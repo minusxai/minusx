@@ -8,9 +8,9 @@
  * full payload across faithfully — no stripping here; the projector decides what the LLM sees.
  *
  * Query results in `CompressedAugmentedFile` are a FLAT list keyed by query hash; here they are
- * re-attached to the file entry they belong to (matched via `fileState.queryResultId`). Images are
- * NOT part of `CompressedAugmentedFile` (they come from the separate chart-attachment pipeline) —
- * the caller attaches {@link ImageFacet}s after adapting (see the Phase C wiring).
+ * re-attached to the file entry they belong to (matched via `fileState.queryResultId`). A file's
+ * `image` rides on the `CompressedFileState` itself — stamped at send time by
+ * `lib/screenshot/app-state-screenshot.ts` — and is mapped straight across.
  */
 import type { CompressedAugmentedFile, CompressedFileState, CompressedQueryResult } from '@/lib/types';
 import type { ImageContent } from '@/orchestrator/llm';

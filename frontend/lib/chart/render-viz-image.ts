@@ -1,8 +1,8 @@
 /**
  * Server-side V2 (Vega/Vega-Lite envelope) chart → JPEG (Viz Arch V2 §21 item 2, the
- * headless path). Envelope → SVG (`renderEnvelopeToSvg`) → PNG (Resvg) → JPEG (Sharp),
- * reusing the exact compositor the ECharts path uses (`composeSvgToJpeg`) so the two
- * families produce byte-compatible output (size, background, logo footer).
+ * headless path). Envelope → SVG (`renderEnvelopeToSvg`) → PNG (Resvg) → JPEG (Sharp)
+ * through the shared compositor (`composeSvgToJpeg`), which owns size, background and
+ * the logo footer.
  *
  * Node.js only. For the browser path (real street tiles via `view.toCanvas()`), use
  * `VizImageRenderer.client.ts`. Slack/cron/server previews use this.

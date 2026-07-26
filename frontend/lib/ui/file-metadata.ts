@@ -75,18 +75,10 @@ export const FILE_TYPE_METADATA = {
     supported: true,
     h: 'none',
   },
-//   connector: {
-//     label: 'Data Connector',
-//     icon: LuPlug,
-//     color: 'accent.cyan',         // Turquoise cyan (#1abc9c)
-//     category: 'engineering',
-//     supported: true,
-//     hidden: false
-//   },
   context: {
     label: 'Knowledge Base',
     icon: LuNotebookText,
-    color: 'accent.warning',         // Turquoise cyan (#1abc9c)
+    color: 'accent.warning',         // Orange (#f39c12)
     category: 'analytics',
     supported: true,
     h: 'none',
@@ -95,7 +87,7 @@ export const FILE_TYPE_METADATA = {
   report: {
     label: 'Digest',
     icon: LuFileText,
-    color: 'accent.secondary',      // Emerald green (#2ecc71)
+    color: 'accent.secondary',      // Amethyst purple (#9b59b6)
     category: 'analytics',
     supported: false,
     h: 'none',
@@ -122,7 +114,7 @@ export const FILE_TYPE_METADATA = {
   alert: {
     label: 'Alert',
     icon: LuBell,
-    color: 'accent.secondary',      // Orange (#f39c12)
+    color: 'accent.secondary',      // Amethyst purple (#9b59b6)
     category: 'analytics',
     supported: true,
     h: 'none',
@@ -188,7 +180,7 @@ export const FILE_TYPE_METADATA = {
   explore: {
     label: 'Explore',
     icon: LuRocket,
-    color: 'accent.teal',    // Amethyst purple (#9b59b6)
+    color: 'accent.teal',    // Green Sea teal (#16a085)
     category: 'misc',
     supported: true,
     h: 'none',
@@ -231,7 +223,6 @@ export function isFileTypeSupported(type: FileType, override?: FileType[]): bool
 
 /**
  * Analytics file types (derived from metadata where category === 'analytics')
- * Used for QuestionContainer type in types.ts
  */
 const ANALYTICS_FILE_TYPES = Object.entries(FILE_TYPE_METADATA)
   .filter(([_, meta]) => meta.category === 'analytics')

@@ -9,8 +9,8 @@ const DATA_URL_RE = /^data:([^;]+);base64,([\s\S]*)$/;
  * base64 image (`data:` URL) or a remote-URL image (http(s) — Anthropic loads
  * the URL directly via the pi patch; our server never fetches it, so there is
  * no SSRF surface). Text attachments pass through with name + page count.
- * Splits attachments into image blocks and <Attachment>
- * text blocks.
+ * Rendering these into image content blocks and `<Attachment …>` text blocks is
+ * the agent's job (`agents/analyst/analyst-agent.ts`), not this normalizer's.
  */
 export function normalizeAttachments(raw: unknown): AgentAttachment[] {
   if (!Array.isArray(raw)) return [];

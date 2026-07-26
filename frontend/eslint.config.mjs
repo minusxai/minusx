@@ -27,7 +27,7 @@ const RESTRICT_ADAPTER_FACTORY = {
 // pi-ai is isolated to orchestrator/llm/. Nothing else may import it — consumers
 // use the owned types + wrapped runtime from @/orchestrator/llm, faux/test
 // helpers from @/orchestrator/llm/testing, and typebox directly from "typebox".
-// See orchestrator/llm/Migration.md for the rationale.
+// See MinusX.md, "Chat Engine", for the rationale.
 //
 // INVARIANT: every `no-restricted-imports` override below must include
 // RESTRICT_PI_AI, EXCEPT the orchestrator/llm/** carve-out (the one place pi-ai
@@ -47,7 +47,7 @@ const RESTRICT_PI_AI_SUBPATHS = {
   message: RESTRICT_PI_AI.message,
 };
 
-// Container/View convention (CLAUDE.md "Component Patterns"):
+// Container/View convention (MinusX.md, "Development philosophy"):
 // views must be pure presentation, containers own Redux. Widen the file list here
 // only as each view is actually migrated, never all at once.
 //
@@ -68,14 +68,14 @@ const RESTRICT_VIEW_REDUX = [
   {
     name: "@/store/hooks",
     message:
-      "Views must not read/write Redux directly (Container/View convention, CLAUDE.md " +
+      "Views must not read/write Redux directly (Container/View convention, MinusX.md " +
       "'Component Patterns'). Move the useAppDispatch/useAppSelector call into this view's " +
       "container and pass the value/callback down as a prop instead.",
   },
   {
     name: "react-redux",
     message:
-      "Views must not read/write Redux directly (Container/View convention, CLAUDE.md " +
+      "Views must not read/write Redux directly (Container/View convention, MinusX.md " +
       "'Component Patterns'). Move the Redux access into this view's container and pass " +
       "the value/callback down as a prop instead.",
   },
@@ -405,7 +405,7 @@ const eslintConfig = defineConfig([
       ],
     },
   },
-  // Container/View convention (CLAUDE.md "Component Patterns") — these views were
+  // Container/View convention (MinusX.md, "Development philosophy") — these views were
   // migrated to pure presentation; guard against regression. See RESTRICT_VIEW_REDUX.
   {
     files: [
@@ -455,7 +455,7 @@ const eslintConfig = defineConfig([
   // (the MX proxy URL), so @/lib/config is permitted here (the app-agnostic
   // pattern ban is intentionally not applied). Must come AFTER the orchestrator/**
   // block so it wins (flat-config: last matching config replaces the rule).
-  // See orchestrator/llm/Migration.md for the rationale.
+  // See MinusX.md, "Chat Engine", for the rationale.
   {
     files: ["orchestrator/llm/**/*.ts"],
     rules: {

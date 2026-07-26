@@ -1,6 +1,6 @@
 // CLI-safe DB tools. NO server-only imports — this module is loaded by
-// `npm run benchmark:dab` (Node CLI) as well as by the v=2 server agent
-// path. Production variants (which need `runQuery` / `loadConnectionSchema`
+// `npm run benchmark:dab` (Node CLI) as well as by the production server
+// agent path. Production variants (which need `runQuery` / `loadConnectionSchema`
 // → server-only chain into NextAuth) live in `db-tools.server.ts` and
 // extend the `Base*` classes here.
 
@@ -167,8 +167,9 @@ export class BaseSearchDBSchema extends MXTool<typeof SearchDBSchemaParams, Benc
       ? await cachedConnectorSchema(this.parameters.connection_id, local)
       : await this._loadSchemaFallback(this.parameters.connection_id);
 
-    // Per-run whitelist (set by the orchestrator from a context file) filters schemas
-    // before they reach the LLM. Same logic as production tool-handlers.server.ts.
+    // Per-run whitelist (built server-side from the request's context pointer — see
+    // `whitelistedTables` in lib/chat/orchestration-core.server.ts) filters schemas
+    // before they reach the LLM.
     const whitelist = this.context.whitelistedTables;
     const filteredSchemas = whitelist
       ? schemas.map((s) => ({
@@ -199,8 +200,8 @@ export class BaseSearchDBSchema extends MXTool<typeof SearchDBSchemaParams, Benc
 // Fields common to the benchmark and production ExecuteQuery schemas.
 // Kept separate so the production variant (`db-tools.server.ts`) can build
 // a schema WITHOUT the benchmark-only `timeout` param — the timeout is only
-// honoured on the benchmark path today; wiring it through the production
-// `_executeFallback` → `runQuery` chain is a tracked follow-up (Tasks.md).
+// honoured on the benchmark path today; the production `_executeFallback` →
+// `runQuery` chain does not wire it through.
 const EXECUTE_QUERY_BASE_FIELDS = {
   connectionId: Type.String(),
   query: Type.String(),
@@ -231,8 +232,8 @@ const ExecuteQueryParams = Type.Object({
 /**
  * Production ExecuteQuery params — same as `ExecuteQueryParams` minus
  * `timeout`. Consumed by `db-tools.server.ts::ExecuteQuery`, which routes
- * through `_executeFallback` → `runQuery` (a path that does not yet honour
- * the timeout — see Tasks.md). Hiding the param keeps the production tool
+ * through `_executeFallback` → `runQuery` (a path that does not honour
+ * the timeout). Hiding the param keeps the production tool
  * from advertising a capability it doesn't deliver.
  */
 export const ExecuteQueryParamsNoTimeout = Type.Object(EXECUTE_QUERY_BASE_FIELDS);
@@ -418,9 +419,9 @@ export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, Benchmar
   }
 
   /**
-   * Render the result's viz to a JPEG buffer. Base returns null (no native renderer in the shared/
-   * benchmark build) so it falls back to row data; the server subclass overrides with the real
-   * ECharts-SSR → JPEG renderer.
+   * Render the result's legacy `vizSettings` to a JPEG buffer. Base returns null (no native
+   * renderer in the shared/benchmark build) so it falls back to row data; the server subclass
+   * overrides with the V1→envelope bridge + `renderVizEnvelopeToJpeg`.
    */
   protected async _renderVizJpeg(
     _queryResult: QueryResult,

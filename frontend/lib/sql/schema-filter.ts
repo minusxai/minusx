@@ -1,6 +1,8 @@
 /**
  * Shared schema filtering logic
- * Used by both client-side (useContext hook) and server-side (ContextHelpers)
+ * Used by both client-side (`lib/hooks/useContext.ts`) and server-side
+ * (`lib/chat/agent-args.server.ts`, `lib/data/loaders/context-loader-utils.ts`,
+ * `lib/sql/whitelist-resolver.server.ts`)
  */
 import { DatabaseSchema, WhitelistItem, ContextContent, DatabaseWithSchema, Whitelist, WhitelistNode } from '../types';
 import { getPublishedVersion } from '../context/context-utils';

@@ -504,8 +504,8 @@ export async function setupOrchestration(
 
   if (body.user_message) {
     if (isBenchmarkRoot) {
-      // Per-conversation connector configs come from the conversation
-      // file's `meta.benchmark_connections` (set at import time when the
+      // Per-conversation connector configs come from the conversation row's
+      // `meta.benchmark_connections` (set at import time when the
       // user dropped a connections.json alongside the JSONL); falling
       // back to `BENCHMARK_CONNECTIONS_CONFIG` env so dev workflows that
       // pre-set the env still work. The `Base*` DB tools registered for

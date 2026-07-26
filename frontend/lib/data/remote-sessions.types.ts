@@ -4,7 +4,7 @@
  * A remote session lets an external agent (e.g. Claude Code) drive one conversation over
  * plain HTTP, replacing the LLM as the tool-call decider. The session is scoped to a single
  * conversation and authorized by a bearer capability code (`/s/<code>`); only a hash of the
- * code's nonce is stored. See REMOTE_AGENT_SESSIONS.md at the repo root for the full design.
+ * code's nonce is stored.
  *
  * Client-safe: types only, no server imports.
  */

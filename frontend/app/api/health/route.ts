@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 
 /**
- * Health check endpoint
- * Used by database initialization scripts to detect if the Next.js app is running
+ * Health check endpoint — unauthenticated liveness probe (allowlisted in middleware)
+ * for external deploy/uptime checks. Nothing in this repo calls it.
  */
 export async function GET() {
   return NextResponse.json({ status: 'ok' });

@@ -49,8 +49,6 @@ export async function publishFile(
     throw new Error(`File ${fileId} not found`);
   }
 
-  // Import isDirty selector
-
   // Check if file is dirty
   const isDirty = selectIsDirty(state, fileId);
   if (!isDirty) {

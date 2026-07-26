@@ -13,7 +13,7 @@ const DATE = '2024-01-15T14:05:09Z'
 const DATE_ONLY = '2024-01-15'
 const geoColumns = ['state', 'revenue', 'lat', 'lng', 'lat2', 'lng2', 'intensity']
 
-// ─── chart-utils.test.ts ───
+// ─── chart-format ───
 
 describe('formatDateValue', () => {
   describe('pattern-based formatting', () => {

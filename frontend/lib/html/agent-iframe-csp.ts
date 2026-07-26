@@ -8,7 +8,7 @@
 //
 // `font-src` must include 'self': the app's fonts (JetBrains Mono / Inter) are self-hosted by Next.js
 // at same-origin /_next/static/media/*.woff2, and mirrorAppStyles copies their @font-face rules into
-// the iframe. Without 'self' those font files are CSP-blocked, so embedded ECharts charts fall back to
+// the iframe. Without 'self' those font files are CSP-blocked, so embedded charts fall back to
 // a system font and render with the wrong typeface/size.
 export const AGENT_IFRAME_CSP = [
   "default-src 'none'",

@@ -11,7 +11,7 @@
  * after the move they'll live in the container and reach the view as props.
  * Testing through the container means this exact test file passes unchanged
  * both before and after the move (verifying the move preserved behavior),
- * per CLAUDE.md's "Refactoring — Blue -> Red -> Blue" discipline.
+ * per MinusX.md's "Refactoring — Blue → Red → Blue" discipline.
  *
  * Heavy data-fetching leaf hooks used by the view (schema context, connections
  * list, available-questions autocomplete, GUI-compat check) are mocked to

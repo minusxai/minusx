@@ -1,5 +1,5 @@
 // setup-cli entries — run inside the app image via `docker run --rm <image>
-// npx tsx --conditions react-server scripts/setup-cli/<entry>.ts` by setup.sh.
+// node setup-cli/<entry>.js` by install.sh (precompiled by `npm run build:setup-cli`).
 // Each entry reads JSON on stdin and prints a JSON result; these tests drive
 // the exported run* functions directly.
 import { describe, it, expect } from 'vitest';

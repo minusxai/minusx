@@ -74,10 +74,6 @@ export interface FileState extends DbFile {
  */
 export type FileId = number;
 
-/**
- * Check if a file ID is a virtual file ID (for create mode)
- * Virtual files have negative IDs (< 0)
- */
 // djb2-style hash — stays within 32-bit range
 function hashString(str: string): number {
   let hash = 5381;
@@ -91,7 +87,7 @@ function hashString(str: string): number {
 /** Deterministic placeholder ID for a path being loaded (negative, within int4). */
 function pathToVirtualId(path: string): number {
   // Kept within int4 range [-2^31, -1] so it never overflows an `integer` column.
-  // Must match lib/file-state/file-state.ts:pathToPlaceholderId (same path → same ID).
+  // Must match lib/file-state/file-read.ts:pathToPlaceholderId (same path → same ID).
   return -(1 + (Math.abs(hashString(path)) % 2_000_000_000));
 }
 
@@ -401,7 +397,7 @@ const filesSlice = createSlice({
     },
 
     /**
-     * Track edits (Phase 2 - currently unused)
+     * Stage content edits.
      * Merge with existing persistableChanges
      */
     setEdit(state, action: PayloadAction<{ fileId: FileId; edits: Partial<DbFile['content']> }>) {
@@ -902,11 +898,6 @@ const filesSlice = createSlice({
   }
 });
 
-/**
- * Helper: Compute queryResultId for a question file and strip it from content
- * Returns { queryResultId, content } where content has queryResultId removed
- */
-
 // Actions
 export const {
   setFile,
@@ -1116,8 +1107,10 @@ export const selectEffectivePath = (state: RootState, id: FileId): string | unde
 
 /**
  * Returns all loaded NON-system files that have unsaved changes.
- * System files (connection, config, styles, context) are excluded:
- * they save in-place and are discarded on navigation-away anyway.
+ * SYSTEM_FILE_TYPES_SET (connection, config, styles) is excluded: those save
+ * in-place and are discarded on navigation-away anyway. NOTE: this set is
+ * narrower than lib/ui/file-metadata.ts's SYSTEM_FILE_TYPES — `context` files
+ * DO show up as dirty here and are published by publishAll.
  */
 export const selectDirtyFiles = createSelector(
   [(state: RootState) => state.files.files],

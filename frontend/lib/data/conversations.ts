@@ -8,7 +8,7 @@ import type { Conversation, ConversationErrorRow, MessageRow } from './conversat
 import type { ConversationView } from './conversation-projection';
 import type { ConversationSummary } from '@/app/api/conversations/route';
 
-/** Options for ConversationsAPI.get (see /conversations-v2.md). */
+/** Options for ConversationsAPI.get (see MinusX.md "Chat serving"). */
 export interface GetConversationOpts {
   /** 'full' = verbatim pi log (dev mode only); default 'display' = slim projection. */
   view?: ConversationView;

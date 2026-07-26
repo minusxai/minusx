@@ -49,12 +49,10 @@ import type { QueryIR } from '@/lib/sql/ir-types';
  * production seam.
  *
  * Overrides `static schema` with the no-`timeout` variant: the production
- * path (`_executeFallback` → `runQuery`) does not yet honour the query
+ * path (`_executeFallback` → `runQuery`) does not honour the query
  * timeout, so the param + its description are hidden here rather than
- * advertising a capability the production tool doesn't deliver. Wiring
- * the timeout through the production path is tracked in Tasks.md; restore
- * the full schema once that lands. `schema.name` is unchanged, so the LLM
- * still sees one consistent tool name.
+ * advertising a capability the production tool doesn't deliver.
+ * `schema.name` is unchanged, so the LLM still sees one consistent tool name.
  */
 export class ExecuteQuery extends BaseExecuteQuery {
   static override readonly schema: Tool<TSchema> = {
@@ -149,10 +147,10 @@ export class SearchDBSchema extends BaseSearchDBSchema {
 }
 
 /**
- * Production FuzzyMatch tool.
- * execution shares `executeFuzzyMatch` with the v1 Next.js handler so v1 and v2
- * behave identically. `semantic_expansion` is advertised for schema parity but
- * not acted on (matching the v1 handler, which runs a single fuzzy match).
+ * Production FuzzyMatch tool. Executes through `executeFuzzyMatch`
+ * (lib/connections/fuzzy-match-tool.ts). `semantic_expansion` is advertised for
+ * schema parity with the benchmark `FuzzyMatch` but is NOT acted on here — this
+ * variant always runs a single fuzzy match.
  */
 const FuzzyMatchParams = Type.Object({
   connection_id: Type.String({ description: 'Database connection name' }),

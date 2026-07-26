@@ -1,5 +1,5 @@
 /**
- * Remote Agent Sessions — the execution engine (REMOTE_AGENT_SESSIONS.md §5).
+ * Remote Agent Sessions — the execution engine.
  *
  * Each remote tool call is stateless: reconstruct a fresh Orchestrator from the durable log,
  * synthesize an assistant message carrying the externally-authored tool call, and drive
@@ -327,7 +327,7 @@ export async function getRemoteToolResult(
 }
 
 /**
- * Turns-route short-circuit (§5.3): while a session holds the conversation, a browser
+ * Turns-route short-circuit: while a session holds the conversation, a browser
  * `completedToolCalls` POST is APPEND-ONLY — map to pi toolResults, thread to the owning assistant
  * entry, dedupe already-resolved ids (multi-tab / retries), notify. The orchestrator/LLM never runs.
  */

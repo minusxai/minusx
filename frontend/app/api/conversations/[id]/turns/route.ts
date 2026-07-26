@@ -49,7 +49,7 @@ export const POST = withAuth(async (
       return ApiErrors.validationError('turn requires userMessage, completedToolCalls, or autoRetry');
     }
 
-    // Remote Agent Session holds this conversation (mutual exclusion, REMOTE_AGENT_SESSIONS.md §9.4):
+    // Remote Agent Session holds this conversation (mutual exclusion):
     // user messages / retries are refused — the external agent is the only decider. The ONE allowed
     // write is the browser posting frontend-tool completions, which is APPEND-ONLY (short-circuit):
     // toolResult rows + NOTIFY wake the remote endpoint's waiter; the orchestrator/LLM never runs.

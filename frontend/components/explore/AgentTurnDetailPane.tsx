@@ -34,7 +34,7 @@ interface AgentTurnDetailPaneProps {
   filesDict: Record<number, any>;
 }
 
-// null = skip this tool in the carousel (e.g. Clarify is redundant with ClarifyFrontend)
+// Mapped to null = skip this tool in the carousel. Unmapped tools fall back to FileDetailCard.
 const DETAIL_CARD_BY_TOOL: Record<string, React.ComponentType<DetailCardProps> | null> = {
   'Navigate': NavigateDetailCard,
   'Screenshot': ScreenshotDetailCard,

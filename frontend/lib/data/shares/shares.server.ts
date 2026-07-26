@@ -17,7 +17,8 @@ import type { AccessRulesOverride } from '@/lib/branding/whitelabel';
  */
 class SharesDataLayerServer implements ISharesDataLayer {
   /**
-   * Load access rules overrides from org config (cached per-org by configs layer)
+   * Load access rules overrides from the org config. NOT cached — `getConfigs`
+   * re-reads the config document from the DB on every call.
    */
   private async _getOverrides(user: EffectiveUser): Promise<AccessRulesOverride | undefined> {
     try {

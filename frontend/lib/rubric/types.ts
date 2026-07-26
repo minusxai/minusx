@@ -1,12 +1,13 @@
 /**
  * File Health Rubric — shared report contract.
  *
- * A rubric scores the health of a BI file (question / dashboard / story) and returns
+ * A rubric scores the health of a BI file (question / dashboard / story / context) and returns
  * actionable findings the agent can act on. Two flavors produce the SAME shape:
  *  - deterministic: pure `content → RubricReport` (see `deterministic/*`, `scoring.ts`)
  *  - llm:           `(content + screenshot) → RubricReport` (see `llm/*`)
  *
- * See `frontend/docs/rubrik.md` for the rule catalog and research backing.
+ * See `MinusX.md` — "Auth, Access Control, Mode Isolation, HTTP Helpers, and the File-Health
+ * Rubric" — for the rubric architecture and where each threshold lives.
  */
 import type { FileType } from '@/lib/types';
 

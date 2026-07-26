@@ -11,10 +11,10 @@ import type { LlmGrade } from '@/lib/llm/llm-config-types';
  * Chat request from the frontend.
  */
 export interface ChatRequest {
-  conversationID?: number | null;   // Optional - file ID, null to create new
-  log_index?: number | null;        // Index to load log up to (replaces tasks_id)
+  conversationID?: number | null;   // Conversation id (read only by /api/chat/debug-context)
+  log_index?: number | null;        // Not read by any route (fork takes `atSeq`, the stream takes `since`)
   user_message?: string | null;
-  source?: 'explore' | 'side_chat'; // Where the message originated
+  source?: 'explore' | 'side_chat'; // Vestigial — the turn's surface is derived from agent_args.app_state
   completed_tool_calls?: CompletedToolCall[];  // Array of [ToolCall, ToolMessage] tuples
   agent?: string;                   // Agent name
   agent_args?: {
@@ -48,9 +48,9 @@ export interface ChatRequest {
     custom_agent?: string;
   };
   /**
-   * Reconnect to an in-flight (or recently finished) turn instead of starting a
-   * new one. The server replays buffered SSE frames with `seq > afterSeq`, then
-   * tails the live run. Used by the client after a transport drop mid-stream.
+   * Vestigial. Reconnecting to an in-flight turn is done by re-opening
+   * `GET /api/conversations/:id/stream?since=<cursor>`, which catch-up SELECTs
+   * committed rows past the cursor; nothing on the server reads this field.
    */
   resume?: { afterSeq: number };
 }

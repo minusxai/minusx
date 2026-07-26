@@ -41,7 +41,7 @@ export async function GET(
   const sinceParam = streamParams.get('since');
   let cursor = sinceParam != null && Number.isFinite(Number(sinceParam)) ? Number(sinceParam) : -1;
   // Conversations V2: catch-up messages are display-projected unless the client (dev mode) asks
-  // for the verbatim log — same contract as GET /api/conversations/:id (see /conversations-v2.md).
+  // for the verbatim log — same contract as GET /api/conversations/:id.
   const view = parseConversationView(streamParams.get('view'));
 
   const encoder = new TextEncoder();
@@ -141,7 +141,7 @@ export async function GET(
     }
 
     // status === 'running' | 'remote' — tail. A running turn tails to completion; a remote agent
-    // session (REMOTE_AGENT_SESSIONS.md) tails for the session's lifetime: 'remote' status notifies
+    // session tails for the session's lifetime: 'remote' status notifies
     // re-derive pending (frontend-bridged tools the observer must execute) and never close — only
     // the terminal idle/error (session ended) closes. Serialize handler work so catch-up SELECTs
     // (which advance the shared cursor) never overlap.

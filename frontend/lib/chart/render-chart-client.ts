@@ -4,8 +4,8 @@
  * Scales a raw chart image to a max width, optionally overlays a
  * semi-transparent logo watermark, and encodes as JPEG.
  *
- * Used by: chart download button (chart-utils.ts), DevToolsPanel image
- * tools, any client-side chart export that needs JPEG + branding.
+ * Used by VizImageRenderer.client.ts — the shared encoder behind the chart
+ * download menu and the tool-result chart images.
  *
  * Not safe for server/Node.js bundles — uses Canvas API.
  */
@@ -26,7 +26,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
  * optionally add a bottom padding strip with a semi-transparent logo watermark
  * in the bottom-right corner, then encode as JPEG and return an object URL.
  *
- * @param source       Raw image — data URL string or Blob (e.g. PNG from ECharts getDataURL)
+ * @param source       Raw image — data URL string or Blob (e.g. PNG from a Vega canvas render)
  * @param maxWidth     Scale output down to at most this width; never upscales
  * @param addWatermark Include the brand logo watermark
  * @param colorMode    Controls background fill colour and logo variant (dark/light)

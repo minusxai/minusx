@@ -60,8 +60,8 @@ export interface ComposeJpegOptions {
 /**
  * Composite a rendered chart SVG into the final agent JPEG: Resvg rasterizes the SVG on
  * a solid theme background, Sharp adds the optional padding strips + logo footer, then
- * JPEG-encodes at the shared quality. Grammar-agnostic — the ECharts and Vega paths both
- * feed their SVG here so the two families share one background/logo/quality contract.
+ * JPEG-encodes at the shared quality. Grammar-agnostic — any SVG string feeds in here, so
+ * every server image shares one background/logo/quality contract.
  */
 export async function composeSvgToJpeg(svg: string, options: ComposeJpegOptions = {}): Promise<Buffer> {
   const width = options.width ?? 512;

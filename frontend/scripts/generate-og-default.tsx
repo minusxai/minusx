@@ -1,6 +1,6 @@
 /**
  * Regenerate the committed default generic OG card → public/ogs/generic.png.
- * Run after changing the generic card design / tagline / d2 hero:  npm run generate-og
+ * Run after changing the generic card design / tagline / d2 hero:  npm run generate-og:generic
  */
 import 'dotenv/config';
 import sharp from 'sharp';

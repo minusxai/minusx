@@ -162,7 +162,7 @@ export class DetachViz extends MXTool<typeof DetachVizParams, RemoteAnalystConte
 // ─── ReadFiles (frontend-bridge variant) ─────────────────────────────────────
 // Replaces the server-side `ReadFiles` from `agents/analyst/file-tools.ts` for
 // WebAnalystAgent. Server-side ReadFiles only sees persisted DB state; this
-// frontend-bridge variant routes through `frontendToolRegistry.ReadFiles@448`
+// frontend-bridge variant routes through the `ReadFiles` frontend handler,
 // which reads Redux file memory (drafts + persisted) and includes chart
 // images. The frontend-bridge ReadFiles behaviour means an
 // agent that edits a draft and reads it back sees its in-flight edits.
@@ -186,8 +186,8 @@ export class ReadFiles extends MXTool<typeof ReadFilesParams, RemoteAnalystConte
 }
 
 // ─── Navigate ────────────────────────────────────────────────────────────────
-// Schema matches `registerFrontendTool('Navigate', ...)` at line 275 — handler
-// reads `file_id`, `path`, `newFileType`. All three are optional but at least
+// Schema matches `registerFrontendTool('Navigate', ...)` in tool-handlers.ts —
+// handler reads `file_id`, `path`, `newFileType`. All three are optional but at least
 // one must be provided (handler enforces).
 const NavigateParams = Type.Object({
   file_id: Type.Optional(Type.Union([Type.Number(), Type.String()], { description: 'Existing file ID to navigate to.' })),
@@ -243,13 +243,12 @@ export class Screenshot extends MXTool<typeof ReviewFileParams, RemoteAnalystCon
 }
 
 // ─── ClarifyFrontend ─────────────────────────────────────────────────────────
-// Schema matches `registerFrontendTool('ClarifyFrontend', ...)` at line 382 —
+// Schema matches `registerFrontendTool('ClarifyFrontend', ...)` in tool-handlers.ts —
 // handler reads `question`, `options[{label, description?, value?, imageUrl?}]`, `multiSelect?`,
 // and the optional `type` preset ('design' → app-supplied theme options).
-// Naming: we expose the LLM-visible name as `ClarifyFrontend` (matches the
-// frontend handler exactly, no spawn-wrapper needed). The server-side `Clarify`
-// spawns into `ClarifyFrontend`; v2 short-circuits the spawn since the
-// orchestrator dispatches by exact name.
+// Naming: the LLM-visible name is `ClarifyFrontend`, matching the frontend
+// handler exactly — the orchestrator dispatches by exact name, so no
+// spawn-wrapper tool is needed.
 const ClarifyFrontendParams = Type.Object({
   question: Type.String({ description: 'Question to ask the user.' }),
   options: Type.Array(Type.Object({
@@ -277,7 +276,7 @@ export class ClarifyFrontend extends MXTool<typeof ClarifyFrontendParams, Remote
 }
 
 // ─── PublishAll ──────────────────────────────────────────────────────────────
-// Schema matches `registerFrontendTool('PublishAll', ...)` at line 871 —
+// Schema matches `registerFrontendTool('PublishAll', ...)` in tool-handlers.ts —
 // handler takes no arguments; the bridge surfaces a confirmation modal listing
 // every dirty file before persisting.
 const PublishAllParams = Type.Object({});

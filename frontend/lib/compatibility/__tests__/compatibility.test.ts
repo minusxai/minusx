@@ -1,5 +1,5 @@
 // frontend/compatibility.json is the shared static contract consumed by the
-// app (connection form field specs), setup.sh (interview prompts, curled from
+// app (connection form field specs), install.sh (interview prompts, curled from
 // raw.github), and the docs (supported-databases / supported-models tables).
 // This test keeps it honest against the code it must agree with:
 // - connection types ↔ CONNECTION_TYPES (lib/ui/connection-type-options.ts)

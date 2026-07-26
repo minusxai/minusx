@@ -139,7 +139,7 @@ function renderQuestion(content: QuestionContent, { vizV2 }: { vizV2: boolean })
   )
 }
 
-// ─── Viz V2 toggle (docs/Visualization Arch V2.md §21) ───────────────────────
+// ─── Viz V2 toggle ───────────────────────────────────────────────────────────
 //
 // Vega draws EVERY chart — ECharts no longer renders. The uiSlice `vizV2` flag
 // picks the AUTHORITATIVE viz format: OFF (V1, the default until prompts/tools

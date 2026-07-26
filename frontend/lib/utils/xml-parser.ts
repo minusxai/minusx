@@ -3,7 +3,8 @@
  *
  * Handles:
  * - Multiple interleaved <thinking> and <answer> blocks
- * - Incomplete tags during streaming (returns buffer for retry)
+ * - Incomplete tags during streaming (the partial content after an unclosed
+ *   opening tag is emitted immediately, so it is visible while streaming)
  * - Mixed content (text before/after/between tags)
  * - Malformed XML (graceful degradation)
  * - Backwards compatibility (no tags = all content is answer)

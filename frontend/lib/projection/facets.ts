@@ -13,7 +13,7 @@
  * per-facet (not per-file) so that, e.g., a file whose chart re-rendered re-sends only the
  * image while its unchanged markup stays a marker.
  *
- * Design invariants (see also the Phase C projector):
+ * Design invariants (see also the projector in `./project`):
  * - **Forward-only.** A turn may be slimmed relative to EARLIER turns, never the reverse.
  *   Earlier emitted messages stay byte-identical across re-projections, so the provider
  *   prompt cache prefix holds.

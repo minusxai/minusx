@@ -120,8 +120,9 @@ export interface Conversation {
   // conversation; pushed live via setConversationTitle after the first turn.
   title?: string;
 
-  // Conversation file version (from meta.version): 2 = v2 (JS engine), 1 = legacy v1.
-  // Set when loaded from DB; undefined for in-session-created chats (treated as v2).
+  // Chat engine version: 3 = v3 (dedicated conversations/messages tables + LISTEN/NOTIFY
+  // streaming), the only engine. Stamped on every load/render; undefined only for a
+  // conversation shell created in-session before its first turn settles.
   version?: number;
 
   // The conversation's current context size: `usage.totalTokens` of the last LLM call,

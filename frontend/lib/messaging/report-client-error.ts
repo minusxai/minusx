@@ -1,8 +1,9 @@
 /**
- * Shared client-side error reporter — fire-and-forget POST to /api/chat/log-error
- * so client-side failures land on the conversation document's `errors[]` and
- * survive page reload. Used by both `chatListener.handleStreamError` (transport)
- * and the wizard's init path (`handleAgentDescribe`).
+ * Client-side error reporter — fire-and-forget POST to /api/chat/log-error, which
+ * appends a `kind='error'` row to the conversation's message stream so the failure
+ * survives page reload. Used by the connection wizard's init path
+ * (`StepContext.handleAgentDescribe`); `chatListener` has its own equivalent
+ * post for stream/transport errors.
  *
  * Idempotent + best-effort: any failure is swallowed (we never recurse).
  */

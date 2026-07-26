@@ -1,6 +1,6 @@
 /**
- * Generic app-page serialization capture — the snapdom replacement for main-document React views
- * (dashboards / questions / notebooks / reports), Story_Design_V2 §4.
+ * Generic app-page serialization capture for main-document React views (questions / notebooks /
+ * reports — everything that does NOT live on an svg surface), Story_Design_V2 §4.
  *
  * The target element is CLONED into an in-memory `<svg><foreignObject>` document that must be
  * fully self-contained, because it renders in an isolated <img> context (no parent document, no

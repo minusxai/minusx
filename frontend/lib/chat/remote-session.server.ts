@@ -5,7 +5,7 @@
  * The session's log entries are exactly what a normal turn would produce (a root `AgentInvocation`
  * for `RemoteSessionAgent`, then assistant/toolResult entries appended via `Orchestrator.dispatch`
  * in the tool endpoint) — so the side chat renders remote activity with zero changes and a later
- * NORMAL turn loads the log cleanly. See REMOTE_AGENT_SESSIONS.md §5.
+ * NORMAL turn loads the log cleanly.
  */
 import 'server-only';
 import { randomUUID } from 'crypto';

@@ -182,7 +182,7 @@ export async function renderGenericOgImage(): Promise<Response> {
   return imageResponse(<GenericCard assets={await loadCardAssets()} />);
 }
 
-/** Render the DEFAULT-branded generic card to a PNG buffer (used by `npm run generate-og`). */
+/** Render the DEFAULT-branded generic card to a PNG buffer (used by `npm run generate-og:generic`). */
 export async function renderDefaultGenericCardBuffer(): Promise<Buffer> {
   const [logo, logoLight] = await Promise.all([
     resolveLogo(getBrandLogoExpandedUrl(DEFAULT_CONFIG.branding, 'light')),

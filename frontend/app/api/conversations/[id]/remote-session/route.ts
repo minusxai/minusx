@@ -21,7 +21,7 @@ export const runtime = 'nodejs';
 /**
  * Remote Agent Session management (owner-authenticated; the public bearer endpoints live under
  * /s/<code>). POST mints (re-mint revokes the prior code), DELETE stops, GET reports status for
- * the UI banner. See REMOTE_AGENT_SESSIONS.md §4.4.
+ * the UI banner.
  */
 
 async function loadOwned(id: string, user: EffectiveUser): Promise<Conversation | NextResponse> {

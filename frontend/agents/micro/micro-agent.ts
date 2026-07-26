@@ -1,8 +1,8 @@
 // MicroAgent.
 //
 // A generic leaf agent with NO tools: one LLM call that runs a *named* task
-// (`MICRO_TASKS`) — title, description, summary, … — and returns text. Unlike
-// FeedSummaryAgent there is no per-use-case subclass: the task key in the
+// (`MICRO_TASKS`) — title, description, summary, … — and returns text. There is
+// no per-use-case subclass: the task key in the
 // context selects the prompts. Renders `micro.<task>.system` / `micro.<task>.user`
 // from `orchestrator/prompts/prompts.yaml`. Runs headless via `runMicroTask`.
 import 'server-only';

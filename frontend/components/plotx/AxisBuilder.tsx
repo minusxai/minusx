@@ -21,10 +21,7 @@ const INPUT_CLASSES = 'w-full rounded border border-border bg-background px-2 py
 /**
  * Declares which settings panels are visible for a given chart type.
  * AxisBuilder reads this config instead of checking chartType with ad-hoc conditionals.
- */
-/**
- * Declares which settings panels are visible for each ECharts-based chart type.
- * Non-ECharts types (geo, pivot, trend) have their own axis builders and are not listed here.
+ * geo, pivot and trend have their own axis builders and are not listed here.
  */
 interface ChartSettingsConfig {
   xAxisSettings: boolean

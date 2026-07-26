@@ -3,7 +3,7 @@
  */
 
 export interface ScreenshotOptions {
-  pixelRatio?: number;         // Retina scaling (default: 2)
+  pixelRatio?: number;         // Raster scale of the CSS box (default: 0.75); on region captures it is the device cap instead
   maxWidth?: number;           // Cap output width in px; pixelRatio is derived automatically
   /**
    * Cap output HEIGHT in px. Combined with maxWidth by taking whichever cap binds tighter, so the
@@ -12,8 +12,8 @@ export interface ScreenshotOptions {
    */
   maxHeight?: number;
   backgroundColor?: string;    // Background color
-  quality?: number;            // JPEG quality (0-1, default: 1.0)
-  format?: 'png' | 'jpeg';     // Output format (default: 'png')
+  quality?: number;            // JPEG quality (0-1, default: AGENT_IMAGE_JPEG_QUALITY = 0.85)
+  format?: 'png' | 'jpeg';     // Output format (default: 'jpeg')
   filter?: (el: Element) => boolean; // Node filter (return true to keep) — applied to the clone in the serializer
   /**
    * Draw the numbered position-marker gutter down the left edge of a FULL-element capture (see

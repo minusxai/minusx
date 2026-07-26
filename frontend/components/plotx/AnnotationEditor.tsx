@@ -3,8 +3,7 @@
 import { useEffect, useMemo } from 'react'
 import { LuPlus, LuTrash2 } from 'react-icons/lu'
 import type { ChartAnnotation } from '@/lib/types'
-// Pure matcher (formerly lib/chart/chart-annotations, deleted with the ECharts stack):
-// exact match first, then date-prefix matching (date-only vs full ISO).
+// Pure matcher: exact match first, then date-prefix matching (date-only vs full ISO).
 const findMatchingXIndex = (xAxisData: string[], annotationX: string | number): number => {
   const needle = String(annotationX)
   const exactIndex = xAxisData.findIndex(item => String(item) === needle)

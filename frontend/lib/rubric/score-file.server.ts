@@ -3,7 +3,8 @@
  * scorer AND the LLM judge and returns their combined report. This is what the UI panel and the
  * screenshot-tool path call; the deterministic-only path (piece 1) stays in `registry.ts`.
  *
- * See `frontend/docs/rubrik.md`.
+ * See `MinusX.md` — "Auth, Access Control, Mode Isolation, HTTP Helpers, and the File-Health
+ * Rubric".
  */
 import 'server-only';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';

@@ -193,8 +193,7 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
     </div>
   );
 
-  // Pivot Formulas builder inputs — the same derivation ChartBuilder does for the
-  // classic panel: dimension VALUES come from aggregating the result rows.
+  // Pivot Formulas builder inputs: dimension VALUES come from aggregating the result rows.
   const pivotConfig = useMemo(() => (isPivot ? getPivotConfig(envelope) : null), [isPivot, envelope]);
   const pivotData = useMemo(() => {
     if (!pivotConfig || !rows?.length || pivotConfig.values.length === 0) return null;

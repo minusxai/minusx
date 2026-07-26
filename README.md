@@ -57,7 +57,19 @@ curl -fsSL https://minusx.ai/install.sh | bash
 Requires [Docker](https://docs.docker.com/get-docker/). While the image downloads, the script walks you through setup — workspace, AI model (with a live connection test), and optionally your first database — so you just log in when it finishes.
 
 ## Local development
-For local development, check out [Local Dev Setup](./LOCAL_DEV.md) guide.
+MinusX is a single Next.js application — there is no separate backend service.
+
+```bash
+cd frontend
+npm install
+cp .env.example .env          # then set NEXTAUTH_SECRET=$(openssl rand -base64 32)
+npm run dev                   # http://localhost:3000
+```
+
+The LLM provider is configured in the app after first launch (setup wizard "AI Models" step, or
+Settings → Models) — there are no LLM environment variables.
+
+Architecture, module documentation and development guidelines live in [MinusX.md](./MinusX.md).
 
 ## Why MinusX
 

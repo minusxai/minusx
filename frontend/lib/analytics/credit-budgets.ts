@@ -1,8 +1,9 @@
 /**
  * CREDIT BUDGETS — one place for every tuning knob for the credits / billing
  * module (mirrors `lib/context/context-budgets.ts`). Only the numbers/defaults
- * live here; env overrides are wired in `lib/config.ts` (server-only), and the
- * aggregation logic lives in `lib/analytics/credit-usage.server.ts`.
+ * live here; the admin-editable overrides live in the org config document's
+ * `credits` section (`lib/analytics/credit-policy.ts`), and the aggregation logic
+ * lives in `lib/analytics/credit-usage.server.ts`.
  *
  * Two DECOUPLED windows per scope:
  *   - billing cycle — the longer window (e.g. monthly, 10k limit)
@@ -10,7 +11,7 @@
  * The reset cycle should be ⊆ the billing cycle.
  *
  * Client-safe (plain constants, no `server-only`) — imported by the server
- * aggregation, `config.ts`, `costToCredits`, and tests.
+ * aggregation, `credit-policy.ts`, `costToCredits`, and tests.
  */
 /**
  * Weights for the `costToCredits` formula — credits are a weighted sum of the
@@ -32,7 +33,9 @@ export interface CreditWeights {
   requests: number;
 }
 
-/** All the credit knobs. Defaults live in CREDIT_BUDGETS; override via the CREDIT_CONFIG env JSON. */
+/** All the credit knobs. Defaults live in CREDIT_BUDGETS. Only `weights`,
+ *  `defaultBillingCycle` and `maxBillingCycleDays` are read in production;
+ *  the allowance fields are consumed only by `resolveCreditConfig` below. */
 export interface CreditConfig {
   weights: CreditWeights;
   defaultBillingCycle: string;
@@ -49,17 +52,17 @@ export const CREDIT_BUDGETS: CreditConfig = {
   weights: { cost: 100, cachedTokens: 0, nonCachedTokens: 0, outputTokens: 0, requests: 1 },
 
   // ── Billing cycle (longer window) ──────────────────────────────────────────
-  /** Default billing-cycle window `<N><unit>` (unit d|w|m). Override: CREDIT_BILLING_CYCLE. */
+  /** Default billing-cycle window `<N><unit>` (unit d|w|m). Fallback for `parseBillingCycle`. */
   defaultBillingCycle: '1m',
-  /** Default per-user allowance for one billing cycle. Override per-role: CREDIT_ALLOWANCES. */
+  /** Default per-user allowance for one billing cycle. */
   defaultIndividualAllowance: 5_000,
   /** Default org-wide allowance (all users) for one billing cycle. */
   defaultOrgAllowance: 5_000,
 
   // ── Reset cycle (shorter window) ───────────────────────────────────────────
-  /** Default reset-cycle window `<N><unit>`. Override: CREDIT_RESET_CYCLE. */
+  /** Default reset-cycle window `<N><unit>`. */
   defaultResetCycle: '1d',
-  /** Default per-user allowance per reset cycle. Override per-role: CREDIT_RESET_ALLOWANCES. */
+  /** Default per-user allowance per reset cycle. */
   defaultIndividualResetAllowance: 1_000,
   /** Default org-wide allowance per reset cycle. */
   defaultOrgResetAllowance: 1_000,
@@ -69,9 +72,10 @@ export const CREDIT_BUDGETS: CreditConfig = {
 };
 
 /**
- * Deep-merge a partial override (parsed from the CREDIT_CONFIG env JSON) over the
- * CREDIT_BUDGETS defaults. Only known keys are taken, numeric fields coerced;
- * `weights` is merged field-by-field. Invalid input falls back to the defaults.
+ * Deep-merge a partial override over the CREDIT_BUDGETS defaults. Only known keys
+ * are taken, numeric fields coerced; `weights` is merged field-by-field. Invalid
+ * input falls back to the defaults. Currently exercised only by tests — the live
+ * override path is `resolveCreditPolicy` over the org config's `credits` section.
  */
 export function resolveCreditConfig(override: unknown): CreditConfig {
   if (!override || typeof override !== 'object') return CREDIT_BUDGETS;

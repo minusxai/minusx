@@ -14,7 +14,7 @@ const EXPECTED_TOOLS = [
   'ReadFiles',
   'EditFile',
   'ExecuteQuery',
-  'RunSemanticQuery', // semantic-layer sibling of ExecuteQuery (Semantic_Model_v2.md §2.4)
+  'RunSemanticQuery', // semantic-layer sibling of ExecuteQuery
   'PublishAll',
   'Navigate',
   'ClarifyFrontend',

@@ -59,7 +59,7 @@ export function withRemoteSessionAuth(handler: RemoteSessionHandler) {
     if (!resolved.ok) {
       // A code that PROVED ownership (nonce matched the stored hash) but is dead gets an honest
       // 410 "session_ended" so agents stop cleanly; anything else (unknown/malformed/replaced —
-      // indistinguishable from a guess) stays a uniform 404. See REMOTE_AGENT_SESSIONS.md §10.
+      // indistinguishable from a guess) stays a uniform 404.
       if (resolved.denial === 'revoked' || resolved.denial === 'expired' || resolved.denial === 'idle_expired') {
         return NextResponse.json({
           error: 'session_ended',

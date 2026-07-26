@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_PROJECT_DIR/frontend\" && npx tsx scripts/check-docs-consistency.ts 2>&1 | tail -20",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -39,7 +39,7 @@ vi.mock('@/lib/hooks/useConnections', () => ({
 vi.mock('@/lib/hooks/use-semantic-compat', () => ({
   useSemanticCompat: () => ({ detected: null, canUseSemantic: true }),
 }));
-// The GUI tab is gated on AUTHORED semantic models (Semantic_Model_v2.md §2.4),
+// The GUI tab is gated on AUTHORED semantic models,
 // so this mock keys off the path the container resolves — which is the very
 // thing the test is proving. Returning a model only for the draft's real folder
 // path makes the tab's appearance a sharper signal than the old raw-table stub.

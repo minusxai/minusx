@@ -158,8 +158,6 @@ const config: EnvironmentConfig = {
   DISABLE_APP_STATE_IMAGES: process.env.DISABLE_APP_STATE_IMAGES === 'true',
   // Headless story capture — opt-in (HEADLESS_CAPTURE=1 or true), default off.
   HEADLESS_CAPTURE: process.env.HEADLESS_CAPTURE === '1' || process.env.HEADLESS_CAPTURE === 'true',
-  // Whether the credits usage module (Settings card + sidebar donuts) is shown.
-  // Off unless explicitly enabled per deploy.
   // Anonymous guest chat on public shares is OFF by default — an open link drives real
   // LLM spend, so it's opt-in per deploy and acts as an instant kill-switch.
   SHARE_GUEST_CHAT_ENABLED: process.env.SHARE_GUEST_CHAT_ENABLED === 'true',
@@ -204,7 +202,7 @@ const config: EnvironmentConfig = {
   QUERY_CACHE_REVALIDATE_MS: getOptionalNumber(process.env.QUERY_CACHE_REVALIDATE_MS, 20 * 60_000),
   QUERY_CACHE_EXPIRY_MS: getOptionalNumber(process.env.QUERY_CACHE_EXPIRY_MS, 60 * 60_000),
   QUERY_CACHE_LEASE_MS: getOptionalNumber(process.env.QUERY_CACHE_LEASE_MS, 2 * 60_000),
-  // Remote Agent Sessions: 4h hard TTL, 30min idle timeout (see REMOTE_AGENT_SESSIONS.md).
+  // Remote Agent Sessions: 4h hard TTL, 30min idle timeout.
   REMOTE_SESSION_TTL_MS: getOptionalNumber(process.env.REMOTE_SESSION_TTL_MS, 4 * 60 * 60_000),
   REMOTE_SESSION_IDLE_MS: getOptionalNumber(process.env.REMOTE_SESSION_IDLE_MS, 30 * 60_000),
 };

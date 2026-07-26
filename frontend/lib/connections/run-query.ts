@@ -111,9 +111,10 @@ export async function runQueryStream(
     throw new Error(`No connector available for type: ${type}`);
   }
 
-  // Single seam for row-cap enforcement: every server-side execution (v1 chat
-  // ExecuteQuery, /api/query, v2 chat orchestrator) flows through here, so
-  // applying enforceQueryLimit at this point covers them all uniformly.
+  // Single seam for row-cap enforcement: every server-side execution
+  // (/api/query, the orchestrator's ExecuteQuery, headless file reads) flows
+  // through here, so applying enforceQueryLimit at this point covers them all
+  // uniformly.
   // enforceQueryLimit is a no-op on parse failure and on non-SELECT statements
   // (ATTACH, INSERT, DDL, …), so this is safe for the full set of inputs.
   const dialect = connectionTypeToDialect(type);

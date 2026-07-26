@@ -1,5 +1,5 @@
 // setup-cli: print the model registry (baked pi-ai ∪ live models.dev catalog)
-// — the same merged list the app's pickers use. setup.sh uses this for the
+// — the same merged list the app's pickers use. install.sh uses this for the
 // retry-time model picker; the interview's suggestions come from the static
 // compatibility.json.
 //

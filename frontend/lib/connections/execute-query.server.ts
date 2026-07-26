@@ -1,9 +1,8 @@
 /**
- * ExecuteQuery - Standalone query execution (backend tool)
+ * ExecuteQuery - Standalone query execution, used by the MCP server
+ * (`lib/mcp/server.ts`).
  *
- * Phase 1: Unified File System API
- *
- * Executes SQL query and caches results.
+ * Executes a SQL query and compresses the result for a tool reply.
  * Does NOT modify any files - pure query execution.
  */
 
@@ -15,7 +14,7 @@ import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 /**
  * Structured return type for server tool handlers that want to pass
  * details to the UI without sending them to the LLM (the MCP server's
- * tool-call shape — distinct from the v2 orchestrator's `ToolResponse`,
+ * tool-call shape — distinct from the orchestrator's `ToolResponse`,
  * which is content-block based; see `orchestrator/types.ts`).
  */
 export interface ServerToolResult {

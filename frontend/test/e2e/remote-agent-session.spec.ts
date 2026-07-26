@@ -1,7 +1,7 @@
 /**
  * Remote Agent Sessions ("Copy to Agent") e2e — real browser + the test itself playing the
  * external agent over plain HTTP (no LLM is involved in a remote session, so the loop is fully
- * deterministic). Covers the whole REMOTE_AGENT_SESSIONS.md §13.1 flow:
+ * deterministic). Covers the whole flow:
  *
  *   mint via real click → hard input freeze + banner → skill doc served → server tool executes
  *   → frontend-bridged tool round-trips through THIS browser (observer → auto-exec →

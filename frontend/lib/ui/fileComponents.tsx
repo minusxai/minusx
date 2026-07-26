@@ -1,9 +1,8 @@
 /**
  * Type → Component Mapping
- * Phase 2: Core Patterns Implementation
  *
  * Centralized mapping of file types to their corresponding container components.
- * Replaces the 70-line if-else chain in FileLayout.
+ * Consumed by FileView, which renders the returned container for a loaded file.
  */
 import { ComponentType } from 'react';
 import { FileType } from './file-metadata';
@@ -36,10 +35,8 @@ export interface FileComponentProps {
 
 /**
  * Type → Component mapping object
- * Maps file types to their container components
- *
- * Phase 1: Only question, dashboard, presentation
- * Phase 2: Add dataset, context, users, connector, etc.
+ * Maps file types to their container components. A type with no entry here has
+ * no viewer: FileView renders an "Unsupported file type" message instead.
  */
 const FILE_COMPONENTS: Partial<Record<FileType, ComponentType<FileComponentProps>>> = {
   question: QuestionContainerV2,
@@ -55,8 +52,6 @@ const FILE_COMPONENTS: Partial<Record<FileType, ComponentType<FileComponentProps
   report_run: ReportRunContainerV2,
   alert: AlertContainerV2,
   alert_run: AlertRunContainerV2,
-  // Phase 2B: Add remaining file types
-  // users: UserEditor,
 };
 
 /**

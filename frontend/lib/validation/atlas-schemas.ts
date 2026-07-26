@@ -250,7 +250,7 @@ export const VizSettings = Type.Object({
 export type VizSettings = Static<typeof VizSettings>;
 
 // ============================================================================
-// Viz V2 envelope (docs/Visualization Arch V2.md)
+// Viz V2 envelope (MinusX.md "Visualization")
 //
 // Only the MinusX envelope lives in TypeBox. Native Vega-Lite/Vega spec bodies are
 // deliberately opaque here (open records) — they are validated against Vega-Lite's
@@ -358,7 +358,7 @@ export const VizSourcePivot = Type.Object({
 }, { title: 'VizSourcePivot' });
 export type VizSourcePivot = Static<typeof VizSourcePivot>;
 
-// Discriminated on `kind`. `vega` and `slippy-map` join this union as they land
+// Discriminated on `kind`. `slippy-map` joins this union when it lands
 // (additive — see the RFC).
 export const VizSource = Type.Union([VizSourceVegaLite, VizSourceVega, VizSourceRecipe, VizSourceTable, VizSourcePivot], { title: 'VizSource' });
 export type VizSource = Static<typeof VizSource>;
@@ -469,7 +469,7 @@ export const QuestionContent = Type.Object({
   spreadsheet: Type.Optional(NullableD(SpreadsheetSource,
     'Direct data entered in the spreadsheet editor. Mutually exclusive with query-backed sources.')),
   viz: NullableD(VizEnvelope,
-    'Viz V2 envelope (docs/Visualization Arch V2.md). When present it is AUTHORITATIVE — the chart renders ' +
+    'Viz V2 envelope. When present it is AUTHORITATIVE — the chart renders ' +
     'from viz and legacy vizSettings is ignored. Omit to keep rendering via vizSettings.'),
 }, { title: 'QuestionContent' });
 export type QuestionContent = Static<typeof QuestionContent>;
@@ -634,7 +634,7 @@ export const NotebookSqlCell = Type.Object({
     'LEGACY classic chart settings (rollback path). Optional: viz-first cells omit it; when absent the ' +
     'classic pipeline falls back at render time. When viz is present it is authoritative and this is ignored.'),
   viz: NullableD(VizEnvelope,
-    'Viz V2 envelope (docs/Visualization Arch V2.md). When present it is AUTHORITATIVE — the cell renders ' +
+    'Viz V2 envelope. When present it is AUTHORITATIVE — the cell renders ' +
     'from viz and legacy vizSettings is ignored. Omit to keep rendering via vizSettings.'),
   parameters: Nullable(Type.Array(QuestionParameter)),
   parameterValues: Nullable(Type.Record(Type.String(), Type.Unknown())),
@@ -728,7 +728,8 @@ const CtxTableAnnotation = Type.Object({
 }, { title: 'ContextTableAnnotation' });
 
 // ============================================================================
-// Semantic Models V2 — authored semantic layer (Semantic_Model_v2.md §2.3/§5).
+// Semantic Models V2 — authored semantic layer (MinusX.md "Semantic models,
+// contexts, views, and Atlas schemas").
 // TypeBox is the single source of truth for these shapes; lib/types/semantic.ts
 // re-exports the Static types. The tier-1 validator (lib/semantic/validate.ts)
 // uses SemanticModelV2 as its shape gate for agent-authored JSON.

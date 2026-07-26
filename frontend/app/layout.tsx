@@ -119,7 +119,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Load user + configs + contexts (always) + connections (50ms timeout)
+  // Load user + org config + runtime flags for the Redux preloadedState
   const initialData = await loadInitialState();
 
   // Refuse to render the app over data this build cannot read. `withAuth` already 503s

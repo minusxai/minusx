@@ -22,7 +22,7 @@ export function parseToolArgs(msg: MessageWithFlags): Record<string, any> {
   } catch { return {}; }
 }
 
-// In the slim wire view (Conversations V2, /conversations-v2.md) toolResult `content` is dropped
+// In the slim wire view (Conversations V2 — MinusX.md "Chat serving") toolResult `content` is dropped
 // server-side and `details` carries the display data — so both parsers fall back to `details`.
 export function parseToolContent(msg: MessageWithFlags): any {
   const toolMsg = msg as any;

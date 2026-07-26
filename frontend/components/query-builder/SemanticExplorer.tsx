@@ -687,7 +687,7 @@ export function SemanticExplorer({
     </div>
   );
 
-  // M5 (Semantic_Model_v2.md §2.7): models are AUTHORED, not derived. `models`
+  // Models are AUTHORED, not derived. `models`
   // is the FULL authored set for this connection (fetched unscoped), so an
   // empty one genuinely means "none authored" — point at where they're made.
   // Anything else lands on the picker below, never on this state.

@@ -19,7 +19,8 @@ const SCORERS: Record<RubricFileType, DeterministicScorer> = {
 /**
  * Which categories the DETERMINISTIC scorer actually evaluates per file type. Aesthetics is
  * judge-only for question/dashboard (no static beauty rules), so it's not claimed here — the
- * report marks it unassessed rather than a misleading 5/5. The judge assesses all three.
+ * report marks it unassessed rather than a misleading 5/5. The judge's checks are all
+ * `aesthetics`, so it fills exactly that gap.
  */
 const DETERMINISTIC_COVERAGE: Record<RubricFileType, RubricCategory[]> = {
   question: ['correctness', 'clarity'],

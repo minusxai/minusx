@@ -18,7 +18,10 @@ import type { ObjectStore, UploadUrlResult } from './index';
  * S3Adapter — stores files in an S3-compatible bucket.
  * Supports AWS S3, MinIO, Cloudflare R2, and any S3-compatible endpoint.
  *
- * Required env vars (when OBJECT_STORE_PROVIDER=s3):
+ * Selected by createObjectStore() whenever BOTH of the first two vars below are set
+ * (otherwise LocalFsAdapter is used — see isLocalObjectStore in ./index).
+ *
+ * Required env vars:
  *   OBJECT_STORE_BUCKET            Bucket name
  *   OBJECT_STORE_REGION            AWS region (e.g. us-east-1)
  *   OBJECT_STORE_ACCESS_KEY_ID     AWS access key

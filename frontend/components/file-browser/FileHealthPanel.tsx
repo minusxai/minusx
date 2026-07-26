@@ -5,7 +5,8 @@
  * from the file's (merged, live-edited) content — instant, no fetch — and can run the LLM
  * visual judge on demand (POST /api/files/[id]/rubric with a captured screenshot).
  *
- * See `frontend/docs/rubrik.md`. Rendered in the shared FileHeader badge row for
+ * See MinusX.md "Auth, Access Control, Mode Isolation, HTTP Helpers, and the
+ * File-Health Rubric". Rendered in the shared FileHeader badge row for
  * question/dashboard/story files; renders nothing for other types.
  */
 import { useEffect, useMemo, useState } from 'react';

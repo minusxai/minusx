@@ -126,8 +126,8 @@ function v36ShiftUserFileIds(data: InitData): InitData {
 
 /**
  * Migration registry. All historical migrations (V33–V35) have been folded into
- * the initial seed data. MINIMUM_SUPPORTED_DATA_VERSION is now 35, so any export
- * below that version is rejected — re-import from a fresh export.
+ * the initial seed data. MINIMUM_SUPPORTED_DATA_VERSION is 35, so an export below
+ * that version is treated as if it were at 35 and run through the chain from there.
  */
 /**
  * V37 — Viz Arch V2: add a `viz` envelope to every question and notebook SQL cell
@@ -304,7 +304,8 @@ export function fixData(data: InitData): InitData {
 
 /**
  * Apply all migrations to data starting from specified version.
- * Throws if data version is below MINIMUM_SUPPORTED_DATA_VERSION.
+ * Versions below MINIMUM_SUPPORTED_DATA_VERSION (including 0 for unversioned DBs)
+ * are clamped to the minimum — never rejected.
  */
 export function applyMigrations(data: InitData, fromDataVersion: number): InitData {
   // Clamp anything below minimum (including 0 for unversioned DBs) to minimum.

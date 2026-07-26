@@ -33,7 +33,7 @@ interface UIState {
   activeSidebarSection: string | null;
   askForConfirmation: boolean;
   showAdvanced: boolean;
-    /** Viz V2 format switch (docs/Visualization Arch V2.md §21). Off (V1):
+    /** Viz V2 format switch (see MinusX.md "Visualization"). Off (V1):
    * `vizSettings` is the truth — charts are just-in-time converted for rendering,
    * saved `viz` envelopes are ignored, and editing stays on the classic panel
    * (nothing ever writes an envelope). On (V2): a saved envelope is the truth —
@@ -366,8 +366,8 @@ export const selectRightSidebarUIState = createSelector(
 export const selectDevMode = (state: RootState) => state.ui.devMode;
 export const selectShowAdvanced = (state: RootState) => state.ui.showAdvanced;
 export const selectVizV2 = (state: RootState) => state.ui.vizV2;
-/** True only when the vega renderer is active AND the V2 format is authoritative —
- * the single predicate render/edit surfaces should gate V2-envelope behavior on. */
+/** True when the V2 envelope format is authoritative — the single predicate
+ * render/edit surfaces should gate V2-envelope behavior on. */
 export const selectVizV2Active = (state: RootState) => state.ui.vizV2;
 export const selectAllowChatQueue = (state: RootState) => state.ui.allowChatQueue ?? true;
 export const selectQueueStrategy = (state: RootState) => state.ui.queueStrategy ?? 'end-of-turn';

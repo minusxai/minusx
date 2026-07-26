@@ -11,7 +11,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint --cache",
-    "validate": "concurrently -g --names tsc,eslint \"tsc --noEmit\" \"eslint --cache --quiet\"",
+    "validate": "concurrently -g --names tsc,eslint,docs \"tsc --noEmit\" \"eslint --cache --quiet\" \"tsx scripts/check-docs-consistency.ts\"",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:main": "vitest run --project=node",
@@ -35,7 +35,8 @@
     "generate-story-ui-classes": "tsx scripts/generate-story-ui-classes.ts",
     "generate-app-theme-css": "tsx --conditions react-server scripts/generate-app-theme-css.ts",
     "generate-dashboard-chrome-css": "tsx --conditions react-server scripts/generate-dashboard-chrome-css.ts",
-    "generate-theme-previews": "tsx --conditions react-server scripts/generate-theme-previews.ts"
+    "generate-theme-previews": "tsx --conditions react-server scripts/generate-theme-previews.ts",
+    "check-docs": "tsx scripts/check-docs-consistency.ts"
   },
   "dependencies": {
     "@aws-sdk/client-athena": "^3.1032.0",

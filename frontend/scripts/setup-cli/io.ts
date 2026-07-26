@@ -1,5 +1,5 @@
 // Shared plumbing for setup-cli entries (`scripts/setup-cli/*.ts`) — invoked
-// by setup.sh inside the app image:
+// by install.sh inside the app image:
 //   docker run --rm -i <image> node setup-cli/<entry>.js
 // (precompiled at image build time by `npm run build:setup-cli` — never
 // transpiled at run time: tsx/esbuild dies under amd64 emulation on Apple

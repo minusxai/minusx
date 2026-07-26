@@ -131,7 +131,7 @@ function contextEditInvariant(content: unknown): unknown {
 
 /**
  * True if an EditFile on a context changed ONLY the authored fields — the live version's
- * whitelist/docs/metrics/annotations and the content-level evals/skills. Version identity and the
+ * docs/metrics/annotations/semanticModels and the content-level evals/skills. Version identity and the
  * published pointer must be unchanged; the server-computed menus are ignored (re-derived on load, so
  * round-trip noise never false-rejects). Safety net atop the fold, which preserves structure anyway.
  */

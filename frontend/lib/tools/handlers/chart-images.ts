@@ -1,6 +1,8 @@
 /**
- * Render chart images for question files and upload to S3.
- * Returns image_url content blocks (OpenAI format — LiteLLM converts to Anthropic).
+ * Render chart images for question files and upload to the object store
+ * (`uploadChartOrEmbed` — returns the data URL as-is under the local FS adapter).
+ * Returns OpenAI-style `image_url` content blocks; `lib/chat-translator` converts
+ * them to the orchestrator's `image` blocks on the way to the LLM.
  * Browser-only. Never throws — returns [] on any failure.
  *
  * Shared by the ReadFiles and EditFile handlers.

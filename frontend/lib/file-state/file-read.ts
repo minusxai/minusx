@@ -1,21 +1,13 @@
 /**
  * ReadFiles - Load multiple files with references and query results
  *
- * Phase 1: Enhanced with auto-fetching, TTL-based caching, and promise deduplication
- *
  * Features:
  * - Fetches missing files automatically (no more "File not found" errors)
  * - TTL-based cache freshness checks
  * - Promise deduplication for concurrent requests
  * - Skip option to bypass fetching
- * - Extensible augmentation registry for type-specific processing
- *
- * Improvements over read-files.client.ts:
- * - Actually fetches files if missing/stale (instead of throwing error)
- * - Promise deduplication prevents redundant API calls
- * - Flexible TTL control per request
- * - Direct store import (no getState parameter)
- * - Registry pattern for type-specific augmentation
+ * - Augmentation (references + query results) via selectAugmentedFiles
+ *   (@/lib/store/file-selectors), a pure Redux selector
  *
  * Also owns readFolder — it shares the "load metadata into Redux with TTL
  * caching + permission filtering" concern with the file-read functions above.
@@ -116,15 +108,6 @@ export async function loadFiles(fileIds: number[], ttl: number, skip: boolean): 
   }
 }
 
-/**
- * SelectAugmentedFiles - Pure selector: read files + references + query results from Redux
- *
- * No async, no side-effects. Can be used in hooks via useSelector.
- *
- * @param state - Redux state
- * @param fileIds - File IDs to select
- * @returns ReadFilesOutput
- */
 /**
  * loadFileByPath - Fetch a file by path into Redux
  *
@@ -379,8 +362,6 @@ async function filterFilesByPermissions(files: FileState[]): Promise<FileState[]
   // Get effective user and mode
   const effectiveUser = selectEffectiveUser(state);
   const mode = effectiveUser?.mode || 'org';
-
-  // Import access rules and path helpers
 
   // Filter by permissions
   return files.filter(file => {

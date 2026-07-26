@@ -4,7 +4,7 @@
  * rewrite + metric-only join inclusion (lib/semantic/compile.ts).
  *
  * Deliberately NOT the polyglot parser: the parser returns opaque `raw` select
- * columns for any compound aggregate (verified in Semantic_Model_v2.md §4), so
+ * columns for any compound aggregate (verified), so
  * a token scan over qualified identifiers is the mechanism, not a fallback.
  */
 import { immutableSet } from '@/lib/utils/immutable-collections';

@@ -1,5 +1,5 @@
 /**
- * Conversations V2 — display-grade wire projection (see /conversations-v2.md).
+ * Conversations V2 — display-grade wire projection (see MinusX.md "Chat serving").
  *
  * The stored pi log is the LLM's channel (full replay fidelity). The browser only needs
  * display-grade data, so the conversation read routes project each entry through

@@ -25,7 +25,7 @@ export interface UseConnectionsReturn {
  * useConnections Hook
  *
  * Loads all connections with schemas, with TTL-based caching.
- * Uses core useFiles hook for file loading.
+ * Uses the core useFilesByCriteria hook for file loading.
  *
  * Behavior:
  * 1. If data already loaded and fresh (within TTL) → return cached
@@ -33,7 +33,7 @@ export interface UseConnectionsReturn {
  * 3. Sets loading state during fetch
  *
  * @param options - Hook options (ttl, skip)
- * @returns {connections, loading, reload}
+ * @returns {connections, loading, error}
  */
 export function useConnections(options: UseConnectionsOptions = {}): UseConnectionsReturn {
   const { ttl = CACHE_TTL.FILE, skip = false } = options;

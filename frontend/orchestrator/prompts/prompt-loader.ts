@@ -52,8 +52,8 @@ export const HIDDEN_SKILLS = new Set(['navigation_restricted', 'navigation_unres
 const SKILL_PREFIX = 'skill_';
 
 /**
- * List available skills as `name → description` (drives the skills catalog
- * prompt_loader.list_skills). Skills are templates whose keys start with
+ * List available skills as `name → description` (drives the LoadSkill catalog
+ * in the system prompt). Skills are templates whose keys start with
  * `skill_`; the prefix is stripped. With `skipHidden`, the nav skills in
  * HIDDEN_SKILLS are excluded.
  */

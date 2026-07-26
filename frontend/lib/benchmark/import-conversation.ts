@@ -5,8 +5,8 @@ export interface ImportBenchmarkOptions {
   label?: string;
   /**
    * The dataset's `connections.json` content (array of
-   * {name, dialect, config, description?}). Persisted on the conversation
-   * file's `meta.benchmark_connections` so v=2 chat continuation can wire
+   * {name, dialect, config, description?}). Persisted on the conversation's
+   * `meta.benchmark_connections` so chat continuation can wire
    * NodeConnector-backed executors. Without it, SQL queries fail with
    * "connector 'X' not loaded".
    */
@@ -15,9 +15,9 @@ export interface ImportBenchmarkOptions {
 
 /**
  * POST a benchmark run's orchestrator conversation log to /api/benchmark/import,
- * which persists it as a v=2 conversation file in the documents DB and
- * returns the new fileId. The caller can then navigate to
- * `/explore/<fileId>?v=2` to continue the conversation in the chat UI.
+ * which persists it as a conversation (the dedicated `conversations` /
+ * `messages` tables) and returns its id as `fileId`. The caller can then
+ * navigate to `/explore/<fileId>` to continue the conversation in the chat UI.
  *
  * Throws if the import endpoint responds non-2xx.
  */

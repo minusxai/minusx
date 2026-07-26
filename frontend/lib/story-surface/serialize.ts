@@ -21,8 +21,7 @@ import { collectStoryFontImports, resolveImportFontCss } from '@/lib/html/resolv
 const FONT_URL_RE = /url\(\s*(["']?)((?:https?:\/\/|\/)[^"')]+)\1\s*\)/g;
 
 /** Cache: resource URL (font file / image) → data: URL. These assets are effectively immutable,
- *  so this never invalidates: every capture after the first reuses the same inlined bytes.
- *  eslint-disable-next-line no-restricted-syntax -- browser-only capture cache; no per-request scope. */
+ *  so this never invalidates: every capture after the first reuses the same inlined bytes. */
 // eslint-disable-next-line no-restricted-syntax -- browser-only capture cache, keyed by immutable font URL
 const fontDataUrls = new Map<string, Promise<string | null>>();
 

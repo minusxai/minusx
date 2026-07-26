@@ -1,7 +1,8 @@
 /**
- * Rebuild a clean `content.story` string from AgentHtml's live (edited)
- * shadow-root DOM, undoing everything AgentHtml mutated at render time so the
- * saved HTML round-trips losslessly:
+ * Rebuild a clean `content.story` string from AgentHtml's live (edited) surface DOM — the
+ * iframe body in the live path, a detached Element when healing a stored string, or a
+ * ShadowRoot — undoing everything AgentHtml mutated at render time so the saved HTML
+ * round-trips losslessly:
  *
  *  - drop the injected `<style data-mx-app-styles>` (mirrored app CSS, not part
  *    of the story);
@@ -13,7 +14,7 @@
  *  - re-insert the `@import` web-font lines AgentHtml hoisted out of the story's
  *    `<style>` into `document.head` (otherwise the saved story loses its fonts).
  *
- * Operates on a clone, so the live (still-displayed) shadow root is untouched.
+ * Operates on a clone, so the live (still-displayed) surface root is untouched.
  */
 // AgentHtml-injected style tags that are NOT part of the authored story and
 // must be stripped on save. Styles live INSIDE the story root now (Story_Design_V2 §4: the

@@ -54,7 +54,10 @@ export interface InitData {
 }
 
 /**
- * Export entire database to InitData format.
+ * Export the users and files tables to InitData format.
+ * The `draft` and `meta` columns are NOT exported (and `importToDatabase` does not
+ * write them), so a round-trip through export → import resets every row to
+ * draft = false, meta = NULL.
  * _dbPath is accepted for API compat but ignored.
  */
 export async function exportDatabase(_dbPath: string = ''): Promise<InitData> {

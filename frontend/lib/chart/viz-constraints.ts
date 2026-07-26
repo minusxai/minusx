@@ -20,7 +20,7 @@ interface ConstraintInput {
  * Centralized viz type constraint validation.
  *
  * Returns the first constraint violation found, or { error: null } if valid.
- * Called from ChartBuilder (pre-render) and individual plot components (render-time).
+ * Reached through `getVizSettingsWarning` below, which the VizWarning tool handler calls.
  */
 export function getVizConstraintError(
   chartType: VisualizationType,

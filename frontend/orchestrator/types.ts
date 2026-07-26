@@ -160,7 +160,7 @@ export class MXAgent<
   static readonly tools: Tool<TSchema>[] = [];
   /**
    * Hard cap on the agentic loop, counted in `toolThread` entries (assistant +
-   * tool-result messages); the historical MAX_STEPS_LOWER_LEVEL value.
+   * tool-result messages).
    * The loop stops with a "Maximum iterations (N) reached." reply at the cap,
    * and tools are withheld once the thread reaches `maxSteps − 5` so the model
    * is forced to give a final answer. Default `Infinity` = uncapped (concrete

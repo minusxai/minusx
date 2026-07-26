@@ -1,7 +1,7 @@
 // Cross-check controller: runs two `BenchmarkAnalystAgent` instances in
 // parallel as tool calls, judges their final answers via a `CheckEquivalence`
 // tool, and (on disagreement) retries once with cross-feedback. Toggled by
-// `DAB_DOUBLE_CHECK=1` in the benchmark CLI. See `frontend/benchmarks/README.md`.
+// `DAB_DOUBLE_CHECK=1` in the benchmark CLI (`frontend/benchmarks/runner.ts`).
 //
 // The whole flow is hand-rolled TS — no LLM drives the controller; the
 // only LLM cost is inside the four sub-agent runs and the two judge

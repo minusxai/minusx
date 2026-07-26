@@ -102,7 +102,7 @@ interface QuestionViewV2Props {
   queryEstimatedDurationMs?: number | null;
 
   // --- Formerly-internal Redux state, now supplied by the caller (Container/View
-  // convention — see CLAUDE.md "Component Patterns"). Page-mode containers
+  // convention — see MinusX.md "Component patterns"). Page-mode containers
   // (QuestionContainerV2, CreateQuestionModalContainer) source these from Redux;
   // toolcall callers (InlineChart, ExecuteQueryDisplay) supply local/no-op values. ---
 
@@ -270,8 +270,8 @@ export default function QuestionViewV2({
   }, []);
 
   // The semantic vocabulary: every AUTHORED model visible at this file's path
-  // on its connection (Semantic_Model_v2.md §2.7 M5 — models are authored, not
-  // derived from the schema, so this is a human-sized set fetched unscoped).
+  // on its connection (models are authored, not derived from the schema, so
+  // this is a human-sized set fetched unscoped).
   // It's both the explorer's picker list and the gate: no authored models, no
   // GUI tab (a raw whitelisted table is no longer a reason to offer one).
   const { models: semanticModels } = useSemanticModels(filePath || '/org', content.connection_name);

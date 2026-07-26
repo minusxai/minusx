@@ -41,7 +41,7 @@ import {
 export interface UploadUrlResult {
   /** Presigned PUT URL the client uploads to directly. */
   uploadUrl: string;
-  /** Publicly accessible URL of the object after equal. */
+  /** Publicly accessible URL of the object after upload. */
   publicUrl: string;
 }
 

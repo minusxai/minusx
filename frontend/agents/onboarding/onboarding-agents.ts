@@ -1,6 +1,6 @@
 // Onboarding agents (OnboardingContextAgent / OnboardingDashboardAgent).
 //
-// Both run on the normal v=2 chat path (they use the frontend-bridged EditFile /
+// Both run on the normal browser chat path (they use the frontend-bridged EditFile /
 // CreateFile tools), so they extend WebAnalystAgent and just (a) restrict the
 // toolset, (b) cap maxSteps for low latency, (c) render the onboarding-specific
 // prompts (`onboarding_context.*` / `onboarding_dashboard.*`, already in

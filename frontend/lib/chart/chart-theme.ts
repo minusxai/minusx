@@ -5,7 +5,7 @@
  * color pickers, and the geo color scale.
  */
 
-// Reads the CSS variable so ECharts honors the same font override as the rest of the app
+// Reads the CSS variable so charts honor the same font override as the rest of the app
 export function getChartFontFamily(): string {
   const fallback = 'JetBrains Mono, Consolas, Monaco, Courier New, monospace'
   if (typeof document === 'undefined') return fallback
@@ -133,7 +133,3 @@ const getThemeColors = (colorMode: 'light' | 'dark') => {
   return colorMode === 'light' ? LIGHT_THEME : DARK_THEME
 }
 
-/**
- * Base ECharts theme configuration for MinusX BI
- * Apply this to all charts for consistent styling
- */

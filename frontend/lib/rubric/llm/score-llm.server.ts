@@ -7,7 +7,8 @@
  * bespoke LLM call: prompts live in `micro.rubric_llm` (prompts.yaml), model + usage tracking
  * come for free. The screenshot rides along as an image content block on the micro context.
  *
- * See `frontend/docs/rubrik.md`.
+ * See `MinusX.md` — "Auth, Access Control, Mode Isolation, HTTP Helpers, and the File-Health
+ * Rubric".
  */
 import 'server-only';
 import { runMicroTask } from '@/lib/chat/run-micro-task.server';
@@ -108,7 +109,8 @@ function findingsFromVotes(fileType: RubricFileType, runs: CheckVerdict[][]): Ru
 }
 
 /** Merge a deterministic and an LLM report into one. A category is assessed if EITHER scored it
- *  (the LLM covers all three); each finding already carries its own `source`. */
+ *  (every check in `LLM_CHECKS` is categorized `aesthetics`, so in practice the LLM contributes
+ *  that category and the deterministic scorer the rest); each finding carries its own `source`. */
 export function combineReports(deterministic: RubricReport, llm: RubricReport): RubricReport {
   const findings = [...deterministic.categories, ...llm.categories].flatMap((c) => c.findings);
   const assessed = CATEGORIES.filter((cat) =>

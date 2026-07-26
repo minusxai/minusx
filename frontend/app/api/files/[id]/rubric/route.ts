@@ -6,7 +6,8 @@ import { validateFileId } from '@/lib/data/helpers/validation';
 import { isRubricFileType } from '@/lib/rubric/registry';
 import { scoreFile, scoreFileDeterministicResolved } from '@/lib/rubric/score-file.server';
 
-// File health rubric (see docs/rubrik.md).
+// File health rubric (see MinusX.md "Auth, Access Control, Mode Isolation, HTTP Helpers, and the
+// File-Health Rubric").
 //   GET  → deterministic report (score + findings), computed from content.
 //   POST → deterministic + LLM judge, combined. Body: { screenshot?: <data URL>, screenshotUrl?: <https URL> }.
 export const dynamic = 'force-dynamic';

@@ -1,5 +1,5 @@
 /**
- * Tier-1 semantic model validation (Semantic_Model_v2.md §2.3/§2.5, M1).
+ * Tier-1 semantic model validation.
  * One test per validated rule; fixtures mirror the m2m derisk scenario
  * (orders / customers / tags / order_tags + a `costs` view).
  */

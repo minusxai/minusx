@@ -1,6 +1,6 @@
 /**
  * DashboardView — characterizes CURRENT (pre-move) Redux behavior ahead of the
- * Container/View discipline move (CLAUDE.md "Refactoring — Blue -> Red -> Blue").
+ * Container/View discipline move (MinusX.md "Refactoring — Blue → Red → Blue").
  * DashboardView.tsx currently calls useAppDispatch/
  * useAppSelector directly at 8 sites (grep-verified): selectFileEditMode,
  * selectIsDirty, selectMergedContent (dashboard-level parameterValues),
@@ -22,7 +22,7 @@
  * the isDirty -> gridVersion remount (DashboardView.tsx:97-105) is directly
  * observable without depending on the real library's drag/resize internals.
  *
- * All element queries by aria-label only (CLAUDE.md convention). One
+ * All element queries by aria-label only (MinusX.md "Writing tests"). One
  * presentational aria-label was added to DashboardView.tsx's question-tile
  * wrapper (`Dashboard tile <id>[ (mark)]`) since the publish/edit highlight
  * state (fileState/dirtyFiles-driven) had no other observable affordance.

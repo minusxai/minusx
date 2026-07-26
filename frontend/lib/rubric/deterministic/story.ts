@@ -12,7 +12,7 @@ const MAX_COLORS = 10;
 
 // Width thresholds. A story column is ~1280px on desktop; a cartesian plot needs at least half of
 // it to read, a pie/funnel can go narrower. `fraction` is the embed's share of that column; `minPx`
-// is any hard px cap. See `frontend/docs/rubrik.md` (Story rule catalog).
+// is any hard px cap.
 const CARTESIAN = immutableSet(['line', 'area', 'bar', 'scatter']);
 const ROUND = immutableSet(['pie', 'funnel']);
 const MIN_CARTESIAN_FRACTION = 0.5;

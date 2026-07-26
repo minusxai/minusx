@@ -1,11 +1,11 @@
 /**
  * Server-side chart image renderer.
  *
- * Renders charts using ECharts SSR (SVG → Resvg → Sharp JPEG). Works for
+ * Renders charts through the Vega pipeline (SVG → Resvg → Sharp JPEG). Works for
  * the same chart types as the client renderer, but runs in Node.js only.
  *
  * Node.js only — not safe for browser bundles.
- * For browser-side rendering, use ChartImageRenderer.client.ts.
+ * For browser-side rendering, use VizImageRenderer.client.ts.
  */
 import 'server-only'
 

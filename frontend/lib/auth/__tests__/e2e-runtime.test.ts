@@ -1,4 +1,4 @@
-// Unit tests for the runtime-E2E secret gate (Tests/QA/Evals Arch V2 — Phase 5 enabler).
+// Unit tests for the runtime-E2E secret gate.
 // The matcher is the security-critical bit: only the exact configured secret enables
 // the store-exposure opt-in. The configured secret carries a trailing newline here
 // to assert `.trim()` tolerance (a common docker/compose env-setting gotcha).

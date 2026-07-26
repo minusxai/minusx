@@ -9,7 +9,7 @@ export const runtime = 'nodejs';
 
 /**
  * GET /api/conversations/:id/screenshots/:callId — Conversations V2 lazy screenshot endpoint
- * (see /conversations-v2.md).
+ * (see MinusX.md "Chat serving").
  *
  * The display view strips inline base64 screenshots from the conversation JSON and rewrites
  * `details.screenshotUrl` to this URL; the bytes are served on demand from the stored (full)

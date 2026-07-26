@@ -1,5 +1,6 @@
 /**
- * Tier-1 static validation for authored semantic models (Semantic_Model_v2.md §2.5).
+ * Tier-1 static validation for authored semantic models (MinusX.md "Semantic
+ * models, contexts, views, and Atlas schemas").
  *
  * Pure and synchronous: name/alias/namespace rules, source resolution against
  * the exposed schema, and the qualified-ref lexer for metric SQL. No DB or
@@ -48,8 +49,11 @@ function findTableFields(
   for (const s of db.schemas) {
     if (schema && s.schema !== schema) continue;
     const t = s.tables.find((tt) => tt.table === table);
-    // Bounded (names-only) schemas ship tables WITHOUT columns — the table
-    // resolves (it exists) but its fields are unknowable, not empty.
+    // Bounded (names-only) schemas ship tables WITHOUT columns, which yields an
+    // EMPTY field map here — so every column on such a table then reports "not
+    // an exposed field". Callers that may hold a bounded menu (the browser
+    // EditFile path) must gate on `fieldChecksTrustworthy` (./edit-check) and
+    // skip tier 1; the save gate recomputes an unbounded schema, so it is unaffected.
     if (t) return new Map((t.columns ?? []).map((c) => [c.name, c.type ?? '']));
   }
   return null;

@@ -1,9 +1,9 @@
 /**
  * MinusX Vega-Lite theme configs (RFC §7, Mechanism A).
  *
- * One token source generates the light and dark VL `config` objects. Tokens are
- * sourced from the existing chart constants (lib/chart/chart-theme.ts palette +
- * JetBrains Mono) so the two chart stacks cannot drift during migration.
+ * One token source generates the light and dark VL `config` objects: the chart constants
+ * in lib/chart/chart-theme.ts (palette + JetBrains Mono), shared with the native-Vega
+ * parser config below so the two grammar tiers cannot drift.
  * Passed as external compiler config — spec-internal `config` wins natively.
  */
 import type { Config as VegaLiteConfig } from 'vega-lite';
@@ -29,7 +29,7 @@ export function getVegaLiteConfig(mode: 'light' | 'dark'): VegaLiteConfig {
     // Default number format for quantitative axis/legend/tooltip labels without an
     // explicit format: SI units ('.3~s' → 20k, 1.5M, 431k). Specs override per-encoding.
     numberFormat: '.3~s',
-    // The card owns the surface; charts inherit it (same rule as the ECharts theme).
+    // The card owns the surface; charts inherit it.
     background: 'transparent',
     range: {
       category: COLOR_PALETTE,

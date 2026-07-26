@@ -1,8 +1,8 @@
 /**
  * Client-side V2 (Vega/Vega-Lite envelope) chart image renderer (Viz Arch V2 §21 item 2,
  * the client path). Renders an envelope off-screen through Vega's canvas renderer and
- * hands the PNG to the SHARED `toJpegObjectUrl` encoder — the exact watermark/scale/JPEG
- * path the ECharts client renderer uses, so both families upload identical-looking JPEGs.
+ * hands the PNG to the shared `toJpegObjectUrl` encoder, which owns the watermark,
+ * downscale and JPEG encoding for every client-side chart image.
  *
  * Rendering through canvas (not SVG) means slippy street TILES are captured for real,
  * matching what the user sees. Browser-only — needs a document + canvas.
@@ -20,7 +20,7 @@ export interface RenderEnvelopeImageOptions {
   addWatermark?: boolean;
   padding?: boolean;
   logoSrc?: string;
-  /** Explicit height; defaults to the same aspect the ECharts renderer picks per viz type. */
+  /** Explicit height; defaults to the per-viz-type aspect in `renderable-types.ts`. */
   height?: number;
 }
 

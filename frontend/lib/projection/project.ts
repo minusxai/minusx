@@ -3,7 +3,7 @@
  * projection ({@link ProjectedFilesOutput}: lean JSON + out-of-JSON markup/data/image blocks),
  * diffing every facet against a caller-owned {@link FacetMemo}.
  *
- * This is the heart of the append-only-log → LLM-message conversion (Phase C). It is pure and
+ * This is the heart of the append-only-log → LLM-message conversion. It is pure and
  * memo-driven so it can be unit-tested exhaustively and reused by both the client and headless
  * projection paths. The caller walks the emitted turns IN ORDER through a single memo (and
  * `memo.reset()`s at a summarization boundary); within a turn, references are projected with

@@ -1,8 +1,7 @@
 /**
- * Database schema search logic.
- *
- * Extracted from tool-handlers.server.ts so it can be imported without
- * triggering side-effect tool registrations in the chat orchestrator.
+ * Database schema search logic. Pure + side-effect free, so it can be imported
+ * from anywhere: the benchmark analyst's SearchDBSchema tool
+ * (`agents/benchmark-analyst/db-tools.ts`) and the MCP server (`lib/mcp/server.ts`).
  */
 
 import { JSONPath } from 'jsonpath-plus';

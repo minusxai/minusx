@@ -28,7 +28,7 @@ interface SharePageProps {
 
 /**
  * Server-rendered OG/Twitter tags for the shared story so crawlers get a real title +
- * description (the `opengraph-image.tsx` sibling supplies the image). The nonce in
+ * description (the image, when re-enabled, comes from the `og/route.ts` sibling). The nonce in
  * `shareId` is the authorization; invalid/revoked → empty so the page inherits root defaults.
  */
 export async function generateMetadata({ params }: SharePageProps): Promise<Metadata> {

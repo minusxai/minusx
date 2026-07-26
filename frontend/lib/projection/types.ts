@@ -20,8 +20,10 @@
  * Facets are optional throughout: which ones a producer populates is a per-role / per-type
  * POLICY (e.g. references carry `data` only — no `content`/markup; a question carries its
  * viz `image`; a `table` question may carry query `data` instead of an image). The TYPE is
- * uniform; the policy lives in the producers (Phase B). Reuse the SHAPE and the diff
- * machinery ({@link ./facets}); do not conflate file-metadata `data` with query-row `data`.
+ * uniform; the policy lives in the producers (app state via `lib/projection/messages.ts`, the
+ * file tools via `lib/tools/handlers/{read-files,edit-file,create-file}.ts`). Reuse the SHAPE
+ * and the diff machinery ({@link ./facets}); do not conflate file-metadata `data` with
+ * query-row `data`.
  */
 import type { FileType } from '@/lib/types';
 import type { ImageContent } from '@/orchestrator/llm';
@@ -103,9 +105,9 @@ export interface AugmentedFileEntry {
 }
 
 /**
- * A focused/primary file plus its references (other files it points at). Replaces
- * `CompressedAugmentedFile`. App state for a file page is one of these; a multi-file tool
- * output (ReadFiles) is an array of these.
+ * A focused/primary file plus its references (other files it points at). Adapted from a
+ * `CompressedAugmentedFile` by {@link ./from-compressed}. App state for a file page is one of
+ * these; a multi-file tool output (ReadFiles) is an array of these.
  */
 export interface AugmentedFiles {
   file: AugmentedFileEntry;

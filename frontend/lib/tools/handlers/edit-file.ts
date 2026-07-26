@@ -2,10 +2,9 @@
  * EditFile - String-based editing for native toolset
  * Routes to editFileStr for string find-and-replace with oldMatch/newMatch parameters.
  *
- * Returns a delta response: full data for changed parts, stubs for unchanged ones.
- * - fileState: always full (the edited file always changes)
- * - references: {id, unchanged: true} for pre-existing refs; full for new ones
- * - queryResults: {queryResultId, unchanged: true} for results with same hash; full for new/changed
+ * Returns the edit status + the re-read file in `details.__augmented` (a single entry,
+ * no references). Cross-turn de-duplication is NOT computed here — `projectMessages`
+ * diffs `__augmented` against the conversation when the turn is sent to the LLM.
  */
 import type { EditFileDetails, NotebookContent, NotebookSqlCell } from '@/lib/types';
 import type { VizEnvelope, VizSettings } from '@/lib/validation/atlas-schemas';
@@ -290,7 +289,7 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
       }
     }
 
-    // Inline semantic-model validation (Semantic_Model_v2.md §3, same compiler model as viz
+    // Inline semantic-model validation (same compiler model as viz
     // above): tiers 1–2 run BEFORE the edit applies, over the context this edit would leave
     // staged — errors reject atomically with the ISSUE LIST in the tool result, so the agent
     // self-corrects in-loop instead of meeting the publish gate's flattened, human-facing

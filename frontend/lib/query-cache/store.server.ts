@@ -5,7 +5,7 @@
  * deduped via an `INSERT … ON CONFLICT … WHERE lease_expired` claim, so exactly
  * one caller executes and the rest wait then read the blob. Stateless per
  * instance (works across the hosted fleet; a graceful no-op on single-writer
- * PGLite). See docs/Query Execution, Cache, & Params Arch V2.md §4.
+ * PGLite). See `MinusX.md` — "Query data plane", the cache.
  */
 import 'server-only';
 import { getModules } from '@/lib/modules/registry';

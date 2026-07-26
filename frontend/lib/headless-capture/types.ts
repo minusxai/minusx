@@ -15,7 +15,7 @@ export interface StoryCaptureInput {
   fileId: number;
   /** Origin of the running app, e.g. `http://localhost:3000`. */
   baseUrl: string;
-  /** Capture width in CSS px (default 800). */
+  /** Capture width in CSS px (default DEFAULT_CAPTURE_WIDTH = STORY_CANVAS_WIDTH). */
   width?: number;
   /** Output encoding (default 'jpeg'). */
   format?: 'jpeg' | 'png';
