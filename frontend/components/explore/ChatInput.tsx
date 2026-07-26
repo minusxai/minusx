@@ -213,7 +213,7 @@ function ChatInputInner({
   }, [pendingMessage, container, dispatch, onSend, connectionsLoading, contextsLoading, attachments]);
 
   // Remote sessions HARD-lock (queueing deliberately ignored — the external agent is the only
-  // decider until the user stops the session). See REMOTE_AGENT_SESSIONS.md §9.2.
+  // decider until the user stops the session).
   const chatLocked = remoteSessionActive || (isAgentRunning && !allowChatQueue);
 
   // useStableCallback: LexicalMentionEditor is React.memo'd with a comparator

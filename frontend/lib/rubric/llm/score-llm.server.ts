@@ -7,7 +7,7 @@
  * bespoke LLM call: prompts live in `micro.rubric_llm` (prompts.yaml), model + usage tracking
  * come for free. The screenshot rides along as an image content block on the micro context.
  *
- * See `frontend/docs/rubrik.md`.
+ * See `frontend/lib/rubric/AGENTS.md`.
  */
 import 'server-only';
 import { runMicroTask } from '@/lib/chat/run-micro-task.server';

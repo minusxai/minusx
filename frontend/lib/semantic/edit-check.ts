@@ -7,7 +7,8 @@
  *    the BROWSER and therefore cannot import the (server-only) gate.
  *
  * Both import from here rather than re-implementing, so the agent's in-loop
- * feedback (Semantic_Model_v2.md §3) and the publish gate (§2.5) can never drift.
+ * feedback and the publish gate can never drift (see the shared-gate rationale
+ * in lib/semantic/AGENTS.md).
  *
  * Tier 3 — the `SELECT * FROM (…) LIMIT 0` warehouse dry-run — is deliberately NOT
  * here: it needs a live connector plus server credentials, and the save gate owns

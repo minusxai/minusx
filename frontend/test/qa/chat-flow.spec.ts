@@ -83,7 +83,7 @@ test.describe('real-LLM chat flows', () => {
     expect(await sendChat(page, 'Reply with just the word: hello'), 'composer should be driveable').toBe(true);
     await assertChatReplied(page, 1);
 
-    // Conversations V2 (/conversations-v2.md): per-call debug ids (llmDebug/lllm_call_id) ride the
+    // Conversations V2: per-call debug ids (llmDebug/lllm_call_id) ride the
     // FULL wire view only — the default display view strips them. Enable the debug (dev mode) view
     // first; the toggle re-renders the settled transcript from the verbatim log.
     await enableDebugUi(page);

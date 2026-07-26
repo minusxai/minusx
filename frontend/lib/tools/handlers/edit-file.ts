@@ -203,7 +203,7 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
       }
     }
 
-    // Inline semantic-model validation (Semantic_Model_v2.md §3, same compiler model as viz
+    // Inline semantic-model validation (see lib/semantic/AGENTS.md, same compiler model as viz
     // above): tiers 1–2 run BEFORE the edit applies, over the context this edit would leave
     // staged — errors reject atomically with the ISSUE LIST in the tool result, so the agent
     // self-corrects in-loop instead of meeting the publish gate's flattened, human-facing

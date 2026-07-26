@@ -6,7 +6,7 @@
  *  - deterministic: pure `content → RubricReport` (see `deterministic/*`, `scoring.ts`)
  *  - llm:           `(content + screenshot) → RubricReport` (see `llm/*`)
  *
- * See `frontend/docs/rubrik.md` for the rule catalog and research backing.
+ * See `frontend/lib/rubric/AGENTS.md` for the design rules and research backing.
  */
 import type { FileType } from '@/lib/types';
 

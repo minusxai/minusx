@@ -1,5 +1,5 @@
 /**
- * Tier-3 dry-run save gate (Semantic_Model_v2.md §2.5, M4): every probe is the
+ * Tier-3 dry-run save gate: every probe is the
  * compiled metric wrapped `SELECT * FROM (…) AS _probe LIMIT 0`, executed via
  * the real connector seam. Blocking policy: bad SQL blocks; infrastructure
  * failures fail open with `verified: false`. Probe scope: metadata-only →

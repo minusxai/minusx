@@ -8,7 +8,7 @@ import { selectRemoteSessionPrompts } from '@/store/chatSlice';
 import UserInputComponent from '@/components/explore/UserInputComponent';
 
 /**
- * Global approval host for Remote Agent Sessions (REMOTE_AGENT_SESSIONS.md §9).
+ * Global approval host for Remote Agent Sessions.
  *
  * A remote session's user-approval prompts (Navigate confirmations, the PublishAll review) are
  * normally delivered inline in the session conversation's chat view — but the remote agent

@@ -1,6 +1,5 @@
 /**
- * Conversations V2 — client-side raw pi-log cache + incremental conversation loads
- * (see /conversations-v2.md).
+ * Conversations V2 — client-side raw pi-log cache + incremental conversation loads.
  *
  * The chat finalize path used to re-download the ENTIRE conversation after every turn. This
  * module keeps the (slim or full) raw log per conversation in a module map — deliberately NOT

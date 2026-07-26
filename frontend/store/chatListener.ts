@@ -258,7 +258,7 @@ async function runV3TurnInListener(
   if (turn.manualRetry || turn.autoRetry) invalidateConversationLogCache(conversationID);
 
   // Reload the durable log for the final render (one source of truth) — incrementally past the
-  // cached prefix when coherent (Conversations V2, /conversations-v2.md), in the view matching dev
+  // cached prefix when coherent (Conversations V2), in the view matching dev
   // mode. Also carries errors[] — the v3 stream only signals a bare terminal `status:'error'` and
   // never puts the message on the wire, so `runError` is undefined; the real cause was persisted to
   // errors[]. Fetch it BEFORE surfacing the error so the user sees the actual message instead of a
@@ -313,7 +313,7 @@ async function runV3TurnInListener(
 
 
 // ---------------------------------------------------------------------------
-// Remote Agent Sessions — the browser observer (REMOTE_AGENT_SESSIONS.md §9.1)
+// Remote Agent Sessions — the browser observer
 // ---------------------------------------------------------------------------
 
 /**
@@ -863,8 +863,8 @@ chatListenerMiddleware.startListening({
 });
 
 /**
- * Dev mode turned ON → conversation reloads switch to the full wire view (Conversations V2,
- * /conversations-v2.md). The raw-log cache must never mix slim and full entries, so any toggle
+ * Dev mode turned ON → conversation reloads switch to the full wire view (Conversations V2).
+ * The raw-log cache must never mix slim and full entries, so any toggle
  * invalidates it. Turning dev mode ON additionally re-renders the settled loaded conversations
  * from the verbatim log so the inspector (per-turn appState, full tool I/O) has data without a
  * page reload. (Not just the `active` one — a conversation opened via its page loads with

@@ -89,8 +89,8 @@ export interface IDatabaseAdapter {
 
   /**
    * Emit a Postgres NOTIFY on `channel` with `payload` (the low-latency wakeup for chat streaming;
-   * see docs/chat-architecture-v3.md). Payload is capped at ~8KB by Postgres — carry pointers, not
-   * data. Works on both PGLite (in-process) and Postgres.
+   * see the chat serving path in the repo-root AGENTS.md). Payload is capped at ~8KB by Postgres —
+   * carry pointers, not data. Works on both PGLite (in-process) and Postgres.
    */
   notify(channel: string, payload: string): Promise<void>;
 

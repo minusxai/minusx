@@ -1,5 +1,5 @@
 /**
- * V2 compiler golden tests (Semantic_Model_v2.md M2): compileSemanticQuery over
+ * V2 compiler golden tests: compileSemanticQuery over
  * primary/references, `_views.*` sources, author aliases, SQL metrics via
  * alias-rewrite, and metric-only join inclusion. m2m compiles in M3 — until
  * then it throws a clear SemanticCompileError.

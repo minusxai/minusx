@@ -2,7 +2,7 @@
  * Remote Agent Sessions — result-content serializer: the orchestrator's own
  * `(TextContent | ImageContent)[]` → wire `RemoteContentBlock[]`.
  *
- * Reuses the app's existing attachment semantics per deployment (REMOTE_AGENT_SESSIONS.md §7):
+ * Reuses the app's existing attachment semantics per deployment:
  * absolute public URLs (S3/CDN) pass through; `data:` URLs and base64 blocks pass through as
  * base64; the local object store's `/api/object-store/serve/<key>` URLs are **auth-gated and
  * relative** — unreachable for an external agent — so they are inlined as base64 by reading the

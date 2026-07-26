@@ -1,8 +1,7 @@
 /**
- * AUTHORED semantic models, served scoped to a path (Semantic_Model_v2.md
- * §2.7 M5). Models are authored on context versions
- * (`ContextVersion.semanticModels`) and inherited down the context tree as
- * `content.fullSemanticModels` — resolution mirrors views
+ * AUTHORED semantic models, served scoped to a path. Models are authored on
+ * context versions (`ContextVersion.semanticModels`) and inherited down the
+ * context tree as `content.fullSemanticModels` — resolution mirrors views
  * (lib/views/views.server.ts): nearest context for the path, inherited models
  * plus the user-visible published version's own. Served by
  * POST /api/semantic-models.

@@ -4,7 +4,7 @@
  * false precision / variance). All tunable constants (deductions, per-type category weights,
  * grade bands) live here so they can be calibrated against a human gold set later.
  *
- * See `frontend/docs/rubrik.md`.
+ * See `frontend/lib/rubric/AGENTS.md`.
  */
 import type {
   AgentRubric,

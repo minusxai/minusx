@@ -1,5 +1,5 @@
 /**
- * Tier-1 static validation for authored semantic models (Semantic_Model_v2.md §2.5).
+ * Tier-1 static validation for authored semantic models.
  *
  * Pure and synchronous: name/alias/namespace rules, source resolution against
  * the exposed schema, and the qualified-ref lexer for metric SQL. No DB or

@@ -193,7 +193,7 @@ const config: EnvironmentConfig = {
   QUERY_CACHE_REVALIDATE_MS: getOptionalNumber(process.env.QUERY_CACHE_REVALIDATE_MS, 20 * 60_000),
   QUERY_CACHE_EXPIRY_MS: getOptionalNumber(process.env.QUERY_CACHE_EXPIRY_MS, 60 * 60_000),
   QUERY_CACHE_LEASE_MS: getOptionalNumber(process.env.QUERY_CACHE_LEASE_MS, 2 * 60_000),
-  // Remote Agent Sessions: 4h hard TTL, 30min idle timeout (see REMOTE_AGENT_SESSIONS.md).
+  // Remote Agent Sessions: 4h hard TTL, 30min idle timeout.
   REMOTE_SESSION_TTL_MS: getOptionalNumber(process.env.REMOTE_SESSION_TTL_MS, 4 * 60 * 60_000),
   REMOTE_SESSION_IDLE_MS: getOptionalNumber(process.env.REMOTE_SESSION_IDLE_MS, 30 * 60_000),
 };

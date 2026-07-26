@@ -1,7 +1,7 @@
 /**
  * Query Execution, Cache & Params Arch V2 — shared contracts.
  *
- * See docs/Query Execution, Cache, & Params Arch V2.md. These types are the
+ * See "Query Execution Flow" in the repo-root AGENTS.md. These types are the
  * single source of truth for the durable, cross-instance query cache that
  * replaces the in-process `queryCache`/`queryInflight` maps.
  *

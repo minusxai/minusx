@@ -1,5 +1,5 @@
 /**
- * Remote Agent Sessions — the execution engine (REMOTE_AGENT_SESSIONS.md §5).
+ * Remote Agent Sessions — the execution engine.
  *
  * Each remote tool call is stateless: reconstruct a fresh Orchestrator from the durable log,
  * synthesize an assistant message carrying the externally-authored tool call, and drive

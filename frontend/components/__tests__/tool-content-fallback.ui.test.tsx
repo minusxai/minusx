@@ -1,5 +1,5 @@
 /**
- * Conversations V2 — display-view fallback for tool-card parsing (see /conversations-v2.md).
+ * Conversations V2 — display-view fallback for tool-card parsing.
  * In the slim wire view, toolResult `content` is dropped and `details` carries the display data:
  * parseToolContent must fall back to `msg.details`, and isToolSuccess must read `details.success`.
  */

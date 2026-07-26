@@ -1,6 +1,6 @@
 /**
- * Authored semantic models (server) — Semantic_Model_v2.md §2.7 M5: the
- * /api/semantic-models entry points serve models AUTHORED on context versions
+ * Authored semantic models (server): the /api/semantic-models entry points
+ * serve models AUTHORED on context versions
  * (ContextVersion.semanticModels, inherited via fullSemanticModels), never
  * per-request derivation. Derivation (lib/semantic/derive.ts) survives only as
  * the draft-suggestion engine — these tests prove it no longer feeds live

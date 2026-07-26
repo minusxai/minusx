@@ -128,7 +128,7 @@ export interface ContextVersion {
   metrics?: MetricDef[];             // Named metrics attached to tables
   annotations?: TableAnnotation[];   // Editorial table/column descriptions
   views?: ViewDef[];                 // Curated SQL exposed as tables under the `_views` schema
-  semanticModels?: SemanticModelV2[]; // Authored semantic models (Semantic_Model_v2.md)
+  semanticModels?: SemanticModelV2[]; // Authored semantic models
   // This context's own selection out of what it INHERITED — the exact analogue of
   // re-selecting tables from `parentSchema`, and the mirror of `childPaths` (the
   // parent choosing who is offered a model). Absent = '*' = take everything,

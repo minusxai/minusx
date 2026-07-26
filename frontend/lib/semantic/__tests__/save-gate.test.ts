@@ -1,5 +1,5 @@
 /**
- * Tier-1 save gate for authored semantic models (Semantic_Model_v2.md M1).
+ * Tier-1 save gate for authored semantic models.
  *
  * Every context write passes through FilesAPI.saveFile → the semantic gate, so
  * an invalid model blocks the version save regardless of author (UI, raw JSON,

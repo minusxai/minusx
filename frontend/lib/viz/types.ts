@@ -1,5 +1,5 @@
 /**
- * Viz V2 shared contracts (docs/Visualization Arch V2.md).
+ * Viz V2 shared contracts (see "Charting / Visualization Library" in the repo-root AGENTS.md).
  *
  * The envelope schema itself lives in lib/validation/atlas-schemas.ts (VizEnvelope);
  * these are the runtime contracts for the validation / data-binding / theme pipeline.

@@ -1,5 +1,5 @@
 // ============================================================================
-// Semantic layer types (Semantic_Model_v2.md).
+// Semantic layer types (see lib/semantic/AGENTS.md).
 //
 // The authored model shape is TypeBox single-source in
 // lib/validation/atlas-schemas.ts; the Static types are RE-EXPORTED below —

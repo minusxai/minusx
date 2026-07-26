@@ -1,6 +1,6 @@
 /**
  * Conversations V2 — chatListener finalize must reload the durable log INCREMENTALLY and in the
- * view matching dev mode (see /conversations-v2.md). Full stack: Redux dispatch → chatListener
+ * view matching dev mode. Full stack: Redux dispatch → chatListener
  * (IS_TEST path) → real v3 route handlers → faux LLM → finalize reload → Redux messages.
  *
  * Wire contract under test:

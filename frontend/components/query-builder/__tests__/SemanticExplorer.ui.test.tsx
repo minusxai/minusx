@@ -9,8 +9,8 @@
  * client-side and emits spec + SQL + viz columns.
  *
  * With no spec yet the columns give way to the AUTHORED-MODEL picker
- * (Semantic_Model_v2.md §2.4 — the UI lists models, dimensions and metrics,
- * never raw tables), so a fresh question can always start a semantic query.
+ * (`frontend/lib/semantic/AGENTS.md`): the UI lists models, dimensions and
+ * metrics, never raw tables, so a fresh question can always start a semantic query.
  */
 import React from 'react';
 import { screen, fireEvent, waitFor, within } from '@testing-library/react';

@@ -75,8 +75,7 @@ export async function editFile(options: EditFileOptions): Promise<void> {
 
     // REPLACE-semantics keys (same class as cellResults, see setNotebookCellResults):
     // the Viz V2 envelope is always written whole — deep-merging deltas resurrects
-    // deleted encoding channels and mangles spec arrays (docs/Visualization Arch V2.md
-    // §8: specs are never deep-merged).
+    // deleted encoding channels and mangles spec arrays.
     if (changes.content != null && 'viz' in changes.content) {
       (mergedChanges as Record<string, unknown>).viz = (changes.content as Record<string, unknown>).viz;
     }
@@ -352,7 +351,7 @@ function collectEditValidation(state: ReturnType<ReturnType<typeof getStore>['ge
     // splits them into separate filters. Non-blocking, same channel as the story lint.
     issues.push(...lintDashboardParams(collectEmbeddedQuestions(state, content, 'dashboard')));
   } else if (fileState.type === 'context') {
-    // Semantic models (Semantic_Model_v2.md §3): tiers 1–2 over EVERY authored model in the
+    // Semantic models (see lib/semantic/AGENTS.md): tiers 1–2 over EVERY authored model in the
     // edited content — `undefined` for the saved side, so nothing is skipped as "unchanged".
     // This is the NON-blocking half: the EditFile handler already rejected an edit that
     // introduced or changed a broken model, so what surfaces here is a model that was already
