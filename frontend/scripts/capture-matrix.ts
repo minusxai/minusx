@@ -19,13 +19,15 @@
  *
  * Run: npm run capture-matrix   (exits non-zero on any failure)
  */
-import { build } from 'esbuild';
+import { build, type Plugin } from 'esbuild';
 import http from 'http';
+import { readFile } from 'fs/promises';
+import yaml from 'js-yaml';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { chromium, webkit, firefox, type BrowserType } from '@playwright/test';
-import { WIDTH_BUNDLE_ENTRY, WIDTH_FIXTURES, runWidthChecks } from './story-width-matrix';
-import { B2_BUNDLE_ENTRY, B2_FIXTURES, runB2Checks } from './b2-surface-matrix';
+import { WIDTH_FIXTURES, runWidthChecks } from './story-width-matrix';
+import { B2_FIXTURES, runB2Checks } from './b2-surface-matrix';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -322,21 +324,27 @@ async function runEngine(browserType: BrowserType, base: string): Promise<CheckR
   return results;
 }
 
+/**
+ * esbuild has no YAML loader, and the surface tree transitively imports
+ * `orchestrator/prompts/story-guidance.yaml`. This is the esbuild-tier equivalent of
+ * yaml-loader (Turbopack), @rollup/plugin-yaml (Vitest) and scripts/register-yaml.mjs (tsx).
+ */
+const yamlPlugin: Plugin = {
+  name: 'yaml',
+  setup(build) {
+    build.onLoad({ filter: /\.ya?ml$/ }, async (args) => ({
+      contents: JSON.stringify(yaml.load(await readFile(args.path, 'utf8'))),
+      loader: 'json',
+    }));
+  },
+};
+
 async function main(): Promise<void> {
   // Bundle the REAL modules for the browser (alias @ → repo root, matching tsconfig paths).
   const bundle = await build({
-    stdin: {
-      contents: `
-        import { serializeElementToSvg } from '@/lib/screenshot/serialize-element';
-        import { svgToImage } from '@/lib/story-surface/serialize';
-        import { sanitizeCssText } from '@/lib/data/story/banned-css';
-        (window as unknown as { __matrix: object }).__matrix = { serializeElementToSvg, svgToImage, sanitizeCssText };
-        ${WIDTH_BUNDLE_ENTRY}
-        ${B2_BUNDLE_ENTRY}
-      `,
-      resolveDir: ROOT,
-      loader: 'ts',
-    },
+    // A real entry file, not an assembled string: the imports stay visible to tsc,
+    // ESLint and knip (see scripts/capture-matrix-bundle.ts).
+    entryPoints: [path.join(ROOT, 'scripts/capture-matrix-bundle.ts')],
     bundle: true,
     write: false,
     format: 'iife',
@@ -347,6 +355,7 @@ async function main(): Promise<void> {
     // (react-day-picker). In the fixture world those styles come from the chrome stylesheet
     // INSIDE the iframe — drop the imports rather than teaching the bundle to emit css.
     loader: { '.css': 'empty' },
+    plugins: [yamlPlugin],
     // The surface tree also pulls lib/constants (process.env.NEXT_PUBLIC_* reads) and the Redux
     // store. Next inlines these at build time; this raw bundle must do the same or the IIFE
     // throws `process is not defined` at load and EVERY fixture times out silently.

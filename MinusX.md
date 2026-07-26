@@ -3638,14 +3638,25 @@ suites (`test/e2e/`, `test/qa/`).
 (`DAB_BENCH_BASE_DIR`) and real LLM credentials. Distinct from `app/api/benchmark/import` (the
 in-app route that ingests benchmark output) — the runner writes JSONL, the route reads it.
 
-**`frontend/scripts/b2-surface-drivers.tsx`** is imported from inside a generated-code *string*
-in `frontend/scripts/b2-surface-matrix.ts`, so static analysis reports it as unused. It is not:
-it is the in-page fixture harness for `npm run capture-matrix`, driving the real `DashboardSurface`,
-`WindowedTile` and story-serializer capture path across Chromium, WebKit and Firefox. The harness
-pages deliberately carry zero stylesheets — a tile that rasterizes empty proves the surface
-depended on its environment. `npm run knip` will keep reporting it, and `tailwindcss`,
-`yaml-loader` and `@tailwindcss/oxide` (all consumed through config rather than imports). Verify
-before deleting anything knip flags.
+**The capture-matrix browser bundle has a real entry file.** `scripts/capture-matrix-bundle.ts`
+imports the shipped modules and exposes them on `window` for the in-page drivers; esbuild bundles
+that file into the `/bundle.js` the fixture pages load. It is a checked-in file rather than a
+string assembled at build time specifically so the imports stay visible to `tsc`, ESLint and
+`npm run knip` — a module reachable only through a template literal looks dead to every tool that
+reads the repo. `scripts/b2-surface-drivers.tsx` (the dashboard-surface drivers) is reached this
+way; the fixture pages deliberately carry zero stylesheets, so a tile that rasterizes empty proves
+the surface depended on its environment.
+
+The bundle carries its own YAML loader plugin. esbuild has no YAML support and the surface tree
+transitively imports `orchestrator/prompts/story-guidance.yaml`, so `capture-matrix.ts` registers a
+plugin that parses it — the esbuild-tier equivalent of `yaml-loader` (Turbopack),
+`@rollup/plugin-yaml` (Vitest) and `scripts/register-yaml.mjs` (tsx). Without it the bundle does not
+build at all. **`npm run capture-matrix` is not in CI**, so nothing catches it breaking except
+running it.
+
+`npm run knip` still reports `tailwindcss`, `@tailwindcss/oxide` and `yaml-loader` as unused
+dependencies — all three are consumed through config rather than imports. Verify before deleting
+anything it flags.
 
 **`frontend/types/`** — ambient declaration files only (`next-auth.d.ts` augments
 `User`/`Session`/`JWT` with `userId`/`role`/`home_folder`/`tokenVersion`). No values, no runtime.
