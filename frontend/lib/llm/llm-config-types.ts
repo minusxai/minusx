@@ -29,6 +29,16 @@ export const CUSTOM_PROVIDER = 'custom';
 
 /** Header carrying the requested grade to the MinusX gateway for routing. */
 export const MX_USE_CASE_HEADER = 'X-MX-Use-Case';
+/**
+ * Header carrying the TASK KIND (`LlmAgentKey`) to the MinusX gateway.
+ *
+ * The gateway resolves `agent:grade` → `grade` → its default, so this is purely
+ * additive: an agent with no override routes exactly as it did on grade alone.
+ * It exists because grade by itself discards the strongest predictor of which
+ * model wins — a Slack one-liner and a long analyst tool loop are not the same
+ * workload, even at the same capability tier.
+ */
+export const MX_AGENT_HEADER = 'X-MX-Agent';
 
 /**
  * A credentialed LLM endpoint. `provider` is either a pi-ai registry slug

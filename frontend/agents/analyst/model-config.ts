@@ -44,5 +44,5 @@ export function getAgentModelOrTestFallback(testFallback: Model<Api>): Model<Api
  */
 export function getAnalystModelOptions(): Record<string, unknown> | undefined {
   if (isTestEnv() || E2E_MODE) return undefined;
-  return minusxCallOptions('core');
+  return minusxCallOptions('core', 'analyst');
 }

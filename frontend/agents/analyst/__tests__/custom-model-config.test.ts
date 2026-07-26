@@ -7,7 +7,7 @@ import { buildCustomModel, getModel } from '@/orchestrator/llm';
 import type { Api, Model } from '@/orchestrator/llm';
 import { getAgentModelOrTestFallback, getAnalystModelOptions } from '@/agents/analyst/model-config';
 import { getMicroModelOrTestFallback, getMicroModelOptions } from '@/agents/micro/model-config';
-import { MX_USE_CASE_HEADER } from '@/lib/llm/llm-config-types';
+import { MX_AGENT_HEADER, MX_USE_CASE_HEADER } from '@/lib/llm/llm-config-types';
 import { MINUSX_AUTO_MODEL } from '@/lib/llm/minusx-default';
 
 const FAUX = { id: 'faux', provider: 'faux', api: 'faux' } as unknown as Model<Api>;
@@ -91,5 +91,11 @@ describe('static agent models (substrate under the DB plan resolver)', () => {
     stubProductionEnv();
     expect((getAnalystModelOptions()?.headers as Record<string, string>)[MX_USE_CASE_HEADER]).toBe('core');
     expect((getMicroModelOptions()?.headers as Record<string, string>)[MX_USE_CASE_HEADER]).toBe('lite');
+  });
+
+  it('production static options also carry the task-kind header', () => {
+    stubProductionEnv();
+    expect((getAnalystModelOptions()?.headers as Record<string, string>)[MX_AGENT_HEADER]).toBe('analyst');
+    expect((getMicroModelOptions()?.headers as Record<string, string>)[MX_AGENT_HEADER]).toBe('micro');
   });
 });

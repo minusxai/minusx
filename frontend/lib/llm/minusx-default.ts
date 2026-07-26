@@ -4,14 +4,15 @@
  * configured `minusx` provider entry. Pure (no server-only) — shared by the
  * server plan resolver and the agents' static model fields.
  *
- * The gateway is OpenAI-compatible; it routes model/prompt/fallbacks per
- * grade from the `X-MX-Use-Case` header (`minusx-auto` model sentinel). The
- * workspace's gateway API key lives in the config secrets store and is
+ * The gateway is OpenAI-compatible; it routes model/prompt/fallbacks from two
+ * headers — the capability grade (`X-MX-Use-Case`) and the task kind
+ * (`X-MX-Agent`) — with the `minusx-auto` model sentinel telling it to pick.
+ * The workspace's gateway API key lives in the config secrets store and is
  * injected per call by the plan resolver — never on the model handle.
  */
 import { buildCustomModel, type Api, type Model } from '@/orchestrator/llm';
 import { MINUSX_GATEWAY_URL } from '@/lib/constants';
-import { MINUSX_PROVIDER, MX_USE_CASE_HEADER, type LlmGrade } from './llm-config-types';
+import { MINUSX_PROVIDER, MX_AGENT_HEADER, MX_USE_CASE_HEADER, type LlmAgentKey, type LlmGrade } from './llm-config-types';
 
 /** Model id sentinel telling the gateway to pick the model itself. */
 export const MINUSX_AUTO_MODEL = 'minusx-auto';
@@ -36,7 +37,23 @@ export function buildMinusxModel(baseUrl?: string, modelId?: string): Model<Api>
   });
 }
 
-/** Call options for the gateway: the grade routing header. */
-export function minusxCallOptions(grade: LlmGrade, extraHeaders?: Record<string, string>): Record<string, unknown> {
-  return { headers: { ...(extraHeaders ?? {}), [MX_USE_CASE_HEADER]: grade } };
+/**
+ * Call options for the gateway: the routing headers.
+ *
+ * Two axes, both sent on every call — the capability GRADE and the TASK KIND.
+ * The gateway looks up `agent:grade` first and falls back to `grade`, so
+ * omitting the agent changes nothing about how a request routes.
+ */
+export function minusxCallOptions(
+  grade: LlmGrade,
+  agent?: LlmAgentKey,
+  extraHeaders?: Record<string, string>,
+): Record<string, unknown> {
+  return {
+    headers: {
+      ...(extraHeaders ?? {}),
+      [MX_USE_CASE_HEADER]: grade,
+      ...(agent ? { [MX_AGENT_HEADER]: agent } : {}),
+    },
+  };
 }

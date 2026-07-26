@@ -51,7 +51,7 @@ import { autoGradeProvider, compatDefaultModel } from './compat-models';
  * The entry must already have RESOLVED credentials (no refs).
  * Exported for reuse by the connection-test endpoint (`/api/llm/test`).
  */
-export function buildPlanStep(entry: LlmProviderEntry, choice: LlmModelChoice, grade: LlmGrade, catalog?: ModelCatalog | null): LlmPlanStep {
+export function buildPlanStep(entry: LlmProviderEntry, choice: LlmModelChoice, grade: LlmGrade, agent: LlmAgentKey, catalog?: ModelCatalog | null): LlmPlanStep {
   const options: Record<string, unknown> = { ...(choice.options ?? {}) };
   if (entry.apiKey) options['apiKey'] = entry.apiKey;
 
@@ -63,7 +63,7 @@ export function buildPlanStep(entry: LlmProviderEntry, choice: LlmModelChoice, g
     // stale id linger from a grade that was remapped away from another provider
     // in Settings → Models, and that non-sentinel id 400s the gateway.
     const model = buildMinusxModel(entry.baseUrl, MINUSX_AUTO_MODEL);
-    return { model, callOptions: { ...options, ...minusxCallOptions(grade, entry.headers) } };
+    return { model, callOptions: { ...options, ...minusxCallOptions(grade, agent, entry.headers) } };
   }
 
   if (entry.provider === CUSTOM_PROVIDER) {
@@ -110,19 +110,19 @@ function planFromConfig(llm: LlmConfig, agent: LlmAgentKey, grade: LlmGrade, cat
   if (choice) {
     const entry = findLlmProvider(llm, choice.providerName);
     if (!entry) throw new Error(`Grade '${grade}' references unknown provider '${choice.providerName}'`);
-    return buildPlanStep(entry, choice, grade, catalog);
+    return buildPlanStep(entry, choice, grade, agent, catalog);
   }
   // No mapping: a configured minusx provider handles every grade (the gateway
   // routes the grade itself).
   const minusx = findMinusxProvider(llm);
-  if (minusx) return buildPlanStep(minusx, { providerName: minusx.name }, grade);
+  if (minusx) return buildPlanStep(minusx, { providerName: minusx.name }, grade, agent);
   // Still no mapping, but the workspace has exactly ONE bring-your-own-key
   // provider with curation for this grade: run it as "Auto". Connecting a
   // single provider is the overwhelmingly common setup, and requiring three
   // separate grade mappings on top of it means a saved-and-tested provider
   // still fails every call. Grade-agnostic, so lite/micro is covered too.
   const auto = autoGradeProvider(llm, grade);
-  if (auto) return buildPlanStep(auto, { providerName: auto.name }, grade, catalog);
+  if (auto) return buildPlanStep(auto, { providerName: auto.name }, grade, agent, catalog);
   throw new Error(`No model is mapped to grade '${grade}' (agent '${agent}'). Map it in Settings → Models.`);
 }
 
@@ -132,8 +132,8 @@ function isTestEnv(): boolean {
 }
 
 /** The universal default: the managed MinusX gateway (sentinel key until configured). */
-function minusxDefaultPlan(grade: LlmGrade): LlmPlanStep {
-  return { model: buildMinusxModel(), callOptions: { apiKey: MINUSX_UNCONFIGURED_KEY, ...minusxCallOptions(grade) } };
+function minusxDefaultPlan(grade: LlmGrade, agent: LlmAgentKey): LlmPlanStep {
+  return { model: buildMinusxModel(), callOptions: { apiKey: MINUSX_UNCONFIGURED_KEY, ...minusxCallOptions(grade, agent) } };
 }
 
 /** Narrow an engine-side selector string to a known agent key (benchmark/eval
@@ -183,7 +183,7 @@ export async function resolveLlmPlan(
     // Stamp the resolved grade on the step so the orchestrator can record it per call.
     return { ...planFromConfig(resolved, agent, grade, catalog), grade };
   }
-  return isTestEnv() ? null : { ...minusxDefaultPlan(grade), grade };
+  return isTestEnv() ? null : { ...minusxDefaultPlan(grade, agent), grade };
 }
 
 /** Orchestrator hook: per-call plan resolution (workspace-level, mode-independent). */
