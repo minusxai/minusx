@@ -171,6 +171,36 @@ index 2eda248..715b1da 100644
              }
              if (blocks.length === 0)
                  continue;
+diff --git a/node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js b/node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js
+index d764beb..4cc5730 100644
+--- a/node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js
++++ b/node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js
+@@ -927,6 +927,25 @@ function parseChunkUsage(rawUsage, model) {
+         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+     };
+     calculateCost(model, usage);
++    // MinusX patch: honour a cost reported BY THE PROVIDER.
++    //
++    // calculateCost() above is `local_rate x wire_tokens`, which cannot work for
++    // a gateway: the model is chosen server-side per request, so the client has
++    // no rate to multiply by (buildCustomModel zeroes them) and every call bills
++    // as 0. Providers that know their own cost report it in the usage object —
++    // OpenRouter's `usage.cost` convention, which the MinusX gateway follows.
++    // When present it is authoritative and wins over the local estimate.
++    const wireCost = typeof rawUsage.cost === "number" && Number.isFinite(rawUsage.cost)
++        ? rawUsage.cost
++        : null;
++    if (wireCost !== null) {
++        const details = rawUsage.cost_details ?? {};
++        usage.cost.input = typeof details.input === "number" ? details.input : 0;
++        usage.cost.output = typeof details.output === "number" ? details.output : 0;
++        usage.cost.cacheRead = typeof details.cacheRead === "number" ? details.cacheRead : 0;
++        usage.cost.cacheWrite = typeof details.cacheWrite === "number" ? details.cacheWrite : 0;
++        usage.cost.total = wireCost;
++    }
+     return usage;
+ }
+ function mapStopReason(reason) {
 diff --git a/node_modules/@earendil-works/pi-ai/dist/api/openai-responses-shared.js b/node_modules/@earendil-works/pi-ai/dist/api/openai-responses-shared.js
 index cd76bb3..c098515 100644
 --- a/node_modules/@earendil-works/pi-ai/dist/api/openai-responses-shared.js
