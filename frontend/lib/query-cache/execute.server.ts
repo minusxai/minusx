@@ -47,12 +47,6 @@ export interface CachedExec {
    */
   parameterTypes?: Record<string, string>;
   /**
-   * Composed-query references ({id, alias}). The route CTE-composes these into a different final
-   * SQL, so two requests with identical raw SQL+params but different refs must not share a blob.
-   * Keyed by id+alias in order (order affects the composed SQL).
-   */
-  references?: Array<{ id: number; alias?: string }>;
-  /**
    * Force a fresh execution that refreshes the cache, bypassing the fresh/stale
    * serve (the "Run query" button). Still lease-guarded, so concurrent forced
    * runs don't stampede the warehouse.

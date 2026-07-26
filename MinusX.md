@@ -3638,9 +3638,8 @@ suites (`test/e2e/`, `test/qa/`).
 (`DAB_BENCH_BASE_DIR`) and real LLM credentials. Distinct from `app/api/benchmark/import` (the
 in-app route that ingests benchmark output) — the runner writes JSONL, the route reads it.
 
-**`frontend/types/`** — ambient declaration files only (`leaflet.heat.d.ts` augments the Leaflet
-module; `next-auth.d.ts` augments `User`/`Session`/`JWT` with `userId`/`role`/`home_folder`/
-`tokenVersion`). No values, no runtime.
+**`frontend/types/`** — ambient declaration files only (`next-auth.d.ts` augments
+`User`/`Session`/`JWT` with `userId`/`role`/`home_folder`/`tokenVersion`). No values, no runtime.
 
 **`.github/workflows/`** — CI and release. It owns the *required-check names*, not test content.
 
@@ -3937,50 +3936,11 @@ built from the repository root**, not from `docs/`.
 
 ---
 
-## Dead code and dependency hygiene
+## Dependency hygiene
 
-Findings from `npm run knip` (in `frontend/`), with every item verified by hand — knip reports both
-false positives and things it cannot see, so nothing below is taken on its word alone.
-
-Run `npm run knip` to refresh this. Re-verify before acting on any entry.
-
-### Entirely dead files
-
-Four source files have no importer anywhere in the repository. Nothing constructs them, nothing
-routes to them, and no test exercises them.
-
-| File | Status |
-|---|---|
-| `frontend/components/context/ContextVersionManager.tsx` | Its only mention in the codebase is inside a **commented-out JSX block** at `frontend/components/context/ContextEditorV2.tsx:428`. A comment is not a reference. |
-| `frontend/components/dev/JsonViewer.tsx` | Zero references. |
-| `frontend/components/ui/resizable-panel.tsx` | Zero references. |
-| `frontend/lib/chart/aggregate-data.ts` | Zero references. |
-
-### Dead dependencies
-
-Five declared packages have no runtime importer.
-
-| Package | Evidence |
-|---|---|
-| `leaflet` | No runtime import anywhere. |
-| `leaflet.heat` | Referenced only by a `vi.mock` in one test and by one prose comment. |
-| `@types/leaflet` | Types for the above; only `frontend/types/leaflet.heat.d.ts` imports it. |
-| `@radix-ui/react-label` | Zero references. |
-| `@zag-js/switch` | Zero references. |
-
-The three Leaflet packages are the residue of a map renderer that no longer exists — geo
-visualisations (`choropleth`, `point_map`, `geo`) render through Vega, with boundaries resolved by
-`frontend/lib/viz/geo-assets.ts`. Nothing in the render path touches Leaflet.
-
-### A declared-nowhere dependency that the build relies on
-
-`frontend/lib/viz/geo-assets.ts` imports `topojson-client`, which **is not listed in
-`frontend/package.json`**. It resolves today only because some other package pulls it in
-transitively (installed: 3.1.0). This is latent: a dependency bump elsewhere that drops the
-transitive edge breaks the geo build with no warning and no code change of our own.
-
-**This one is a bug, not hygiene.** It should be added as an explicit dependency at the version
-currently resolving.
+`npm run knip` (in `frontend/`) reports unused files, exports and dependencies. Verify every
+finding by hand before acting on it — knip both reports false positives and cannot see some real
+uses.
 
 ### Reported but NOT dead
 
@@ -3988,24 +3948,23 @@ Recorded so the next person doesn't "clean up" working code:
 
 | Reported | Why it is actually used |
 |---|---|
-| `frontend/scripts/b2-surface-drivers.tsx` | Imported from inside a generated-code string at `frontend/scripts/b2-surface-matrix.ts:38`, which static analysis cannot see. |
+| `frontend/scripts/b2-surface-drivers.tsx` | Imported from inside a generated-code string at `frontend/scripts/b2-surface-matrix.ts`, which static analysis cannot see. |
 | `tailwindcss` | Consumed through `frontend/postcss.config.mjs`, `frontend/next.config.ts`, and `frontend/app/globals.css`. |
 | `yaml-loader` | Used by the build to load prompt YAML. |
 | `@tailwindcss/oxide` | Platform-specific engine package pulled in by the Tailwind toolchain. |
 
 ### Unused exports
 
-Knip also reports **171 unused exports**, **176 unused exported types**, and one duplicate export
-(`VegaChart` is exported both as default and as a named export from
-`frontend/components/viz/VegaChart.tsx`).
+Knip reports a large number of unused exports and exported types. Most are re-exports from the
+type barrels (`frontend/lib/types.ts` and `frontend/lib/types/*.ts`) that exist to give consumers
+one import path — a barrel export with no current consumer is intentional, not rot. **Do not
+bulk-delete these.** Prune one only when touching the owning module for another reason, and only
+after confirming no consumer imports the symbol through the barrel.
 
-Most of the unused types are re-exports from the type barrels (`frontend/lib/types.ts` and
-`frontend/lib/types/*.ts`) that exist to give consumers one import path — a barrel export with no
-current consumer is intentional, not rot. Do not bulk-delete these. They are worth pruning only
-when touching the owning module for another reason, and only after confirming no consumer imports
-the symbol through the barrel.
-
----
+Two exports in `frontend/lib/chart/` are currently reachable only from their own tests —
+`getHeatGradient` (`geo-color-scale.ts`) and `computeHeatmapOptions` (`geo-heatmap-defaults.ts`).
+They were the map-heatmap path; geo now renders through Vega. They are removable along with their
+tests whenever the geo feature is next touched.
 
 ## Development philosophy
 

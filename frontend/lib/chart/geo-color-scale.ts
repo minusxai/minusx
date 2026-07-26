@@ -105,7 +105,7 @@ export function getColorScale(
 }
 
 /**
- * Convert a color scale to a leaflet.heat gradient object (0→1 stops).
+ * Convert a color scale to a gradient object keyed by 0→1 stops.
  */
 export function getHeatGradient(
   colorMode: 'light' | 'dark',

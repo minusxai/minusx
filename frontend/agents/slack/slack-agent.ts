@@ -36,9 +36,12 @@ export class SlackAgent extends RemoteAnalystAgent {
     // the shared orchestration core resolved for that user (see setupOrchestration
     // in lib/chat/orchestration-core.server.ts).
     const ctx = this.context;
+    const ctor = this.constructor as typeof SlackAgent;
     const base = renderPrompt('default.system', {
       agent_name: 'SlackAgent',
-      max_steps: '40',
+      // Prompt hint = maxSteps − 5, same convention as the web prompt. Derived,
+      // not literal: a hardcoded value silently drifts from the enforced cap.
+      max_steps: String(ctor.maxSteps - 5),
       allowed_viz_types: ctx.allowedVizTypes?.length ? ctx.allowedVizTypes.join(', ') : 'all',
       role: ctx.role ?? '',
       schema: renderSchemaForPrompt(ctx.schema),
