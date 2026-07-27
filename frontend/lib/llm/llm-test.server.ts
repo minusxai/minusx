@@ -70,7 +70,9 @@ export async function testLlmEntry(
     const catalog = await getModelCatalog();
     // The probe rides the core grade (compat core default for model-less
     // registry entries; `core` in the minusx routing header).
-    const step = buildPlanStep(entry, { providerName: entry.name, model: choice.model, options: choice.options }, 'core', catalog);
+    // Connection test has no agent context — attribute it to the analyst family,
+    // which is what an unknown selector resolves to everywhere else.
+    const step = buildPlanStep(entry, { providerName: entry.name, model: choice.model, options: choice.options }, 'core', 'analyst', catalog);
     model = step.model;
     callOptions = step.callOptions;
   } catch (err) {

@@ -9,7 +9,7 @@ import { saveRawConfig, getRawConfig } from '@/lib/data/configs.server';
 import { isSecretRef } from '@/lib/secrets/config-secret-specs';
 import compatibility from '@/compatibility.json';
 import { resolveLlmPlan, buildPlanStep } from '../llm-plan.server';
-import { MX_USE_CASE_HEADER, type LlmConfig } from '../llm-config-types';
+import { MX_AGENT_HEADER, MX_USE_CASE_HEADER, type LlmConfig } from '../llm-config-types';
 import { MINUSX_AUTO_MODEL, MINUSX_UNCONFIGURED_KEY } from '../minusx-default';
 
 const dbPath = getTestDbPath('llm_plan_server');
@@ -47,6 +47,66 @@ describe('resolveLlmPlan', () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+
+  it('sends the TASK KIND alongside the grade so the gateway can route on both', async () => {
+    // Grade alone throws away the strongest predictor of which model wins: a
+    // Slack one-liner and a long analyst tool loop are not the same workload.
+    await setLlmConfig({
+      providers: [{ name: 'mx', provider: 'minusx', apiKey: 'mx-key' }],
+    } satisfies LlmConfig);
+    for (const agent of ['analyst', 'web-analyst', 'slack', 'report', 'micro'] as const) {
+      const plan = (await resolveLlmPlan({ agent }))!;
+      const headers = plan.callOptions?.headers as Record<string, string>;
+      expect(headers[MX_AGENT_HEADER]).toBe(agent);
+    }
+  });
+
+  it('sends the task kind for an unconfigured workspace too', async () => {
+    await setLlmConfig(undefined);
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('VITEST', '');
+    try {
+      const plan = (await resolveLlmPlan({ agent: 'slack' }))!;
+      const headers = plan.callOptions?.headers as Record<string, string>;
+      expect(headers[MX_AGENT_HEADER]).toBe('slack');
+      expect(headers[MX_USE_CASE_HEADER]).toBeTruthy();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('narrows an unknown engine-side selector to analyst in the task-kind header', async () => {
+    // Benchmark/eval agents ride the analyst policy — the header must agree
+    // with the policy that was actually applied, not leak an unknown string.
+    await setLlmConfig({
+      providers: [{ name: 'mx', provider: 'minusx', apiKey: 'mx-key' }],
+    } satisfies LlmConfig);
+    const plan = (await resolveLlmPlan({ agent: 'rubric_llm' }))!;
+    expect((plan.callOptions?.headers as Record<string, string>)[MX_AGENT_HEADER]).toBe('analyst');
+  });
+
+  it('keeps grade and task kind independent (same agent, different grades)', async () => {
+    await setLlmConfig({
+      providers: [{ name: 'mx', provider: 'minusx', apiKey: 'mx-key' }],
+    } satisfies LlmConfig);
+    const core = (await resolveLlmPlan({ agent: 'analyst' }, 'core'))!;
+    const advanced = (await resolveLlmPlan({ agent: 'analyst' }, 'advanced'))!;
+    const coreHeaders = core.callOptions?.headers as Record<string, string>;
+    const advancedHeaders = advanced.callOptions?.headers as Record<string, string>;
+    expect(coreHeaders[MX_AGENT_HEADER]).toBe('analyst');
+    expect(advancedHeaders[MX_AGENT_HEADER]).toBe('analyst');
+    expect(coreHeaders[MX_USE_CASE_HEADER]).toBe('core');
+    expect(advancedHeaders[MX_USE_CASE_HEADER]).toBe('advanced');
+  });
+
+  it('does not send MinusX routing headers to a non-minusx provider', async () => {
+    await setLlmConfig({
+      providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k' }],
+      grades: { core: { providerName: 'a', model: 'claude-sonnet-4-6' } },
+    } satisfies LlmConfig);
+    const plan = (await resolveLlmPlan({ agent: 'analyst' }))!;
+    expect(plan.callOptions?.headers).toBeUndefined();
   });
 
   it('routes each agent through its default grade (analyst → core, micro → lite)', async () => {
@@ -198,7 +258,7 @@ describe('resolveLlmPlan', () => {
   });
 
   it('still requires a model id for registry providers without compatibility defaults', () => {
-    expect(() => buildPlanStep({ name: 'm', provider: 'mistral' }, { providerName: 'm' }, 'core'))
+    expect(() => buildPlanStep({ name: 'm', provider: 'mistral' }, { providerName: 'm' }, 'core', 'analyst'))
       .toThrow(/model id/);
   });
 
@@ -212,6 +272,7 @@ describe('resolveLlmPlan', () => {
       { name: 'mx', provider: 'minusx', apiKey: 'mx-key' },
       { providerName: 'mx', model: 'gpt-5.6-terra' },
       'core',
+      'analyst',
     );
     expect((step.model as { provider: string; id: string }).provider).toBe('minusx');
     expect((step.model as { id: string }).id).toBe(MINUSX_AUTO_MODEL);
@@ -338,6 +399,7 @@ describe('buildPlanStep — provider mapping', () => {
       { name: 'bd', provider: 'amazon-bedrock', apiKey: 'bedrock-api-key', awsRegion: 'us-east-1' },
       { providerName: 'bd', model: 'amazon.nova-pro-v1:0' },
       'core',
+      'analyst',
     );
     expect(step.callOptions?.bearerToken).toBe('bedrock-api-key');
     expect(step.callOptions?.apiKey).toBeUndefined();
@@ -349,6 +411,7 @@ describe('buildPlanStep — provider mapping', () => {
       { name: 'ollama', provider: 'custom', baseUrl: 'http://localhost:11434/v1' },
       { providerName: 'ollama', model: 'qwen3:32b', customModel: { contextWindow: 32000 } },
       'core',
+      'analyst',
     );
     const model = step.model as { id: string; baseUrl: string; contextWindow: number };
     expect(model.id).toBe('qwen3:32b');
@@ -358,16 +421,16 @@ describe('buildPlanStep — provider mapping', () => {
 
   it('custom without baseUrl or model throws', () => {
     expect(() => buildPlanStep(
-      { name: 'c', provider: 'custom' }, { providerName: 'c', model: 'm' }, 'core',
+      { name: 'c', provider: 'custom' }, { providerName: 'c', model: 'm' }, 'core', 'analyst',
     )).toThrow(/baseUrl/);
     expect(() => buildPlanStep(
-      { name: 'c', provider: 'custom', baseUrl: 'http://x/v1' }, { providerName: 'c' }, 'core',
+      { name: 'c', provider: 'custom', baseUrl: 'http://x/v1' }, { providerName: 'c' }, 'core', 'analyst',
     )).toThrow(/model id/);
   });
 
   it('registry provider with unknown model throws the registry error', () => {
     expect(() => buildPlanStep(
-      { name: 'a', provider: 'anthropic' }, { providerName: 'a', model: 'not-a-real-model' }, 'core',
+      { name: 'a', provider: 'anthropic' }, { providerName: 'a', model: 'not-a-real-model' }, 'core', 'analyst',
     )).toThrow(/not in the model registry/);
   });
 });
