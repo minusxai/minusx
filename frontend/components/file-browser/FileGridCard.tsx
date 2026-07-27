@@ -2,7 +2,7 @@
 
 import { Box, VStack, Text, Icon } from '@chakra-ui/react';
 import { DbFile } from '@/lib/types';
-import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
+import { getFileTypeMetadata, getFileDisplayName, isFileUntitled } from '@/lib/ui/file-metadata';
 import { RESERVED_NAMES } from '@/lib/data/helpers/connections';
 import FileActionMenu from './FileActionMenu';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -47,6 +47,11 @@ export default function FileGridCard({
   handleDragLeave,
   handleDrop,
 }: FileGridCardProps) {
+  // A nameless file must still read as something — bare icon with a blank caption is
+  // unrecognizable and indistinguishable from its untitled siblings.
+  const displayName = getFileDisplayName(file);
+  const untitled = isFileUntitled(file);
+
   return (
     <Box
       position="relative"
@@ -112,13 +117,15 @@ export default function FileGridCard({
               fontSize="sm"
               textAlign="center"
               w="100%"
-              color="fg.default"
+              color={untitled ? 'fg.muted' : 'fg.default'}
               overflow="hidden"
               textOverflow="ellipsis"
               whiteSpace="nowrap"
               fontFamily={"mono"}
+              title={displayName}
+              aria-label={displayName}
             >
-              {file.name}
+              {displayName}
             </Text>
             {file.type === 'question' && (
               <DashboardUsageBadge dashboards={dashboardsByQuestionId.get(file.id)} compact />
@@ -143,7 +150,7 @@ export default function FileGridCard({
             size="sm"
             checked={selectedFileIds.has(file.id)}
             onCheckedChange={() => toggleFileSelection(file.id)}
-            aria-label={`Select ${file.name}`}
+            aria-label={`Select ${displayName}`}
           />
         </Box>
       )}

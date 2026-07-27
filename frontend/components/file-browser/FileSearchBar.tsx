@@ -13,7 +13,7 @@ import {
 } from '@chakra-ui/react';
 import { LuSearch } from 'react-icons/lu';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
-import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
+import { FILE_TYPE_METADATA, getFileDisplayName, isFileUntitled } from '@/lib/ui/file-metadata';
 import type { SearchResultMetadata } from '@/lib/search/file-search';
 import { useFetchManual } from '@/lib/http/useFetch';
 import { API } from '@/lib/http/declarations';
@@ -240,11 +240,11 @@ export default function FileSearchBar({ onResultClick }: FileSearchBarProps) {
                           <Text
                             fontSize="sm"
                             fontWeight={500}
-                            color="fg.default"
+                            color={isFileUntitled(result) ? 'fg.muted' : 'fg.default'}
                             lineClamp={1}
                             width="100%"
                           >
-                            {result.name}
+                            {getFileDisplayName(result)}
                           </Text>
                           <Text
                             fontSize="xs"

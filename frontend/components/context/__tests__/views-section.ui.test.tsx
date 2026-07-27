@@ -101,6 +101,41 @@ describe('ViewsSection', () => {
     await waitFor(() => expect(screen.queryByLabelText('View name')).toBeNull());
   });
 
+  it('a definition opened in VIEW mode becomes editable when the context enters edit mode', async () => {
+    // The panel is opened BEFORE clicking Edit — the common order in the real UI.
+    // The open/inspect state must not outlive view mode, or the workbench stays
+    // stuck in Monaco read-only ("Cannot edit in read-only editor") with no Save,
+    // while the row around it (delete, checkboxes) is fully editable.
+    function Harness() {
+      const [editMode, setEditMode] = React.useState(false);
+      return (
+        <>
+          <button aria-label="Toggle edit mode" onClick={() => setEditMode((v) => !v)}>edit</button>
+          <ViewsSection
+            contextPath="/org/context"
+            connection="warehouse"
+            views={[ZONE_REVENUE]}
+            inheritedViews={[]}
+            onViewsChange={editMode ? () => {} : undefined}
+          />
+        </>
+      );
+    }
+    renderWithProviders(<Harness />);
+
+    fireEvent.click(screen.getByLabelText('Definition of zone_revenue'));
+    expect(await screen.findByLabelText('View name')).toBeTruthy();
+    expect(screen.queryByLabelText('Save view')).toBeNull();  // read-only, correctly
+
+    fireEvent.click(screen.getByLabelText('Toggle edit mode'));
+    await waitFor(() => expect(screen.getByLabelText('Save view')).toBeTruthy());
+
+    // ...and back: leaving edit mode must disarm the open workbench too.
+    fireEvent.click(screen.getByLabelText('Toggle edit mode'));
+    await waitFor(() => expect(screen.queryByLabelText('Save view')).toBeNull());
+    expect(screen.getByLabelText('View name')).toBeTruthy();  // still open, just read-only
+  });
+
   it('scopes views to the connection', () => {
     renderSection({ views: [{ ...ZONE_REVENUE, connection: 'other' }] });
     expect(screen.queryByLabelText('View zone_revenue')).toBeNull();

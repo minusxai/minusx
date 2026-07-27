@@ -2,7 +2,7 @@
 
 import { Box, HStack, Text, Icon } from '@chakra-ui/react';
 import { DbFile } from '@/lib/types';
-import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
+import { getFileTypeMetadata, getFileDisplayName, isFileUntitled } from '@/lib/ui/file-metadata';
 import { RESERVED_NAMES } from '@/lib/data/helpers/connections';
 import FileActionMenu from './FileActionMenu';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -51,6 +51,10 @@ export default function FileListRow({
   handleDragLeave,
   handleDrop,
 }: FileListRowProps) {
+  // See FileGridCard: a nameless file gets a readable, id-tagged placeholder.
+  const displayName = getFileDisplayName(file);
+  const untitled = isFileUntitled(file);
+
   return (
     <Box
       position="relative"
@@ -98,7 +102,7 @@ export default function FileListRow({
             cursor: 'pointer',
           }}
           transition="all 0.15s"
-          aria-label={file.name}
+          aria-label={displayName}
         >
           {/* Checkbox in selection mode */}
           {selectionMode && (
@@ -107,7 +111,7 @@ export default function FileListRow({
                 size="sm"
                 checked={selectedFileIds.has(file.id)}
                 onCheckedChange={() => toggleFileSelection(file.id)}
-                aria-label={`Select ${file.name}`}
+                aria-label={`Select ${displayName}`}
               />
             </Box>
           )}
@@ -122,12 +126,13 @@ export default function FileListRow({
             <Text
               fontWeight="500"
               fontSize="sm"
-              color="fg.default"
+              color={untitled ? 'fg.muted' : 'fg.default'}
               truncate
               lineClamp={1}
               fontFamily="mono"
+              title={displayName}
             >
-              {file.name}
+              {displayName}
             </Text>
             {file.type === 'question' && (
               <DashboardUsageBadge dashboards={dashboardsByQuestionId.get(file.id)} />

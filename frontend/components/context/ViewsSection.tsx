@@ -33,7 +33,7 @@
 
 import React, { useState } from 'react';
 import { Box, VStack, HStack, Text, Button, Icon } from '@chakra-ui/react';
-import { LuPlus, LuEye, LuEyeOff, LuTable, LuChevronRight, LuChevronDown, LuBan } from 'react-icons/lu';
+import { LuPlus, LuEye, LuEyeOff, LuBox, LuChevronRight, LuChevronDown, LuBan } from 'react-icons/lu';
 import { Checkbox } from '@/components/ui/checkbox';
 import SchemaColumnRow from '@/components/schema-browser/SchemaColumnRow';
 import ChildPathSelector from '@/components/selectors/ChildPathSelector';
@@ -59,10 +59,17 @@ interface ViewsSectionProps {
   namePrefix?: string;
 }
 
+/**
+ * What's open. Note there is NO 'edit' vs 'inspect' distinction stored here:
+ * whether an open definition is editable is DERIVED at render time from the
+ * current mode (see `canEditDef`). Storing it froze the mode at open time — a
+ * definition opened in view mode stayed read-only after the user clicked Edit
+ * (and vice versa), leaving a Monaco that refuses input inside a fully editable
+ * row.
+ */
 type Editing =
   | { kind: 'new' }
-  | { kind: 'edit'; index: number }
-  | { kind: 'inspect'; name: string }
+  | { kind: 'def'; name: string; index: number | null }
   | null;
 
 export default function ViewsSection({
@@ -115,6 +122,11 @@ export default function ViewsSection({
     onViewWhitelistChange?.(toggleNameWhitelist(viewWhitelist, inheritedViews.map((x) => x.name), v.name));
   };
 
+  /** How many data models actually reach an agent — a DISABLED one never does. */
+  const exposedCount =
+    mine.filter(({ v }) => !problemOf(v.name) && exposed(v).length > 0).length +
+    inherited.filter((v) => !problemOf(v.name) && taken(v)).length;
+
   const toggleColumn = (index: number, v: ViewDef, column: string) => {
     const all = (v.columns ?? []).map((c) => c.name);
     const current = new Set(exposed(v));
@@ -131,16 +143,22 @@ export default function ViewsSection({
     });
   };
 
-  /** The eye button: edit the definition in place (edit mode) or inspect it read-only. */
-  const openDefinition = (v: ViewDef, index: number | null) => {
-    if (editable && index !== null && !problemOf(v.name)) setEditing({ kind: 'edit', index });
-    else setEditing({ kind: 'inspect', name: v.name });
-  };
+  /** The eye button: open the definition — editable or not is decided at render. */
+  const openDefinition = (v: ViewDef, index: number | null) =>
+    setEditing({ kind: 'def', name: v.name, index });
 
-  /** Is this view's definition panel open (being edited or inspected)? */
+  /**
+   * May this open definition be EDITED right now? Recomputed every render, so
+   * toggling the context between view and edit mode re-arms (or disarms) an
+   * already-open workbench. An inherited model (no index) or one the loader
+   * DISABLED is inspect-only in either mode.
+   */
+  const canEditDef = (v: ViewDef, index: number | null): index is number =>
+    editable && index !== null && !problemOf(v.name);
+
+  /** Is this view's definition panel open? */
   const isDefOpen = (v: ViewDef, index: number | null) =>
-    (editing?.kind === 'edit' && index !== null && editing.index === index) ||
-    (editing?.kind === 'inspect' && editing.name === v.name);
+    editing?.kind === 'def' && editing.name === v.name && editing.index === index;
 
   const viewRow = (v: ViewDef, index: number | null, inheritedRow = false) => {
     const disabled = problemOf(v.name);
@@ -189,9 +207,9 @@ export default function ViewsSection({
             )}
 
             <Icon
-              as={disabled ? LuBan : LuTable}
+              as={disabled ? LuBan : LuBox}
               boxSize={3}
-              color={disabled ? 'accent.danger' : 'fg.muted'}
+              color={disabled ? 'accent.danger' : 'accent.teal'}
               flexShrink={0}
             />
             <Text
@@ -285,24 +303,17 @@ export default function ViewsSection({
       {viewRow(v, index, inheritedRow)}
       {isDefOpen(v, index) && (
         <Box px={2} pb={2}>
-          {editing?.kind === 'edit' ? (
-            <ViewWorkbench
-              contextPath={contextPath}
-              connection={connection}
-              view={v}
-              onSave={(next) => upsert(index!, next)}
-              onDelete={() => remove(index!)}
-              onCancel={() => setEditing(null)}
-            />
-          ) : (
-            <ViewWorkbench
-              contextPath={contextPath}
-              connection={connection}
-              view={v}
-              readOnly
-              onCancel={() => setEditing(null)}
-            />
-          )}
+          <ViewWorkbench
+            contextPath={contextPath}
+            connection={connection}
+            view={v}
+            readOnly={!canEditDef(v, index)}
+            {...(canEditDef(v, index) ? {
+              onSave: (next: ViewDef) => upsert(index, next),
+              onDelete: () => remove(index),
+            } : {})}
+            onCancel={() => setEditing(null)}
+          />
         </Box>
       )}
     </React.Fragment>
@@ -310,11 +321,19 @@ export default function ViewsSection({
 
   return (
     <VStack align="stretch" gap={0} onClick={(e) => e.stopPropagation()}>
-      <Box px={3} py={1} bg="bg.subtle" borderBottom="1px solid" borderColor="border.muted">
+      <HStack px={3} py={1} bg="bg.subtle" borderBottom="1px solid" borderColor="border.muted" gap={1.5}>
+        <Icon as={LuBox} boxSize={3} color="accent.teal" />
         <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.02em">
           Data Models
         </Text>
-      </Box>
+        {/* Like the schema/table counters, the number is exposed-of-total — a plain
+            total would hide that an unchecked data model reaches no agent. */}
+        {inherited.length + mine.length > 0 && (
+          <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">
+            {exposedCount}/{inherited.length + mine.length}
+          </Text>
+        )}
+      </HStack>
 
       {inherited.map((v) => renderRow(v, null, true))}
       {mine.map(({ v, index }) => renderRow(v, index, false))}
