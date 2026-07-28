@@ -85,6 +85,8 @@ registerModules({
       invalidatePrefix: async () => {},
     },
     namespace: {
+      resolve: async () => 'mx',
+      with: <T,>(_ns: string, fn: () => Promise<T>) => fn(),
       isolation: async () => 'mx',
       minDataVersion: async () => 38,
       bindExternalId: async () => {},

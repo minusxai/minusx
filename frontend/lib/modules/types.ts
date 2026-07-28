@@ -118,6 +118,30 @@ export type ExternalIdKind = 'slack_team';
  */
 export interface INamespaceModule {
   /**
+   * Request → the wire token that carries the namespace downstream, or null to reject
+   * the request outright.
+   *
+   * The token's FORM is opaque to callers by design: a single-namespace deployment can
+   * return the namespace itself, while one serving several can return something signed,
+   * without any call site knowing the difference. Middleware puts it on the request;
+   * `get()` reads it back.
+   *
+   * `hints` carries identifiers that only the caller can supply — a webhook's workspace
+   * id, for instance — for requests whose namespace is not derivable from the URL.
+   */
+  resolve(req: NextRequest, hints?: Record<string, string>): Promise<string | null>;
+
+  /**
+   * Establish a namespace where there is no request to read it from: cron, webhooks,
+   * background work that outlives its request, tests.
+   *
+   * Scoped to `fn` — deliberately NOT an `enterWith`-style call that sets the ambient
+   * context and everything after it, which cannot be unset and leaks into whatever runs
+   * next on the same async context.
+   */
+  with<T>(namespace: string, fn: () => Promise<T>): Promise<T>;
+
+  /**
    * The current request's isolation level — the coarse prefix every durable key is
    * scoped by. Constant in a single-workspace deployment.
    */

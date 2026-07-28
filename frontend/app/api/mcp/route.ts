@@ -91,8 +91,7 @@ function unauthorizedResponse(): Response {
 // POST — tool calls and initialization
 // ---------------------------------------------------------------------------
 
-export async function POST(request: NextRequest): Promise<Response> {
-  await getModules().auth.addHeaders(request, new Headers());
+async function handleMcpPost(request: NextRequest): Promise<Response> {
   // Authenticate via OAuth Bearer token
   const user = await authenticateOAuthRequest(request);
   if (!user) {
@@ -161,8 +160,7 @@ export async function POST(request: NextRequest): Promise<Response> {
 // GET — SSE stream for server-to-client notifications
 // ---------------------------------------------------------------------------
 
-export async function GET(request: NextRequest): Promise<Response> {
-  await getModules().auth.addHeaders(request, new Headers());
+async function handleMcpGet(request: NextRequest): Promise<Response> {
   const user = await authenticateOAuthRequest(request);
   if (!user) {
     return unauthorizedResponse();
@@ -188,3 +186,23 @@ export async function DELETE(request: NextRequest): Promise<Response> {
   }
   return new Response(null, { status: 204, headers: CORS_HEADERS });
 }
+
+/**
+ * MCP requests carry their namespace in a bearer token, not in the host, so it has to
+ * be resolved here rather than by middleware.
+ *
+ * `with()` scopes it to this handler. The previous `addHeaders` call established it
+ * ambiently via `enterWith`, which cannot be unset and therefore persists onto whatever
+ * runs next on the same async context.
+ */
+async function withNamespace(
+  request: NextRequest,
+  handler: (request: NextRequest) => Promise<Response>,
+): Promise<Response> {
+  const ns = await getModules().namespace.resolve(request);
+  if (ns == null) return unauthorizedResponse();
+  return getModules().namespace.with(ns, () => handler(request));
+}
+
+export const POST = (request: NextRequest): Promise<Response> => withNamespace(request, handleMcpPost);
+export const GET = (request: NextRequest): Promise<Response> => withNamespace(request, handleMcpGet);

@@ -1,5 +1,6 @@
 import { DEFAULT_ISOLATION } from '@/lib/namespace/types';
 import { getDataVersion } from '@/lib/database/config-store';
+import type { NextRequest } from 'next/server';
 import type { ExternalIdKind, INamespaceModule } from '../types';
 
 /**
@@ -11,6 +12,16 @@ import type { ExternalIdKind, INamespaceModule } from '../types';
  * check before joining.
  */
 export class NamespaceModule implements INamespaceModule {
+  /** One workspace, so every request resolves to the same namespace. */
+  async resolve(_req: NextRequest, _hints?: Record<string, string>): Promise<string | null> {
+    return DEFAULT_ISOLATION;
+  }
+
+  /** Nothing ambient to establish — the namespace is a constant. */
+  async with<T>(_namespace: string, fn: () => Promise<T>): Promise<T> {
+    return fn();
+  }
+
   async isolation(): Promise<string> {
     return DEFAULT_ISOLATION;
   }
