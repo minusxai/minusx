@@ -73,7 +73,12 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
   // (e.g. the onboarding agents use a lower limit for latency).
   static readonly maxSteps: number = 35;
 
-  protected getSystemPrompt(): string {
+  /**
+   * The full variable set for `default.system` (and the custom-agent replace
+   * prompt, which uses a subset). Extracted so CustomAgent can re-render a
+   * different prompt id with the same runtime data.
+   */
+  protected buildSystemPromptVars(): Record<string, string> {
     const ctor = this.constructor as typeof RemoteAnalystAgent;
     const selected = this.context.selectedSkills ?? [];
     const userCatalog = this.context.userSkillCatalog ?? [];
@@ -82,7 +87,8 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
       selected,
       unrestrictedMode: this.context.unrestrictedMode ?? false,
     });
-    return renderPrompt('default.system', {
+    const customAgent = this.context.customAgent;
+    return {
       // Branding name the agent introduces itself as (default "MinusX").
       agent_name: this.context.agentName ?? 'MinusX',
       // Prompt hint = maxSteps − 5.
@@ -103,12 +109,13 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
       // in lib/chat/orchestration-core.server.ts.)
       context: formatContextDocsSection(this.context.resolvedContextDocs ?? { docs: [] }),
       // LoadSkill catalog: skills available to fetch on demand (system + user,
-      // minus already-preloaded).
+      // minus already-preloaded). A custom agent's skillAllowlist restricts it.
       skills_catalog: buildSkillsCatalog({
         tree: PROMPTS,
         preloaded: new Set(preloadedNames),
         selected,
         userCatalog,
+        allowlist: customAgent?.skillAllowlist ? new Set(customAgent.skillAllowlist) : undefined,
       }),
       connection_id: this.context.connectionId ?? '',
       home_folder: this.context.homeFolder ?? '',
@@ -118,7 +125,17 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
         skillNames: preloadedNames,
         selected,
       }),
-    });
+      // Custom-agent persona (append mode only): a framed block between the
+      // Available Info and Schema sections. Substituted as a VALUE — never run
+      // through resolveTemplates — so author braces stay literal.
+      agent_persona: customAgent && customAgent.promptMode === 'append'
+        ? `## Agent Persona\n${customAgent.prompt}`
+        : '',
+    };
+  }
+
+  protected getSystemPrompt(): string {
+    return renderPrompt('default.system', this.buildSystemPromptVars());
   }
 
   /**

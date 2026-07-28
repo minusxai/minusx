@@ -19,7 +19,7 @@ import { getWhitelistedSchemaForUser } from '@/lib/sql/schema-filter';
 import { resolveContextDocs } from '@/lib/sql/context-docs';
 import { selectDatabase } from '@/lib/utils/database-selector';
 import { connectionTypeToDialect } from '@/lib/types';
-import type { ContextContent, DatabaseWithSchema, ResolvedContextDocs, TableAnnotation, SkillEntry, AgentSkillSelection, AgentUserSkillCatalogItem } from '@/lib/types';
+import type { ContextContent, DatabaseWithSchema, ResolvedContextDocs, TableAnnotation, AgentSkillSelection, AgentUserSkillCatalogItem } from '@/lib/types';
 import type { ResolvedCustomAgent } from '@/agents/analyst/types';
 import { LLM_GRADES, type LlmGrade } from '@/lib/llm/llm-config-types';
 
@@ -42,18 +42,21 @@ export interface ServerAgentArgs {
    */
   annotations?: TableAnnotation[];
   /**
+   * ALL enabled user skills from the resolved context, WITH content — the
+   * server-side skill catalog. Merged over the client-sent catalog (which only
+   * carries names) so LoadSkill resolves user skills in-process on every turn
+   * instead of bridging to the browser. Absent when no context resolved.
+   */
+  user_skill_catalog?: AgentUserSkillCatalogItem[];
+  /**
    * Custom-agent definition resolved from the context's agents/fullAgents when
-   * `options.customAgentName` was passed AND matched an enabled entry. Skills are
-   * resolved SERVER-side here (user-skill content from the context's
-   * skills/fullSkills), so headless/custom-agent turns don't depend on the
-   * browser shipping skill content. Absent = run as the default analyst.
+   * `options.customAgentName` was passed AND matched an enabled entry.
+   * Absent = run as the default analyst.
    */
   custom_agent?: {
     resolved: ResolvedCustomAgent;
     /** Preload selections (system names + user skills WITH content) to merge into selectedSkills. */
     preloadSelections: AgentSkillSelection[];
-    /** Included user skills WITH content, so LoadSkill resolves in-process. */
-    userCatalog: AgentUserSkillCatalogItem[];
   };
 }
 
@@ -84,10 +87,6 @@ function resolveCustomAgentFromContext(
       ? { type: 'user' as const, name: n, content: user.content, description: user.description }
       : { type: 'system' as const, name: n };
   });
-  const userCatalog: AgentUserSkillCatalogItem[] = [...new Set([...include, ...preload])]
-    .map((n) => userByName.get(n))
-    .filter((s): s is SkillEntry => s !== undefined)
-    .map((s) => ({ name: s.name, description: s.description, content: s.content }));
 
   const skillAllowlist = include.length > 0 ? [...new Set([...include, ...preload])] : undefined;
   const gradeOverride: LlmGrade | undefined =
@@ -104,7 +103,6 @@ function resolveCustomAgentFromContext(
       ...(gradeOverride ? { gradeOverride } : {}),
     },
     preloadSelections,
-    userCatalog,
   };
 }
 
@@ -175,6 +173,7 @@ export async function buildServerAgentArgs(
   let resolvedDocs: ResolvedContextDocs = { docs: [] };
   let annotations: TableAnnotation[] | undefined;
   let customAgent: ServerAgentArgs['custom_agent'];
+  let userSkillCatalog: AgentUserSkillCatalogItem[] | undefined;
 
   try {
     const effectiveHomeFolder = resolveHomeFolderSync(user.mode, user.home_folder || '');
@@ -205,6 +204,12 @@ export async function buildServerAgentArgs(
       databases = getWhitelistedSchemaForUser(contextContent, user.userId, options?.contextVersion);
       resolvedDocs = resolveContextDocs(contextContent, user.userId, options?.contextVersion);
       annotations = contextContent.fullAnnotations;
+      // The server-side user-skill catalog (names + CONTENT) — built for every
+      // turn so LoadSkill resolves user skills in-process; the client-sent
+      // catalog only ever carries names.
+      userSkillCatalog = mergeSkillsByName(contextContent.fullSkills || [], contextContent.skills || [])
+        .filter((s) => s.enabled)
+        .map((s) => ({ name: s.name, description: s.description, content: s.content }));
       if (options?.customAgentName) {
         customAgent = resolveCustomAgentFromContext(contextContent, options.customAgentName);
       }
@@ -266,6 +271,7 @@ export async function buildServerAgentArgs(
     schema,
     context_docs: resolvedDocs,
     annotations,
+    ...(userSkillCatalog ? { user_skill_catalog: userSkillCatalog } : {}),
     ...(customAgent ? { custom_agent: customAgent } : {}),
   };
 }

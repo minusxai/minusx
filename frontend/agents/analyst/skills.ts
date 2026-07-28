@@ -75,19 +75,25 @@ export function getPreloadedSkillNames(opts: {
   return skills;
 }
 
-/** Build the LoadSkill catalog, excluding already-preloaded/selected/hidden skills. */
+/**
+ * Build the LoadSkill catalog, excluding already-preloaded/selected/hidden skills.
+ * `allowlist` (custom agents) restricts the catalog to the listed names — system
+ * and user alike; undefined leaves the catalog unrestricted.
+ */
 export function buildSkillsCatalog(opts: {
   tree: PromptTree;
   preloaded: Set<string>;
   selected: AgentSkillSelection[];
   userCatalog: AgentUserSkillCatalogItem[];
+  allowlist?: Set<string>;
 }): string {
-  const { tree, preloaded, selected, userCatalog } = opts;
+  const { tree, preloaded, selected, userCatalog, allowlist } = opts;
   const excluded = new Set([...preloaded, ...HIDDEN_SKILLS]);
+  const allowed = (name: string) => !allowlist || allowlist.has(name);
 
   const systemLines: string[] = [];
   for (const [name, description] of Object.entries(listSkills(tree, { skipHidden: true }))) {
-    if (!excluded.has(name)) systemLines.push(`  - \`"${name}"\` — ${description}`);
+    if (!excluded.has(name) && allowed(name)) systemLines.push(`  - \`"${name}"\` — ${description}`);
   }
 
   const selectedUserNames = new Set(
@@ -95,7 +101,7 @@ export function buildSkillsCatalog(opts: {
   );
   const userLines: string[] = [];
   for (const skill of userCatalog) {
-    if (!skill.name || selectedUserNames.has(skill.name)) continue;
+    if (!skill.name || selectedUserNames.has(skill.name) || !allowed(skill.name)) continue;
     userLines.push(`  - \`"${skill.name}"\` — ${skill.description ?? ''}`);
   }
 

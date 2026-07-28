@@ -65,6 +65,12 @@ export type AgentSkillSelection =
 export interface AgentUserSkillCatalogItem {
   name: string;
   description?: string;
+  /** Skill body. Populated ONLY by the server (buildServerAgentArgs reads it off
+   *  the resolved context on every turn) so LoadSkill resolves user skills
+   *  in-process — no pause-and-bridge to the browser. The client's catalog
+   *  (buildAgentArgsForMessage) sends names only; the browser LoadSkill handler
+   *  remains as a fallback for contexts the server couldn't resolve. */
+  content?: string;
 }
 
 // AI Chat types (OpenAI-compatible)

@@ -33,6 +33,7 @@ import {
 import { SearchFiles, ReadFiles as ServerReadFiles } from '@/agents/analyst/file-tools';
 import { CheckFileHealth } from '@/agents/analyst/health-tools';
 import { SlackAgent } from '@/agents/slack/slack-agent';
+import { CustomAgent } from '@/agents/custom/custom-agent';
 import { OnboardingContextAgent, OnboardingDashboardAgent } from '@/agents/onboarding/onboarding-agents';
 import { ListDBConnections } from '@/agents/benchmark-analyst/db-tools';
 import { CatalogSearchDBSchema, ChainedExecuteQuery } from '@/agents/benchmark-analyst/db-tools';
@@ -130,6 +131,11 @@ export const REGISTRABLES: RegistrableClass[] = [
   LoadSkill,
   LoadContext,
   WebAnalystAgent,
+  // User-defined custom agents (AgentEntry on the context file): ONE registered
+  // class serves every definition — the per-turn context carries the resolved
+  // definition (customAgent + selectedSkills), so saved-log resume reconstructs
+  // the same behavior from this registry by schema name.
+  CustomAgent,
   // Slack chat runs headlessly through the same shared turn runner (setupOrchestration
   // picks SlackAgent as root when body.agent === 'SlackAgent' — see below). SlackAgent
   // extends RemoteAnalystAgent and advertises ListDBConnections (which WebAnalystAgent
@@ -325,6 +331,10 @@ const ROOT_AGENT_BY_NAME = immutableMap<string, RootAgentCtor>([
   ['OnboardingContextAgent', OnboardingContextAgent],
   ['OnboardingDashboardAgent', OnboardingDashboardAgent],
   ['SlackAgent', SlackAgent],
+  // Direct addressing only — custom-agent selection is driven by the
+  // agent_args.custom_agent pointer resolving (see setupOrchestration), not by
+  // body.agent. Registered here so a resent `agent: 'CustomAgent'` stays stable.
+  ['CustomAgent', CustomAgent],
 ]);
 
 export async function setupOrchestration(
@@ -359,6 +369,13 @@ export async function setupOrchestration(
     typeof rawGradeOverride === 'string' && (LLM_GRADES as readonly string[]).includes(rawGradeOverride)
       ? rawGradeOverride as LlmGrade
       : undefined;
+  // Custom-agent POINTER (AgentEntry.name on the resolved context). The server
+  // resolves the definition below; an unknown/disabled name degrades to the
+  // default analyst rather than failing the turn.
+  const customAgentName =
+    typeof (agentArgs as { custom_agent?: unknown }).custom_agent === 'string'
+      ? (agentArgs as { custom_agent: string }).custom_agent
+      : undefined;
 
   // The client sends only POINTERS (context_file_id, context_version,
   // connection_id) — the server resolves the actual context docs, catalog,
@@ -371,7 +388,11 @@ export async function setupOrchestration(
     contextFileId,
     contextVersion,
     connectionId: requestedConnectionId,
+    customAgentName,
   });
+  if (customAgentName && !serverArgs.custom_agent) {
+    console.warn(`[chat-v3] custom agent '${customAgentName}' not found/enabled on the resolved context — falling back to the default analyst`);
+  }
 
   const clientAllowedVizTypes = Array.isArray((agentArgs as { allowed_viz_types?: unknown }).allowed_viz_types)
     ? (agentArgs as { allowed_viz_types: string[] }).allowed_viz_types
@@ -454,8 +475,9 @@ export async function setupOrchestration(
   orch.beforeLlmCall = creditEnforcer(user);
   // DB-backed model config (workspace-level — every mode shares the org
   // config's `llm` providers): resolve the agent's grade → model plan on every
-  // call; unconfigured workspaces default to the MinusX gateway.
-  orch.resolveLlmPlan = buildLlmPlanResolver(gradeOverride);
+  // call; unconfigured workspaces default to the MinusX gateway. A custom
+  // agent's gradeOverride is the DEFAULT — an explicit user pick always wins.
+  orch.resolveLlmPlan = buildLlmPlanResolver(gradeOverride ?? serverArgs.custom_agent?.resolved.gradeOverride);
 
   // Resume path: frontend sends back [ToolCall, ToolMessage][] tuples.
   // ToolMessage (from Redux/executeToolCall) lacks .function — patch it from
@@ -529,6 +551,22 @@ export async function setupOrchestration(
           config: c.config,
         }))
       : undefined;
+    // Custom-agent turns: merge the SERVER-resolved preload selections over
+    // what the client sent (dedupe by type+name).
+    const agentPreloads = serverArgs.custom_agent?.preloadSelections ?? [];
+    const mergedSelectedSkills = [
+      ...selectedSkills,
+      ...agentPreloads.filter((sel) => !selectedSkills.some((s) => s.type === sel.type && s.name === sel.name)),
+    ];
+    // User-skill catalog: the SERVER-built catalog (names + content, from the
+    // resolved context) wins by name over the client's names-only entries, on
+    // EVERY turn — so LoadSkill resolves user skills in-process instead of the
+    // pause-and-bridge-to-the-browser dance.
+    const serverCatalog = serverArgs.user_skill_catalog ?? [];
+    const mergedUserSkillCatalog = [
+      ...userSkillCatalog.filter((item) => !serverCatalog.some((s) => s.name === item.name)),
+      ...serverCatalog,
+    ];
     const ctx: RemoteAnalystContext = {
       userId: String(user.userId ?? user.email),
       mode: narrowedMode,
@@ -549,13 +587,20 @@ export async function setupOrchestration(
       appState: clientAppState,
       viewport: clientViewport,
       pageType,
-      selectedSkills,
-      userSkillCatalog,
+      selectedSkills: mergedSelectedSkills,
+      userSkillCatalog: mergedUserSkillCatalog,
       unrestrictedMode,
       attachments,
       city: clientCity,
+      customAgent: serverArgs.custom_agent?.resolved,
     };
-    const RootAgent = (body.agent && ROOT_AGENT_BY_NAME.get(body.agent)) || WebAnalystAgent;
+    // A resolved custom-agent pointer takes precedence over body.agent. Resume
+    // note: mid-turn hops reuse the definition FROZEN into the saved root
+    // context; each new user message re-resolves it from the context file here
+    // (so edits to the definition apply from the next message on).
+    const RootAgent = serverArgs.custom_agent
+      ? CustomAgent
+      : (body.agent && ROOT_AGENT_BY_NAME.get(body.agent)) || WebAnalystAgent;
     const agent = new RootAgent(orch, { userMessage: body.user_message }, ctx);
     return {
       conversationId,
