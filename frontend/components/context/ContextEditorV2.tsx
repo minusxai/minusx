@@ -461,7 +461,7 @@ export default function ContextEditorV2({
   }, [content.agents, onChange]);
 
   return (
-    <VStack gap={6} align="stretch" p={3}>
+    <VStack gap={6} align="stretch" p={3} pb={{ base: '140px', md: '180px' }}>
       {/* Document Header */}
       <Box borderBottomWidth="1px" borderColor="border.muted" pb={2}>
         <DocumentHeader

@@ -11,8 +11,9 @@
  */
 
 import { useState } from 'react';
-import { Box, Button, HStack, Input, NativeSelect, Text, Textarea, VStack } from '@chakra-ui/react';
+import { Box, Button, createListCollection, HStack, Input, Text, Textarea, VStack } from '@chakra-ui/react';
 import { AgentReadView, type AgentDraft } from './AgentReadView';
+import { SelectContent, SelectItem, SelectRoot, SelectTrigger, SelectValueText } from '@/components/ui/select';
 
 const STEPS = ['identity', 'prompt', 'skills', 'review'] as const;
 type Step = (typeof STEPS)[number];
@@ -40,6 +41,15 @@ const EMPTY_DRAFT: AgentDraft = {
   preloadSkills: [],
   includeSkills: [],
 };
+
+const GRADE_OPTIONS = createListCollection({
+  items: [
+    { label: 'Workspace default', value: 'default' },
+    { label: 'Lite', value: 'lite' },
+    { label: 'Core', value: 'core' },
+    { label: 'Advanced', value: 'advanced' },
+  ],
+});
 
 export function AgentBuilder({ initial, systemSkills, userSkills, onSave, onCancel }: AgentBuilderProps) {
   const [step, setStep] = useState<Step>('identity');
@@ -175,19 +185,29 @@ export function AgentBuilder({ initial, systemSkills, userSkills, onSave, onCanc
             </Box>
             <Box minW="220px">
               {label('LLM grade')}
-              <NativeSelect.Root size="md">
-                <NativeSelect.Field
+              <SelectRoot
+                collection={GRADE_OPTIONS}
+                value={[draft.gradeOverride ?? 'default']}
+                onValueChange={(e) => patch({
+                  gradeOverride: (e.value[0] === 'default' ? undefined : e.value[0]) as AgentDraft['gradeOverride'],
+                })}
+                size="md"
+              >
+                <SelectTrigger
                   aria-label="Agent grade"
-                  value={draft.gradeOverride ?? ''}
-                  onChange={(e) => patch({ gradeOverride: (e.target.value || undefined) as AgentDraft['gradeOverride'] })}
+                  bg="bg.panel"
+                  fontFamily="mono"
                 >
-                  <option value="">Workspace default</option>
-                  <option value="lite">Lite</option>
-                  <option value="core">Core</option>
-                  <option value="advanced">Advanced</option>
-                </NativeSelect.Field>
-                <NativeSelect.Indicator />
-              </NativeSelect.Root>
+                  <SelectValueText placeholder="Workspace default" />
+                </SelectTrigger>
+                <SelectContent fontFamily="mono">
+                  {GRADE_OPTIONS.items.map((item) => (
+                    <SelectItem key={item.value} item={item.value}>
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </SelectRoot>
               {hint('Optional default — a grade the user picks in chat always wins.')}
             </Box>
           </HStack>

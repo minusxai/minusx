@@ -68,11 +68,45 @@ describe('AgentsTabContent — read view', () => {
     expect(card).toHaveTextContent('sales_helper');
     expect(card).toHaveTextContent('sales_helper description');
     expect(card).toHaveTextContent('SALES_PROMPT_BODY');
-    expect(card).toHaveTextContent(/append/i);
+    expect(card).toHaveTextContent(/extends default agent prompt/i);
     expect(card).toHaveTextContent('kb_pricing');   // preloaded skills section
     expect(card).toHaveTextContent('dashboards');   // available skills section
     // inherited agents render read-only
     expect(screen.getByLabelText('Inherited agent inherited_agent')).toBeInTheDocument();
+  });
+
+  it('caps long card instructions with an ellipsis while keeping settings visible', () => {
+    const longPrompt = `${'a'.repeat(260)}TAIL_MARKER`;
+    renderTab({
+      content: {
+        ...content,
+        agents: [mkAgent({ name: 'long_prompt_agent', prompt: longPrompt, gradeOverride: 'core' })],
+      },
+    });
+
+    const card = screen.getByLabelText('Agent long_prompt_agent');
+    expect(card).toHaveTextContent('…');
+    expect(card).not.toHaveTextContent('TAIL_MARKER');
+    expect(card).toHaveTextContent(/settings/i);
+    expect(card).toHaveTextContent(/core model/i);
+  });
+
+  it('keeps skill chips to two rows and summarizes the remainder', () => {
+    renderTab({
+      content: {
+        ...content,
+        agents: [mkAgent({
+          name: 'skill_heavy_agent',
+          preloadSkills: ['one', 'two', 'three', 'four', 'five', 'six'],
+        })],
+      },
+    });
+
+    const card = screen.getByLabelText('Agent skill_heavy_agent');
+    expect(card).toHaveTextContent('one');
+    expect(card).toHaveTextContent('three');
+    expect(card).not.toHaveTextContent('four');
+    expect(card).toHaveTextContent('+3 more');
   });
 });
 
@@ -145,11 +179,11 @@ describe('AgentsTabContent — builder', () => {
     expect(onDeleteAgent).toHaveBeenCalledWith(0);
   });
 
-  it('toggles an agent between production (enabled) and draft (disabled) via a switch', async () => {
+  it('toggles an agent between published (enabled) and draft (disabled) via a switch', async () => {
     const user = userEvent.setup();
     const { onUpdateAgent } = renderTab();
     const card = screen.getByLabelText('Agent sales_helper');
-    expect(card).toHaveTextContent(/production/i); // enabled agent shows Production
+    expect(card).toHaveTextContent(/published/i); // enabled agent shows Published
     const toggle = screen.getByLabelText('Agent sales_helper enabled');
     expect(toggle).toBeChecked(); // an actual switch input, not a button
     await user.click(toggle);
