@@ -133,11 +133,8 @@ export const POSTGRES_SCHEMA = `
   -- again when a draft is published (draft to false). Migrate existing DBs off the old global
   -- UNIQUE(path) table constraint to this partial unique index.
   -- (NOTE: keep these comments free of semicolons -- splitSQLStatements is comment-unaware.)
-  ALTER TABLE files DROP CONSTRAINT IF EXISTS files_path_key;
   CREATE UNIQUE INDEX IF NOT EXISTS idx_files_path_published_unique ON files (path) WHERE draft = false;
 
-  -- Drop redundant standalone type index (replaced by composite index below)
-  DROP INDEX IF EXISTS idx_files_type;
 
   CREATE INDEX IF NOT EXISTS idx_files_path ON files(path);
   CREATE INDEX IF NOT EXISTS idx_files_updated_at ON files(updated_at DESC);
@@ -295,10 +292,6 @@ export const POSTGRES_SCHEMA = `
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
   ALTER TABLE query_execution_events ADD COLUMN IF NOT EXISTS file_id INTEGER;
-  ALTER TABLE query_execution_events DROP COLUMN IF EXISTS query;
-  ALTER TABLE query_execution_events DROP COLUMN IF EXISTS params;
-  ALTER TABLE query_execution_events DROP COLUMN IF EXISTS schema_context;
-  ALTER TABLE query_execution_events DROP COLUMN IF EXISTS connection_name;
 
   CREATE INDEX IF NOT EXISTS idx_qee_file  ON query_execution_events(file_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_qee_hash  ON query_execution_events(query_hash, created_at);
@@ -363,7 +356,6 @@ export const POSTGRES_SCHEMA = `
   -- Keyset-pagination index: owner+mode partition ordered by (updated_at DESC, id DESC) so the
   -- conversation list + its cursor ("load more") is a pure index range scan including the id tiebreak.
   -- Supersedes the old 3-column index (dropped once -- DROP IF EXISTS is a no-op on later boots).
-  DROP INDEX IF EXISTS idx_conversations_owner;
   CREATE INDEX IF NOT EXISTS idx_conversations_owner_keyset ON conversations(owner_user_id, mode, updated_at DESC, id DESC);
 
   CREATE OR REPLACE FUNCTION update_conversations_updated_at()
@@ -405,14 +397,6 @@ export const POSTGRES_SCHEMA = `
   -- Error reads (kind='error', ordered by arrival) — partial index keeps it cheap.
   CREATE INDEX IF NOT EXISTS idx_messages_errors ON messages(conversation_id, created_at) WHERE kind = 'error';
 
-  -- Self-heal databases created before errors moved into messages -- idempotent, runs every boot.
-  -- (1) messages.seq used to be NOT NULL -- error rows need seq=NULL, so drop the constraint.
-  -- (2) the dedicated conversation_errors table is gone -- drop it if a prior boot created it.
-  -- (3) messages no longer FK-references conversations (append-hot table, cleanup done in code) --
-  --     drop the constraint if an earlier boot created it.
-  ALTER TABLE messages ALTER COLUMN seq DROP NOT NULL;
-  ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_conversation_id_fkey;
-  DROP TABLE IF EXISTS conversation_errors;
 
   -- ===========================================================================
   -- Query Execution, Cache & Params Arch V2.
