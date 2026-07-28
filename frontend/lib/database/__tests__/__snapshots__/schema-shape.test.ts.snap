@@ -1,0 +1,232 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`base schema shape > matches the recorded shape 1`] = `
+"TABLE app_events
+  col  created_at timestamp with time zone NOT NULL DEFAULT now()
+  col  event_type character varying NOT NULL
+  col  id bigint NOT NULL DEFAULT nextval('app_events_id_seq'::regclass)
+  col  mode character varying
+  col  payload jsonb NOT NULL DEFAULT '{}'::jsonb
+  col  user_email character varying
+  col  user_id integer
+  con  app_events_pkey PRIMARY KEY (id)
+  idx  CREATE UNIQUE INDEX app_events_pkey ON public.app_events USING btree (id)
+  idx  CREATE INDEX idx_app_events_ts ON public.app_events USING btree (created_at)
+  idx  CREATE INDEX idx_app_events_type ON public.app_events USING btree (event_type, created_at)
+TABLE configs
+  col  key text NOT NULL
+  col  updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+  col  value text NOT NULL
+  con  configs_pkey PRIMARY KEY (key)
+  idx  CREATE UNIQUE INDEX configs_pkey ON public.configs USING btree (key)
+TABLE conversations
+  col  agent text NOT NULL DEFAULT 'WebAnalystAgent'::text
+  col  created_at timestamp with time zone NOT NULL DEFAULT now()
+  col  forked_from integer
+  col  id integer NOT NULL
+  col  meta jsonb NOT NULL DEFAULT '{}'::jsonb
+  col  mode text NOT NULL DEFAULT 'org'::text
+  col  owner_user_id integer NOT NULL
+  col  run_heartbeat_at timestamp with time zone
+  col  run_lease_owner text
+  col  run_started_seq integer
+  col  run_status text NOT NULL DEFAULT 'idle'::text
+  col  title text NOT NULL DEFAULT 'New Conversation'::text
+  col  updated_at timestamp with time zone NOT NULL DEFAULT now()
+  con  conversations_pkey PRIMARY KEY (id)
+  idx  CREATE UNIQUE INDEX conversations_pkey ON public.conversations USING btree (id)
+  idx  CREATE INDEX idx_conversations_owner_keyset ON public.conversations USING btree (owner_user_id, mode, updated_at DESC, id DESC)
+TABLE feedback_events
+  col  comment text DEFAULT ''::text
+  col  conversation_id integer NOT NULL
+  col  created_at timestamp with time zone NOT NULL DEFAULT now()
+  col  id bigint NOT NULL DEFAULT nextval('feedback_events_id_seq'::regclass)
+  col  rating character varying NOT NULL
+  col  request_id uuid
+  col  tags jsonb NOT NULL DEFAULT '[]'::jsonb
+  col  user_id integer
+  col  user_message_log_index integer NOT NULL
+  con  feedback_events_pkey PRIMARY KEY (id)
+  idx  CREATE UNIQUE INDEX feedback_events_pkey ON public.feedback_events USING btree (id)
+  idx  CREATE INDEX idx_fbe_conv ON public.feedback_events USING btree (conversation_id, created_at)
+  idx  CREATE INDEX idx_fbe_ts ON public.feedback_events USING btree (created_at)
+TABLE file_events
+  col  created_at timestamp with time zone NOT NULL DEFAULT now()
+  col  event_type smallint NOT NULL
+  col  file_id integer NOT NULL
+  col  file_version integer
+  col  id bigint NOT NULL DEFAULT nextval('file_events_id_seq'::regclass)
+  col  referenced_by_file_id integer
+  col  request_id uuid
+  col  user_id integer
+  con  file_events_pkey PRIMARY KEY (id)
+  idx  CREATE UNIQUE INDEX file_events_pkey ON public.file_events USING btree (id)
+  idx  CREATE INDEX idx_fe_file_id ON public.file_events USING btree (file_id)
+  idx  CREATE INDEX idx_fe_ts ON public.file_events USING btree (created_at)
+  idx  CREATE INDEX idx_fe_type ON public.file_events USING btree (event_type, file_id)
+  idx  CREATE INDEX idx_fe_user ON public.file_events USING btree (user_id)
+TABLE files
+  col  content jsonb NOT NULL
+  col  created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+  col  draft boolean NOT NULL DEFAULT false
+  col  file_references jsonb NOT NULL DEFAULT '[]'::jsonb
+  col  id integer NOT NULL
+  col  last_edit_id text
+  col  meta jsonb
+  col  name text NOT NULL
+  col  path text NOT NULL
+  col  type text NOT NULL
+  col  updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+  col  version integer NOT NULL DEFAULT 1
+  con  files_pkey PRIMARY KEY (id)
+  idx  CREATE UNIQUE INDEX files_pkey ON public.files USING btree (id)
+  idx  CREATE INDEX idx_files_draft ON public.files USING btree (draft) WHERE (draft = true)
+  idx  CREATE INDEX idx_files_last_edit_id ON public.files USING btree (last_edit_id) WHERE (last_edit_id IS NOT NULL)
+  idx  CREATE INDEX idx_files_meta_shares ON public.files USING gin (((meta -> 'shares'::text)) jsonb_path_ops)
+  idx  CREATE INDEX idx_files_path ON public.files USING btree (path)
+  idx  CREATE UNIQUE INDEX idx_files_path_published_unique ON public.files USING btree (path) WHERE (draft = false)
+  idx  CREATE INDEX idx_files_type_updated ON public.files USING btree (type, updated_at DESC)
+  idx  CREATE INDEX idx_files_updated_at ON public.files USING btree (updated_at DESC)
+TABLE job_runs
+  col  completed_at timestamp without time zone
+  col  created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+  col  error text
+  col  id integer NOT NULL DEFAULT nextval('job_runs_id_seq'::regclass)
+  col  job_id text NOT NULL
+  col  job_type text NOT NULL
+  col  output_file_id integer
+  col  output_file_type text
+  col  source text NOT NULL DEFAULT 'manual'::text
+  col  status text NOT NULL DEFAULT 'RUNNING'::text
+  col  timeout integer NOT NULL DEFAULT 30
+  con  job_runs_pkey PRIMARY KEY (id)
+  idx  CREATE INDEX idx_job_runs_created_at ON public.job_runs USING btree (created_at DESC)
+  idx  CREATE INDEX idx_job_runs_job ON public.job_runs USING btree (job_id, job_type)
+  idx  CREATE UNIQUE INDEX job_runs_pkey ON public.job_runs USING btree (id)
+TABLE llm_call_events
+  col  agent character varying
+  col  app_state_tokens integer NOT NULL DEFAULT 0
+  col  cache_creation_tokens bigint NOT NULL DEFAULT 0
+  col  cached_tokens bigint NOT NULL DEFAULT 0
+  col  completion_tokens bigint NOT NULL DEFAULT 0
+  col  conversation_id integer NOT NULL
+  col  cost double precision NOT NULL DEFAULT 0
+  col  created_at timestamp with time zone NOT NULL DEFAULT now()
+  col  duration_s double precision NOT NULL DEFAULT 0
+  col  finish_reason character varying
+  col  grade character varying
+  col  id bigint NOT NULL DEFAULT nextval('llm_call_events_id_seq'::regclass)
+  col  llm_call_id character varying
+  col  mode character varying
+  col  model character varying NOT NULL
+  col  prompt_tokens bigint NOT NULL DEFAULT 0
+  col  provider character varying
+  col  reasoning_tokens bigint NOT NULL DEFAULT 0
+  col  request_id uuid
+  col  stream boolean NOT NULL DEFAULT false
+  col  system_prompt_tokens integer NOT NULL DEFAULT 0
+  col  total_tokens bigint NOT NULL DEFAULT 0
+  col  total_tool_calls integer NOT NULL DEFAULT 0
+  col  trigger character varying
+  col  user_id integer
+  con  llm_call_events_pkey PRIMARY KEY (id)
+  idx  CREATE INDEX idx_llm_conv ON public.llm_call_events USING btree (conversation_id)
+  idx  CREATE INDEX idx_llm_ts ON public.llm_call_events USING btree (created_at)
+  idx  CREATE INDEX idx_llm_user_ts ON public.llm_call_events USING btree (user_id, created_at)
+  idx  CREATE UNIQUE INDEX llm_call_events_pkey ON public.llm_call_events USING btree (id)
+TABLE llm_logs
+  col  call_id character varying NOT NULL
+  col  created_at timestamp with time zone NOT NULL DEFAULT now()
+  col  error text
+  col  model character varying
+  col  provider character varying
+  col  request_json text
+  col  response_json text
+  col  user_id integer
+  con  llm_logs_pkey PRIMARY KEY (call_id)
+  idx  CREATE INDEX idx_llm_logs_ts ON public.llm_logs USING btree (created_at)
+  idx  CREATE UNIQUE INDEX llm_logs_pkey ON public.llm_logs USING btree (call_id)
+TABLE messages
+  col  content jsonb NOT NULL
+  col  conversation_id integer NOT NULL
+  col  created_at timestamp with time zone NOT NULL DEFAULT now()
+  col  id bigint NOT NULL DEFAULT nextval('messages_id_seq'::regclass)
+  col  kind text NOT NULL
+  col  parent_pi_id text
+  col  pi_id text
+  col  seq integer
+  con  messages_conversation_id_seq_key UNIQUE (conversation_id, seq)
+  con  messages_pkey PRIMARY KEY (id)
+  idx  CREATE INDEX idx_messages_conv_seq ON public.messages USING btree (conversation_id, seq)
+  idx  CREATE INDEX idx_messages_errors ON public.messages USING btree (conversation_id, created_at) WHERE (kind = 'error'::text)
+  idx  CREATE UNIQUE INDEX messages_conversation_id_seq_key ON public.messages USING btree (conversation_id, seq)
+  idx  CREATE UNIQUE INDEX messages_pkey ON public.messages USING btree (id)
+TABLE queries
+  col  connection_name character varying
+  col  created_at timestamp with time zone NOT NULL DEFAULT now()
+  col  file_id integer
+  col  file_version integer
+  col  params jsonb
+  col  query text
+  col  query_hash character varying NOT NULL
+  col  schema_context jsonb
+  con  queries_pkey PRIMARY KEY (query_hash)
+  idx  CREATE UNIQUE INDEX queries_pkey ON public.queries USING btree (query_hash)
+TABLE query_cache
+  col  blob_ref text
+  col  byte_size integer
+  col  cache_key text NOT NULL
+  col  col_count integer
+  col  connection_name text NOT NULL
+  col  created_at bigint NOT NULL
+  col  expire_at bigint NOT NULL
+  col  final_query text
+  col  lease_expires_at bigint NOT NULL
+  col  params jsonb NOT NULL DEFAULT '{}'::jsonb
+  col  query text NOT NULL
+  col  revalidate_at bigint NOT NULL
+  col  row_count integer
+  col  status text NOT NULL DEFAULT 'pending'::text
+  con  query_cache_pkey PRIMARY KEY (cache_key)
+  idx  CREATE INDEX idx_query_cache_expire ON public.query_cache USING btree (expire_at)
+  idx  CREATE UNIQUE INDEX query_cache_pkey ON public.query_cache USING btree (cache_key)
+TABLE query_execution_events
+  col  col_count integer NOT NULL DEFAULT 0
+  col  created_at timestamp with time zone NOT NULL DEFAULT now()
+  col  duration_ms integer NOT NULL DEFAULT 0
+  col  error text
+  col  file_id integer
+  col  id bigint NOT NULL DEFAULT nextval('query_execution_events_id_seq'::regclass)
+  col  query_hash character varying NOT NULL
+  col  request_id uuid
+  col  row_count integer NOT NULL DEFAULT 0
+  col  user_id integer
+  col  was_cache_hit boolean NOT NULL DEFAULT false
+  con  query_execution_events_pkey PRIMARY KEY (id)
+  idx  CREATE INDEX idx_qee_file ON public.query_execution_events USING btree (file_id, created_at)
+  idx  CREATE INDEX idx_qee_hash ON public.query_execution_events USING btree (query_hash, created_at)
+  idx  CREATE INDEX idx_qee_ts ON public.query_execution_events USING btree (created_at)
+  idx  CREATE UNIQUE INDEX query_execution_events_pkey ON public.query_execution_events USING btree (id)
+TABLE secrets
+  col  path text NOT NULL
+  col  updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+  col  value text NOT NULL
+  con  secrets_pkey PRIMARY KEY (path)
+  idx  CREATE UNIQUE INDEX secrets_pkey ON public.secrets USING btree (path)
+TABLE users
+  col  created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+  col  email text NOT NULL
+  col  home_folder text NOT NULL DEFAULT ''::text
+  col  id integer NOT NULL
+  col  name text NOT NULL
+  col  password_hash text
+  col  phone text
+  col  role text NOT NULL DEFAULT 'viewer'::text
+  col  state text
+  col  updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+  con  users_email_key UNIQUE (email)
+  con  users_pkey PRIMARY KEY (id)
+  con  users_role_check CHECK ((role = ANY (ARRAY['admin'::text, 'editor'::text, 'viewer'::text])))
+  idx  CREATE UNIQUE INDEX users_email_key ON public.users USING btree (email)
+  idx  CREATE UNIQUE INDEX users_pkey ON public.users USING btree (id)"
+`;

@@ -64,21 +64,8 @@ export const POSTGRES_SCHEMA = `
   );
 
   -- Add phone and state columns if they don't exist (migration for existing tables)
-  DO $$
-  BEGIN
-    IF NOT EXISTS (
-      SELECT 1 FROM information_schema.columns
-      WHERE table_name = 'users' AND column_name = 'phone'
-    ) THEN
-      ALTER TABLE users ADD COLUMN phone TEXT;
-    END IF;
-    IF NOT EXISTS (
-      SELECT 1 FROM information_schema.columns
-      WHERE table_name = 'users' AND column_name = 'state'
-    ) THEN
-      ALTER TABLE users ADD COLUMN state TEXT;
-    END IF;
-  END $$;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS state TEXT;
 
   -- Trigger to auto-update updated_at for users
   CREATE OR REPLACE FUNCTION update_users_updated_at()
@@ -122,59 +109,19 @@ export const POSTGRES_SCHEMA = `
   );
 
   -- Add file_references column if it doesn't exist (migration for existing tables)
-  DO $$
-  BEGIN
-    IF NOT EXISTS (
-      SELECT 1 FROM information_schema.columns
-      WHERE table_schema = current_schema() AND table_name = 'files' AND column_name = 'file_references'
-    ) THEN
-      ALTER TABLE files ADD COLUMN file_references JSONB NOT NULL DEFAULT '[]';
-    END IF;
-  END $$;
+  ALTER TABLE files ADD COLUMN IF NOT EXISTS file_references JSONB NOT NULL DEFAULT '[]';
 
   -- Add version column if it doesn't exist (migration for existing tables)
-  DO $$
-  BEGIN
-    IF NOT EXISTS (
-      SELECT 1 FROM information_schema.columns
-      WHERE table_schema = current_schema() AND table_name = 'files' AND column_name = 'version'
-    ) THEN
-      ALTER TABLE files ADD COLUMN version INTEGER NOT NULL DEFAULT 1;
-    END IF;
-  END $$;
+  ALTER TABLE files ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
 
   -- Add last_edit_id column if it doesn't exist (migration for existing tables)
-  DO $$
-  BEGIN
-    IF NOT EXISTS (
-      SELECT 1 FROM information_schema.columns
-      WHERE table_schema = current_schema() AND table_name = 'files' AND column_name = 'last_edit_id'
-    ) THEN
-      ALTER TABLE files ADD COLUMN last_edit_id TEXT;
-    END IF;
-  END $$;
+  ALTER TABLE files ADD COLUMN IF NOT EXISTS last_edit_id TEXT;
 
   -- Add draft column if it doesn't exist (migration for existing tables)
-  DO $$
-  BEGIN
-    IF NOT EXISTS (
-      SELECT 1 FROM information_schema.columns
-      WHERE table_schema = current_schema() AND table_name = 'files' AND column_name = 'draft'
-    ) THEN
-      ALTER TABLE files ADD COLUMN draft BOOLEAN NOT NULL DEFAULT FALSE;
-    END IF;
-  END $$;
+  ALTER TABLE files ADD COLUMN IF NOT EXISTS draft BOOLEAN NOT NULL DEFAULT FALSE;
 
   -- Add meta column if it doesn't exist (migration for existing tables)
-  DO $$
-  BEGIN
-    IF NOT EXISTS (
-      SELECT 1 FROM information_schema.columns
-      WHERE table_schema = current_schema() AND table_name = 'files' AND column_name = 'meta'
-    ) THEN
-      ALTER TABLE files ADD COLUMN meta JSONB DEFAULT NULL;
-    END IF;
-  END $$;
+  ALTER TABLE files ADD COLUMN IF NOT EXISTS meta JSONB DEFAULT NULL;
 
   -- Index on last_edit_id must come AFTER the ADD COLUMN guard above
   CREATE INDEX IF NOT EXISTS idx_files_last_edit_id ON files(last_edit_id) WHERE last_edit_id IS NOT NULL;
@@ -186,15 +133,7 @@ export const POSTGRES_SCHEMA = `
   -- again when a draft is published (draft to false). Migrate existing DBs off the old global
   -- UNIQUE(path) table constraint to this partial unique index.
   -- (NOTE: keep these comments free of semicolons -- splitSQLStatements is comment-unaware.)
-  DO $$
-  BEGIN
-    IF EXISTS (
-      SELECT 1 FROM information_schema.table_constraints
-      WHERE table_schema = current_schema() AND table_name = 'files' AND constraint_name = 'files_path_key'
-    ) THEN
-      ALTER TABLE files DROP CONSTRAINT files_path_key;
-    END IF;
-  END $$;
+  ALTER TABLE files DROP CONSTRAINT IF EXISTS files_path_key;
   CREATE UNIQUE INDEX IF NOT EXISTS idx_files_path_published_unique ON files (path) WHERE draft = false;
 
   -- Drop redundant standalone type index (replaced by composite index below)
