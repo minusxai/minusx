@@ -170,8 +170,9 @@ export async function recordLlmCallEvent(p: InsertLlmCallEventParams): Promise<v
 export async function recordLlmRequest(callId: string, requestJson: string): Promise<void> {
   try {
     await getModules().db.exec(
+      // By constraint NAME — see the note in config-store.setConfigValue.
       `INSERT INTO llm_logs (call_id, request_json) VALUES ($1, $2)
-       ON CONFLICT (call_id) DO UPDATE SET request_json = EXCLUDED.request_json`,
+       ON CONFLICT ON CONSTRAINT llm_logs_pkey DO UPDATE SET request_json = EXCLUDED.request_json`,
       [callId, requestJson]
     );
   } catch (err) {
@@ -189,7 +190,7 @@ export async function recordLlmResponse(p: RecordLlmResponseParams): Promise<voi
     await getModules().db.exec(
       `INSERT INTO llm_logs (call_id, user_id, provider, model, response_json, error)
        VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (call_id) DO UPDATE SET
+       ON CONFLICT ON CONSTRAINT llm_logs_pkey DO UPDATE SET
          user_id       = EXCLUDED.user_id,
          provider      = EXCLUDED.provider,
          model         = EXCLUDED.model,

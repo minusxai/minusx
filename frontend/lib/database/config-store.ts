@@ -31,8 +31,11 @@ async function getConfigValue(key: string, db?: QueryContext): Promise<string | 
 async function setConfigValue(key: string, value: string, db?: QueryContext): Promise<void> {
   const exec = resolveExec(db);
   await exec(
+    // Target the primary key by NAME, not by column list. `ON CONFLICT (key)` has to
+    // match a unique index exactly, so it breaks anywhere the PK carries extra
+    // scoping columns; the constraint name resolves to whatever the PK actually is.
     `INSERT INTO configs (key, value, updated_at) VALUES ($1, $2, CURRENT_TIMESTAMP)
-     ON CONFLICT(key) DO UPDATE SET value = $3, updated_at = CURRENT_TIMESTAMP`,
+     ON CONFLICT ON CONSTRAINT configs_pkey DO UPDATE SET value = $3, updated_at = CURRENT_TIMESTAMP`,
     [key, value, value]
   );
 }

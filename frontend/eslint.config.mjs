@@ -108,6 +108,14 @@ const BASE_RESTRICTED_SYNTAX = [
     selector: "LogicalExpression[operator='||'][left.type='BinaryExpression'][left.operator='==='][right.type='BinaryExpression'][right.operator='===']:matches([left.right.type='Literal'][left.right.raw='null'][right.right.type='Identifier'][right.right.name='undefined'], [left.right.type='Identifier'][left.right.name='undefined'][right.right.type='Literal'][right.right.raw='null'])",
     message: "Use `== null` instead of `=== null || === undefined`. `== null` catches both.",
   },
+  // `ON CONFLICT (cols)` must match a unique index EXACTLY, so it silently breaks
+  // wherever a primary key carries extra scoping columns (42P10, or — worse — a
+  // swallowed write). Targeting the constraint by name resolves to whatever the PK
+  // actually is, which is what keeps one statement valid across deployments.
+  {
+    selector: "TemplateElement[value.raw=/ON\\s+CONFLICT\\s*\\(/i], Literal[value=/ON\\s+CONFLICT\\s*\\(/i]",
+    message: "Use `ON CONFLICT ON CONSTRAINT <table>_pkey` instead of a column-list conflict target. A column list must match a unique index exactly, so it breaks when the primary key gains scoping columns; the constraint name does not. (A bare `DO NOTHING`, with no column list, is fine.)",
+  },
   {
     selector: "LogicalExpression[operator='&&'][left.type='BinaryExpression'][left.operator='!=='][right.type='BinaryExpression'][right.operator='!==']:matches([left.right.type='Literal'][left.right.raw='null'][right.right.type='Identifier'][right.right.name='undefined'], [left.right.type='Identifier'][left.right.name='undefined'][right.right.type='Literal'][right.right.raw='null'])",
     message: "Use `!= null` instead of `!== null && !== undefined`. `!= null` catches both.",
