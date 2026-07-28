@@ -100,7 +100,7 @@ function TabCount({ count }: { count: number }) {
       borderRadius="full"
       bg="accent.teal/20"
       color="accent.teal"
-      fontSize="3xs"
+      fontSize="2xs"
       fontWeight="700"
       ml={1}
     >
@@ -173,7 +173,7 @@ export default function ContextEditorV2({
   const filesState = useAppSelector(state => state.files.files, shallowEqual); // Moved here for consistent hooks order
 
   const [userSkillsOpen, setUserSkillsOpen] = useState(true);
-  const [systemSkillsOpen, setSystemSkillsOpen] = useState(false);
+  const [systemSkillsOpen, setSystemSkillsOpen] = useState(true);
   const contextDir = useMemo(() => file?.path.substring(0, file.path.lastIndexOf('/')) || '/', [file?.path]);
   const contextInfo = useKnowledgeContext(contextDir, currentVersion, true);
   const systemSkills = useMemo(() => (
@@ -574,7 +574,7 @@ export default function ContextEditorV2({
           </Tabs.Trigger>
           <Tabs.Trigger value="skills" fontFamily="mono" fontSize="sm">
             Skills
-            <TabCount count={content.skills?.length ?? 0} />
+            <TabCount count={(content.skills?.length ?? 0) + systemSkills.length} />
           </Tabs.Trigger>
           <Tabs.Trigger value="agents" fontFamily="mono" fontSize="sm">
             Agents

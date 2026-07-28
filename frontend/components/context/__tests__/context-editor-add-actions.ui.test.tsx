@@ -17,7 +17,10 @@ vi.mock('@/lib/hooks/useContext', () => ({
     contextId: undefined,
     databases: [],
     skills: [],
-    availableSkills: [],
+    availableSkills: [
+      { type: 'skill', source: 'system', name: 'dashboards', description: 'Build dashboard views' },
+      { type: 'skill', source: 'system', name: 'alerts', description: 'Configure alerting' },
+    ],
     hasContext: false,
     contextLoading: false,
   }),
@@ -51,7 +54,7 @@ const CONTENT = {
   fullAgents: [],
 } as unknown as ContextContent;
 
-function renderEditor(tab: 'skills' | 'agents') {
+function renderEditor(tab: 'skills' | 'agents', content: ContextContent = CONTENT) {
   navigationState.tab = tab;
   const onChange = vi.fn();
   const onEditModeChange = vi.fn();
@@ -65,7 +68,7 @@ function renderEditor(tab: 'skills' | 'agents') {
   }));
   renderWithProviders(
     <ContextEditorV2
-      content={CONTENT}
+      content={content}
       fileName="Knowledge Base"
       isDirty={false}
       isSaving={false}
@@ -83,6 +86,25 @@ function renderEditor(tab: 'skills' | 'agents') {
 }
 
 describe('ContextEditorV2 add actions outside edit mode', () => {
+  it('counts user and system skills together and opens System Skills by default', () => {
+    renderEditor('skills', {
+      ...CONTENT,
+      skills: [{
+        name: 'pricing',
+        description: 'Pricing knowledge',
+        content: 'Use current pricing.',
+        enabled: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        createdBy: 1,
+      }],
+    });
+
+    expect(screen.getByRole('tab', { name: /Skills/ })).toHaveTextContent('3');
+    expect(screen.getByText('Build dashboard views')).toBeVisible();
+    expect(screen.getByText('Configure alerting')).toBeVisible();
+  });
+
   it('shows Add skill and enters edit mode before adding the default skill', () => {
     const { onChange, onEditModeChange } = renderEditor('skills');
 
