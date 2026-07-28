@@ -25,6 +25,7 @@ interface SkillsTabContentProps {
   colorMode: string;
   content: ContextContent;
   onChange: (updates: Partial<ContextContent>) => void;
+  canAddSkill: boolean;
   canManageSkills: boolean;
   systemSkills: { name: string; description: string }[];
   systemSkillNames: Set<string>;
@@ -42,6 +43,7 @@ export function SkillsTabContent({
   colorMode,
   content,
   onChange,
+  canAddSkill,
   canManageSkills,
   systemSkills,
   systemSkillNames,
@@ -66,8 +68,9 @@ export function SkillsTabContent({
                     <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="wider" color="fg.muted">User Skills</Text>
                     <Badge size="xs" colorPalette="teal" variant="subtle">{content.skills?.length ?? 0}</Badge>
                   </HStack>
-                  {canManageSkills && (
+                  {canAddSkill && (
                     <Button
+                      aria-label="Add skill"
                       size="xs"
                       variant="outline"
                       onClick={(event) => {

@@ -13,7 +13,7 @@ import { setSidebarPendingMessage, selectChatAttachments, addChatAttachment, rem
 import RegionCaptureButton from '@/components/screenshot/RegionCaptureButton';
 import ImageAnnotatorDialog from '@/components/screenshot/ImageAnnotatorDialog';
 import { uploadBlobOrEmbed } from '@/lib/object-store/client';
-import ChatSettingsPopover from './ChatSettingsPopover';
+import ChatSettingsPopover, { type ChatAgentOption } from './ChatSettingsPopover';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { LexicalMentionEditor, LexicalMentionEditorRef } from '@/components/chat/LexicalMentionEditor';
 import type { DatabaseWithSchema, Attachment, SkillMention, SlashCommand } from '@/lib/types';
@@ -44,6 +44,9 @@ interface ChatInputProps {
   onDatabaseChange: (name: string) => void;
   selectedGrade?: LlmGrade | null;
   onGradeChange?: (grade: LlmGrade | null) => void;
+  agentOptions?: ChatAgentOption[];
+  selectedAgent?: string | null;
+  onAgentChange?: (name: string | null) => void;
   container?: 'page' | 'sidebar' | 'floating';
   isCompact: boolean;
   colSpan?: any;
@@ -72,6 +75,9 @@ function ChatInputInner({
   onDatabaseChange,
   selectedGrade = null,
   onGradeChange,
+  agentOptions,
+  selectedAgent = null,
+  onAgentChange,
   container = 'page',
   isCompact,
   colSpan: colSpanProp,
@@ -734,6 +740,9 @@ function ChatInputInner({
                       onDatabaseChange={onDatabaseChange}
                       selectedGrade={selectedGrade}
                       onGradeChange={onGradeChange || (() => {})}
+                      agentOptions={agentOptions}
+                      selectedAgent={selectedAgent}
+                      onAgentChange={onAgentChange}
                       modelDisabled={isAgentRunning || remoteSessionActive}
                       selectedContextPath={selectedContextPath || null}
                       selectedVersion={selectedVersion}
@@ -815,9 +824,10 @@ const chatInputPropsEqual = (prev: ChatInputProps, next: ChatInputProps): boolea
   if (!isEqual(prev.availableSkills, next.availableSkills)) return false;
   if (!isEqual(prev.availableCommands, next.availableCommands)) return false;
   if (!isEqual(prev.whitelistedSchemas, next.whitelistedSchemas)) return false;
+  if (!isEqual(prev.agentOptions, next.agentOptions)) return false;
   return shallowEqualExcept(prev, next, [
-    'availableSkills', 'availableCommands', 'whitelistedSchemas',
-    'onSend', 'onStop', 'onDatabaseChange', 'onGradeChange', 'onContextChange', 'onCommandExecute',
+    'availableSkills', 'availableCommands', 'whitelistedSchemas', 'agentOptions',
+    'onSend', 'onStop', 'onDatabaseChange', 'onGradeChange', 'onAgentChange', 'onContextChange', 'onCommandExecute',
   ]);
 };
 
