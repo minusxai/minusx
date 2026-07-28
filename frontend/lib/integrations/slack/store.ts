@@ -3,6 +3,7 @@ import { getConfigsForMode, getRawConfig, saveRawConfig } from '@/lib/data/confi
 import { resolveConfigSecrets } from '@/lib/secrets/config-secrets.server';
 import { createConversation, findConversationIdByMeta } from '@/lib/data/conversations.server';
 import { VALID_MODES, type Mode } from '@/lib/mode/mode-types';
+import { getModules } from '@/lib/modules/registry';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { ConfigBot, ConfigChannel, ConfigContent, ConversationSource, SlackBotConfig } from '@/lib/types';
 
@@ -18,6 +19,28 @@ export interface SlackInstallationMatch {
 
 function normalizeSlackBot(bot: SlackBotConfig): SlackBotConfig {
   return { ...bot, enabled: bot.enabled ?? true };
+}
+
+/**
+ * Slack event webhooks arrive with no session and no workspace-identifying host —
+ * only a team id — so the namespace has to be resolvable from that id alone, before
+ * any request context exists. Install/uninstall is the one moment both are known.
+ * Best-effort: a binding failure must never fail the install itself, since the config
+ * write is what the user asked for.
+ */
+async function syncTeamBinding(
+  op: 'bind' | 'unbind',
+  teamId: string | undefined,
+): Promise<void> {
+  if (!teamId) return;
+  try {
+    const ns = getModules().namespace;
+    await (op === 'bind'
+      ? ns.bindExternalId('slack_team', teamId)
+      : ns.unbindExternalId('slack_team', teamId));
+  } catch (err) {
+    console.warn(`[slack/store] namespace ${op} failed for team ${teamId} (non-fatal):`, err);
+  }
 }
 
 export async function upsertSlackBotConfig(
@@ -41,6 +64,7 @@ export async function upsertSlackBotConfig(
   }
 
   await saveRawConfig(mode, { ...rawConfig, bots: next });
+  await syncTeamBinding('bind', normalized.team_id);
 }
 
 export async function removeSlackBotConfig(
@@ -52,6 +76,7 @@ export async function removeSlackBotConfig(
     ...rawConfig,
     bots: (rawConfig.bots ?? []).filter(b => !(b.type === 'slack' && b.team_id === teamId)),
   });
+  await syncTeamBinding('unbind', teamId);
 }
 
 export async function rememberSlackAppChannel(

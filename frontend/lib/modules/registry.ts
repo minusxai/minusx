@@ -1,10 +1,11 @@
-import { IAuthModule, ICacheModule, IFileSystemDBModule, IObjectStoreModule } from './types';
+import { IAuthModule, ICacheModule, IFileSystemDBModule, INamespaceModule, IObjectStoreModule } from './types';
 
 export interface ModuleSet {
   auth: IAuthModule;
   db: IFileSystemDBModule;
   store: IObjectStoreModule;
   cache: ICacheModule;
+  namespace: INamespaceModule;
 }
 
 // Turbopack creates separate module instances for the instrumentation bundle vs

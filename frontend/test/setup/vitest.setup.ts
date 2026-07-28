@@ -84,6 +84,10 @@ registerModules({
       invalidate: async () => {},
       invalidatePrefix: async () => {},
     },
+    namespace: {
+      bindExternalId: async () => {},
+      unbindExternalId: async () => {},
+    },
 });
 
 // Mock auth helpers with default test user

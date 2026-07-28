@@ -101,6 +101,28 @@ export interface IAuthModule {
   getSlackInstallFinishUrl?(returnUrl: string): string | null;
 }
 
+/** Kinds of third-party identifier that can be bound to a namespace. */
+export type ExternalIdKind = 'slack_team';
+
+/**
+ * Namespace Module — binds third-party identifiers to the namespace that owns them.
+ *
+ * Some inbound requests carry no session and no host that identifies the workspace:
+ * a third-party webhook knows only its own workspace identifier. Resolving that to a
+ * namespace has to happen *before* any request context exists, so it cannot read
+ * namespace-scoped storage. Install time is the one moment both the external
+ * identifier and the namespace are known — record the binding then.
+ *
+ * Default (single-namespace): both methods are no-ops, since there is nothing to
+ * disambiguate.
+ */
+export interface INamespaceModule {
+  /** Record that `externalId` belongs to the calling namespace. Idempotent. */
+  bindExternalId(kind: ExternalIdKind, externalId: string): Promise<void>;
+  /** Forget a binding, e.g. on uninstall. Idempotent. */
+  unbindExternalId(kind: ExternalIdKind, externalId: string): Promise<void>;
+}
+
 /**
  * Object Store Module — owns all binary/blob storage.
  * Default: local filesystem or S3-compatible.
