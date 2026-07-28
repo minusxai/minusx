@@ -1,4 +1,5 @@
 import { DEFAULT_ISOLATION } from '@/lib/namespace/types';
+import { getDataVersion } from '@/lib/database/config-store';
 import type { ExternalIdKind, INamespaceModule } from '../types';
 
 /**
@@ -12,6 +13,11 @@ import type { ExternalIdKind, INamespaceModule } from '../types';
 export class NamespaceModule implements INamespaceModule {
   async isolation(): Promise<string> {
     return DEFAULT_ISOLATION;
+  }
+
+  /** One workspace, so the fleet minimum is just its own version. */
+  async minDataVersion(): Promise<number> {
+    return getDataVersion();
   }
 
   async bindExternalId(_kind: ExternalIdKind, _externalId: string): Promise<void> {}

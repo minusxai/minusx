@@ -122,6 +122,16 @@ export interface INamespaceModule {
    * scoped by. Constant in a single-workspace deployment.
    */
   isolation(): Promise<string>;
+  /**
+   * The OLDEST data version across every namespace this deployment serves.
+   *
+   * A build declares the range it can read (MINIMUM_SUPPORTED_DATA_VERSION) and the
+   * version it writes (LATEST_DATA_VERSION). Raising the minimum is only safe once
+   * every namespace has been migrated past it — otherwise the lagging one is served by
+   * code that misreads its data. This is the number that makes that checkable before a
+   * deploy rather than after.
+   */
+  minDataVersion(): Promise<number>;
   /** Record that `externalId` belongs to the calling namespace. Idempotent. */
   bindExternalId(kind: ExternalIdKind, externalId: string): Promise<void>;
   /** Forget a binding, e.g. on uninstall. Idempotent. */

@@ -43,6 +43,7 @@ function makeMockModules(db: DBModule) {
     },
     namespace: {
       isolation: async () => 'mx',
+      minDataVersion: async () => 38,
       bindExternalId: async () => {},
       unbindExternalId: async () => {},
     },

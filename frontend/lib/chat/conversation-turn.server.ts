@@ -24,11 +24,20 @@ import type { Conversation } from '@/lib/data/conversations.types';
 import { notifyMessage, notifyDelta, notifyStatus, subscribe } from './conversation-stream.server';
 import { truncateMessageForName } from '@/lib/conversations-utils';
 import { runMicroTask } from '@/lib/chat/run-micro-task.server';
+import { randomUUID } from 'crypto';
 
 const DELTA_FLUSH_MS = 50;
 const HEARTBEAT_MS = 30_000;
-/** Identifies this process as the lease owner (so a stale lease = this owner died/restarted). */
-export const INSTANCE_ID = `pid-${typeof process !== 'undefined' ? process.pid : 0}`;
+/**
+ * Identifies this process as the lease owner, so a stale lease means that owner died or
+ * restarted.
+ *
+ * Random rather than the process id: every container has its own PID namespace, so
+ * replicas of the same image all start node at the SAME pid — measured as 7 on the
+ * shipped image. Every instance would then claim leases under one identifier, and one
+ * instance's heartbeat would keep another's lease alive.
+ */
+export const INSTANCE_ID = `mx-${randomUUID()}`;
 
 /** First user message = the userMessage on the root invocation (parent_id null) in this diff. */
 function firstUserMessage(entries: ConversationLog): string | null {

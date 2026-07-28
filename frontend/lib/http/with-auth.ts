@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getEffectiveUser, type EffectiveUser } from '@/lib/auth/auth-helpers';
 import { ApiErrors, isClientAbortError } from '@/lib/http/api-responses';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
+import { checkDataVersion, dataVersionMessage } from '@/lib/database/data-version-gate';
 
 type AuthHandler = (
   request: NextRequest,
@@ -45,6 +46,17 @@ export function withAuth(handler: AuthHandler) {
 
     if (!user) {
       return ApiErrors.unauthorized();
+    }
+
+    // Refuse data this build cannot correctly read or write, rather than misreading it.
+    // Checked per request because a workspace can be migrated (or a build rolled back)
+    // while the process is running.
+    const version = await checkDataVersion();
+    if (!version.ok) {
+      return NextResponse.json(
+        { error: dataVersionMessage(version), code: version.reason },
+        { status: 503 },
+      );
     }
 
     try {
