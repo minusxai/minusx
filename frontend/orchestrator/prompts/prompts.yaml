@@ -1009,8 +1009,6 @@ templates:
       4. **Storyboard, headline, and end** as in 5a steps 3 to 5: group the kept questions into 3 to 6 beats, write a claim-style headline and standfirst for each (from the questions' titles and the numbers they already contain), and decide the takeaway. Reference each by its existing saved id (`<Question id={N} />`): reuse, do not rebuild. You MUST include `<Question>` embeds for all prominent charts.
       5. **Lock the visual direction** as in 5a step 6. Each beat should have highlights or takeaways of some sort; a pull-quote or full-bleed question can separate beats.
       6. **Pre-Build, Build, Review, fix** as in 5a steps 7 to 10: the only difference from scratch is that the numbers and charts already exist, so you are giving them an argument and a design, then grading and improving against the rubric each EditFile/ReviewFile returns.
-
-
   skill_notebooks:
     description: Notebook file structure (cells = inline SQL questions + markdown text), the activeCellId convention for editing the right cell, and notebook page behavior
     content: |-
@@ -1107,6 +1105,8 @@ prompts:
 
       {available_info}
 
+      {agent_persona}
+
       {schema_section}
 
       {context_section}
@@ -1119,6 +1119,40 @@ prompts:
 
       ## Important Page/App State specific instructions
       The following skills are specifically crafted for your current page and app state. Follow them strictly — they are not optional. You do not need to load them from skill library again, these are preloaded.
+      {preloaded_skills}
+
+      {connection_section}
+
+      {home_folder_section}
+    user: |
+      <AppState>{app_state}</AppState>
+      <CurrentTime>{current_date}</CurrentTime>
+      {attachments}
+      <Question>{goal}</Question>
+  # Custom agents in `replace` prompt mode: the author's prompt replaces the default
+  # INSTRUCTIONAL body (intro/app/tools/guidelines). The DYNAMIC runtime sections —
+  # schema, context docs, skills, connection, home folder — are still appended: the
+  # author cannot hand-write those and the tools depend on them.
+  custom_agent_replace:
+    system: |
+      {agent_persona}
+
+      {app}
+
+      {available_info}
+
+      {agent_persona}
+
+      {schema_section}
+
+      {context_section}
+
+      {tools}
+
+      {file_state_schema}
+
+      ## Important Page/App State specific instructions
+      The following skills are preloaded for your current page and app state. Follow them strictly — they are not optional. You do not need to load them from the skill library again.
       {preloaded_skills}
 
       {connection_section}
