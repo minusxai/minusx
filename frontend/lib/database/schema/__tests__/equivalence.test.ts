@@ -1,85 +1,99 @@
 /**
- * The declaration must describe the SAME database the shipped DDL builds.
+ * Guards on the rendered schema.
  *
- * Comparing SQL text would prove nothing — two spellings of the same table are equal,
- * and `IF NOT EXISTS` means a statement that differs from what is deployed is skipped
- * silently. So both are applied to real databases and the resulting CATALOGS are
- * compared: columns, defaults, nullability, constraints, indexes, triggers.
+ * The cutover comparison — hand-written SQL vs rendered declaration — lived here while
+ * the two coexisted. `POSTGRES_SCHEMA` is now rendered FROM the declaration, so
+ * comparing them would compare a thing to itself. The enduring guard is the golden
+ * snapshot in `../../__tests__/schema-shape.test.ts`, which was recorded from the
+ * original hand-written SQL and still matches: that is the evidence the generated
+ * schema builds the same database.
  *
- * This is what makes the cutover checkable. Until every table is converted, it runs
- * per-table against the corresponding slice of the shipped schema.
+ * What remains here is what the snapshot cannot express.
  */
 
 import { PgliteAdapter } from '@/lib/database/adapter/pglite-adapter';
 import { POSTGRES_SCHEMA } from '@/lib/database/postgres-schema';
 import { renderSchema } from '@/lib/database/schema/render';
 import { TABLES } from '@/lib/database/schema/tables';
-import type { Table } from '@/lib/database/schema/types';
-import { introspectSchema, renderSchemaShape, type TableShape } from '@/test/harness/schema-introspect';
+import { introspectSchema, renderSchemaShape } from '@/test/harness/schema-introspect';
 
-/**
- * Apply the shipped DDL, then keep only the tables under test. Slicing the STATEMENTS
- * instead would need a dependency-aware filter; applying everything and comparing the
- * relevant tables is exact and needs no such judgement.
- */
-async function shippedShapes(names: string[]): Promise<TableShape[]> {
+async function applied(sql: string): Promise<PgliteAdapter> {
   const adapter = new PgliteAdapter();
-  await adapter.exec(POSTGRES_SCHEMA);
-  const all = await introspectSchema(adapter);
-  return all.filter(t => names.includes(t.name));
+  await adapter.exec(sql);
+  return adapter;
 }
 
-async function declaredShapes(tables: readonly Table[]): Promise<TableShape[]> {
-  const adapter = new PgliteAdapter();
-  await adapter.exec(renderSchema(tables));
-  const all = await introspectSchema(adapter);
-  return all.filter(t => tables.some(d => d.name === t.name));
-}
+describe('rendered schema', () => {
+  it('applies cleanly and creates every declared table', async () => {
+    const adapter = await applied(POSTGRES_SCHEMA);
+    const shape = await introspectSchema(adapter);
 
-describe('declared schema vs shipped DDL', () => {
-  const names = TABLES.map(t => t.name);
-
-  it.each(TABLES.map(t => t.name))('renders %s identically', async (name) => {
-    const [shipped] = await shippedShapes([name]);
-    const [declared] = await declaredShapes(TABLES.filter(t => t.name === name));
-
-    expect(renderSchemaShape([declared])).toBe(renderSchemaShape([shipped]));
+    expect(shape.map(t => t.name).sort()).toEqual(TABLES.map(t => t.name).sort());
   });
 
-  it('renders every converted table identically in one pass', async () => {
-    expect(renderSchemaShape(await declaredShapes(TABLES)))
-      .toBe(renderSchemaShape(await shippedShapes(names)));
-  });
-
-  it('is idempotent — re-applying the rendered DDL changes nothing', async () => {
-    const adapter = new PgliteAdapter();
-    const sql = renderSchema(TABLES);
-    await adapter.exec(sql);
+  it('is idempotent — re-applying changes nothing', async () => {
+    const adapter = await applied(POSTGRES_SCHEMA);
     const first = renderSchemaShape(await introspectSchema(adapter));
 
-    await adapter.exec(sql);
+    await adapter.exec(POSTGRES_SCHEMA);
 
     expect(renderSchemaShape(await introspectSchema(adapter))).toBe(first);
   });
+
+  it('names every primary key <table>_pkey', async () => {
+    // Upserts target the PK by name so they survive a variant that adds scoping
+    // columns. An explicit CONSTRAINT clause in the renderer would break them all.
+    const adapter = await applied(POSTGRES_SCHEMA);
+    const { rows } = await adapter.query<{ tablename: string; conname: string }>(
+      `SELECT c.relname AS tablename, con.conname
+         FROM pg_constraint con
+         JOIN pg_class c ON c.oid = con.conrelid
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE con.contype = 'p' AND n.nspname = current_schema()`,
+    );
+
+    expect(rows).toHaveLength(TABLES.length);
+    expect(rows.filter(r => r.conname !== `${r.tablename}_pkey`)).toEqual([]);
+  });
+
+  it('declares a scope for every table and every unique constraint', async () => {
+    // Both default to the safe-looking answer if forgotten, and both fail OPEN: a
+    // table nobody scoped is shared, a unique nobody scoped is global.
+    for (const table of TABLES) {
+      expect(table.scope, `${table.name}.scope`).toMatch(/^(shared|per-namespace)$/);
+      for (const u of table.uniques ?? []) {
+        expect(u.scope, `${table.name} UNIQUE(${u.columns.join(',')})`).toMatch(/^(scoped|global)$/);
+      }
+    }
+  });
 });
 
-describe('the declaration models everything the DDL says', () => {
-  // The failure this guards against: an index form the model cannot express falls
-  // through to raw passthrough, round-trips unchanged, and is therefore invisible to
-  // both the transform and this test. Counting is how you notice.
-  it('declares every index the shipped DDL creates for a converted table', async () => {
-    const shipped = await shippedShapes(TABLES.map(t => t.name));
+describe('the renderer round-trips through a real database', () => {
+  // Rendering is only half the contract: what Postgres ends up with has to match what
+  // was declared. This catches a renderer that emits syntactically valid SQL for the
+  // wrong thing — a DESC that lands ASC, a partial index without its predicate.
+  it('creates every declared index, with its predicate and method intact', async () => {
+    const adapter = await applied(renderSchema(TABLES));
 
-    for (const table of shipped) {
-      const declared = TABLES.find(t => t.name === table.name)!;
-      // Indexes Postgres creates implicitly for PK/UNIQUE constraints are not declared.
-      const constraintIndexes = table.constraints
-        .filter(c => c.type === 'p' || c.type === 'u')
-        .map(c => c.name);
-      const explicit = table.indexes.filter(i => !constraintIndexes.includes(i.name));
+    for (const table of TABLES) {
+      const { rows } = await adapter.query<{ indexname: string; indexdef: string }>(
+        `SELECT indexname, indexdef FROM pg_indexes
+          WHERE schemaname = current_schema() AND tablename = $1`,
+        [table.name],
+      );
+      const byName = Object.fromEntries(rows.map(r => [r.indexname, r.indexdef]));
 
-      expect(explicit.map(i => i.name).sort())
-        .toEqual([...(declared.indexes ?? []).map(i => i.name)].sort());
+      for (const index of table.indexes ?? []) {
+        const def = byName[index.name];
+        expect(def, `${table.name}.${index.name} missing`).toBeDefined();
+        if (index.where) expect(def).toContain('WHERE');
+        if (index.using) expect(def).toContain(index.using);
+        if (index.unique) expect(def).toContain('UNIQUE');
+        for (const col of index.columns) {
+          if (typeof col === 'string') expect(def).toContain(col);
+          else if ('direction' in col) expect(def).toContain(`${col.column} DESC`);
+        }
+      }
     }
   });
 });

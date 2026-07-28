@@ -19,16 +19,19 @@
 /** Every column type the schema uses. Widen deliberately, not casually. */
 export type ColumnType =
   | 'TEXT'
+  | 'VARCHAR'
+  | `VARCHAR(${number})`
+  | 'SMALLINT'
   | 'INTEGER'
   | 'BIGINT'
+  | 'FLOAT8'
   | 'BOOLEAN'
+  | 'UUID'
   | 'JSONB'
   | 'TIMESTAMP'
   | 'TIMESTAMPTZ'
   | 'SERIAL'
-  | 'BIGSERIAL'
-  | `VARCHAR(${number})`
-  | 'VARCHAR';
+  | 'BIGSERIAL';
 
 export interface Column {
   name: string;
