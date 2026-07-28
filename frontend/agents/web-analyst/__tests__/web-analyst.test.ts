@@ -103,6 +103,20 @@ describe('LoadSkill tool', () => {
     await expect(tool.run()).rejects.toBeInstanceOf(UserInputException);
   });
 
+  it('resolves a user skill INLINE (no bridge) when the catalog entry carries content — custom-agent turns', async () => {
+    const orch = new Orchestrator([], []);
+    const ctxWithContent = {
+      ...ctx,
+      userSkillCatalog: [{ name: 'kb_with_content', description: 'kb', content: 'SERVER_RESOLVED_KB_BODY' }],
+    };
+    const tool = new LoadSkill(orch, { name: 'kb_with_content' }, ctxWithContent as typeof ctx);
+    const res = await tool.run();
+    const payload = payloadOf((res as { content: { type: string }[] }).content);
+    expect(payload.success).toBe(true);
+    expect(payload.skill).toBe('kb_with_content');
+    expect(payload.content).toBe('SERVER_RESOLVED_KB_BODY');
+  });
+
   it('an unknown name (neither system nor user skill) errors WITH the valid names — no bridge', async () => {
     const orch = new Orchestrator([], []);
     const tool = new LoadSkill(orch, { name: 'writing_stories' }, ctx);
