@@ -30,11 +30,20 @@ export interface ConstraintShape {
   definition: string;
 }
 
+export interface TriggerShape {
+  name: string;
+  timing: string;
+  event: string;
+  /** Body of the function the trigger executes — a renamed-but-identical trigger is not a difference, a changed body is. */
+  functionBody: string;
+}
+
 export interface TableShape {
   name: string;
   columns: ColumnShape[];
   indexes: IndexShape[];
   constraints: ConstraintShape[];
+  triggers: TriggerShape[];
   rls: { enabled: boolean; forced: boolean; policies: string[] };
 }
 
@@ -92,6 +101,24 @@ export async function introspectSchema(adapter: IDatabaseAdapter): Promise<Schem
       [t.name],
     );
 
+    const { rows: triggers } = await adapter.query<{
+      name: string; timing: string; event: string; functionBody: string;
+    }>(
+      `SELECT tg.tgname AS name,
+              CASE WHEN (tg.tgtype & 2) <> 0 THEN 'BEFORE' ELSE 'AFTER' END AS timing,
+              CASE WHEN (tg.tgtype & 16) <> 0 THEN 'UPDATE'
+                   WHEN (tg.tgtype & 4)  <> 0 THEN 'INSERT'
+                   WHEN (tg.tgtype & 8)  <> 0 THEN 'DELETE' ELSE 'OTHER' END AS event,
+              p.prosrc AS "functionBody"
+         FROM pg_trigger tg
+         JOIN pg_class c ON c.oid = tg.tgrelid
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         JOIN pg_proc p ON p.oid = tg.tgfoid
+        WHERE NOT tg.tgisinternal AND n.nspname = current_schema() AND c.relname = $1
+        ORDER BY tg.tgname`,
+      [t.name],
+    );
+
     shapes.push({
       name: t.name,
       columns: columns.map(c => ({
@@ -102,6 +129,8 @@ export async function introspectSchema(adapter: IDatabaseAdapter): Promise<Schem
       })),
       indexes,
       constraints,
+      // Normalised: the trigger's own name is incidental, what it DOES is not.
+      triggers: triggers.map(t => ({ ...t, functionBody: t.functionBody.trim().replace(/\s+/g, ' ') })),
       rls: { enabled: t.rls, forced: t.forced, policies: policies.map(p => p.definition) },
     });
   }
@@ -122,6 +151,7 @@ export function renderSchemaShape(shape: SchemaShape): string {
     }
     for (const c of t.constraints) lines.push(`  con  ${c.name} ${c.definition}`);
     for (const i of t.indexes) lines.push(`  idx  ${i.definition}`);
+    for (const g of t.triggers) lines.push(`  trg  ${g.timing} ${g.event} -> ${g.functionBody}`);
     if (t.rls.enabled) lines.push(`  rls  enabled${t.rls.forced ? ' forced' : ''}`);
     for (const p of t.rls.policies) lines.push(`  pol  ${p}`);
   }

@@ -19,6 +19,7 @@ TABLE configs
   col  value text NOT NULL
   con  configs_pkey PRIMARY KEY (key)
   idx  CREATE UNIQUE INDEX configs_pkey ON public.configs USING btree (key)
+  trg  BEFORE UPDATE -> BEGIN NEW.updated_at = CURRENT_TIMESTAMP; RETURN NEW; END;
 TABLE conversations
   col  agent text NOT NULL DEFAULT 'WebAnalystAgent'::text
   col  created_at timestamp with time zone NOT NULL DEFAULT now()
@@ -36,6 +37,7 @@ TABLE conversations
   con  conversations_pkey PRIMARY KEY (id)
   idx  CREATE UNIQUE INDEX conversations_pkey ON public.conversations USING btree (id)
   idx  CREATE INDEX idx_conversations_owner_keyset ON public.conversations USING btree (owner_user_id, mode, updated_at DESC, id DESC)
+  trg  BEFORE UPDATE -> BEGIN NEW.updated_at = CURRENT_TIMESTAMP; RETURN NEW; END;
 TABLE feedback_events
   col  comment text DEFAULT ''::text
   col  conversation_id integer NOT NULL
@@ -87,6 +89,7 @@ TABLE files
   idx  CREATE UNIQUE INDEX idx_files_path_published_unique ON public.files USING btree (path) WHERE (draft = false)
   idx  CREATE INDEX idx_files_type_updated ON public.files USING btree (type, updated_at DESC)
   idx  CREATE INDEX idx_files_updated_at ON public.files USING btree (updated_at DESC)
+  trg  BEFORE UPDATE -> BEGIN NEW.updated_at = CURRENT_TIMESTAMP; RETURN NEW; END;
 TABLE job_runs
   col  completed_at timestamp without time zone
   col  created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
@@ -228,5 +231,6 @@ TABLE users
   con  users_pkey PRIMARY KEY (id)
   con  users_role_check CHECK ((role = ANY (ARRAY['admin'::text, 'editor'::text, 'viewer'::text])))
   idx  CREATE UNIQUE INDEX users_email_key ON public.users USING btree (email)
-  idx  CREATE UNIQUE INDEX users_pkey ON public.users USING btree (id)"
+  idx  CREATE UNIQUE INDEX users_pkey ON public.users USING btree (id)
+  trg  BEFORE UPDATE -> BEGIN NEW.updated_at = CURRENT_TIMESTAMP; RETURN NEW; END;"
 `;
