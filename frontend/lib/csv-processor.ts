@@ -26,7 +26,7 @@ import {
   OBJECT_STORE_ENDPOINT,
   LOCAL_UPLOAD_PATH,
 } from '@/lib/config';
-import { createObjectStore, isLocalObjectStore } from '@/lib/object-store';
+import { createObjectStore, isLocalObjectStore, resolveObjectKey } from '@/lib/object-store';
 import { sanitizeTableName, ensureUniqueTableNames } from '@/lib/csv-utils';
 
 // Re-export shared utilities so existing callers don't break
@@ -54,10 +54,17 @@ export interface RegisteredFile {
 
 // ─── Storage helpers ──────────────────────────────────────────────────────────
 
-/** Returns the DuckDB-readable URL/path for a stored key. */
-function getStorageUrl(key: string): string {
-  if (!isLocalObjectStore()) return `s3://${OBJECT_STORE_BUCKET!}/${key}`;
-  return resolve(join(LOCAL_UPLOAD_PATH, key));
+/**
+ * The DuckDB-readable URL/path for a stored key.
+ *
+ * DuckDB reads the object itself rather than going through the store, so the physical
+ * key has to be resolved the same way the store resolves it — otherwise a write through
+ * the store lands somewhere this cannot read.
+ */
+async function getStorageUrl(key: string): Promise<string> {
+  const physical = await resolveObjectKey(key);
+  if (!isLocalObjectStore()) return `s3://${OBJECT_STORE_BUCKET!}/${physical}`;
+  return resolve(join(LOCAL_UPLOAD_PATH, physical));
 }
 
 // ─── S3 client ───────────────────────────────────────────────────────────────
@@ -84,11 +91,12 @@ function makeS3(): S3Client {
  * Returns one IncomingFile record per sheet.
  */
 async function getStoredFileBytes(key: string): Promise<Buffer> {
+  const physical = await resolveObjectKey(key);
   if (isLocalObjectStore()) {
-    return readFileSync(resolve(join(LOCAL_UPLOAD_PATH, key)));
+    return readFileSync(resolve(join(LOCAL_UPLOAD_PATH, physical)));
   }
   const s3 = makeS3();
-  const response = await s3.send(new GetObjectCommand({ Bucket: OBJECT_STORE_BUCKET!, Key: key }));
+  const response = await s3.send(new GetObjectCommand({ Bucket: OBJECT_STORE_BUCKET!, Key: physical }));
   const chunks: Uint8Array[] = [];
   for await (const chunk of response.Body as AsyncIterable<Uint8Array>) chunks.push(chunk);
   return Buffer.concat(chunks);
@@ -118,7 +126,7 @@ async function xlsxBytesToS3Csvs(
   schemaName: string,
   createdKeys: string[] = [],
 ): Promise<IncomingFile[]> {
-  const store = createObjectStore();
+  const store = await createObjectStore();
   const workbook = XLSX.read(buffer, { type: 'buffer' });
   const results: IncomingFile[] = [];
 
@@ -271,8 +279,8 @@ type DuckConn = Awaited<ReturnType<InstanceType<typeof DuckDBInstance>['connect'
  */
 async function convertCsvToParquet(conn: DuckConn, csvKey: string): Promise<string | null> {
   const parquetKey = csvKey.replace(/\.[^.]+$/, '') + '.parquet';
-  const csvUrl     = getStorageUrl(csvKey);
-  const parquetUrl = getStorageUrl(parquetKey);
+  const csvUrl     = await getStorageUrl(csvKey);
+  const parquetUrl = await getStorageUrl(parquetKey);
   try {
     if (isLocalObjectStore()) {
       mkdirSync(dirname(parquetUrl), { recursive: true });
@@ -380,7 +388,7 @@ export async function processFilesFromS3(
           // conversion returned null → original CSV key stays in toCleanup
         }
 
-        const fileUrl = getStorageUrl(s3Key);
+        const fileUrl = await getStorageUrl(s3Key);
         const { rowCount, columns } = await readFileMetadata(conn, fileUrl, format);
         results.push({
           table_name: tableName,

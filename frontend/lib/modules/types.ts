@@ -117,6 +117,11 @@ export type ExternalIdKind = 'slack_team';
  * disambiguate.
  */
 export interface INamespaceModule {
+  /**
+   * The current request's isolation level — the coarse prefix every durable key is
+   * scoped by. Constant in a single-workspace deployment.
+   */
+  isolation(): Promise<string>;
   /** Record that `externalId` belongs to the calling namespace. Idempotent. */
   bindExternalId(kind: ExternalIdKind, externalId: string): Promise<void>;
   /** Forget a binding, e.g. on uninstall. Idempotent. */

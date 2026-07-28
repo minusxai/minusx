@@ -23,55 +23,11 @@ export async function register() {
       const { register: registerModules } = await import('./local/instrumentation');
       return registerModules();
     }
+    // Everything the app needs at boot now lives in registerWithModules, so a
+    // deployment with its own module stack inherits it instead of re-implementing it.
     // eslint-disable-next-line no-restricted-syntax
     const { registerWithModules } = await import('./lib/instrumentation/register-modules');
     await registerWithModules();
-
-    // Env → in-app LLM config seeding: legacy model-config env vars are
-    // INITIAL configuration — converted once into the workspace config (keys
-    // into the secrets store) when no `llm` section exists yet. This is the
-    // lossless upgrade path for env-configured deployments; user edits in
-    // Settings → Models are never overwritten. Best-effort, never blocks boot.
-    void (async () => {
-      try {
-        // eslint-disable-next-line no-restricted-syntax
-        const { seedLlmConfigFromEnv } = await import('./lib/llm/llm-env-seed.server');
-        await seedLlmConfigFromEnv();
-      } catch (e) {
-        console.warn('[llm-env-seed] boot seed failed (non-fatal):', e);
-      }
-    })();
-
-    // Route orchestrator-tagged unhandled rejections to the conversation's
-    // errors[] so the failure shows up in chat history (Cycle 8 wire).
-    // Untagged rejections are ignored here (Sentry already captures them).
-    // Best-effort: the handler swallows its own errors.
-    // eslint-disable-next-line no-restricted-syntax
-    const { logTaggedRejection } = await import('./lib/messaging/unhandled-rejection-logger');
-    process.on('unhandledRejection', (reason) => {
-      void logTaggedRejection(reason);
-    });
-
-    // Boot-warm the heavy chat runtime so the FIRST chat request doesn't pay the
-    // module load + JIT-parse cost on a cold Node process (the DB is already
-    // warmed by db.init() above). Non-blocking: the server starts serving
-    // immediately and this loads concurrently. Best-effort — never crashes boot.
-    // Opt out with BOOT_WARM_CHAT=false.
-    // eslint-disable-next-line no-restricted-syntax
-    if (process.env.BOOT_WARM_CHAT !== 'false') {
-      void (async () => {
-        try {
-          const t0 = Date.now();
-          // Pulls in the orchestrator engine, every agent/tool, and pi-ai, and
-          // runs registrable registration — the bulk of the first-request cost.
-          // eslint-disable-next-line no-restricted-syntax
-          await import('./lib/chat/orchestration-core.server');
-          console.log(`[boot-warm] chat runtime warmed in ${Date.now() - t0}ms`);
-        } catch (e) {
-          console.warn('[boot-warm] chat runtime warm skipped (non-fatal):', e);
-        }
-      })();
-    }
   }
 }
 

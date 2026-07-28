@@ -34,7 +34,7 @@ export const POST = withAuth(async (
 
     const card = await composeStoryCard(screenshot, truncate(file.name, 90), tone);
     const key = ogCacheKey(file.id, file.updated_at);
-    await createObjectStore().put(key, card, 'image/png');
+    await (await createObjectStore()).put(key, card, 'image/png');
     await setStoryPreview(id, user, key);
     return successResponse({ ok: true });
   } catch (error) {

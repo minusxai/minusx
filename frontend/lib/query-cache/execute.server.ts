@@ -98,7 +98,7 @@ function cacheKey(opts: CachedExec): string {
   return `${base}:${extra}`;
 }
 
-function store(opts: CachedExec): QueryCacheBlobStore {
+async function store(opts: CachedExec): Promise<QueryCacheBlobStore> {
   return opts.blobStore ?? createQueryCacheBlobStore();
 }
 
@@ -112,7 +112,7 @@ export async function getCachedResult(opts: CachedExec): Promise<{ result: Query
   if (r.source === 'fresh') {
     return { result: r.result, meta: metaOf(r.result, false, r.cachedAt) };
   }
-  const result = await store(opts).getResult(r.blobRef);
+  const result = await (await store(opts)).getResult(r.blobRef);
   if (result) {
     return { result, meta: { finalQuery: r.finalQuery, rowCount: r.rowCount, colCount: r.colCount, fromCache: r.fromCache, cachedAt: r.cachedAt } };
   }
@@ -139,7 +139,7 @@ export async function getCachedResultBounded(
     const clipped = clipRows(r.result, budget);
     return { result: clipped.result, meta: metaOf(r.result, false, r.cachedAt), truncated: clipped.truncated };
   }
-  const bounded = await store(opts).getResultBounded(r.blobRef, budget);
+  const bounded = await (await store(opts)).getResultBounded(r.blobRef, budget);
   if (bounded) {
     return {
       result: bounded,
@@ -158,7 +158,7 @@ export async function getCachedJsonlStream(opts: CachedExec): Promise<{ stream: 
   if (r.source === 'fresh') {
     return { stream: resultToJsonlStream(r.result), meta: metaOf(r.result, false, r.cachedAt) };
   }
-  const stream = await store(opts).getStream(r.blobRef);
+  const stream = await (await store(opts)).getStream(r.blobRef);
   if (stream) {
     return { stream, meta: { finalQuery: r.finalQuery, rowCount: r.rowCount, colCount: r.colCount, fromCache: r.fromCache, cachedAt: r.cachedAt } };
   }
@@ -173,7 +173,7 @@ async function resolve(opts: CachedExec): Promise<Resolved> {
   const key = cacheKey(opts);
 
   // Opportunistic, throttled GC of hard-expired rows + blobs (no cron in this deployment).
-  maybeSweepExpired(store(opts), now);
+  maybeSweepExpired((await store(opts)), now);
 
   // forceRefresh ("Run query") skips the fresh/stale serve and re-executes,
   // refreshing the cached blob (still lease-guarded inside executeWithLease).
@@ -239,7 +239,7 @@ async function runAndStore(key: string, opts: CachedExec, now: number): Promise<
     try {
       const blobRef = blobRefForKey(key);
       const { readable, rowCount, colCount } = queryStreamToJsonl(stream);
-      const { byteSize } = await store(opts).putStream(blobRef, readable); // connector → gzip → object store
+      const { byteSize } = await (await store(opts)).putStream(blobRef, readable); // connector → gzip → object store
       const rc = rowCount();
       await markReady(
         key,

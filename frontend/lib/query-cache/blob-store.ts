@@ -104,16 +104,12 @@ export function blobRefForKey(cacheKey: string): string {
   return `query-cache/${safe}.jsonl.gz`;
 }
 
-// Overridable object-store factory for the blob plane. Defaults to the shared object
-// store; a deployment can inject a wrapper that applies a request-scoped key namespace
-// (e.g. namespacing blobs by an ambient request context).
-let objectStoreFactory: () => ObjectStore = createObjectStore;
-
-/** Override the object store backing the query-cache blob plane. */
-export function setQueryCacheObjectStoreFactory(factory: () => ObjectStore): void {
-  objectStoreFactory = factory;
-}
-
-export function createQueryCacheBlobStore(store: ObjectStore = objectStoreFactory()): QueryCacheBlobStore {
-  return new ObjectStoreBlobStore(store);
+/**
+ * The blob plane used to take an injectable object-store factory, so a deployment could
+ * wrap it to namespace blob keys. That is now what the shared factory itself does, for
+ * every consumer rather than this one — so the injection point is gone and blobs are
+ * namespaced by construction.
+ */
+export async function createQueryCacheBlobStore(store?: ObjectStore): Promise<QueryCacheBlobStore> {
+  return new ObjectStoreBlobStore(store ?? await createObjectStore());
 }

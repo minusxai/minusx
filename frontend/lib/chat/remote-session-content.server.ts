@@ -30,7 +30,7 @@ export interface SerializeRemoteContentOpts {
 }
 
 async function readFromObjectStore(key: string): Promise<{ data: Buffer; contentType: string } | null> {
-  const data = await createObjectStore().get(key);
+  const data = await (await createObjectStore()).get(key);
   if (!data) return null;
   const ext = key.split('.').pop()?.toLowerCase() ?? '';
   return { data, contentType: MIME_BY_EXT[ext] ?? 'application/octet-stream' };

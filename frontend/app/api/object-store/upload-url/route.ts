@@ -104,7 +104,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ uploadUrl: 'base64:', publicUrl: '' });
     }
 
-    const store = createObjectStore();
+    const store = await createObjectStore();
     const result = await store.getUploadUrl({ key, contentType });
 
     // Make publicUrl absolute if the adapter returned a relative path (local FS).

@@ -58,6 +58,7 @@ interface EnvironmentConfig {
   MD_LOGIN: string;
   MD_REGISTER: string;
   CUSTOM_MODULE: string | undefined;
+  BOOT_WARM_CHAT: string | undefined;
   LANDING_HTML: string | undefined;
   ENABLE_ORG_CREATION: boolean;
   ANALYTICS_CONFIG: string | undefined;
@@ -173,6 +174,7 @@ const config: EnvironmentConfig = {
   MD_LOGIN: process.env.MD_LOGIN ?? '',
   MD_REGISTER: process.env.MD_REGISTER ?? '',
   CUSTOM_MODULE: process.env.CUSTOM_MODULE,
+  BOOT_WARM_CHAT: process.env.BOOT_WARM_CHAT,
   LANDING_HTML: process.env.LANDING_HTML,
   ENABLE_ORG_CREATION: process.env.ENABLE_ORG_CREATION !== 'false',
   ANALYTICS_CONFIG: process.env.ANALYTICS_CONFIG,
@@ -305,6 +307,8 @@ export const MD_HOME = config.MD_HOME;
 export const MD_LOGIN = config.MD_LOGIN;
 export const MD_REGISTER = config.MD_REGISTER;
 export const CUSTOM_MODULE = config.CUSTOM_MODULE;
+/** Opt out of warming the chat runtime at boot. */
+export const BOOT_WARM_CHAT = config.BOOT_WARM_CHAT;
 export const LANDING_HTML = config.LANDING_HTML;
 export const ENABLE_ORG_CREATION = config.ENABLE_ORG_CREATION;
 // Leveled control over everything that reports outside the deployment —

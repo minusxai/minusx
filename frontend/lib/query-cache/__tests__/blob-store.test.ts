@@ -42,7 +42,7 @@ async function streamToString(s: Readable): Promise<string> {
 describe('QueryCacheBlobStore', () => {
   it('putStream stores compressed bytes and reports byteSize', async () => {
     const os = fakeObjectStore();
-    const store = createQueryCacheBlobStore(os);
+    const store = await createQueryCacheBlobStore(os);
     const { byteSize } = await store.putStream('q/1.jsonl.gz', resultToJsonlStream(RESULT));
     expect(byteSize).toBeGreaterThan(0);
     expect(os.map.has('q/1.jsonl.gz')).toBe(true);
@@ -54,7 +54,7 @@ describe('QueryCacheBlobStore', () => {
 
   it('getStream returns the decompressed JSONL stream', async () => {
     const os = fakeObjectStore();
-    const store = createQueryCacheBlobStore(os);
+    const store = await createQueryCacheBlobStore(os);
     await store.putStream('q/1.jsonl.gz', resultToJsonlStream(RESULT));
     const out = await store.getStream('q/1.jsonl.gz');
     expect(out).not.toBeNull();
@@ -64,20 +64,20 @@ describe('QueryCacheBlobStore', () => {
 
   it('getResult round-trips the QueryResult', async () => {
     const os = fakeObjectStore();
-    const store = createQueryCacheBlobStore(os);
+    const store = await createQueryCacheBlobStore(os);
     await store.putStream('q/1.jsonl.gz', resultToJsonlStream(RESULT));
     expect(await store.getResult('q/1.jsonl.gz')).toEqual(RESULT);
   });
 
   it('getStream / getResult return null for a missing ref', async () => {
-    const store = createQueryCacheBlobStore(fakeObjectStore());
+    const store = await createQueryCacheBlobStore(fakeObjectStore());
     expect(await store.getStream('nope')).toBeNull();
     expect(await store.getResult('nope')).toBeNull();
   });
 
   it('delete removes the blob', async () => {
     const os = fakeObjectStore();
-    const store = createQueryCacheBlobStore(os);
+    const store = await createQueryCacheBlobStore(os);
     await store.putStream('q/1.jsonl.gz', resultToJsonlStream(RESULT));
     await store.delete('q/1.jsonl.gz');
     expect(os.map.has('q/1.jsonl.gz')).toBe(false);

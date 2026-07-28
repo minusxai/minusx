@@ -15,6 +15,8 @@ import { MXFOOD_TABLES } from '@/lib/object-store/mxfood-tables';
 import { getRawConfig, saveRawConfig } from '@/lib/data/configs.server';
 import { ConnectionsAPI } from '@/lib/data/connections.server';
 import { DEFAULT_MODE } from '@/lib/mode/mode-types';
+import { getModules } from '@/lib/modules/registry';
+import { buildNamespace } from '@/lib/namespace/types';
 
 function escapeForJson(s: string): string {
   return JSON.stringify(s).slice(1, -1);
@@ -33,7 +35,14 @@ export class AuthModule implements IAuthModule {
   }
 
   async getUserKey(user: { mode: string }): Promise<string> {
-    return user.mode;
+    // The identity-scoped level of the namespace. A deployment that isolates
+    // workspaces gets its coarser level folded in here without overriding anything.
+    const { mode } = buildNamespace({
+      isolation: await getModules().namespace.isolation(),
+      mode: user.mode,
+      userId: 0,
+    });
+    return mode;
   }
 
   async getRequestContext(): Promise<RequestContext> {

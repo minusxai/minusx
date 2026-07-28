@@ -42,6 +42,7 @@ function makeMockModules(db: DBModule) {
       invalidatePrefix: async () => {},
     },
     namespace: {
+      isolation: async () => 'mx',
       bindExternalId: async () => {},
       unbindExternalId: async () => {},
     },

@@ -28,7 +28,11 @@ import { randomUUID } from 'crypto';
 import type { Readable } from 'stream';
 import { S3Adapter } from './s3-adapter';
 import { LocalFsAdapter } from './local-fs-adapter';
-import { ensureLocalMxfoodSeeds } from './local-seed';
+import { NamespacedObjectStore } from './namespaced';
+import { getModules } from '@/lib/modules/registry';
+import { namespaced } from '@/lib/namespace/types';
+import { createReadStream } from 'fs';
+import { ensureLocalMxfoodSeeds, seedPath } from './local-seed';
 import {
   OBJECT_STORE_ACCESS_KEY_ID,
   OBJECT_STORE_BUCKET,
@@ -65,8 +69,35 @@ export function isLocalObjectStore(): boolean {
   return !OBJECT_STORE_ACCESS_KEY_ID || !OBJECT_STORE_BUCKET;
 }
 
-export function createObjectStore(): ObjectStore {
+/** The bare backend, with no namespace prefixing. Internal — see createObjectStore. */
+function createBackingStore(): ObjectStore {
   return isLocalObjectStore() ? new LocalFsAdapter() : new S3Adapter();
+}
+
+/**
+ * The object store, scoped to the caller's namespace.
+ *
+ * Async because resolving the namespace is: the prefix is applied HERE rather than at
+ * each call site, so no caller can forget it, and a deployment that isolates workspaces
+ * gets it without any call site knowing. Every key written or read through this is
+ * inside the caller's namespace — there are deliberately no shared keys.
+ */
+/**
+ * The physical key a logical key resolves to.
+ *
+ * Some readers cannot go through the store — DuckDB is handed an `s3://` URL or a
+ * filesystem path and reads it itself. Those paths must apply the SAME prefix the store
+ * applies, or a write through the store becomes unreadable by the reader that follows
+ * it. Logical keys stay namespace-free wherever they are persisted; the prefix is
+ * applied at access time, here.
+ */
+export async function resolveObjectKey(logicalKey: string): Promise<string> {
+  return namespaced(await getModules().namespace.isolation(), logicalKey);
+}
+
+export async function createObjectStore(): Promise<ObjectStore> {
+  const namespace = getModules().namespace;
+  return new NamespacedObjectStore(createBackingStore(), () => namespace.isolation());
 }
 
 /**
@@ -104,43 +135,42 @@ export function generateCsvUploadKey(params: {
 }
 
 /** Shared S3 seed path for a single mxfood table. */
-function getMxfoodSeedKey(tableName: string): string {
-  return `seeds/mxfood/${tableName}.parquet`;
-}
-
-/** Destination key for a mxfood tutorial table. */
+/** Destination key for a mxfood tutorial table, inside the caller's namespace. */
 function getMxfoodTutorialKey(mode: string, tableName: string): string {
   return `csvs/${mode}/mxfood/${tableName}.parquet`;
 }
 
 /**
- * Copy all mxfood seed Parquet files from the shared `seeds/mxfood/` prefix
- * to the mode-specific `csvs/{mode}/mxfood/` prefix using
- * server-side S3 CopyObject (no data transfer through Node.js).
+ * Seed the mxfood sample tables into this namespace.
  *
- * Returns the list of table names that were copied successfully.
- * Failures are logged but do not throw — call is best-effort.
+ * These used to be server-side copies from one shared `seeds/mxfood/` prefix. That
+ * prefix cannot survive namespacing — reading it would need an exemption from the
+ * prefix, and an exemption is the hole that lets one workspace reach another's
+ * objects. So the parquets are written per namespace instead, from a local cache that
+ * lives outside the object store. The only thing being avoided by caching was
+ * re-downloading mxfood.duckdb, which a temp dir does just as well.
+ *
+ * Best-effort per table: a failure is logged and the rest continue.
  */
 export async function copySeedMxfoodForMode(
   mode: string,
   tableNames: readonly string[],
 ): Promise<string[]> {
-  if (isLocalObjectStore()) {
-    await ensureLocalMxfoodSeeds(tableNames);
-  }
+  await ensureLocalMxfoodSeeds(tableNames);
 
-  const store = createObjectStore();
+  const store = await createObjectStore();
   const copied: string[] = [];
 
   await Promise.all(tableNames.map(async (table) => {
     try {
-      await store.copyObject(
-        getMxfoodSeedKey(table),
+      await store.putStream(
         getMxfoodTutorialKey(mode, table),
+        createReadStream(seedPath(table)),
+        'application/vnd.apache.parquet',
       );
       copied.push(table);
     } catch (err) {
-      console.warn(`[copySeedMxfoodForMode] Failed to copy ${table}:`, err);
+      console.warn(`[copySeedMxfoodForMode] Failed to seed ${table}:`, err);
     }
   }));
 
@@ -156,7 +186,7 @@ export async function getMxfoodSeedStatus(
   mode: string,
   tableNames: readonly string[],
 ): Promise<{ ready: boolean; present: number; total: number }> {
-  const store = createObjectStore();
+  const store = await createObjectStore();
   const flags = await Promise.all(
     tableNames.map((t) => store.exists(getMxfoodTutorialKey(mode, t)).catch(() => false)),
   );

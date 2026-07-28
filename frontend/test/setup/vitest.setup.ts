@@ -85,6 +85,7 @@ registerModules({
       invalidatePrefix: async () => {},
     },
     namespace: {
+      isolation: async () => 'mx',
       bindExternalId: async () => {},
       unbindExternalId: async () => {},
     },

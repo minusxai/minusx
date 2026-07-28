@@ -5,10 +5,19 @@ import { join, resolve } from 'path';
 import { tmpdir } from 'os';
 import { randomUUID } from 'crypto';
 import { DuckDBInstance } from '@duckdb/node-api';
-import { LOCAL_UPLOAD_PATH, MXFOOD_DUCKDB_URL } from '@/lib/config';
+import { MXFOOD_DUCKDB_URL } from '@/lib/config';
 
-function seedPath(tableName: string): string {
-  return resolve(join(LOCAL_UPLOAD_PATH, 'seeds', 'mxfood', `${tableName}.parquet`));
+/**
+ * Where the generated parquets are cached.
+ *
+ * Deliberately a temp dir, NOT under the upload path: anything there is an object-store
+ * key, and object-store keys are namespaced. A shared key would need an exemption from
+ * that — and an exemption is exactly the hole that lets one workspace read another's
+ * objects. This cache exists only to avoid re-downloading mxfood.duckdb, so it belongs
+ * outside the store entirely.
+ */
+export function seedPath(tableName: string): string {
+  return resolve(join(tmpdir(), 'mx-mxfood-seeds', `${tableName}.parquet`));
 }
 
 async function downloadFile(url: string, dest: string): Promise<void> {
@@ -30,7 +39,7 @@ async function downloadFile(url: string, dest: string): Promise<void> {
 }
 
 /**
- * Ensure mxfood seed parquet files exist under LOCAL_UPLOAD_PATH/seeds/mxfood/.
+ * Ensure the mxfood seed parquet files exist in the local cache.
  * Downloads mxfood.duckdb once, exports all requested tables, then deletes the temp DB.
  * Idempotent: skips tables that already exist on disk.
  */
@@ -48,7 +57,7 @@ export async function ensureLocalMxfoodSeeds(tableNames: readonly string[]): Pro
 
     await conn.run(`ATTACH '${tmpDb}' AS mxfood (READ_ONLY)`);
 
-    const seedDir = resolve(join(LOCAL_UPLOAD_PATH, 'seeds', 'mxfood'));
+    const seedDir = resolve(join(tmpdir(), 'mx-mxfood-seeds'));
     mkdirSync(seedDir, { recursive: true });
 
     for (const table of missing) {
