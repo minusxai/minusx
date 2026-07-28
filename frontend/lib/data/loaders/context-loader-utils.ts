@@ -4,12 +4,12 @@
  * Used by both context loader and file template generation
  */
 
-import { DatabaseWithSchema, ContextContent, ContextVersion, DocEntry, MetricDef, TableAnnotation, SkillEntry, ViewDef, SemanticModelV2 } from '@/lib/types';
+import { DatabaseWithSchema, ContextContent, ContextVersion, DocEntry, MetricDef, TableAnnotation, SkillEntry, AgentEntry, ViewDef, SemanticModelV2 } from '@/lib/types';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { FilesAPI } from '@/lib/data/files.server';
 import { applyWhitelistToConnections, appliesToChildPath } from '@/lib/sql/schema-filter';
 import { resolvePath } from '@/lib/mode/path-resolver';
-import { getPublishedVersionForUser as getPublishedVersionForUserId, mergeSkillsByName } from '@/lib/context/context-utils';
+import { getPublishedVersionForUser as getPublishedVersionForUserId, mergeByName, mergeSkillsByName } from '@/lib/context/context-utils';
 import { applyNameWhitelist } from '@/lib/context/name-whitelist';
 
 /** Keep only the entries whose `childPaths` reach `currentPath`. */
@@ -39,11 +39,13 @@ export interface ComputedContextSchema {
   /** Inherited semantic models TAKEN (`parentSemanticModels` × the whitelist). */
   fullSemanticModels: SemanticModelV2[];
   fullSkills: SkillEntry[];
+  fullAgents: AgentEntry[];
 }
 
 const EMPTY_COMPUTED: ComputedContextSchema = {
   fullSchema: [], parentSchema: [], fullDocs: [], fullMetrics: [], fullAnnotations: [],
   parentViews: [], fullViews: [], parentSemanticModels: [], fullSemanticModels: [], fullSkills: [],
+  fullAgents: [],
 };
 
 /**
@@ -132,6 +134,7 @@ export async function computeSchemaFromWhitelist(
   const parentOwnDocs = inheritedBy(publishedVersion.docs || [], contextDir);
   const fullDocs = [...parentFullDocs, ...parentOwnDocs];
   const fullSkills = mergeSkillsByName(ancestorContent.fullSkills || [], ancestorContent.skills || []);
+  const fullAgents = mergeByName(ancestorContent.fullAgents || [], ancestorContent.agents || []);
 
   // Accumulate inherited metrics (parent's inherited + parent's own).
   const fullMetrics = [...(ancestorContent.fullMetrics || []), ...(publishedVersion.metrics || [])];
@@ -169,7 +172,7 @@ export async function computeSchemaFromWhitelist(
   // parentOffering = what the parent makes available to this context (before own whitelist)
   return {
     fullSchema, parentSchema: parentOffering, fullDocs, fullMetrics, fullAnnotations,
-    parentViews, fullViews, parentSemanticModels, fullSemanticModels, fullSkills,
+    parentViews, fullViews, parentSemanticModels, fullSemanticModels, fullSkills, fullAgents,
   };
 }
 

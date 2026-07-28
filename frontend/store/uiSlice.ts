@@ -15,6 +15,8 @@ interface UIState {
   devMode: boolean;
   sidebarPendingMessage: string | null;
   chatGradeSelection: LlmGrade | null;
+  /** Sidebar chat's selected custom agent (AgentEntry.name); null = default analyst. */
+  chatAgentSelection: string | null;
   sidebarPendingSlashCommand: string | null;
   activeSidebarSection: string | null;
   askForConfirmation: boolean;
@@ -61,6 +63,7 @@ const initialState: UIState = {
   devMode: false,
   sidebarPendingMessage: null,
   chatGradeSelection: null,
+  chatAgentSelection: null,
   sidebarPendingSlashCommand: null,
   activeSidebarSection: null,
   askForConfirmation: false,
@@ -129,6 +132,9 @@ const uiSlice = createSlice({
     },
     setChatGradeSelection: (state, action: PayloadAction<LlmGrade | null>) => {
       state.chatGradeSelection = action.payload;
+    },
+    setChatAgentSelection: (state, action: PayloadAction<string | null>) => {
+      state.chatAgentSelection = action.payload;
     },
     setSidebarPendingSlashCommand: (state, action: PayloadAction<UIState['sidebarPendingSlashCommand']>) => {
       state.sidebarPendingSlashCommand = action.payload;
@@ -275,6 +281,7 @@ export const {
   setDevMode,
   setSidebarPendingMessage,
   setChatGradeSelection,
+  setChatAgentSelection,
   setSidebarPendingSlashCommand,
   setActiveSidebarSection,
   setAskForConfirmation,

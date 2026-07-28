@@ -6,7 +6,7 @@ import { useConnections } from './useConnections';
 import { ContextContent, ContextInfo, SkillMention } from '@/lib/types';
 import { getWhitelistedSchemaForUser } from '@/lib/sql/schema-filter';
 import { resolveContextDocs } from '@/lib/sql/context-docs';
-import { mergeSkillsByName } from '@/lib/context/context-utils';
+import { mergeByName, mergeSkillsByName } from '@/lib/context/context-utils';
 
 let cachedSystemSkills: SkillMention[] | null = null;
 let systemSkillsRequest: Promise<SkillMention[]> | null = null;
@@ -122,12 +122,15 @@ export function useContext(path: string, version?: number, isFolderScope?: boole
       const databases = getWhitelistedSchemaForUser(contextContent, currentUser.id, version);
       const resolvedDocs = resolveContextDocs(contextContent, currentUser.id, version);
       const skills = mergeSkillsByName(contextContent.fullSkills || [], contextContent.skills || []);
+      const agents = mergeByName(contextContent.fullAgents || [], contextContent.agents || [])
+        .filter(agent => agent.enabled);
 
       return {
         contextId: loadedContext.id,
         databases,
         contextDocs: resolvedDocs,
         skills,
+        agents,
         availableSkills: toAvailableSkills(skills),
         hasContext: true,
         contextLoading: contextLoading
@@ -148,6 +151,7 @@ export function useContext(path: string, version?: number, isFolderScope?: boole
       databases,
       contextDocs: undefined,
       skills: [],
+      agents: [],
       availableSkills: systemSkills,
       hasContext: false,
       contextLoading: contextLoading || connectionsLoading

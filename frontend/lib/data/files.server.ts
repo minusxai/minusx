@@ -586,7 +586,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
     // Older clients may send version.databases (legacy) instead of version.whitelist (new).
     // Normalize on every save so the DB always uses the canonical format.
     if (existingFile.type === 'context') {
-      const { fullSchema, parentSchema, fullDocs, fullSkills, ...ctx } = content as ContextContent;
+      const { fullSchema, parentSchema, fullDocs, fullSkills, fullAgents, ...ctx } = content as ContextContent;
       if (ctx.versions) {
         ctx.versions = ctx.versions.map(v => {
           const { databases: _legacy, ...vClean } = v as any;

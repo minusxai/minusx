@@ -1,7 +1,24 @@
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { AgentSkillSelection, AgentUserSkillCatalogItem } from '@/lib/types';
 import type { ResolvedContextDocs } from '@/lib/types';
+import type { LlmGrade } from '@/lib/llm/llm-config-types';
 import type { BenchmarkAnalystContext } from '@/agents/benchmark-analyst/types';
+
+/**
+ * A custom-agent definition resolved server-side from the context's
+ * agents/fullAgents (see AgentEntry in lib/types/context.ts). Presence of this
+ * on the agent context is what makes a turn a custom-agent turn. Saved into the
+ * conversation log with the rest of the root context, so mid-turn resume hops
+ * reuse the definition frozen at turn start.
+ */
+export interface ResolvedCustomAgent {
+  name: string;
+  prompt: string;
+  promptMode: 'append' | 'replace';
+  /** includeSkills ∪ preloadSkills when includeSkills was non-empty; undefined = unrestricted catalog. */
+  skillAllowlist?: string[];
+  gradeOverride?: LlmGrade;
+}
 
 /**
  * Context shape for RemoteAnalystAgent (and SlackAgent / WebAnalystAgent).
@@ -39,6 +56,8 @@ export interface RemoteAnalystContext extends BenchmarkAnalystContext {
   selectedSkills?: AgentSkillSelection[];
   /** User-defined skill catalog (agent_args.skills.user_catalog). */
   userSkillCatalog?: AgentUserSkillCatalogItem[];
+  /** Custom-agent definition (server-resolved from the context's agents). */
+  customAgent?: ResolvedCustomAgent;
   /** Whether navigation is unrestricted (picks the navigation_unrestricted skill). */
   unrestrictedMode?: boolean;
   /** User-message attachments (images pre-converted to base64, plus text). */

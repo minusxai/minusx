@@ -17,7 +17,7 @@
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import { getPublishedVersion } from '@/lib/context/context-utils';
 import type {
-  ContextContent, ContextVersion, DocEntry, MetricDef, TableAnnotation, SkillEntry, Test,
+  ContextContent, ContextVersion, DocEntry, MetricDef, TableAnnotation, SkillEntry, AgentEntry, Test,
 } from '@/lib/types';
 import type { SemanticModelV2 } from '@/lib/validation/atlas-schemas';
 
@@ -90,6 +90,7 @@ export function foldContextAgentView(existing: unknown, edited: unknown): Record
     out.versions = next;
   }
   if ('skills' in e) out.skills = e.skills as SkillEntry[];
+  if ('agents' in e) out.agents = e.agents as AgentEntry[];
   if ('evals' in e) out.evals = e.evals as Test[];
   return out;
 }
@@ -98,14 +99,14 @@ export function foldContextAgentView(existing: unknown, edited: unknown): Record
 // `fullSemanticModels` is computed like fullViews.
 const COMPUTED_CONTEXT_FIELDS = immutableSet([
   'fullSchema', 'parentSchema', 'fullDocs', 'fullMetrics', 'fullAnnotations', 'fullViews', 'fullSemanticModels',
-  'parentViews', 'parentSemanticModels', 'fullSkills',
+  'parentViews', 'parentSemanticModels', 'fullSkills', 'fullAgents',
 ]);
 // Version fields the agent authors (folded into the live version) — ignore when bounding edits.
 // `whitelist` is NOT here: it's not in the agent's view, so the guard treats any whitelist change as
 // out of bounds (the fold preserves it, so a legitimate edit never trips this).
 const EDITABLE_VERSION_FIELDS = immutableSet(['docs', 'metrics', 'annotations', 'semanticModels']);
 // Content-level fields the agent authors — ignore when bounding edits.
-const EDITABLE_CONTENT_FIELDS = immutableSet(['evals', 'skills']);
+const EDITABLE_CONTENT_FIELDS = immutableSet(['evals', 'skills', 'agents']);
 
 /** Drop the editable + computed fields, leaving only the fields an EditFile must NOT touch. */
 function contextEditInvariant(content: unknown): unknown {

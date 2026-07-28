@@ -49,16 +49,25 @@ export function countResolvedWhitelist(
   return { databases: databaseCount, items: itemCount };
 }
 
-export function mergeSkillsByName(...skillGroups: SkillEntry[][]): SkillEntry[] {
-  const byName = new Map<string, SkillEntry>();
-  for (const skills of skillGroups) {
-    for (const skill of skills) {
-      if (!skill.name) continue;
-      byName.delete(skill.name);
-      byName.set(skill.name, skill);
+/**
+ * Merge named entries across groups, last-wins by name (a later group's entry
+ * replaces an earlier one AND moves to that later position — inheritance order:
+ * ancestors first, own entries last). Used for context skills and agents.
+ */
+export function mergeByName<T extends { name: string }>(...groups: T[][]): T[] {
+  const byName = new Map<string, T>();
+  for (const group of groups) {
+    for (const entry of group) {
+      if (!entry.name) continue;
+      byName.delete(entry.name);
+      byName.set(entry.name, entry);
     }
   }
   return [...byName.values()];
+}
+
+export function mergeSkillsByName(...skillGroups: SkillEntry[][]): SkillEntry[] {
+  return mergeByName(...skillGroups);
 }
 
 /**
