@@ -6,7 +6,6 @@ import { AuthModule } from '@/lib/modules/auth';
 import { ObjectStoreModule } from '@/lib/modules/object-store';
 import { InMemoryCacheModule } from '@/lib/modules/cache';
 import { NamespaceModule } from '@/lib/modules/namespace';
-import { seedLlmConfigFromEnv } from '@/lib/llm/llm-env-seed.server';
 import { logTaggedRejection } from '@/lib/messaging/unhandled-rejection-logger';
 import { BOOT_WARM_CHAT } from '@/lib/config';
 import type { IAuthModule, IFileSystemDBModule, INamespaceModule, IObjectStoreModule, ICacheModule } from '@/lib/modules/types';
@@ -21,7 +20,6 @@ export interface ModuleOverrides {
 
 export async function registerWithModules(
   overrides: ModuleOverrides = {},
-  options: BootOptions = {},
 ): Promise<void> {
   let db = overrides.db;
 
@@ -45,15 +43,7 @@ export async function registerWithModules(
   await getModules().db.init();
   await getModules().db.runMigrations?.();
 
-  await runBootTasks(options);
-}
-
-export interface BootOptions {
-  /**
-   * Seed in-app LLM config from env. A deployment serving several namespaces has no
-   * single workspace to seed at boot and runs it per namespace instead.
-   */
-  seedLlmConfigFromEnv?: boolean;
+  await runBootTasks();
 }
 
 /**
@@ -66,15 +56,7 @@ export interface BootOptions {
  *
  * All are best-effort: none may block or fail boot.
  */
-async function runBootTasks({ seedLlmConfigFromEnv: seed = true }: BootOptions = {}): Promise<void> {
-  // Legacy model-config env vars are INITIAL configuration, converted once into the
-  // workspace config (keys into the secrets store) when no `llm` section exists yet.
-  // User edits in Settings → Models are never overwritten.
-  if (seed) {
-    void seedLlmConfigFromEnv().catch(e =>
-      console.warn('[llm-env-seed] boot seed failed (non-fatal):', e));
-  }
-
+async function runBootTasks(): Promise<void> {
   // Orchestrator-tagged unhandled rejections go to the conversation's errors[] so the
   // failure shows up in chat history. Untagged ones are left to Sentry.
   process.on('unhandledRejection', (reason) => {

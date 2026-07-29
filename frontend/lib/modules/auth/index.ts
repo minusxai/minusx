@@ -10,7 +10,6 @@ import workspaceTemplate from '@/lib/database/workspace-template.json';
 import { DEFAULT_STYLES } from '@/lib/branding/whitelabel';
 import { copySeedMxfoodForMode } from '@/lib/object-store';
 import { registerCompanyWithGateway } from '@/lib/gateway/gateway-register.server';
-import { seedLlmConfigFromEnv } from '@/lib/llm/llm-env-seed.server';
 import { MXFOOD_TABLES } from '@/lib/object-store/mxfood-tables';
 import { getRawConfig, saveRawConfig } from '@/lib/data/configs.server';
 import { ConnectionsAPI } from '@/lib/data/connections.server';
@@ -114,30 +113,21 @@ export class AuthModule implements IAuthModule {
 
     // When MX_GATEWAY_URL + MX_GATEWAY_SHARED_SECRET are set, register this
     // workspace with the MinusX gateway and wire it as the models provider, so
-    // it is usable without configuring one by hand. Runs BEFORE the two seeds
-    // below so an interview-supplied or env-seeded config still wins — an
-    // explicit choice should not be overwritten by the default. Best-effort:
-    // registration has already committed, so an outage leaves a working
-    // workspace rather than an unrepeatable half-registration.
+    // it is usable without configuring one by hand. Skipped when the installer
+    // supplied a config below: an explicit choice should not be overwritten by
+    // the default. Best-effort — registration has already committed, so an
+    // outage leaves a working workspace rather than a half-registration that
+    // cannot be repeated.
     if (!input.llm) {
       await registerCompanyWithGateway({ email: input.adminEmail, workspaceName: input.workspaceName });
     }
 
-    // setup.sh bootstrap: an interview-provided LLM config wins over any env
-    // seed — save it FIRST (extract-on-write moves keys into the secrets
-    // store), so seedLlmConfigFromEnv below sees `llm` present and no-ops.
+    // setup.sh bootstrap: the interview-provided LLM config, saved here so a
+    // scripted install starts configured. Extract-on-write moves keys into the
+    // secrets store.
     if (input.llm) {
       const raw = await getRawConfig(DEFAULT_MODE);
       await saveRawConfig(DEFAULT_MODE, { ...raw, llm: input.llm });
-    }
-
-    // Env → in-app LLM config: convert legacy model-config env vars (if any)
-    // into the fresh workspace's config so a pre-provisioned install starts
-    // configured (keys land in the secrets store; editable in Settings).
-    try {
-      await seedLlmConfigFromEnv();
-    } catch (err) {
-      console.warn('[AuthModule.register] LLM env seed failed (non-fatal):', err);
     }
 
     // setup.sh bootstrap: create the interview-provided first connection in
