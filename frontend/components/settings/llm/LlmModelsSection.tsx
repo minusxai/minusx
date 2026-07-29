@@ -496,27 +496,37 @@ export function LlmModelsSection({ variant = 'settings' }: { variant?: 'settings
 
       <Box>
         <Text fontSize="sm" fontWeight="semibold" fontFamily="mono" mb={1}>Model grades</Text>
-        {minusx && !hasExplicitGrades ? (
+        {/*
+          With MinusX configured there is no per-grade choice to offer: it owns
+          every grade (see `planFromConfig`, which puts it ahead of any stored
+          mapping). Rendering disabled pickers would suggest a decision the
+          admin does not get to make here, so the editors are omitted entirely.
+        */}
+        {minusx ? (
           <Text fontSize="xs" color="fg.muted" fontFamily="mono" aria-label="Grades managed by MinusX">
-            Managed by MinusX — every grade routes through the MinusX gateway. Map a grade below to override.
+            Managed by MinusX — every grade routes through the MinusX gateway, which
+            picks the model per grade and task. Remove the MinusX provider above to
+            map grades yourself.
           </Text>
         ) : (
-          <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-            Map each grade to the model it runs on. Agents and chat users pick grades, never raw models.
-          </Text>
+          <>
+            <Text fontSize="xs" color="fg.muted" fontFamily="mono">
+              Map each grade to the model it runs on. Agents and chat users pick grades, never raw models.
+            </Text>
+            <VStack align="stretch" gap={4} mt={3}>
+              {LLM_GRADES.map((grade) => (
+                <GradeSlotEditor
+                  key={grade}
+                  grade={grade}
+                  choice={draft.grades?.[grade]}
+                  providers={providers}
+                  modelsFor={modelsFor}
+                  onChange={(choice) => setGrade(grade, choice)}
+                />
+              ))}
+            </VStack>
+          </>
         )}
-        <VStack align="stretch" gap={4} mt={3}>
-          {LLM_GRADES.map((grade) => (
-            <GradeSlotEditor
-              key={grade}
-              grade={grade}
-              choice={draft.grades?.[grade]}
-              providers={providers}
-              modelsFor={modelsFor}
-              onChange={(choice) => setGrade(grade, choice)}
-            />
-          ))}
-        </VStack>
       </Box>
 
       <Box>

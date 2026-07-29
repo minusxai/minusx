@@ -234,6 +234,31 @@ describe('LlmModelsSection', () => {
     expect((screen.getByLabelText('LLM provider openai API key') as HTMLInputElement).value).toBe('');
   });
 
+  it('offers no per-grade choice at all while MinusX is configured', async () => {
+    // Picking the managed gateway is picking managed model selection. Leaving
+    // the per-grade pickers on invites a half-managed workspace — some grades
+    // routed by MinusX, others pinned to a vendor model it knows nothing about
+    // — so the editors are not rendered rather than merely ignored.
+    mockFetch();
+    renderWithProviders(<LlmModelsSection />, {
+      store: storeWithLlm({
+        providers: [
+          { name: 'mx', provider: 'minusx', apiKey: 'mx-key' },
+          { name: 'a', provider: 'anthropic', apiKey: 'k' },
+        ],
+        grades: { advanced: { providerName: 'a', model: 'claude-3-opus' } },
+      }),
+    });
+
+    await screen.findByLabelText('Grades managed by MinusX');
+    for (const label of ['Lite provider', 'Core provider', 'Advanced provider']) {
+      expect(screen.queryByLabelText(label)).not.toBeInTheDocument();
+    }
+    for (const label of ['Lite model', 'Core model', 'Advanced model']) {
+      expect(screen.queryByLabelText(label)).not.toBeInTheDocument();
+    }
+  });
+
   it('shows the managed banner when MinusX is configured with no explicit grade mappings', async () => {
     mockFetch();
     renderWithProviders(<LlmModelsSection />, {
