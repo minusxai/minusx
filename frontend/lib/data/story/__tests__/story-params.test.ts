@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest';
 import {
   paramFromJsxAttrs, paramToPlaceholder, paramToJsx, extractStoryParams,
   placeholdersToParamJsx, normalizeParamType, lintStoryParams, lintDashboardParams, lintStoryParamSources, paramFromPlaceholderEl, storyParamToQuestionParameter, type StoryParam,
+  updateParamQueryInHtml, updateParamQueryInJsx,
 } from '../story-params';
 
 describe('story-params — type normalisation', () => {
@@ -25,6 +26,14 @@ describe('story-params — jsx attrs ⇄ StoryParam', () => {
   it('reads an import/autocomplete source (id + column, column defaults to name)', () => {
     expect(paramFromJsxAttrs({ name: 'city', type: 'text', id: 5 })).toMatchObject({ source: { questionId: 5, column: 'city' } });
     expect(paramFromJsxAttrs({ name: 'city', type: 'text', id: 5, column: 'region' })).toMatchObject({ source: { questionId: 5, column: 'region' } });
+  });
+
+  it('reads an inline SQL autocomplete source (query + connection)', () => {
+    expect(paramFromJsxAttrs({
+      name: 'city', type: 'text', query: 'SELECT DISTINCT city\\nFROM customers', connection: 'warehouse',
+    })).toMatchObject({
+      source: { query: 'SELECT DISTINCT city\nFROM customers', connection: 'warehouse' },
+    });
   });
 });
 
@@ -99,6 +108,27 @@ describe('story-params — placeholder round-trip (through content.story HTML)',
     expect(jsx).toBe('<Param name="city" type="text" nullable={false} id={5} column="region" />');
     // and that jsx parses back to the same param
     expect(paramToJsx(params[0])).toBe(jsx);
+  });
+
+  it('round-trips an inline SQL source through placeholder HTML and back to template-literal JSX', () => {
+    const p: StoryParam = {
+      name: 'city', type: 'text', nullable: true,
+      source: { query: 'SELECT DISTINCT city\nFROM customers\nORDER BY city', connection: 'warehouse' },
+    };
+    const html = paramToPlaceholder(p);
+    expect(html).toContain('data-param-source-sql=');
+    expect(extractStoryParams(html)).toEqual([p]);
+    const jsx = placeholdersToParamJsx(html);
+    expect(jsx).toContain('query={`SELECT DISTINCT city\nFROM customers\nORDER BY city`}');
+    expect(jsx).toContain('connection="warehouse"');
+  });
+
+  it('extracts params directly from a new-format JSX story body', () => {
+    const jsx = '<div><Param name="city" type="text" query={`SELECT DISTINCT city FROM customers`} connection="warehouse" /></div>';
+    expect(extractStoryParams(jsx)).toEqual([{
+      name: 'city', type: 'text', nullable: true,
+      source: { query: 'SELECT DISTINCT city FROM customers', connection: 'warehouse' },
+    }]);
   });
 });
 
@@ -176,6 +206,15 @@ describe('story-params — source validation (FIX-1)', () => {
     const declared: StoryParam[] = [sourced('city', 5), { name: 'plain', type: 'text', nullable: true }];
     expect(lintStoryParamSources(declared, (id) => (id === 5 ? 'question' : undefined))).toEqual([]);
   });
+
+  it('warns when an inline SQL source omits its connection', () => {
+    const declared: StoryParam[] = [{
+      name: 'city', type: 'text', nullable: true, source: { query: 'SELECT city FROM t', connection: '' },
+    }];
+    expect(lintStoryParamSources(declared, () => undefined)).toEqual([
+      '<Param name="city"> has an inline SQL source but no connection.',
+    ]);
+  });
 });
 
 describe('story-params — render helpers', () => {
@@ -183,10 +222,53 @@ describe('story-params — render helpers', () => {
     const el = { getAttribute: (n: string) => ({ 'data-param-name': 'city', 'data-param-type': 'text', 'data-param-nullable': 'false', 'data-param-source-id': '5', 'data-param-source-col': 'region' } as Record<string, string>)[n] ?? null };
     expect(paramFromPlaceholderEl(el)).toEqual({ name: 'city', type: 'text', nullable: false, source: { questionId: 5, column: 'region' } });
   });
+  it('reads an inline SQL source from a rendered placeholder element', () => {
+    const attrs: Record<string, string> = {
+      'data-param-name': 'city', 'data-param-type': 'text', 'data-param-nullable': 'true',
+      'data-param-source-sql': JSON.stringify({ query: 'SELECT DISTINCT city FROM customers', connection: 'warehouse' }),
+    };
+    const el = { getAttribute: (n: string) => attrs[n] ?? null };
+    expect(paramFromPlaceholderEl(el)).toEqual({
+      name: 'city', type: 'text', nullable: true,
+      source: { query: 'SELECT DISTINCT city FROM customers', connection: 'warehouse' },
+    });
+  });
   it('maps a StoryParam to a QuestionParameter (source → question source)', () => {
     expect(storyParamToQuestionParameter({ name: 'city', type: 'text', nullable: true, source: { questionId: 5, column: 'region' } }))
       .toEqual({ name: 'city', type: 'text', label: null, source: { type: 'question', id: 5, column: 'region' } });
     expect(storyParamToQuestionParameter({ name: 'n', type: 'number', nullable: true }))
       .toEqual({ name: 'n', type: 'number', label: null, source: null });
+    expect(storyParamToQuestionParameter({
+      name: 'city', type: 'text', nullable: true,
+      source: { query: 'SELECT city FROM t', connection: 'warehouse' },
+    })).toEqual({ name: 'city', type: 'text', label: null, source: { type: 'sql', query: 'SELECT city FROM t' } });
+  });
+});
+
+describe('story-params — inline SQL source write-back', () => {
+  const sqlParam: StoryParam = {
+    name: 'city', type: 'text', nullable: true,
+    source: { query: 'SELECT city FROM old_table', connection: 'warehouse' },
+    style: { width: '240px' },
+  };
+
+  it('updates the targeted legacy placeholder and preserves its other attributes', () => {
+    const plain = paramToPlaceholder({ name: 'plain', type: 'text', nullable: true });
+    const html = `<div>${plain}${paramToPlaceholder(sqlParam)}</div>`;
+    const next = updateParamQueryInHtml(html, 1, 'SELECT DISTINCT city\nFROM customers');
+    expect(extractStoryParams(next)).toEqual([
+      { name: 'plain', type: 'text', nullable: true },
+      { ...sqlParam, source: { query: 'SELECT DISTINCT city\nFROM customers', connection: 'warehouse' } },
+    ]);
+    expect(updateParamQueryInHtml(html, 0, 'SELECT 1')).toBe(html); // source-less target is ignored
+  });
+
+  it('updates only the targeted query-backed Param in JSX', () => {
+    const jsx = '<div><Param name="saved" type="text" id={5} column="city" /><Param name="city" type="text" query={`SELECT city FROM old_table`} connection="warehouse" /></div>';
+    const next = updateParamQueryInJsx(jsx, '0.1', 'SELECT DISTINCT city\nFROM customers');
+    expect(extractStoryParams(next)[1]).toMatchObject({
+      name: 'city', source: { query: 'SELECT DISTINCT city\nFROM customers', connection: 'warehouse' },
+    });
+    expect(updateParamQueryInJsx(jsx, '0.0', 'SELECT 1')).toBe(jsx); // id source is not editable SQL
   });
 });

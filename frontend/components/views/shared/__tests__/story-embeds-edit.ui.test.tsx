@@ -12,7 +12,10 @@ import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import type { InlineQuestionEmbed } from '@/lib/data/story/story-question';
 import { inlineEmbedToQuestionContent } from '@/lib/data/story/story-question';
 
-const h = vi.hoisted(() => ({ smartProps: [] as Record<string, unknown>[] }));
+const h = vi.hoisted(() => ({
+  smartProps: [] as Record<string, unknown>[],
+  paramProps: [] as Record<string, unknown>[],
+}));
 
 vi.mock('@/components/containers/SmartEmbeddedQuestionContainer', async () => {
   const React = await import('react');
@@ -31,6 +34,18 @@ vi.mock('@/components/containers/EmbeddedQuestionContainer', async () => {
   return { __esModule: true, default: () => React.createElement('div', { 'aria-label': 'Inline embed body' }) };
 });
 
+vi.mock('@/components/views/story/StoryParamControl', async () => {
+  const React = await import('react');
+  const Fake = (props: Record<string, unknown>) => {
+    h.paramProps.push(props);
+    return React.createElement('button', {
+      'aria-label': `Edit ${(props.param as { name: string }).name} options query`,
+      onClick: () => (props.onRequestEdit as (() => void) | undefined)?.(),
+    });
+  };
+  return { __esModule: true, default: Fake };
+});
+
 import StoryEmbeds from '../StoryEmbeds';
 
 const OVERRIDE: VizEnvelope = {
@@ -47,6 +62,7 @@ const el = () => {
 beforeEach(() => {
   document.body.innerHTML = '';
   h.smartProps.length = 0;
+  h.paramProps.length = 0;
 });
 
 describe('StoryEmbeds — question edit affordances', () => {
@@ -119,5 +135,33 @@ describe('StoryEmbeds — question edit affordances', () => {
     );
     expect(screen.queryByLabelText('Card actions')).toBeNull();
     expect(screen.queryByLabelText('Edit question')).toBeNull();
+  });
+
+  it('query-backed params report their legacy placeholder occurrence in edit mode', () => {
+    const onEditParamQuery = vi.fn();
+    renderWithProviders(
+      <StoryEmbeds
+        doc={document}
+        targets={[]}
+        inlineTargets={[]}
+        numberTargets={[]}
+        paramTargets={[
+          { el: el(), param: { name: 'plain', type: 'text', nullable: true } },
+          { el: el(), param: {
+            name: 'region', type: 'text', nullable: true,
+            source: { query: 'SELECT DISTINCT region FROM sales', connection: 'duckdb' },
+          } },
+        ]}
+        readOnly={false}
+        editable
+        onEditParamQuery={onEditParamQuery}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText('Edit region options query'));
+    expect(onEditParamQuery).toHaveBeenLastCalledWith({
+      name: 'region', query: 'SELECT DISTINCT region FROM sales', connection: 'duckdb',
+      ref: { format: 'html', occurrence: 1 },
+    });
+    expect(h.paramProps[0].onRequestEdit).toBeUndefined();
   });
 });

@@ -107,3 +107,52 @@ describe('StoryParamControl — autocomplete (param with a question source)', ()
     expect(after).toBe(before); // same node identity → not remounted → focus preserved
   });
 });
+
+describe('StoryParamControl — autocomplete (param with an inline SQL source)', () => {
+  const sourced: StoryParam = {
+    name: 'region', type: 'text', nullable: true,
+    source: { query: 'SELECT DISTINCT region FROM sales', connection: 'warehouse' },
+  };
+
+  it('renders an inline-SQL combobox and commits a typed value on Enter', () => {
+    const onChange = vi.fn();
+    const { getByLabelText } = renderWithProviders(
+      <StoryParamControl param={sourced} value="" filePath="/org/story" onChange={onChange} />,
+    );
+    const input = getByLabelText('param region') as HTMLInputElement;
+    expect(input.getAttribute('role')).toBe('combobox');
+    fireEvent.change(input, { target: { value: 'West' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onChange).toHaveBeenCalledWith('West');
+  });
+
+  it('applies story-authored input styles', () => {
+    const styled = { ...sourced, style: { width: '260px' } } as StoryParam;
+    const { getByLabelText } = renderWithProviders(<StoryParamControl param={styled} value="" onChange={() => {}} />);
+    expect((getByLabelText('param region') as HTMLInputElement).style.width).toBe('260px');
+  });
+
+  it('uses the story-safe Radix popover and constrains the options to the input width', () => {
+    const { getByLabelText, getByRole } = renderWithProviders(
+      <StoryParamControl param={sourced} value="" onChange={() => {}} />,
+    );
+    fireEvent.click(getByLabelText('param region'));
+    const options = getByRole('listbox');
+    expect(options).toHaveAttribute('data-story-floating');
+    expect(options).toHaveClass('w-[var(--radix-popover-trigger-width)]');
+    expect(options).toHaveClass('overflow-y-auto');
+  });
+
+  it('shows the SQL edit action only when author edit mode supplies a handler', () => {
+    const onRequestEdit = vi.fn();
+    const view = renderWithProviders(
+      <StoryParamControl param={sourced} value="" onChange={() => {}} onRequestEdit={onRequestEdit} />,
+    );
+    fireEvent.click(view.getByLabelText('Edit region options query'));
+    expect(onRequestEdit).toHaveBeenCalledOnce();
+    view.unmount();
+
+    const reader = renderWithProviders(<StoryParamControl param={sourced} value="" onChange={() => {}} />);
+    expect(reader.queryByLabelText('Edit region options query')).toBeNull();
+  });
+});

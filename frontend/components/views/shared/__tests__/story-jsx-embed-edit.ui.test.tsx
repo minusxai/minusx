@@ -16,6 +16,7 @@ import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 const h = vi.hoisted(() => ({
   smartProps: [] as Record<string, unknown>[],
   numberProps: [] as Record<string, unknown>[],
+  paramProps: [] as Record<string, unknown>[],
 }));
 
 vi.mock('@/components/containers/SmartEmbeddedQuestionContainer', async () => {
@@ -47,6 +48,18 @@ vi.mock('@/components/views/story/InlineNumber', async () => {
   return { __esModule: true, default: Fake };
 });
 
+vi.mock('@/components/views/story/StoryParamControl', async () => {
+  const React = await import('react');
+  const Fake = (props: Record<string, unknown>) => {
+    h.paramProps.push(props);
+    return React.createElement('button', {
+      'aria-label': 'Edit region options query',
+      onClick: () => (props.onRequestEdit as (() => void) | undefined)?.(),
+    });
+  };
+  return { __esModule: true, default: Fake };
+});
+
 import StoryJsxBody from '../StoryJsxBody';
 
 const OVERRIDE: VizEnvelope = {
@@ -54,12 +67,13 @@ const OVERRIDE: VizEnvelope = {
   source: { kind: 'table', columnFormats: null, conditionalFormats: null, css: '.mx-th{background:#111}' },
 };
 
-// Paths: div=0 → [saved Question=0.0, Card=0.1 (inline Question=0.1.0), Number=0.2]
-const JSX_DOC = `<div className="p-8"><Question id={42} viz={${JSON.stringify(OVERRIDE)}} height="500px" /><Card><Question query={\`SELECT 1\`} connection="duckdb" height="340px" /></Card><Number query={\`SELECT count(*) FROM t\`} connection="duckdb" prefix="$" /></div>`;
+// Paths: div=0 → [saved Question=0.0, Card=0.1 (inline Question=0.1.0), Number=0.2, Param=0.3]
+const JSX_DOC = `<div className="p-8"><Question id={42} viz={${JSON.stringify(OVERRIDE)}} height="500px" /><Card><Question query={\`SELECT 1\`} connection="duckdb" height="340px" /></Card><Number query={\`SELECT count(*) FROM t\`} connection="duckdb" prefix="$" /><Param name="region" type="text" query={\`SELECT DISTINCT region FROM sales\`} connection="duckdb" /></div>`;
 
 beforeEach(() => {
   h.smartProps.length = 0;
   h.numberProps.length = 0;
+  h.paramProps.length = 0;
 });
 
 function renderBody(overrides: Partial<React.ComponentProps<typeof StoryJsxBody>> = {}) {
@@ -108,12 +122,25 @@ describe('StoryJsxBody — embed edit affordances (jsx stories)', () => {
     });
   });
 
+  it('query-backed params request edits with their SQL and AST path', () => {
+    const onEditParamQuery = vi.fn();
+    renderBody({ onEditParamQuery });
+    fireEvent.click(screen.getByLabelText('Edit region options query'));
+    expect(onEditParamQuery).toHaveBeenLastCalledWith({
+      name: 'region',
+      query: 'SELECT DISTINCT region FROM sales',
+      connection: 'duckdb',
+      ref: { format: 'jsx', astPath: '0.3' },
+    });
+  });
+
   it('shows no edit affordances outside edit mode', () => {
-    renderBody({ editable: false, onEditQuestion: vi.fn(), onEditNumber: vi.fn() });
+    renderBody({ editable: false, onEditQuestion: vi.fn(), onEditNumber: vi.fn(), onEditParamQuery: vi.fn() });
     expect(screen.queryByLabelText('Card actions')).toBeNull();
     expect(h.smartProps[0].showActionsMenu).toBe(false);
     expect(h.smartProps[0].onEdit).toBeUndefined();
     expect(h.numberProps[0].editable).toBe(false);
     expect(h.numberProps[0].onRequestEdit).toBeUndefined();
+    expect(h.paramProps[0].onRequestEdit).toBeUndefined();
   });
 });

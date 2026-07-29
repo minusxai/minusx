@@ -4,7 +4,7 @@
  *  1. The svg surface is the DEFAULT: AgentHtml mounts the story body inside <svg><foreignObject>
  *     with no explicit `surface` prop (there is no user-facing renderer setting anymore).
  *  2. Injected styles live INSIDE the story root as data-mx-*-tagged <style> nodes — compiledCss
- *     (data-mx-tw), the mirrored app styles (data-mx-app-styles), the jsx floating css
+ *     (data-mx-tw), the mirrored app styles (data-mx-app-styles), the floating css
  *     (data-mx-floating), and the platform font css (data-mx-fonts) — NOT in the iframe <head>,
  *     so the serialized <svg> carries them without head-cloning.
  *  3. Byte-identity: rendering a story and saving it back leaves `content.story` unchanged
@@ -53,11 +53,13 @@ describe('injected styles live INSIDE the story root (self-contained serialized 
     const root = surfaceRoot(doc)!;
     expect(root.querySelector('style[data-mx-tw]')?.textContent).toBe('.tw{display:flex}');
     expect(root.querySelector('style[data-mx-app-styles]')).toBeTruthy();
+    expect(root.querySelector('style[data-mx-floating]')).toBeTruthy();
     expect(doc.head.querySelector('style[data-mx-tw]')).toBeNull();
     expect(doc.head.querySelector('style[data-mx-app-styles]')).toBeNull();
+    expect(doc.head.querySelector('style[data-mx-floating]')).toBeNull();
   });
 
-  it('jsx stories additionally carry the floating css and platform font css in-root', async () => {
+  it('jsx stories additionally carry the platform font css in-root', async () => {
     render(<AgentHtml html={JSX_STORY} format="jsx" compiledCss=".tw{display:flex}" width={800} colorMode="light" />);
     const doc = iframeDoc();
     await waitFor(() => expect(within(doc.body).getByLabelText('para')).toBeTruthy());

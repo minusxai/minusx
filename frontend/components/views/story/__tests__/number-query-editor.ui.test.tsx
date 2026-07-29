@@ -57,4 +57,25 @@ describe('NumberQueryEditor (light-DOM SqlEditor modal)', () => {
     renderWithProviders(<NumberQueryEditor request={null} filePath="/org/story" onClose={() => {}} />);
     expect(screen.queryByLabelText('SQL editor')).toBeNull();
   });
+
+  it('supports Param-specific title and action labels while reusing the same SQL editor', async () => {
+    const apply = vi.fn();
+    renderWithProviders(
+      <NumberQueryEditor
+        request={{
+          query: 'SELECT DISTINCT region FROM sales',
+          connection: 'duck',
+          editorTitle: 'Edit region options query',
+          editorAriaSubject: 'parameter options query',
+          apply,
+        }}
+        filePath="/org/story"
+        onClose={() => {}}
+      />,
+    );
+    expect(await screen.findByText('Edit region options query')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('SQL editor'), { target: { value: 'SELECT region FROM active_sales' } });
+    fireEvent.click(screen.getByLabelText('apply parameter options query edit'));
+    expect(apply).toHaveBeenCalledWith('SELECT region FROM active_sales');
+  });
 });

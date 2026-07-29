@@ -4,6 +4,7 @@
 import { describe, it, expect } from 'vitest';
 import { storyEmbedRuns, getRootParamsFromContent } from '../param-resolution';
 import { numberToPlaceholder } from '@/lib/data/story/story-number';
+import { paramToPlaceholder } from '@/lib/data/story/story-params';
 
 describe('getRootParamsFromContent — a story flows its parameterValues (like a dashboard)', () => {
   it('returns a story\'s saved parameterValues as the inherited params', () => {
@@ -41,5 +42,24 @@ describe('storyEmbedRuns — inline <Number> binds story :params', () => {
     const html = `<div>${numberToPlaceholder({ query: numQuery, connection: 'duck', col: 'm' })}</div>`;
     expect(storyEmbedRuns(html, { min_mrr: '' })[0].params).toEqual({ min_mrr: null });
     expect(storyEmbedRuns(html, { min_mrr: null })[0].params).toEqual({ min_mrr: null });
+  });
+});
+
+describe('storyEmbedRuns — inline-SQL <Param> autocomplete sources', () => {
+  it('runs a legacy-placeholder source query without binding the selected value', () => {
+    const html = paramToPlaceholder({
+      name: 'region', type: 'text', nullable: true,
+      source: { query: 'SELECT DISTINCT region FROM sales', connection: 'duck' },
+    });
+    expect(storyEmbedRuns(html, { region: 'West' })).toEqual([{
+      query: 'SELECT DISTINCT region FROM sales', connection: 'duck', params: {},
+    }]);
+  });
+
+  it('runs a source query declared directly in a JSX-format story body', () => {
+    const jsx = '<Param name="region" type="text" query={`SELECT DISTINCT region FROM sales`} connection="duck" />';
+    expect(storyEmbedRuns(jsx, {})).toEqual([{
+      query: 'SELECT DISTINCT region FROM sales', connection: 'duck', params: {},
+    }]);
   });
 });
