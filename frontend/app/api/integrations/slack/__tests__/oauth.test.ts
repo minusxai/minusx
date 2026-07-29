@@ -2,15 +2,15 @@ import type { Mock } from 'vitest';
 /**
  * Tests for the Slack OAuth 2.0 flow.
  *
- * The flow is split across two routes so the install finishes inside tenant
+ * The flow is split across two routes so the install finishes inside the
  * context without a domain-wide cookie:
  *   - oauth-start      — admin-gated; mints the HMAC-signed state.
  *   - oauth-callback   — lands on the root domain (Slack's fixed redirect_uri);
  *                        a thin HMAC-verifying forwarder. No DB writes. Redirects
  *                        to the finish URL supplied by the namespace module.
- *   - oauth-callback-finish — runs on the tenant's host (auth-gated), re-verifies
+ *   - oauth-callback-finish — runs on the workspace's host (auth-gated), re-verifies
  *                        the state + the logged-in admin, then exchanges the code
- *                        and writes the bot config in tenant context.
+ *                        and writes the bot config in that context.
  *
  * Covers:
  *  1. buildState — payload encoding and HMAC structure
@@ -49,7 +49,7 @@ vi.mock('@/lib/auth/role-helpers', () => ({
   isAdmin: (role: string) => role === 'admin',
 }));
 
-// withAuth provides the authenticated tenant user to oauth-start and the finish
+// withAuth provides the authenticated user to oauth-start and the finish
 // route. Tests override `mockUser` to exercise the initiator/admin check.
 const { mockUser } = vi.hoisted(() => ({
   mockUser: { value: { email: 'admin@acme.com', role: 'admin', mode: 'org' as const, userId: 1, home_folder: '/org' } },
@@ -60,7 +60,7 @@ vi.mock('@/lib/http/with-auth', () => ({
 }));
 
 // The root callback asks the namespace module where to finalize the install. OSS returns
-// nothing (finish on same host); proprietary returns the tenant subdomain URL.
+// nothing (finish on same host); a deployment serving several may return another host.
 const { getFinishUrlMock } = vi.hoisted(() => ({ getFinishUrlMock: vi.fn() }));
 vi.mock('@/lib/modules/registry', () => ({
   getModules: () => ({ namespace: { installFinishUrl: getFinishUrlMock } }),
