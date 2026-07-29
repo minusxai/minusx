@@ -11,6 +11,7 @@ import RecordingControl from '@/components/dev/RecordingControl';
 import DataManagementSection from '@/components/settings/DataManagementSection';
 import { ChannelsSection } from '@/components/settings/ChannelsSection';
 import { CreditsUsageCards } from '@/components/settings/CreditsCard';
+import { GatewayBillingCard } from '@/components/settings/GatewayBillingCard';
 import AdminUsageDashboard from '@/components/settings/AdminUsageDashboard';
 import { SlackIntegration } from '@/components/settings/integrations/SlackIntegration';
 import { McpIntegration } from '@/components/settings/integrations/McpIntegration';
@@ -742,6 +743,9 @@ function SettingsContent() {
       group: 'management',
       custom: (
         <VStack align="stretch" gap={5}>
+          {/* Renders nothing unless this workspace is backed by the MinusX
+              gateway, so a self-hosted install sees no change here. */}
+          <GatewayBillingCard />
           <CreditsUsageCards />
           {isAdmin && <AdminUsageDashboard />}
         </VStack>
