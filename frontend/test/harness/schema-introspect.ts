@@ -44,14 +44,13 @@ export interface TableShape {
   indexes: IndexShape[];
   constraints: ConstraintShape[];
   triggers: TriggerShape[];
-  rls: { enabled: boolean; forced: boolean; policies: string[] };
 }
 
 export type SchemaShape = TableShape[];
 
 export async function introspectSchema(adapter: IDatabaseAdapter): Promise<SchemaShape> {
-  const { rows: tables } = await adapter.query<{ name: string; rls: boolean; forced: boolean }>(
-    `SELECT c.relname AS name, c.relrowsecurity AS rls, c.relforcerowsecurity AS forced
+  const { rows: tables } = await adapter.query<{ name: string }>(
+    `SELECT c.relname AS name
        FROM pg_class c
        JOIN pg_namespace n ON n.oid = c.relnamespace
       WHERE c.relkind = 'r' AND n.nspname = current_schema()
@@ -93,14 +92,6 @@ export async function introspectSchema(adapter: IDatabaseAdapter): Promise<Schem
       [t.name],
     );
 
-    const { rows: policies } = await adapter.query<{ definition: string }>(
-      `SELECT policyname || ' USING ' || COALESCE(qual, '') AS definition
-         FROM pg_policies
-        WHERE schemaname = current_schema() AND tablename = $1
-        ORDER BY policyname`,
-      [t.name],
-    );
-
     const { rows: triggers } = await adapter.query<{
       name: string; timing: string; event: string; functionBody: string;
     }>(
@@ -131,7 +122,6 @@ export async function introspectSchema(adapter: IDatabaseAdapter): Promise<Schem
       constraints,
       // Normalised: the trigger's own name is incidental, what it DOES is not.
       triggers: triggers.map(t => ({ ...t, functionBody: t.functionBody.trim().replace(/\s+/g, ' ') })),
-      rls: { enabled: t.rls, forced: t.forced, policies: policies.map(p => p.definition) },
     });
   }
 
@@ -152,8 +142,6 @@ export function renderSchemaShape(shape: SchemaShape): string {
     for (const c of t.constraints) lines.push(`  con  ${c.name} ${c.definition}`);
     for (const i of t.indexes) lines.push(`  idx  ${i.definition}`);
     for (const g of t.triggers) lines.push(`  trg  ${g.timing} ${g.event} -> ${g.functionBody}`);
-    if (t.rls.enabled) lines.push(`  rls  enabled${t.rls.forced ? ' forced' : ''}`);
-    for (const p of t.rls.policies) lines.push(`  pol  ${p}`);
   }
   return lines.join('\n');
 }
