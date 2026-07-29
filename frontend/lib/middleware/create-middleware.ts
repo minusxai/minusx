@@ -95,7 +95,7 @@ async function routeRequest(req: AuthReq): Promise<NextResponse> {
       pathname.startsWith('/api/health') ||
       pathname === '/api/jobs/cron' ||
       // Shared-secret gated, and consumed by CI/deploy tooling that has no session.
-      pathname === '/api/admin/fleet-version'
+      pathname === '/api/admin/min-data-version'
     ) {
       const requestHeaders = new Headers(req.headers);
       requestHeaders.set('x-request-id', requestId);
