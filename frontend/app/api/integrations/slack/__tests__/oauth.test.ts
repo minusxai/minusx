@@ -7,7 +7,7 @@ import type { Mock } from 'vitest';
  *   - oauth-start      — admin-gated; mints the HMAC-signed state.
  *   - oauth-callback   — lands on the root domain (Slack's fixed redirect_uri);
  *                        a thin HMAC-verifying forwarder. No DB writes. Redirects
- *                        to the tenant's finish URL (from the namespace module).
+ *                        to the finish URL supplied by the namespace module.
  *   - oauth-callback-finish — runs on the tenant's host (auth-gated), re-verifies
  *                        the state + the logged-in admin, then exchanges the code
  *                        and writes the bot config in tenant context.
@@ -201,7 +201,7 @@ describe('oauth-callback — forwarding', () => {
     expect(new URL(res.headers.get('location')!).host).toBe('minusx.app');
   });
 
-  it('forwards to the tenant subdomain host supplied by the namespace module', async () => {
+  it('forwards to the host supplied by the namespace module', async () => {
     getFinishUrlMock.mockReturnValue('https://acme.minusx.app/api/integrations/slack/oauth-callback-finish');
     const state = makeState();
     const res = await callbackHandler(makeCallbackRequest({ code: 'c', state }));

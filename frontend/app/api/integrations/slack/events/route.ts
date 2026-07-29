@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
   }
 
   const teamId = getTeamId(payload);
-  // A webhook carries no session and no tenant host — only the provider's own workspace
+  // A webhook carries no session and no identifying host — only the provider's own workspace
   // id — so the namespace comes from the hint. Unknown team means we genuinely cannot
   // tell who this is for; ack it and drop rather than guessing.
   const ns = teamId ? await getModules().namespace.resolve(request, { slack_team: teamId }) : null;
