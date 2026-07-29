@@ -77,8 +77,8 @@ interface EnvironmentConfig {
   // MinusX gateway (hosted model access). Setting BOTH makes a new workspace
   // register with it and use it as the models provider; leaving either unset
   // means none of that code runs.
-  MX_GATEWAY_URL: string | undefined;
   MX_GATEWAY_SHARED_SECRET: string | undefined;
+  MX_GATEWAY_URL: string | undefined;
   MAX_CONCURRENT_QUERIES: number;
   QUERY_TIMEOUT_MS: number;
   /** Server-side wall-clock bound on one query execution (runQuery) — the backstop for callers
@@ -188,8 +188,8 @@ const config: EnvironmentConfig = {
   DAB_AUTOCTX_ONLY: process.env.DAB_AUTOCTX_ONLY,
   MAX_LLM_CONCURRENCY: process.env.MAX_LLM_CONCURRENCY,
   MAX_AGENTS_CONCURRENCY: process.env.MAX_AGENTS_CONCURRENCY,
-  MX_GATEWAY_URL: process.env.MX_GATEWAY_URL,
   MX_GATEWAY_SHARED_SECRET: process.env.MX_GATEWAY_SHARED_SECRET,
+  MX_GATEWAY_URL: process.env.MX_GATEWAY_URL,
   MAX_CONCURRENT_QUERIES: getOptionalNumber(process.env.MAX_CONCURRENT_QUERIES, 10),
   QUERY_SERVER_TIMEOUT_MS: getOptionalNumber(process.env.QUERY_SERVER_TIMEOUT_MS, 180_000),
   // Client-side wall-clock cap for a single /api/query call (chat/tool-triggered
@@ -326,5 +326,20 @@ export const DAB_ROW_INDEX = config.DAB_ROW_INDEX;
 export const DAB_AUTOCTX_ONLY = config.DAB_AUTOCTX_ONLY;
 export const MAX_LLM_CONCURRENCY = config.MAX_LLM_CONCURRENCY;
 export const MAX_AGENTS_CONCURRENCY = config.MAX_AGENTS_CONCURRENCY;
-export const MX_GATEWAY_URL = config.MX_GATEWAY_URL;
 export const MX_GATEWAY_SHARED_SECRET = config.MX_GATEWAY_SHARED_SECRET;
+
+/**
+ * Origin of the managed MinusX gateway. ONE service, two planes: inference at
+ * `/v1`, a control plane (orgs, credits, status) at the root.
+ */
+export const MX_GATEWAY_ORIGIN: string =
+  (config.MX_GATEWAY_URL || 'https://llm.minusx.ai').replace(/\/+$/, '');
+
+/**
+ * Inference endpoint. Purely DERIVED — there is deliberately no second variable
+ * for it. One that could disagree with the origin is one that eventually will,
+ * and the failure it produces is an auth error against a gateway that never
+ * minted the key: a long way from its cause. An install that wants a different
+ * inference endpoint entirely configures a provider in Settings → Models.
+ */
+export const MINUSX_GATEWAY_URL: string = `${MX_GATEWAY_ORIGIN}/v1`;

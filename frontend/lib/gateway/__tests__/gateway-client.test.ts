@@ -56,20 +56,27 @@ function mockFetch(status: number, body: unknown) {
 }
 
 describe('the switch', () => {
-  it('is off when MX_GATEWAY_URL is unset', async () => {
+  it('is off for an install that set nothing', async () => {
     const { gatewayEnabled } = await loadClient({});
     expect(gatewayEnabled()).toBe(false);
   });
 
-  it('is off when the URL is set but the shared secret is not', async () => {
-    // Half-configured is OFF, not a runtime error at registration time:
-    // setting one variable by accident must still leave registration working.
+  it('is the SHARED SECRET, not the URL', async () => {
+    // The URL has a default (it is the managed provider every install talks to
+    // for inference), so it cannot be the gate. The secret is: it is issued by
+    // MinusX and a self-hosted install cannot obtain one. Naming the gateway
+    // must therefore stay harmless on its own.
     const { gatewayEnabled } = await loadClient({ MX_GATEWAY_URL: 'https://llm.minusx.ai' });
     expect(gatewayEnabled()).toBe(false);
   });
 
-  it('is on only when both are set', async () => {
+  it('is on once the secret is present', async () => {
     const { gatewayEnabled } = await loadClient(ON);
+    expect(gatewayEnabled()).toBe(true);
+  });
+
+  it('defaults the origin to production when only the secret is set', async () => {
+    const { gatewayEnabled } = await loadClient({ MX_GATEWAY_SHARED_SECRET: 'shhh' });
     expect(gatewayEnabled()).toBe(true);
   });
 
@@ -241,25 +248,15 @@ describe('buildGatewayLlmConfig', () => {
     }
   });
 
-  it('sends inference to the SAME gateway that issued the key', async () => {
-    // Two variables address one service on two planes: MX_GATEWAY_URL is the
-    // control plane (no /v1), MINUSX_GATEWAY_URL the inference endpoint (with
-    // /v1) — and the latter defaults to PRODUCTION. Without pinning the base
-    // URL here, a staging install registers against staging and then bills its
-    // inference to prod, which is a silent cross-environment leak rather than
-    // a visible failure.
+  it('does not freeze a base URL into the persisted workspace config', async () => {
+    // This config document is saved at registration and never rewritten, so a
+    // URL written here outlives every later change of address — including an
+    // internal container hostname, which would be baked in permanently.
+    // Inference instead resolves from MINUSX_GATEWAY_URL, derived from the same
+    // origin, so moving the gateway moves every workspace with it.
     const { buildGatewayLlmConfig } = await loadClient({
       ...ON, MX_GATEWAY_URL: 'https://staging-llm.minusxapp.com',
     });
-    expect(buildGatewayLlmConfig('mxk1_abc').providers![0].baseUrl)
-      .toBe('https://staging-llm.minusxapp.com/v1');
-  });
-
-  it('carries the trailing-slash trim into the inference URL too', async () => {
-    const { buildGatewayLlmConfig } = await loadClient({
-      ...ON, MX_GATEWAY_URL: 'https://llm.minusx.ai/',
-    });
-    expect(buildGatewayLlmConfig('mxk1_abc').providers![0].baseUrl)
-      .toBe('https://llm.minusx.ai/v1');
+    expect(buildGatewayLlmConfig('mxk1_abc').providers![0].baseUrl).toBeUndefined();
   });
 });

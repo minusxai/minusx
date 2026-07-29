@@ -30,7 +30,7 @@ Model providers, keys, and assignments are configured **in the app** (setup wiza
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `MINUSX_GATEWAY_URL` | `https://llm.minusx.ai/v1` | Base URL of the managed MinusX gateway (the default provider); override for staging gateways. |
+| `MX_GATEWAY_URL` | `https://llm.minusx.ai` | Origin of the managed MinusX gateway (the default provider). Inference is this plus `/v1` — there is no separate variable for it. Replaces `MINUSX_GATEWAY_URL`, which no longer has any effect; note this one takes the origin, **without** the `/v1`. |
 | `MAX_LLM_CONCURRENCY` | unlimited | Cap on concurrent in-flight LLM requests. |
 | `BOOT_WARM_CHAT` | `true` | Warm the chat runtime at boot so the first message isn't a cold start. `false` to disable. |
 

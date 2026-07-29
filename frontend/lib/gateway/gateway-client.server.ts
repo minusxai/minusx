@@ -18,7 +18,7 @@ import 'server-only';
 
 import { MINUSX_AUTO_MODEL } from '@/lib/llm/minusx-default';
 import { MINUSX_PROVIDER, type LlmConfig } from '@/lib/llm/llm-config-types';
-import { AUTH_URL, MX_GATEWAY_SHARED_SECRET, MX_GATEWAY_URL } from '@/lib/config';
+import { AUTH_URL, MX_GATEWAY_ORIGIN, MX_GATEWAY_SHARED_SECRET } from '@/lib/config';
 import { GIT_COMMIT_SHA } from '@/lib/constants';
 
 import type {
@@ -31,7 +31,7 @@ const GATEWAY_PROVIDER_NAME = 'minusx';
 const REQUEST_TIMEOUT_MS = 10_000;
 
 function baseUrl(): string {
-  return (MX_GATEWAY_URL ?? '').replace(/\/+$/, '');
+  return MX_GATEWAY_ORIGIN;
 }
 
 /**
@@ -175,12 +175,13 @@ export async function fetchOrgUsage(
  * `minusx-auto` sentinel, which lets the gateway choose from the routing
  * headers rather than pinning anything here.
  *
- * `baseUrl` is pinned rather than left to `MINUSX_GATEWAY_URL`, which is a
- * DIFFERENT variable addressing the same service's other plane and which
- * defaults to production. The key was minted by whichever gateway
- * `MX_GATEWAY_URL` names, so that is the only gateway that can authenticate it;
- * inheriting the default would send a staging workspace's inference to prod and
- * fail as an auth error a long way from its cause.
+ * No `baseUrl` is written. This document is PERSISTED at registration, so a
+ * pinned URL is frozen into the workspace forever — moving the gateway later
+ * would leave every already-registered workspace calling the old address, and
+ * an internal address (a container hostname, say) would be baked in for good.
+ * Left unset, inference resolves from `MINUSX_GATEWAY_URL`, which is derived
+ * from the same origin this client registered against, so the two cannot drift
+ * and the deployment stays free to move.
  */
 export function buildGatewayLlmConfig(apiKey: string): LlmConfig {
   const choice = { providerName: GATEWAY_PROVIDER_NAME, model: MINUSX_AUTO_MODEL };
@@ -189,7 +190,6 @@ export function buildGatewayLlmConfig(apiKey: string): LlmConfig {
       name: GATEWAY_PROVIDER_NAME,
       provider: MINUSX_PROVIDER,
       apiKey,
-      baseUrl: `${baseUrl()}/v1`,
     }],
     grades: { lite: { ...choice }, core: { ...choice }, advanced: { ...choice } },
   };

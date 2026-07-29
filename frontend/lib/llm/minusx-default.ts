@@ -11,7 +11,7 @@
  * injected per call by the plan resolver — never on the model handle.
  */
 import { buildCustomModel, type Api, type Model } from '@/orchestrator/llm';
-import { MINUSX_GATEWAY_URL } from '@/lib/constants';
+import { MINUSX_GATEWAY_URL } from '@/lib/config';
 import { MINUSX_PROVIDER, MX_AGENT_HEADER, MX_USE_CASE_HEADER, type LlmAgentKey, type LlmGrade } from './llm-config-types';
 
 /** Model id sentinel telling the gateway to pick the model itself. */
