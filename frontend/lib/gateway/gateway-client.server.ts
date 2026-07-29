@@ -52,7 +52,14 @@ async function call<T>(
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (!response.ok) {
-      console.warn(`[gateway] ${init.method ?? 'GET'} ${path} -> ${response.status}`);
+      // Log the body, not just the status. Every failure here is silent by
+      // design — the workspace still registers, it simply has no gateway — so
+      // this line is the ONLY way anyone finds out why, and "-> 409" without
+      // the reason sends you looking in the wrong place.
+      const detail = await response.text().catch(() => '');
+      console.warn(
+        `[gateway] ${init.method ?? 'GET'} ${path} -> ${response.status} ${detail}`,
+      );
       return null;
     }
     return (await response.json()) as T;

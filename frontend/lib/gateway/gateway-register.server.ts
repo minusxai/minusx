@@ -34,7 +34,19 @@ export async function registerCompanyWithGateway(
 
   try {
     const creds = await createGatewayOrg(input);
-    if (!creds) return null;
+    if (!creds) {
+      // Loud, because everything downstream of this is a non-event: no gateway
+      // config is written, so the models provider falls back to whatever else
+      // is configured and the settings panel shows nothing. Without this line
+      // that reads as "the feature is broken" rather than "registration was
+      // refused, and here is why".
+      console.warn(
+        `[gateway] NOT registered for workspace '${input.workspaceName}' — see the ` +
+        `error above. This workspace will use whatever LLM provider is configured ` +
+        `by other means, and Settings will show no plan.`,
+      );
+      return null;
+    }
 
     const raw = await getRawConfig(DEFAULT_MODE);
     await saveRawConfig(DEFAULT_MODE, {
