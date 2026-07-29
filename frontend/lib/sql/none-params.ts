@@ -13,7 +13,7 @@
  * Pure + best-effort: any parse failure falls through to plain NULL substitution.
  */
 import { removeNoneParamConditions } from '@/lib/sql/ir-transforms';
-import { parseSqlToIrLocal } from '@/lib/sql/sql-to-ir';
+import { parseSqlToIrLocal, removeNoneParamConditionsFromSqlAst } from '@/lib/sql/sql-to-ir';
 import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
 import type { QueryIR } from '@/lib/sql/ir-types';
 
@@ -51,6 +51,13 @@ export async function applyNoneParams(
       const transformed = removeNoneParamConditions(ir as QueryIR, noneSet);
       query = irToSqlLocal(transformed, dialect);
     }
+  } catch { /* fall through to NULL substitution */ }
+
+  // QueryIR intentionally covers only the visual editor's subset. If a skipped predicate is in a
+  // CTE/UNION branch (or another valid shape QueryIR cannot represent), prune it from the parser's
+  // native AST instead. This is a no-op when the QueryIR pass already removed every such predicate.
+  try {
+    query = await removeNoneParamConditionsFromSqlAst(query, dialect, noneSet);
   } catch { /* fall through to NULL substitution */ }
 
   // Substitute any remaining :param_name references with NULL (non-filter uses, fallback)

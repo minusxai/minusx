@@ -38,6 +38,115 @@ export interface ParseSqlToIrOptions {
   enforceGuiCompatibility?: boolean;
 }
 
+/** Return whether an AST node contains a named `:parameter` that is being skipped. */
+function containsNoneParameter(node: unknown, noneParams: Set<string>): boolean {
+  if (!node || typeof node !== 'object') return false;
+  if (Array.isArray(node)) return node.some(child => containsNoneParameter(child, noneParams));
+
+  const record = node as Record<string, any>;
+  if (record.parameter) {
+    const rawName = record.parameter.name;
+    const name = typeof rawName === 'string' ? rawName : rawName?.name;
+    if (typeof name === 'string' && noneParams.has(name)) return true;
+  }
+
+  return Object.values(record).some(child => containsNoneParameter(child, noneParams));
+}
+
+/**
+ * Remove leaves that reference skipped params from an AST boolean expression. Collapsing an
+ * AND/OR whose left or right side was removed matches the existing IR transform's semantics.
+ */
+function pruneNoneParameterPredicate(
+  node: any,
+  noneParams: Set<string>,
+): { node: any | null; changed: boolean } {
+  if (!node || typeof node !== 'object') return { node, changed: false };
+
+  const booleanKey = 'and' in node ? 'and' : 'or' in node ? 'or' : null;
+  if (booleanKey) {
+    const expression = node[booleanKey];
+    const left = pruneNoneParameterPredicate(expression.left, noneParams);
+    const right = pruneNoneParameterPredicate(expression.right, noneParams);
+
+    if (!left.node && !right.node) return { node: null, changed: true };
+    if (!left.node) return { node: right.node, changed: true };
+    if (!right.node) return { node: left.node, changed: true };
+    if (!left.changed && !right.changed) return { node, changed: false };
+
+    return {
+      node: {
+        ...node,
+        [booleanKey]: { ...expression, left: left.node, right: right.node },
+      },
+      changed: true,
+    };
+  }
+
+  if ('paren' in node) {
+    const inner = pruneNoneParameterPredicate(node.paren.this, noneParams);
+    if (!inner.node) return { node: null, changed: inner.changed };
+    if (!inner.changed) return { node, changed: false };
+    return { node: { ...node, paren: { ...node.paren, this: inner.node } }, changed: true };
+  }
+
+  return containsNoneParameter(node, noneParams)
+    ? { node: null, changed: true }
+    : { node, changed: false };
+}
+
+/**
+ * Remove skipped-param predicates directly from the parser AST and regenerate SQL.
+ *
+ * This is the fallback for queries the editable QueryIR cannot represent, including a WITH query
+ * whose outer statement is a UNION and whose seed SELECT has no FROM clause. Walking the native
+ * AST also reaches WHERE/HAVING clauses inside CTEs and nested compound branches.
+ */
+export async function removeNoneParamConditionsFromSqlAst(
+  sql: string,
+  dialect: string,
+  noneParams: Set<string>,
+): Promise<string> {
+  if (noneParams.size === 0) return sql;
+  await ensureInit();
+
+  const parsed = parse(sql, dialect as Dialect);
+  if (!parsed.ast?.length) throw new UnsupportedSQLError('Failed to parse SQL', ['PARSE_ERROR']);
+
+  let changed = false;
+  const visit = (node: any): void => {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      node.forEach(visit);
+      return;
+    }
+
+    const select = node.select;
+    if (select && typeof select === 'object') {
+      for (const clauseName of ['where_clause', 'having'] as const) {
+        const clause = select[clauseName];
+        if (!clause?.this) continue;
+        const pruned = pruneNoneParameterPredicate(clause.this, noneParams);
+        if (pruned.changed) {
+          select[clauseName] = pruned.node ? { ...clause, this: pruned.node } : null;
+          changed = true;
+        }
+      }
+    }
+
+    Object.values(node).forEach(visit);
+  };
+
+  parsed.ast.forEach(visit);
+  if (!changed) return sql;
+
+  const generated = generate(parsed.ast, dialect as Dialect);
+  if (!generated.sql?.length) {
+    throw new UnsupportedSQLError('Failed to generate SQL', ['GENERATION_ERROR']);
+  }
+  return generated.sql.join(';\n');
+}
+
 // ---------------------------------------------------------------------------
 // Main entry point
 // ---------------------------------------------------------------------------
