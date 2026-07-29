@@ -54,6 +54,14 @@ export function AgentsTabContent({
     .filter((skill) => skill.enabled)
     .map((skill) => ({ name: skill.name, description: skill.description }));
 
+  // React's prop-derived state adjustment: page-level Cancel flips this flag
+  // outside the tab, so clear any nested builder in the same render cycle.
+  const [previousCanManageAgents, setPreviousCanManageAgents] = useState(canManageAgents);
+  if (previousCanManageAgents !== canManageAgents) {
+    setPreviousCanManageAgents(canManageAgents);
+    if (!canManageAgents && builder !== null) setBuilder(null);
+  }
+
   const handleSave = (draft: AgentDraft) => {
     if (builder?.mode === 'edit') {
       onUpdateAgent(builder.index, draft);
@@ -92,7 +100,7 @@ export function AgentsTabContent({
                 {canAddAgent && (
                   <Button
                     aria-label="Add agent"
-                    size="sm"
+                    size="xs"
                     variant="outline"
                     borderColor="accent.teal"
                     color="accent.teal"
@@ -134,16 +142,19 @@ export function AgentsTabContent({
                         compact
                         muted={!agent.enabled}
                         headerEnd={(
-                          <VStack align="end" gap={1}>
+                          <HStack
+                            align="center"
+                            gap={0.5}
+                            p={0.5}
+                            border="1px solid"
+                            borderColor="border.muted"
+                            borderRadius="full"
+                            bg="bg.muted"
+                          >
                             {canManageAgents ? (
                               <Box
-                                order={2}
-                                px={2}
-                                py={1}
-                                border="1px solid"
-                                borderColor={agent.enabled ? 'accent.teal/30' : 'border.default'}
-                                borderRadius="full"
-                                bg={agent.enabled ? 'accent.teal/12' : 'fg.subtle/10'}
+                                px={1.5}
+                                py={0.5}
                               >
                                 <Switch.Root
                                   size="xs"
@@ -162,12 +173,9 @@ export function AgentsTabContent({
                               </Box>
                             ) : (
                               <Badge
-                                order={2}
                                 size="xs"
                                 variant="plain"
-                                border="1px solid"
-                                borderColor={agent.enabled ? 'accent.teal/20' : 'border.default'}
-                                bg={agent.enabled ? 'accent.teal/16' : 'fg.subtle/10'}
+                                bg="transparent"
                                 color={agent.enabled ? 'accent.teal' : 'fg.muted'}
                                 borderRadius="full"
                                 px={2}
@@ -177,11 +185,10 @@ export function AgentsTabContent({
                             )}
                             {canManageAgents && (
                               <HStack
-                                order={1}
                                 gap={0}
-                                p={0.5}
-                                borderRadius="full"
-                                bg="bg.muted"
+                                pl={0.5}
+                                borderLeft="1px solid"
+                                borderColor="border.default"
                               >
                                 <Button
                                   aria-label={`Edit agent ${agent.name}`}
@@ -193,7 +200,7 @@ export function AgentsTabContent({
                                   h="26px"
                                   p={0}
                                   color="fg.muted"
-                                  _hover={{ color: 'accent.teal', bg: 'accent.teal/10' }}
+                                  _hover={{ color: 'accent.teal', bg: 'bg.subtle' }}
                                   onClick={() => setBuilder({ mode: 'edit', index })}
                                 >
                                   <Icon as={LuPencil} boxSize={3} />
@@ -214,7 +221,7 @@ export function AgentsTabContent({
                                 </Button>
                               </HStack>
                             )}
-                          </VStack>
+                          </HStack>
                         )}
                       />
                     </Box>

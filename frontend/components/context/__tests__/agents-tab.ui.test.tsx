@@ -40,25 +40,32 @@ function renderTab(overrides: Partial<React.ComponentProps<typeof AgentsTabConte
   const onStartAddAgent = vi.fn();
   const onUpdateAgent = vi.fn();
   const onDeleteAgent = vi.fn();
-  renderWithProviders(
+  const baseProps: React.ComponentProps<typeof AgentsTabContent> = {
+    activeTab: 'picker',
+    colorMode: 'light',
+    content,
+    onChange: vi.fn(),
+    canAddAgent: true,
+    canManageAgents: true,
+    systemSkills: [{ name: 'dashboards', description: 'dash' }, { name: 'alerts', description: 'alerts' }],
+    onStartAddAgent,
+    onAddAgent,
+    onUpdateAgent,
+    onDeleteAgent,
+  };
+  const renderContent = (props: Partial<React.ComponentProps<typeof AgentsTabContent>> = {}) => (
     <Tabs.Root value="agents">
-      <AgentsTabContent
-        activeTab="picker"
-        colorMode="light"
-        content={content}
-        onChange={vi.fn()}
-        canAddAgent={true}
-        canManageAgents={true}
-        systemSkills={[{ name: 'dashboards', description: 'dash' }, { name: 'alerts', description: 'alerts' }]}
-        onStartAddAgent={onStartAddAgent}
-        onAddAgent={onAddAgent}
-        onUpdateAgent={onUpdateAgent}
-        onDeleteAgent={onDeleteAgent}
-        {...overrides}
-      />
-    </Tabs.Root>,
+      <AgentsTabContent {...baseProps} {...overrides} {...props} />
+    </Tabs.Root>
   );
-  return { onAddAgent, onStartAddAgent, onUpdateAgent, onDeleteAgent };
+  const rendered = renderWithProviders(renderContent());
+  return {
+    onAddAgent,
+    onStartAddAgent,
+    onUpdateAgent,
+    onDeleteAgent,
+    rerenderTab: (props: Partial<React.ComponentProps<typeof AgentsTabContent>>) => rendered.rerender(renderContent(props)),
+  };
 }
 
 describe('AgentsTabContent — read view', () => {
@@ -97,16 +104,33 @@ describe('AgentsTabContent — read view', () => {
         ...content,
         agents: [mkAgent({
           name: 'skill_heavy_agent',
-          preloadSkills: ['one', 'two', 'three', 'four', 'five', 'six'],
+          preloadSkills: ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'],
         })],
       },
     });
 
     const card = screen.getByLabelText('Agent skill_heavy_agent');
     expect(card).toHaveTextContent('one');
-    expect(card).toHaveTextContent('three');
-    expect(card).not.toHaveTextContent('four');
+    expect(card).toHaveTextContent('six');
+    expect(card).not.toHaveTextContent('seven');
     expect(card).toHaveTextContent('+3 more');
+  });
+
+  it('does not repeat an always-loaded skill in the on-demand list', () => {
+    renderTab({
+      content: {
+        ...content,
+        agents: [mkAgent({
+          name: 'deduped_agent',
+          preloadSkills: ['questions'],
+          includeSkills: ['questions', 'dashboards'],
+        })],
+      },
+    });
+
+    const cardText = screen.getByLabelText('Agent deduped_agent').textContent ?? '';
+    expect(cardText.match(/questions/g)).toHaveLength(1);
+    expect(cardText).toContain('dashboards');
   });
 });
 
@@ -231,6 +255,22 @@ describe('AgentsTabContent — builder', () => {
     expect(screen.queryByLabelText('Skill kb_pricing')).not.toBeInTheDocument();
   });
 
+  it('keeps On demand and Always loaded mutually exclusive', () => {
+    renderTab();
+    fireEvent.click(screen.getByLabelText('Edit agent sales_helper'));
+    fireEvent.click(screen.getByLabelText('Builder step Skills'));
+
+    expect(screen.getByLabelText('Include skill dashboards')).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(screen.getByLabelText('Preload skill dashboards'));
+    expect(screen.getByLabelText('Include skill dashboards')).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByLabelText('Preload skill dashboards')).toHaveAttribute('aria-checked', 'true');
+
+    fireEvent.click(screen.getByLabelText('Exclude skill dashboards'));
+    expect(screen.getByLabelText('Exclude skill dashboards')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByLabelText('Include skill dashboards')).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByLabelText('Preload skill dashboards')).toHaveAttribute('aria-checked', 'false');
+  });
+
   it('blocks jumping ahead while prerequisites are missing (new agent)', () => {
     renderTab();
     fireEvent.click(screen.getByLabelText('Add agent'));
@@ -259,5 +299,16 @@ describe('AgentsTabContent — builder', () => {
     fireEvent.click(screen.getByLabelText('Add agent'));
     expect(onStartAddAgent).toHaveBeenCalledTimes(1);
     expect(screen.getByLabelText('Agent name')).toBeInTheDocument();
+  });
+
+  it('dismisses the nested builder when the page exits edit mode', () => {
+    const { rerenderTab } = renderTab();
+    fireEvent.click(screen.getByLabelText('Edit agent sales_helper'));
+    expect(screen.getByLabelText('Agent name')).toBeInTheDocument();
+
+    rerenderTab({ canManageAgents: false });
+
+    expect(screen.queryByLabelText('Agent name')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Agent sales_helper')).toBeInTheDocument();
   });
 });

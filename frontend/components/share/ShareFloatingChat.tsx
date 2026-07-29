@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { Box, Portal } from '@chakra-ui/react';
+import { Box } from '@chakra-ui/react';
 import { useAppDispatch } from '@/store/hooks';
 import { setSidebarPendingMessage, addChatAttachment } from '@/store/uiSlice';
 import { useContext } from '@/lib/hooks/useContext';
@@ -34,7 +34,6 @@ interface ShareFloatingChatProps {
  */
 export default function ShareFloatingChat({ contextPath, appState, railWidth, onOpenChat }: ShareFloatingChatProps) {
   const dispatch = useAppDispatch();
-  const [isFocused, setIsFocused] = useState(false);
 
   const contextInfo = useContext(contextPath);
   const defaultDatabase = selectDatabase(contextInfo.databases, undefined);
@@ -56,11 +55,6 @@ export default function ShareFloatingChat({ contextPath, appState, railWidth, on
   const handleDatabaseChange = useCallback((name: string) => setLocalDatabase(name), []);
   const noop = useCallback(() => {}, []);
 
-  const handleFocusIn = useCallback(() => setIsFocused(true), []);
-  const handleFocusOut = useCallback((e: React.FocusEvent) => {
-    if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsFocused(false);
-  }, []);
-
   return (
     <Box
       position="fixed"
@@ -71,14 +65,11 @@ export default function ShareFloatingChat({ contextPath, appState, railWidth, on
       zIndex={1000}
       display={{ base: 'none', md: 'block' }}
     >
-      {isFocused && (
-        <Portal>
-          <Box position="fixed" top={0} left={0} width="100vw" height="100vh" bg="fg.subtle/20" zIndex={999} />
-        </Portal>
-      )}
+      {/* The dimming overlay lives INSIDE ChatInput (floating mode), driven by the
+          same collapsed/expanded state as the bar — never tracked separately here. */}
       <Box pointerEvents="auto" position="relative" zIndex={1000}>
         <Box maxW="1280px" mx="auto" px={{ base: 8, md: 12, lg: 16 }}>
-          <Box onFocus={handleFocusIn} onBlur={handleFocusOut}>
+          <Box>
             <ChatInput
               onSend={handleSend}
               onStop={noop}

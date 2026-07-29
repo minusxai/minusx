@@ -12,7 +12,7 @@
 
 import { useState } from 'react';
 import { Badge, Box, Button, createListCollection, HStack, Icon, Input, Portal, SimpleGrid, Text, Textarea, VStack } from '@chakra-ui/react';
-import { LuBookOpen, LuCheck, LuCheckCheck, LuLibrary, LuSearch, LuZap } from 'react-icons/lu';
+import { LuBookOpen, LuCheck, LuCheckCheck, LuCircleOff, LuLibrary, LuSearch, LuZap } from 'react-icons/lu';
 import { AgentReadView, type AgentDraft } from './AgentReadView';
 import { SelectContent, SelectItem, SelectPositioner, SelectRoot, SelectTrigger, SelectValueText } from '@/components/ui/select';
 
@@ -52,17 +52,32 @@ const GRADE_OPTIONS = createListCollection({
   ],
 });
 
+function normalizeSkillAccess(draft: AgentDraft): AgentDraft {
+  const preloaded = new Set(draft.preloadSkills);
+  return {
+    ...draft,
+    includeSkills: draft.includeSkills.filter((name) => !preloaded.has(name)),
+  };
+}
+
+type SkillAccessMode = 'excluded' | 'demand' | 'always';
+
 export function AgentBuilder({ initial, systemSkills, userSkills, onSave, onCancel }: AgentBuilderProps) {
   const [step, setStep] = useState<Step>('identity');
-  const [draft, setDraft] = useState<AgentDraft>(initial ?? EMPTY_DRAFT);
+  const [draft, setDraft] = useState<AgentDraft>(() => normalizeSkillAccess(initial ?? EMPTY_DRAFT));
   const [skillQuery, setSkillQuery] = useState('');
   const stepIndex = STEPS.indexOf(step);
 
   const patch = (updates: Partial<AgentDraft>) => setDraft((d) => ({ ...d, ...updates }));
-  const toggleName = (list: 'preloadSkills' | 'includeSkills', name: string) => {
+  const setSkillAccess = (mode: SkillAccessMode, name: string) => {
     setDraft((d) => ({
       ...d,
-      [list]: d[list].includes(name) ? d[list].filter((n) => n !== name) : [...d[list], name],
+      preloadSkills: mode === 'always'
+        ? [...d.preloadSkills.filter((n) => n !== name), name]
+        : d.preloadSkills.filter((n) => n !== name),
+      includeSkills: mode === 'demand'
+        ? [...d.includeSkills.filter((n) => n !== name), name]
+        : d.includeSkills.filter((n) => n !== name),
     }));
   };
 
@@ -106,7 +121,7 @@ export function AgentBuilder({ initial, systemSkills, userSkills, onSave, onCanc
               {i > 0 && <Text fontSize="sm" color="fg.subtle" px={0.5}>›</Text>}
               <Button
                 aria-label={`Builder step ${STEP_TITLES[s]}`}
-                size="sm"
+                size="xs"
                 variant={s === step ? 'subtle' : 'ghost'}
                 colorPalette={s === step ? 'teal' : 'gray'}
                 fontWeight={s === step ? '700' : '500'}
@@ -118,7 +133,7 @@ export function AgentBuilder({ initial, systemSkills, userSkills, onSave, onCanc
             </HStack>
           ))}
         </HStack>
-        <Button aria-label="Cancel agent builder" size="sm" variant="ghost" onClick={onCancel}>
+        <Button aria-label="Cancel agent builder" size="xs" variant="ghost" onClick={onCancel}>
           Cancel
         </Button>
       </HStack>
@@ -172,7 +187,7 @@ export function AgentBuilder({ initial, systemSkills, userSkills, onSave, onCanc
               <HStack gap={2}>
                 <Button
                   aria-label="Prompt mode append"
-                  size="sm"
+                  size="xs"
                   variant={draft.promptMode === 'append' ? 'solid' : 'outline'}
                   colorPalette="teal"
                   onClick={() => patch({ promptMode: 'append' })}
@@ -181,7 +196,7 @@ export function AgentBuilder({ initial, systemSkills, userSkills, onSave, onCanc
                 </Button>
                 <Button
                   aria-label="Prompt mode replace"
-                  size="sm"
+                  size="xs"
                   variant={draft.promptMode === 'replace' ? 'solid' : 'outline'}
                   colorPalette="teal"
                   onClick={() => patch({ promptMode: 'replace' })}
@@ -251,46 +266,31 @@ export function AgentBuilder({ initial, systemSkills, userSkills, onSave, onCanc
             </HStack>
           </HStack>
 
-          <SimpleGrid columns={{ base: 1, md: 2 }} gap={3}>
-            <HStack align="start" gap={3} p={3} borderTop="1px solid" borderColor="border.muted">
-              <Box
-                display="flex"
-                alignItems="center"
-                justifyContent="center"
-                w="30px"
-                h="30px"
-                flexShrink={0}
-                borderRadius="md"
-                bg="bg.muted"
-                color="fg.muted"
-              >
-                <Icon as={LuCheck} boxSize={4} />
-              </Box>
+          <SimpleGrid columns={{ base: 1, md: 3 }} gap={3}>
+            <HStack align="start" gap={2.5} py={2}>
+              <Icon as={LuCircleOff} boxSize={4} color="fg.subtle" mt={0.5} flexShrink={0} />
               <Box>
-                <Text fontSize="sm" fontWeight="700">On demand</Text>
-                <Text fontSize="xs" color="fg.muted" mt={0.5}>
-                  The agent fetches the skill only when useful. Selecting one narrows the full catalog.
+                <Text fontSize="xs" fontWeight="700">Excluded</Text>
+                <Text fontSize="2xs" color="fg.muted" mt={0.5}>
+                  Unavailable to this agent.
                 </Text>
               </Box>
             </HStack>
-            <HStack align="start" gap={3} p={3} borderTop="1px solid" borderColor="border.muted">
-              <Box
-                display="flex"
-                alignItems="center"
-                justifyContent="center"
-                w="30px"
-                h="30px"
-                flexShrink={0}
-                borderRadius="md"
-                bg="accent.teal/12"
-                color="accent.teal"
-              >
-                <Icon as={LuCheckCheck} boxSize={4} />
-              </Box>
+            <HStack align="start" gap={2.5} py={2}>
+              <Icon as={LuCheck} boxSize={4} color="fg.muted" mt={0.5} flexShrink={0} />
               <Box>
-                <Text fontSize="sm" fontWeight="700">Always loaded</Text>
-                <Text fontSize="xs" color="fg.muted" mt={0.5}>
-                  The full skill is added to every prompt. Use this only for essential instructions.
+                <Text fontSize="xs" fontWeight="700">On demand</Text>
+                <Text fontSize="2xs" color="fg.muted" mt={0.5}>
+                  Fetched only when useful.
+                </Text>
+              </Box>
+            </HStack>
+            <HStack align="start" gap={2.5} py={2}>
+              <Icon as={LuCheckCheck} boxSize={4} color="accent.teal" mt={0.5} flexShrink={0} />
+              <Box>
+                <Text fontSize="xs" fontWeight="700">Always loaded</Text>
+                <Text fontSize="2xs" color="fg.muted" mt={0.5}>
+                  Added to every prompt.
                 </Text>
               </Box>
             </HStack>
@@ -322,21 +322,21 @@ export function AgentBuilder({ initial, systemSkills, userSkills, onSave, onCanc
             {filteredSkills.map((skill) => {
               const isOnDemand = draft.includeSkills.includes(skill.name);
               const isAlwaysLoaded = draft.preloadSkills.includes(skill.name);
-              const isSelected = isOnDemand || isAlwaysLoaded;
+              const accessMode: SkillAccessMode = isAlwaysLoaded ? 'always' : isOnDemand ? 'demand' : 'excluded';
               return (
                 <Box
                   key={`${skill.source}:${skill.name}`}
                   aria-label={`Skill ${skill.name}`}
                   display="flex"
                   flexDirection="column"
-                  minH="158px"
-                  p={4}
+                  minH="132px"
+                  p={3.5}
                   border="1px solid"
-                  borderColor={isSelected ? 'accent.teal/35' : 'border.muted'}
+                  borderColor="border.muted"
                   borderRadius="lg"
-                  bg={isSelected ? 'accent.teal/5' : 'bg.panel'}
-                  transition="border-color 160ms ease, background 160ms ease, transform 160ms ease"
-                  _hover={{ borderColor: 'accent.teal/35', transform: 'translateY(-1px)' }}
+                  bg="bg.panel"
+                  transition="border-color 160ms ease, box-shadow 160ms ease"
+                  _hover={{ borderColor: 'border.emphasized', boxShadow: 'xs' }}
                 >
                   <HStack justify="space-between" align="start" gap={3}>
                     <Box minW={0}>
@@ -353,31 +353,53 @@ export function AgentBuilder({ initial, systemSkills, userSkills, onSave, onCanc
                     </Badge>
                   </HStack>
 
-                  <HStack gap={2} mt="auto" pt={4}>
-                    <Button
-                      aria-label={`Include skill ${skill.name}`}
-                      aria-pressed={isOnDemand}
-                      flex="1"
-                      size="sm"
-                      variant={isOnDemand ? 'subtle' : 'outline'}
-                      colorPalette="teal"
-                      onClick={() => toggleName('includeSkills', skill.name)}
+                  <HStack justify="space-between" align="center" gap={3} mt="auto" pt={3}>
+                    <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.08em">
+                      Access
+                    </Text>
+                    <HStack
+                      role="radiogroup"
+                      aria-label={`Skill access for ${skill.name}`}
+                      gap={0.5}
+                      p={0.5}
+                      border="1px solid"
+                      borderColor="border.muted"
+                      borderRadius="md"
+                      bg="bg.muted"
                     >
-                      <Icon as={LuCheck} boxSize={3.5} />
-                      On demand
-                    </Button>
-                    <Button
-                      aria-label={`Preload skill ${skill.name}`}
-                      aria-pressed={isAlwaysLoaded}
-                      flex="1"
-                      size="sm"
-                      variant={isAlwaysLoaded ? 'solid' : 'outline'}
-                      colorPalette="teal"
-                      onClick={() => toggleName('preloadSkills', skill.name)}
-                    >
-                      <Icon as={LuCheckCheck} boxSize={3.5} />
-                      Always loaded
-                    </Button>
+                      {([
+                        { mode: 'excluded' as const, label: 'Excluded', ariaLabel: `Exclude skill ${skill.name}`, icon: LuCircleOff },
+                        { mode: 'demand' as const, label: 'On demand', ariaLabel: `Include skill ${skill.name}`, icon: LuCheck },
+                        { mode: 'always' as const, label: 'Always', ariaLabel: `Preload skill ${skill.name}`, icon: LuCheckCheck },
+                      ]).map((option) => {
+                        const selected = accessMode === option.mode;
+                        return (
+                          <Button
+                            key={option.mode}
+                            role="radio"
+                            aria-label={option.ariaLabel}
+                            aria-checked={selected}
+                            size="xs"
+                            variant="ghost"
+                            h="26px"
+                            minW="auto"
+                            px={2}
+                            gap={1}
+                            borderRadius="sm"
+                            border="1px solid"
+                            borderColor={selected ? 'border.default' : 'transparent'}
+                            bg={selected ? 'bg.panel' : 'transparent'}
+                            color={selected && option.mode !== 'excluded' ? 'accent.teal' : selected ? 'fg.default' : 'fg.muted'}
+                            boxShadow={selected ? 'xs' : 'none'}
+                            _hover={{ bg: selected ? 'bg.panel' : 'bg.subtle', color: 'fg.default' }}
+                            onClick={() => setSkillAccess(option.mode, skill.name)}
+                          >
+                            <Icon as={option.icon} boxSize={3} />
+                            {option.label}
+                          </Button>
+                        );
+                      })}
+                    </HStack>
                   </HStack>
                 </Box>
               );
@@ -404,14 +426,14 @@ export function AgentBuilder({ initial, systemSkills, userSkills, onSave, onCanc
 
       <HStack justify="flex-end" gap={2} mt={6}>
         {stepIndex > 0 && (
-          <Button aria-label="Builder back" size="sm" variant="outline" onClick={() => setStep(STEPS[stepIndex - 1])}>
+          <Button aria-label="Builder back" size="xs" variant="outline" onClick={() => setStep(STEPS[stepIndex - 1])}>
             Back
           </Button>
         )}
         {step !== 'review' ? (
           <Button
             aria-label="Builder next"
-            size="sm"
+            size="xs"
             colorPalette="teal"
             disabled={!canAdvance}
             onClick={() => setStep(STEPS[stepIndex + 1])}
@@ -419,7 +441,7 @@ export function AgentBuilder({ initial, systemSkills, userSkills, onSave, onCanc
             Next
           </Button>
         ) : (
-          <Button aria-label="Save agent" size="sm" colorPalette="teal" onClick={() => onSave(draft)}>
+          <Button aria-label="Save agent" size="xs" colorPalette="teal" onClick={() => onSave(draft)}>
             Save agent
           </Button>
         )}

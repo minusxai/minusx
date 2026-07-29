@@ -79,9 +79,8 @@ function SkillPills({
 
   return (
     <Box
-      display={compact ? 'grid' : 'flex'}
-      gridTemplateColumns={compact ? 'repeat(2, minmax(0, 1fr))' : undefined}
-      flexWrap={compact ? undefined : 'wrap'}
+      display="flex"
+      flexWrap="wrap"
       gap={1.5}
     >
       {visibleSkills.map((skill) => (
@@ -128,6 +127,7 @@ function SkillPills({
 
 export function AgentReadView({ agent, headerEnd, compact = false, muted = false }: AgentReadViewProps) {
   const instructions = agent.prompt || 'No custom instructions yet.';
+  const onDemandSkills = agent.includeSkills.filter((skill) => !agent.preloadSkills.includes(skill));
   const visibleInstructions = compact && instructions.length > COMPACT_INSTRUCTION_CHARS
     ? `${instructions.slice(0, COMPACT_INSTRUCTION_CHARS).trimEnd()}…`
     : instructions;
@@ -280,7 +280,13 @@ export function AgentReadView({ agent, headerEnd, compact = false, muted = false
                 Available
               </Text>
             </HStack>
-            <SkillPills skills={agent.includeSkills} emptyLabel="Full catalog" catalog muted={muted} compact={compact} />
+            <SkillPills
+              skills={onDemandSkills}
+              emptyLabel={agent.includeSkills.length === 0 ? 'Full catalog' : 'None additional'}
+              catalog={agent.includeSkills.length === 0}
+              muted={muted}
+              compact={compact}
+            />
           </Box>
         </Box>
       </Box>
