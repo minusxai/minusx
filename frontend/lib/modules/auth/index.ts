@@ -24,10 +24,8 @@ function escapeForJson(s: string): string {
 
 /**
  * Open source Auth Module — delegates to existing NextAuth session validation.
- * addHeaders() is a no-op.
- *
- * NOTE: Middleware integration (delegating handleRequest to this module) is
- * deferred to Phase 5. The existing middleware.ts remains authoritative.
+ * Namespace resolution is not here: middleware asks the namespace module directly, so
+ * this module is only ever about who the user is.
  */
 export class AuthModule implements IAuthModule {
   async handleRequest(_req: NextRequest): Promise<{ context: RequestContext; response?: NextResponse }> {
@@ -76,10 +74,6 @@ export class AuthModule implements IAuthModule {
       mode: user.mode as 'org' | 'tutorial' | 'internals',
       impersonating: undefined,
     };
-  }
-
-  async addHeaders(_req: NextRequest, _headers: Headers): Promise<boolean> {
-    return true;
   }
 
   async register(input: RegisterInput): Promise<RegisterResult> {
