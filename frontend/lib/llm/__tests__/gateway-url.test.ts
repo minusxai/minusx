@@ -40,14 +40,14 @@ describe('the gateway URLs', () => {
   });
 
   it('moves inference with the origin, so staging is ONE variable', async () => {
-    const c = await load({ MX_GATEWAY_URL: 'https://staging-llm.minusxapp.com' });
-    expect(c.MX_GATEWAY_URL_PROXY).toBe('https://staging-llm.minusxapp.com/v1');
+    const c = await load({ MX_GATEWAY_URL: 'https://gateway.example.com' });
+    expect(c.MX_GATEWAY_URL_PROXY).toBe('https://gateway.example.com/v1');
   });
 
   it('tolerates a trailing slash rather than emitting a double one', async () => {
-    const c = await load({ MX_GATEWAY_URL: 'https://staging-llm.minusxapp.com/' });
-    expect(c.MX_GATEWAY_ORIGIN).toBe('https://staging-llm.minusxapp.com');
-    expect(c.MX_GATEWAY_URL_PROXY).toBe('https://staging-llm.minusxapp.com/v1');
+    const c = await load({ MX_GATEWAY_URL: 'https://gateway.example.com/' });
+    expect(c.MX_GATEWAY_ORIGIN).toBe('https://gateway.example.com');
+    expect(c.MX_GATEWAY_URL_PROXY).toBe('https://gateway.example.com/v1');
   });
 
   it('lets the two planes be genuinely different addresses', async () => {
@@ -55,17 +55,17 @@ describe('the gateway URLs', () => {
     // with the gateway reaches the control plane and the inference proxy as two
     // separate services, never through one origin.
     const c = await load({
-      MX_GATEWAY_URL: 'http://admin:4001',
-      MX_GATEWAY_URL_PROXY: 'http://gateway:4000/v1',
+      MX_GATEWAY_URL: 'http://control-plane.internal:9001',
+      MX_GATEWAY_URL_PROXY: 'http://inference.internal:9002/v1',
     });
-    expect(c.MX_GATEWAY_ORIGIN).toBe('http://admin:4001');
-    expect(c.MX_GATEWAY_URL_PROXY).toBe('http://gateway:4000/v1');
+    expect(c.MX_GATEWAY_ORIGIN).toBe('http://control-plane.internal:9001');
+    expect(c.MX_GATEWAY_URL_PROXY).toBe('http://inference.internal:9002/v1');
   });
 
   it('does not append /v1 to an override that already carries it', async () => {
     // The override is the FULL inference URL, not an origin — it has to be,
     // because the port it lives on is not the port the control plane is on.
-    const c = await load({ MX_GATEWAY_URL_PROXY: 'http://gateway:4000/v1' });
-    expect(c.MX_GATEWAY_URL_PROXY).toBe('http://gateway:4000/v1');
+    const c = await load({ MX_GATEWAY_URL_PROXY: 'http://inference.internal:9002/v1' });
+    expect(c.MX_GATEWAY_URL_PROXY).toBe('http://inference.internal:9002/v1');
   });
 });

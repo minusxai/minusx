@@ -121,7 +121,7 @@ describe('createGatewayOrg', () => {
     // "which install is this, where does it run, and what is it running" —
     // the questions asked when a customer says the gateway is misbehaving.
     const { createGatewayOrg } = await loadClient({
-      ...ON, AUTH_URL: 'https://acme.minusx.app', GIT_COMMIT_SHA: 'deadbeef',
+      ...ON, AUTH_URL: 'https://acme.example.com', GIT_COMMIT_SHA: 'deadbeef',
     });
     const fetchMock = mockFetch(200, {
       org_id: 'o', org_secret: 's', key_id: 'k', key: 'mxk1_x',
@@ -132,7 +132,7 @@ describe('createGatewayOrg', () => {
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(JSON.parse(init.body as string).props).toEqual({
       workspace_name: 'Acme',
-      app_url: 'https://acme.minusx.app',
+      app_url: 'https://acme.example.com',
       app_commit: 'deadbeef',
     });
   });
@@ -255,7 +255,7 @@ describe('buildGatewayLlmConfig', () => {
     // Inference instead resolves from MX_GATEWAY_URL_PROXY, derived from the
     // same origin, so moving the gateway moves every workspace with it.
     const { buildGatewayLlmConfig } = await loadClient({
-      ...ON, MX_GATEWAY_URL: 'https://staging-llm.minusxapp.com',
+      ...ON, MX_GATEWAY_URL: 'https://gateway.example.com',
     });
     expect(buildGatewayLlmConfig('mxk1_abc').providers![0].baseUrl).toBeUndefined();
   });
