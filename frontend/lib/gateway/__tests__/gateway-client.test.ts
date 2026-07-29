@@ -26,7 +26,13 @@ function setEnv(env: Record<string, string | undefined>) {
  * re-import, not just mutate the environment.
  */
 async function loadClient(env: Record<string, string | undefined>) {
-  setEnv({ MX_GATEWAY_URL: undefined, MX_GATEWAY_SHARED_SECRET: undefined, ...env });
+  setEnv({
+    MX_GATEWAY_URL: undefined, MX_GATEWAY_SHARED_SECRET: undefined,
+    // Cleared too, so the props assertions below read the same on a developer's
+    // machine as in CI rather than picking up whatever the ambient env holds.
+    AUTH_URL: undefined, GIT_COMMIT_SHA: undefined,
+    ...env,
+  });
   vi.resetModules();
   return import('../gateway-client.server');
 }
@@ -94,8 +100,52 @@ describe('createGatewayOrg', () => {
     // No `kind`: the account type is the gateway's to decide from the
     // credential we present, never something this client asks for.
     expect(JSON.parse(init.body as string)).toEqual({
-      email: 'a@co.com', props: { workspace_name: 'Acme' },
+      email: 'a@co.com',
+      props: {
+        workspace_name: 'Acme',
+        app_url: 'http://localhost:3000',
+        app_commit: 'unknown',
+      },
     });
+  });
+
+  it('identifies the install it registered for: name, origin and build', async () => {
+    // Support has an org id and nothing else to go on. These three answer
+    // "which install is this, where does it run, and what is it running" —
+    // the questions asked when a customer says the gateway is misbehaving.
+    const { createGatewayOrg } = await loadClient({
+      ...ON, AUTH_URL: 'https://acme.minusx.app', GIT_COMMIT_SHA: 'deadbeef',
+    });
+    const fetchMock = mockFetch(200, {
+      org_id: 'o', org_secret: 's', key_id: 'k', key: 'mxk1_x',
+    });
+
+    await createGatewayOrg({ email: 'a@co.com', workspaceName: 'Acme' });
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(init.body as string).props).toEqual({
+      workspace_name: 'Acme',
+      app_url: 'https://acme.minusx.app',
+      app_commit: 'deadbeef',
+    });
+  });
+
+  it('sends the shape even when the origin and build are unconfigured', async () => {
+    // A fixed set of keys, always present. An install that never set AUTH_URL
+    // reports the localhost default, which is itself the useful signal — a
+    // missing key would instead read as an old client that never sent one.
+    const { createGatewayOrg } = await loadClient({
+      ...ON, AUTH_URL: undefined, GIT_COMMIT_SHA: undefined,
+    });
+    const fetchMock = mockFetch(200, {
+      org_id: 'o', org_secret: 's', key_id: 'k', key: 'mxk1_x',
+    });
+
+    await createGatewayOrg({ email: 'a@co.com', workspaceName: 'Acme' });
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(Object.keys(JSON.parse(init.body as string).props).sort())
+      .toEqual(['app_commit', 'app_url', 'workspace_name']);
   });
 
   it('returns null rather than throwing when the gateway is down', async () => {

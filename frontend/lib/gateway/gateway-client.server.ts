@@ -18,7 +18,8 @@ import 'server-only';
 
 import { MINUSX_AUTO_MODEL } from '@/lib/llm/minusx-default';
 import { MINUSX_PROVIDER, type LlmConfig } from '@/lib/llm/llm-config-types';
-import { MX_GATEWAY_SHARED_SECRET, MX_GATEWAY_URL } from '@/lib/config';
+import { AUTH_URL, MX_GATEWAY_SHARED_SECRET, MX_GATEWAY_URL } from '@/lib/config';
+import { GIT_COMMIT_SHA } from '@/lib/constants';
 
 import type {
   GatewayCredentials, GatewayOrgStatus, GatewayUsageRow,
@@ -90,7 +91,17 @@ export async function createGatewayOrg(
       // Identifiers the service carries back to us for support. An install IS
       // one workspace — registration refuses a second — so its name and the
       // admin email are what exist at this point.
-      props: { workspace_name: input.workspaceName },
+      //
+      // The origin and build go with them because an org id on its own is not
+      // something a human can act on: together these answer "which install is
+      // this, where does it run, and what is it running". Always all three,
+      // even when unset — the localhost/`unknown` defaults are themselves the
+      // signal, where an absent key would just look like an older client.
+      props: {
+        workspace_name: input.workspaceName,
+        app_url: AUTH_URL,
+        app_commit: GIT_COMMIT_SHA,
+      },
     }),
   });
   if (!body) return null;
