@@ -65,6 +65,8 @@ interface ChatInterfaceProps {
   readOnly?: boolean;
   /** Custom empty-state prompts (e.g. story-specific questions). Falls back to generic defaults. */
   suggestedPrompts?: string[];
+  /** Canonical custom-agent key to select for a new Explore deep link. */
+  initialAgentName?: string | null;
 }
 
 export default function ChatInterface({
@@ -78,6 +80,7 @@ export default function ChatInterface({
   onDatabaseChange,
   readOnly = false,
   suggestedPrompts,
+  initialAgentName = null,
 }: ChatInterfaceProps) {
   const router = useRouter();
   const dispatch = useAppDispatch();
@@ -160,7 +163,7 @@ export default function ChatInterface({
   }, [container, dispatch]);
 
   // Custom-agent selection — exact clone of the grade pattern above.
-  const [localSelectedAgent, setLocalSelectedAgent] = useState<string | null>(null);
+  const [localSelectedAgent, setLocalSelectedAgent] = useState<string | null>(initialAgentName);
   const sharedSelectedAgent = useAppSelector(state => state.ui.chatAgentSelection);
   const selectedAgent = container === 'sidebar' ? sharedSelectedAgent : localSelectedAgent;
   const setSelectedAgent = useCallback((name: string | null) => {
@@ -194,7 +197,11 @@ export default function ChatInterface({
   // a stale selection (agent deleted / context switched) is flagged "(missing)"
   // in the popover and the turn truthfully runs as the default analyst.
   const chatAgentOptions = useMemo(
-    () => (contextInfo.agents ?? []).map(agent => ({ name: agent.name, description: agent.description })),
+    () => (contextInfo.agents ?? []).map(agent => ({
+      name: agent.name,
+      displayName: agent.displayName,
+      description: agent.description,
+    })),
     [contextInfo.agents],
   );
   const effectiveSelectedAgent = selectedAgent && chatAgentOptions.some(agent => agent.name === selectedAgent)
@@ -268,7 +275,7 @@ export default function ChatInterface({
     const storedAgent = conversation?.agent_args?.custom_agent as string | undefined;
     if (container === 'sidebar' && !conversation) return;
     setSelectedGrade(stored ?? null);
-    setSelectedAgent(storedAgent ?? null);
+    setSelectedAgent(storedAgent ?? (!providedConversationId ? initialAgentName : null));
     // Only switch selection when the active conversation itself changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationID]);

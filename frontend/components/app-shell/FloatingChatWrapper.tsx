@@ -102,6 +102,7 @@ export default function FloatingChatWrapper({
         onGradeChange={handleGradeChange}
         agentOptions={(contextInfo.agents ?? []).map(agent => ({
           name: agent.name,
+          displayName: agent.displayName,
           description: agent.description,
         }))}
         selectedAgent={selectedAgent}

@@ -36,6 +36,7 @@ import { SkillsTabContent } from './SkillsTabContent';
 import { AgentsTabContent } from './AgentsTabContent';
 import type { AgentDraft } from './AgentReadView';
 import { uniqueUserSkillName } from '@/lib/context/skill-utils';
+import { buildAgentExploreHref, uniqueUserAgentName } from '@/lib/context/agent-utils';
 import { EvalsTabContent } from './EvalsTabContent';
 
 type DatabaseSelection = {
@@ -418,25 +419,19 @@ export default function ContextEditorV2({
   // Custom agents — same permission gate and slug discipline as skills.
   const canManageAgents = canManageSkills;
   const makeAgentName = useCallback((name: string, ignoreIndex?: number) => {
-    const base = name.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || 'agent';
-    const existing = new Set((content.agents || [])
+    const existing = (content.agents || [])
       .filter((_, index) => index !== ignoreIndex)
       .map(agent => agent.name)
-      .concat(['analyst'])); // reserved: the default analyst's picker slot
-    let candidate = base;
-    let suffix = 2;
-    while (existing.has(candidate)) {
-      candidate = `${base}_${suffix}`;
-      suffix += 1;
-    }
-    return candidate;
+      .concat(['analyst']); // reserved: the default analyst's picker slot
+    return uniqueUserAgentName(name, existing);
   }, [content.agents]);
 
   const handleAddAgent = useCallback((draft: AgentDraft) => {
     const now = new Date().toISOString();
     const agent: AgentEntry = {
       ...draft,
-      name: makeAgentName(draft.name),
+      name: makeAgentName(draft.displayName),
+      displayName: draft.displayName,
       enabled: true,
       createdAt: now,
       updatedAt: now,
@@ -450,7 +445,9 @@ export default function ContextEditorV2({
     const current = agents[index];
     if (!current) return;
     const next = { ...current, ...updates, updatedAt: new Date().toISOString() };
-    if (updates.name !== undefined) {
+    if (updates.displayName !== undefined) {
+      next.name = makeAgentName(updates.displayName, index);
+    } else if (updates.name !== undefined) {
       next.name = makeAgentName(updates.name, index);
     }
     agents[index] = next;
@@ -688,6 +685,12 @@ export default function ContextEditorV2({
           onAddAgent={handleAddAgent}
           onUpdateAgent={handleUpdateAgent}
           onDeleteAgent={handleDeleteAgent}
+          getAgentExploreHref={(agentName) => buildAgentExploreHref({
+            agentName,
+            contextPath: file?.path,
+            contextVersion: currentVersion,
+            currentSearchParams: searchParams,
+          })}
         />
 
         {/* Evals Tab */}

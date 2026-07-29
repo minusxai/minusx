@@ -10,28 +10,24 @@ import type { ReactNode } from 'react';
 import { Badge, Box, HStack, Icon, Text, VStack } from '@chakra-ui/react';
 import { LuBot, LuCornerDownRight, LuCpu, LuLibrary, LuQuote, LuReplace, LuZap } from 'react-icons/lu';
 import type { AgentEntry } from '@/lib/types';
+import { getUserAgentDisplayName } from '@/lib/context/agent-utils';
 
-export type AgentDraft = Pick<
+type AgentReadModel = Pick<
   AgentEntry,
-  'name' | 'description' | 'prompt' | 'promptMode' | 'preloadSkills' | 'includeSkills' | 'gradeOverride' | 'enabled'
+  'name' | 'displayName' | 'description' | 'prompt' | 'promptMode' | 'preloadSkills' | 'includeSkills' | 'gradeOverride' | 'enabled'
 >;
 
+export type AgentDraft = Omit<AgentReadModel, 'displayName'> & { displayName: string };
+
 interface AgentReadViewProps {
-  agent: AgentDraft;
+  agent: AgentReadModel;
   headerEnd?: ReactNode;
+  footerEnd?: ReactNode;
   compact?: boolean;
   muted?: boolean;
 }
 
 const COMPACT_INSTRUCTION_CHARS = 240;
-
-function displayName(name: string) {
-  return name
-    .split(/[_\-\s]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-}
 
 function monogram(name: string) {
   const letters = name
@@ -125,8 +121,9 @@ function SkillPills({
   );
 }
 
-export function AgentReadView({ agent, headerEnd, compact = false, muted = false }: AgentReadViewProps) {
+export function AgentReadView({ agent, headerEnd, footerEnd, compact = false, muted = false }: AgentReadViewProps) {
   const instructions = agent.prompt || 'No custom instructions yet.';
+  const agentDisplayName = getUserAgentDisplayName(agent);
   const onDemandSkills = agent.includeSkills.filter((skill) => !agent.preloadSkills.includes(skill));
   const visibleInstructions = compact && instructions.length > COMPACT_INSTRUCTION_CHARS
     ? `${instructions.slice(0, COMPACT_INSTRUCTION_CHARS).trimEnd()}…`
@@ -155,7 +152,7 @@ export function AgentReadView({ agent, headerEnd, compact = false, muted = false
             _groupHover={{ transform: 'translateY(-2px) scale(1.02)' }}
           >
             <Text fontSize={compact ? 'xl' : '2xl'} lineHeight="1" fontWeight="800" letterSpacing="-0.04em">
-              {monogram(agent.name)}
+              {monogram(agentDisplayName)}
             </Text>
             <Box
               position="absolute"
@@ -178,7 +175,7 @@ export function AgentReadView({ agent, headerEnd, compact = false, muted = false
 
           <Box minW={0} pt={0.5}>
             <Text fontSize={compact ? 'lg' : 'xl'} lineHeight="1.15" fontWeight="750" letterSpacing="-0.02em">
-              {displayName(agent.name) || 'Untitled agent'}
+              {agentDisplayName || 'Untitled agent'}
             </Text>
             <Text fontSize="xs" fontFamily="mono" color="fg.subtle" mt={1}>
               @{agent.name || 'untitled'}
@@ -282,14 +279,15 @@ export function AgentReadView({ agent, headerEnd, compact = false, muted = false
             </HStack>
             <SkillPills
               skills={onDemandSkills}
-              emptyLabel={agent.includeSkills.length === 0 ? 'Full catalog' : 'None additional'}
-              catalog={agent.includeSkills.length === 0}
+              emptyLabel="None"
               muted={muted}
               compact={compact}
             />
           </Box>
         </Box>
       </Box>
+
+      {footerEnd && <HStack justify="flex-end">{footerEnd}</HStack>}
     </VStack>
   );
 }

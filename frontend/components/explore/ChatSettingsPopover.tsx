@@ -30,6 +30,7 @@ import { useStableCallback } from '@/lib/hooks/use-stable-callback';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import type { ContextContent } from '@/lib/types';
 import type { ChatGradeCatalog, LlmGrade } from '@/lib/llm/llm-config-types';
+import { getUserAgentDisplayName } from '@/lib/context/agent-utils';
 import {
   SearchableSelect,
   type SearchableOption,
@@ -69,6 +70,7 @@ const GRADE_LABELS: Record<LlmGrade, string> = { lite: 'Lite', core: 'Core', adv
 /** The picker's view of a custom agent — a projection of AgentEntry. */
 export interface ChatAgentOption {
   name: string;
+  displayName?: string;
   description?: string;
 }
 
@@ -257,7 +259,7 @@ export default function ChatSettingsPopover({
     for (const agent of agentOptions) {
       options.push({
         value: agent.name,
-        label: agent.name,
+        label: getUserAgentDisplayName(agent),
         subtitle: agent.description ?? '',
       });
     }
@@ -270,7 +272,10 @@ export default function ChatSettingsPopover({
     return options;
   }, [agentOptions, selectedAgent]);
   const selectedAgentValue = selectedAgent ?? DEFAULT_AGENT;
-  const agentSummary = selectedAgent ?? 'Analyst agent';
+  const selectedAgentOption = agentOptions.find((agent) => agent.name === selectedAgent);
+  const agentSummary = selectedAgent
+    ? (selectedAgentOption ? getUserAgentDisplayName(selectedAgentOption) : selectedAgent)
+    : 'Analyst agent';
   const databaseComboboxOptions = useMemo(
     () => databaseOptions.map((name) => ({ value: name, label: name })),
     [databaseOptions],

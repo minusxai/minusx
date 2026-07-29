@@ -16,6 +16,7 @@ import { LuBookOpen, LuCheck, LuCheckCheck, LuCircleOff, LuLibrary, LuSearch, Lu
 import { AgentReadView, type AgentDraft } from './AgentReadView';
 import { SelectContent, SelectItem, SelectPositioner, SelectRoot, SelectTrigger, SelectValueText } from '@/components/ui/select';
 import LexicalTextEditor, { type MentionsConfig } from '@/components/lexical/LexicalTextEditor';
+import { uniqueUserAgentName } from '@/lib/context/agent-utils';
 
 const STEPS = ['identity', 'prompt', 'skills', 'review'] as const;
 type Step = (typeof STEPS)[number];
@@ -31,6 +32,7 @@ export interface AgentBuilderProps {
   initial?: AgentDraft;
   systemSkills: { name: string; description: string }[];
   userSkills: { name: string; displayName?: string; description: string }[];
+  existingAgentNames: string[];
   mentions?: MentionsConfig;
   onSave: (draft: AgentDraft) => void;
   onCancel: () => void;
@@ -38,6 +40,7 @@ export interface AgentBuilderProps {
 
 const EMPTY_DRAFT: AgentDraft = {
   name: '',
+  displayName: '',
   description: '',
   prompt: '',
   promptMode: 'append',
@@ -65,7 +68,7 @@ function normalizeSkillAccess(draft: AgentDraft): AgentDraft {
 
 type SkillAccessMode = 'excluded' | 'demand' | 'always';
 
-export function AgentBuilder({ initial, systemSkills, userSkills, mentions, onSave, onCancel }: AgentBuilderProps) {
+export function AgentBuilder({ initial, systemSkills, userSkills, existingAgentNames, mentions, onSave, onCancel }: AgentBuilderProps) {
   const [step, setStep] = useState<Step>('identity');
   const [draft, setDraft] = useState<AgentDraft>(() => normalizeSkillAccess(initial ?? EMPTY_DRAFT));
   const [skillQuery, setSkillQuery] = useState('');
@@ -85,8 +88,9 @@ export function AgentBuilder({ initial, systemSkills, userSkills, mentions, onSa
   };
 
   // Prerequisites per step: Prompt needs a name; Skills/Review need name + prompt.
-  const hasName = draft.name.trim().length > 0;
+  const hasName = draft.displayName.trim().length > 0;
   const hasPrompt = draft.prompt.trim().length > 0;
+  const canonicalName = uniqueUserAgentName(draft.displayName, existingAgentNames);
   const stepReachable: Record<Step, boolean> = {
     identity: true,
     prompt: hasName,
@@ -175,12 +179,14 @@ export function AgentBuilder({ initial, systemSkills, userSkills, mentions, onSa
             <Input
               aria-label="Agent name"
               size="md"
-              fontFamily="mono"
-              value={draft.name}
-              onChange={(e) => patch({ name: e.target.value })}
-              placeholder="sales_helper"
+              value={draft.displayName}
+              onChange={(e) => patch({ displayName: e.target.value })}
+              placeholder="Sales helper"
             />
-            {hint('A unique slug — this is how the agent appears in the chat agent picker.')}
+            <Text fontSize="xs" color="fg.muted" mt={1.5}>
+              Shown in the chat agent picker. Saved internally as{' '}
+              <Text as="span" fontFamily="mono" fontWeight="600">@{canonicalName}</Text>
+            </Text>
           </Box>
           <Box>
             {label('Description')}
@@ -293,9 +299,7 @@ export function AgentBuilder({ initial, systemSkills, userSkills, mentions, onSa
             <HStack gap={2} flexWrap="wrap">
               <Badge size="sm" variant="subtle" colorPalette="gray" borderRadius="full" px={2.5} py={1}>
                 <Icon as={LuLibrary} boxSize={3} mr={1} />
-                {draft.includeSkills.length === 0
-                  ? 'Full catalog on demand'
-                  : `${draft.includeSkills.length} on demand`}
+                {draft.includeSkills.length} on demand
               </Badge>
               <Badge size="sm" variant="subtle" colorPalette="teal" borderRadius="full" px={2.5} py={1}>
                 <Icon as={LuZap} boxSize={3} mr={1} />
@@ -456,14 +460,14 @@ export function AgentBuilder({ initial, systemSkills, userSkills, mentions, onSa
             </Box>
           )}
           {allSkills.length === 0 && (
-            <Text fontSize="sm" color="fg.muted">No skills available yet — the agent gets the full catalog.</Text>
+            <Text fontSize="sm" color="fg.muted">No skills are available to configure.</Text>
           )}
         </VStack>
       )}
 
       {step === 'review' && (
         <Box aria-label="Agent review">
-          <AgentReadView agent={draft} />
+          <AgentReadView agent={{ ...draft, name: canonicalName }} />
         </Box>
       )}
 
@@ -484,7 +488,12 @@ export function AgentBuilder({ initial, systemSkills, userSkills, mentions, onSa
             Next
           </Button>
         ) : (
-          <Button aria-label="Save agent" size="xs" colorPalette="teal" onClick={() => onSave(draft)}>
+          <Button
+            aria-label="Save agent"
+            size="xs"
+            colorPalette="teal"
+            onClick={() => onSave({ ...draft, name: canonicalName })}
+          >
             Save agent
           </Button>
         )}

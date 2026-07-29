@@ -9,10 +9,12 @@
 
 import { useState } from 'react';
 import { Badge, Box, Button, HStack, Icon, SimpleGrid, Switch, Tabs, Text, VStack } from '@chakra-ui/react';
-import { LuPencil, LuPlus, LuTrash2 } from 'react-icons/lu';
+import { LuPencil, LuPlay, LuPlus, LuTrash2 } from 'react-icons/lu';
+import Link from 'next/link';
 import type { AgentEntry, ContextContent } from '@/lib/types';
 import { mergeSkillsByName } from '@/lib/context/context-utils';
 import { getUserSkillDisplayName } from '@/lib/context/skill-utils';
+import { getUserAgentDisplayName } from '@/lib/context/agent-utils';
 import Editor from '@monaco-editor/react';
 import { AgentBuilder } from './AgentBuilder';
 import { AgentReadView, type AgentDraft } from './AgentReadView';
@@ -33,6 +35,7 @@ interface AgentsTabContentProps {
   onAddAgent: (draft: AgentDraft) => void;
   onUpdateAgent: (index: number, updates: Partial<AgentEntry>) => void;
   onDeleteAgent: (index: number) => void;
+  getAgentExploreHref: (agentName: string) => string;
 }
 
 type BuilderState = { mode: 'new' } | { mode: 'edit'; index: number } | null;
@@ -50,6 +53,7 @@ export function AgentsTabContent({
   onAddAgent,
   onUpdateAgent,
   onDeleteAgent,
+  getAgentExploreHref,
 }: AgentsTabContentProps) {
   const [builder, setBuilder] = useState<BuilderState>(null);
   const agents = content.agents || [];
@@ -85,9 +89,18 @@ export function AgentsTabContent({
         <VStack gap={4} align="stretch" fontFamily="mono">
           {builder ? (
             <AgentBuilder
-              initial={builder.mode === 'edit' ? agents[builder.index] : undefined}
+              initial={builder.mode === 'edit' ? {
+                ...agents[builder.index],
+                displayName: getUserAgentDisplayName(agents[builder.index]),
+              } : undefined}
               systemSkills={systemSkills}
               userSkills={userSkills}
+              existingAgentNames={[
+                ...agents
+                  .filter((_, index) => builder.mode !== 'edit' || index !== builder.index)
+                  .map((agent) => agent.name),
+                'analyst',
+              ]}
               mentions={mentions}
               onSave={handleSave}
               onCancel={() => setBuilder(null)}
@@ -150,6 +163,27 @@ export function AgentsTabContent({
                         agent={agent}
                         compact
                         muted={!agent.enabled}
+                        footerEnd={(
+                          <Button
+                            asChild
+                            aria-label={`Explore with ${getUserAgentDisplayName(agent)}`}
+                            title={`Explore with ${getUserAgentDisplayName(agent)}`}
+                            w="40px"
+                            h="40px"
+                            minW="40px"
+                            p={0}
+                            borderRadius="full"
+                            variant="solid"
+                            bg="accent.teal"
+                            color="white"
+                            _hover={{ bg: 'accent.teal', opacity: 0.9 }}
+                            transition="opacity 160ms ease"
+                          >
+                            <Link href={getAgentExploreHref(agent.name)}>
+                              <Icon as={LuPlay} boxSize={4} ml={0.5} />
+                            </Link>
+                          </Button>
+                        )}
                         headerEnd={(
                           <HStack
                             align="center"
@@ -304,11 +338,11 @@ export function AgentsTabContent({
                           fontSize="sm"
                           fontWeight="800"
                         >
-                          {agent.name.charAt(0).toUpperCase()}
+                          {getUserAgentDisplayName(agent).charAt(0).toUpperCase()}
                         </Box>
                         <Box minW={0}>
                           <Text fontSize="sm" fontFamily="mono" fontWeight="700">
-                            {agent.name}
+                            {getUserAgentDisplayName(agent)}
                           </Text>
                           <Text fontSize="xs" color="fg.muted" mt={1} lineClamp={2}>{agent.description}</Text>
                         </Box>
