@@ -132,9 +132,11 @@ export default function FloatingChatWrapper({
       visibility={hideFloatingBar ? "hidden" : "visible"}
     >
       {/* The dimming overlay lives INSIDE ChatInput (floating mode), driven by the
-          same collapsed/expanded state as the bar — never tracked separately here. */}
+          same collapsed/expanded state as the bar — never tracked separately here.
+          Pointer events stay OFF for this full-width row (inherited from the fixed
+          wrapper); ChatInput re-enables them on the centered pill only, so clicks
+          beside the pill fall through to the page. */}
       <Box
-        pointerEvents="auto"
         position="relative"
         zIndex={1000}
       >

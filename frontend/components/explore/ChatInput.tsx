@@ -439,6 +439,9 @@ function ChatInputInner({
             <Box
             mx={isFloating ? 'auto' : undefined}
             width={isFloating ? (isCollapsed ? { base: '85%', md: '450px', lg: '450px' } : { base: '90%', md: '600px', lg: '700px' }) : undefined}
+            // Floating mode: ancestors are pointer-events:none so the rest of the
+            // row lets clicks through — re-enable them on the pill itself only.
+            pointerEvents={isFloating ? 'auto' : undefined}
             transition="width 0.25s ease, border-radius 0.25s ease"
             >
             <Box

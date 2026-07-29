@@ -66,8 +66,11 @@ export default function ShareFloatingChat({ contextPath, appState, railWidth, on
       display={{ base: 'none', md: 'block' }}
     >
       {/* The dimming overlay lives INSIDE ChatInput (floating mode), driven by the
-          same collapsed/expanded state as the bar — never tracked separately here. */}
-      <Box pointerEvents="auto" position="relative" zIndex={1000}>
+          same collapsed/expanded state as the bar — never tracked separately here.
+          Pointer events stay OFF for this full-width row (inherited from the fixed
+          wrapper); ChatInput re-enables them on the centered pill only, so clicks
+          beside the pill fall through to the page. */}
+      <Box position="relative" zIndex={1000}>
         <Box maxW="1280px" mx="auto" px={{ base: 8, md: 12, lg: 16 }}>
           <Box>
             <ChatInput

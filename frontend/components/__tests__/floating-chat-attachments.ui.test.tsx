@@ -28,7 +28,10 @@ vi.mock('@/components/explore/ChatInput', () => ({
     onAgentChange?: (name: string | null) => void;
   }) => React.createElement(
     'div',
-    null,
+    // The real ChatInput re-enables pointer events on its pill (the floating
+    // wrapper row is pointer-events:none so clicks beside the pill fall through);
+    // the mock must mirror that or userEvent refuses to click inside it.
+    { style: { pointerEvents: 'auto' } },
     React.createElement('button', { 'aria-label': 'send-test', onClick: () => props.onSend('summarize this', [IMG]) }, 'send'),
     React.createElement('button', {
       'aria-label': 'select-grade-test',
