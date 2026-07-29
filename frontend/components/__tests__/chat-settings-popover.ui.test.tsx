@@ -193,6 +193,34 @@ describe('ChatSettingsPopover', () => {
     expect(trigger).toHaveTextContent('Analyst agent');
   });
 
+  // No custom agents (alpha flag off, or the context defines none) → the Agent
+  // picker still renders, offering only the default analyst — same as before
+  // custom agents existed.
+  it('keeps the Agent picker with only the default option when no custom agents exist', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <ChatSettingsPopover
+        databaseName="warehouse"
+        onDatabaseChange={vi.fn()}
+        selectedGrade={null}
+        onGradeChange={vi.fn()}
+        selectedContextPath="/tutorial/context.json"
+        selectedVersion={2}
+        onContextChange={vi.fn()}
+        agentOptions={[]}
+        selectedAgent={null}
+        onAgentChange={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByLabelText('Chat settings'));
+    const agent = await screen.findByLabelText('Agent');
+    expect(agent).toHaveTextContent('Analyst agent');
+    await user.click(agent);
+    expect(screen.getByRole('option', { name: 'Analyst agent' })).toBeInTheDocument();
+    expect(screen.getAllByRole('option')).toHaveLength(1);
+  });
+
   it('flags a selected agent that no longer exists on the context as missing', async () => {
     const user = userEvent.setup();
     renderWithProviders(

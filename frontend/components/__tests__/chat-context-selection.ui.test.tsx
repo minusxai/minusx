@@ -50,15 +50,17 @@ vi.mock('@/lib/hooks/useContext', () => ({
 // Send button that invokes the real onSend the way ChatInput would.
 vi.mock('@/components/explore/ChatInput', () => ({
   __esModule: true,
-  default: ({ onSend, onGradeChange, selectedGrade, onAgentChange, selectedAgent }: {
+  default: ({ onSend, onGradeChange, selectedGrade, onAgentChange, selectedAgent, agentOptions }: {
     onSend: (msg: string, atts: unknown[]) => void;
     onGradeChange: (grade: string) => void;
     selectedGrade: string | null;
     onAgentChange: (name: string | null) => void;
     selectedAgent: string | null;
+    agentOptions?: { name: string }[];
   }) => React.createElement(React.Fragment, null,
     React.createElement('span', { 'data-testid': 'chat-grade' }, selectedGrade ?? 'default'),
     React.createElement('span', { 'data-testid': 'chat-agent' }, selectedAgent ?? 'default'),
+    React.createElement('span', { 'data-testid': 'chat-agent-options' }, (agentOptions ?? []).map(a => a.name).join(',') || 'none'),
     React.createElement('button', {
       'aria-label': 'Select chat grade',
       onClick: () => onGradeChange('advanced'),
@@ -72,7 +74,7 @@ vi.mock('@/components/explore/ChatInput', () => ({
 }));
 
 import ChatInterface from '@/components/explore/ChatInterface';
-import { setChatGradeSelection } from '@/store/uiSlice';
+import { setChatGradeSelection, setEnableCustomAgents } from '@/store/uiSlice';
 
 describe('Chat honors the selected context file', () => {
   beforeEach(() => {
@@ -116,8 +118,32 @@ describe('Chat honors the selected context file', () => {
     });
   });
 
+  // Custom agents are alpha-gated: with the flag off, the context's agents are
+  // never offered as picker options and a selection is never sent to the server.
+  it('withholds custom agents from the picker and the turn when the alpha flag is off', async () => {
+    const store = makeStore();
+    store.dispatch(createConversation({ conversationID: 1, agent: 'AnalystAgent' }));
+
+    renderWithProviders(
+      <ChatInterface conversationId={1} contextPath="/org/selected-context" container="page" appState={null} />,
+      { store },
+    );
+
+    expect(await screen.findByTestId('chat-agent-options')).toHaveTextContent('none');
+
+    fireEvent.click(screen.getByLabelText('Select chat agent'));
+    fireEvent.click(screen.getByLabelText('Send message'));
+
+    await waitFor(() => {
+      const conv = store.getState().chat.conversations[1];
+      expect(conv.agent_args?.context_file_id).toBe(SELECTED_CONTEXT_ID);
+      expect(conv.agent_args?.custom_agent).toBeUndefined();
+    });
+  });
+
   it('sends the selected custom agent as agent_args.custom_agent', async () => {
     const store = makeStore();
+    store.dispatch(setEnableCustomAgents(true));
     store.dispatch(createConversation({ conversationID: 1, agent: 'AnalystAgent' }));
 
     renderWithProviders(
@@ -134,6 +160,9 @@ describe('Chat honors the selected context file', () => {
   });
 
   it('preselects a custom agent supplied by an Explore deep link', async () => {
+    const store = makeStore();
+    store.dispatch(setEnableCustomAgents(true));
+
     renderWithProviders(
       <ChatInterface
         contextPath="/org/selected-context"
@@ -141,6 +170,7 @@ describe('Chat honors the selected context file', () => {
         appState={null}
         initialAgentName="sales_helper"
       />,
+      { store },
     );
 
     expect(await screen.findByTestId('chat-agent')).toHaveTextContent('sales_helper');

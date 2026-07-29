@@ -52,7 +52,7 @@ import { screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import * as storeModule from '@/store/store';
-import { selectChatAttachments, setChatAgentSelection, setChatGradeSelection } from '@/store/uiSlice';
+import { selectChatAttachments, setChatAgentSelection, setChatGradeSelection, setEnableCustomAgents } from '@/store/uiSlice';
 import FloatingChatWrapper from '@/components/app-shell/FloatingChatWrapper';
 
 describe('FloatingChatWrapper: attachment hand-off to the sidebar chat', () => {
@@ -81,8 +81,20 @@ describe('FloatingChatWrapper: attachment hand-off to the sidebar chat', () => {
     expect(screen.getByTestId('selected-grade')).toHaveTextContent('lite');
   });
 
+  // Custom agents are alpha-gated: no flag → the context's agents never reach
+  // the picker and any lingering shared selection is withheld.
+  it('withholds context agents from the picker when the alpha flag is off', () => {
+    const store = storeModule.makeStore();
+    store.dispatch(setChatAgentSelection('yoyo'));
+    renderWithProviders(<FloatingChatWrapper appState={null} />, { store });
+
+    expect(screen.getByTestId('agent-options')).toHaveTextContent(/^$/);
+    expect(screen.getByTestId('selected-agent')).toHaveTextContent('default');
+  });
+
   it('offers context agents and shares the agent selection with the sidebar chat', async () => {
     const store = storeModule.makeStore();
+    store.dispatch(setEnableCustomAgents(true));
     renderWithProviders(<FloatingChatWrapper appState={null} />, { store });
 
     expect(screen.getByTestId('agent-options')).toHaveTextContent('yoyo');

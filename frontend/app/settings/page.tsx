@@ -5,7 +5,7 @@ import { Box, VStack, Text, Flex, Switch, Button, Heading, Badge, HStack, Icon, 
 import { LuChevronRight, LuRefreshCw, LuSearch, LuUser, LuX } from 'react-icons/lu';
 import { ColorModeSwitch } from '@/components/ui/color-mode';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { setAskForConfirmation, setShowAdvanced, setDevMode, setShowSuggestedQuestions, setShowTrustScore, setQueueStrategy, setAllowChatQueue, setUnrestrictedMode, setShowExpandedMessages, setHomePageConfig, selectHomePage } from '@/store/uiSlice';
+import { setAskForConfirmation, setShowAdvanced, setDevMode, setShowSuggestedQuestions, setShowTrustScore, setQueueStrategy, setAllowChatQueue, setUnrestrictedMode, setShowExpandedMessages, setEnableCustomAgents, setHomePageConfig, selectHomePage } from '@/store/uiSlice';
 import { canEdit } from '@/lib/auth/role-helpers';
 import RecordingControl from '@/components/dev/RecordingControl';
 import DataManagementSection from '@/components/settings/DataManagementSection';
@@ -390,6 +390,7 @@ function SettingsContent() {
   const showTrustScore = useAppSelector((state) => state.ui.showTrustScore);
   const showExpandedMessages = useAppSelector((state) => state.ui.showExpandedMessages ?? false);
   const unrestrictedMode = useAppSelector((state) => state.ui.unrestrictedMode);
+  const enableCustomAgents = useAppSelector((state) => state.ui.enableCustomAgents ?? false);
   const { config } = useConfigs();
 
   const searchParams = useSearchParams();
@@ -579,6 +580,18 @@ function SettingsContent() {
     },
     {
       tab: 'dev',
+      section: 'Alpha Flags',
+      title: 'Custom Agents',
+      description: 'Define custom agents on contexts (Agents tab) and pick them in chat settings',
+      control: (
+        <SwitchControl
+          checked={enableCustomAgents}
+          onChange={(checked) => dispatch(setEnableCustomAgents(checked))}
+        />
+      ),
+    },
+    {
+      tab: 'dev',
       title: 'Show Expanded Messages',
       description: 'Always show the detailed timeline view for agent work in chat instead of the compact summary.',
       control: (
@@ -666,7 +679,7 @@ function SettingsContent() {
         </Button>
       ),
     },
-  ], [askForConfirmation, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, handleTelemetryToggle, showAdvanced, isAdmin, isEditorOrAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue, unrestrictedMode, devMode, showExpandedMessages, config.analytics]);
+  ], [askForConfirmation, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, handleTelemetryToggle, showAdvanced, isAdmin, isEditorOrAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue, unrestrictedMode, devMode, showExpandedMessages, enableCustomAgents, config.analytics]);
 
   // ── Tabs config ──────────────────────────────────────────────────
   const tabs: TabEntry[] = useMemo(() => [

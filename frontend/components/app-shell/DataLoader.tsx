@@ -28,7 +28,7 @@ export function DataLoader() {
   // Restore persisted UI flags after hydration — single dispatch avoids 3 separate re-render cycles
   useEffect(() => {
     try {
-      const flags: { devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; vizV2?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; showExpandedMessages?: boolean; homePage?: Record<string, unknown> } = {};
+      const flags: { devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; vizV2?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; showExpandedMessages?: boolean; enableCustomAgents?: boolean; homePage?: Record<string, unknown> } = {};
       const dev = localStorage.getItem('devMode');
       if (dev !== null) flags.devMode = dev === 'true';
       const confirm = localStorage.getItem('askForConfirmation');
@@ -55,6 +55,8 @@ export function DataLoader() {
       if (unrestricted !== null) flags.unrestrictedMode = unrestricted === 'true';
       const expandedMsgs = localStorage.getItem('showExpandedMessages');
       if (expandedMsgs !== null) flags.showExpandedMessages = expandedMsgs === 'true';
+      const customAgents = localStorage.getItem('enableCustomAgents');
+      if (customAgents !== null) flags.enableCustomAgents = customAgents === 'true';
       const hp = localStorage.getItem('homePage');
       if (hp !== null) { try { flags.homePage = JSON.parse(hp); } catch { /* ignore */ } }
       if (Object.keys(flags).length > 0) dispatch(setBulkUiFlags(flags));
