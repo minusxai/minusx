@@ -88,7 +88,9 @@ function resolveCustomAgentFromContext(
       : { type: 'system' as const, name: n };
   });
 
-  const skillAllowlist = include.length > 0 ? [...new Set([...include, ...preload])] : undefined;
+  // Custom-agent skill selection is exact: empty include/preload arrays mean
+  // no optional skills, rather than an unrestricted catalog.
+  const skillAllowlist = [...new Set([...include, ...preload])];
   const gradeOverride: LlmGrade | undefined =
     typeof entry.gradeOverride === 'string' && (LLM_GRADES as readonly string[]).includes(entry.gradeOverride)
       ? entry.gradeOverride
@@ -99,7 +101,7 @@ function resolveCustomAgentFromContext(
       name: entry.name,
       prompt: entry.prompt,
       promptMode: entry.promptMode === 'replace' ? 'replace' : 'append',
-      ...(skillAllowlist ? { skillAllowlist } : {}),
+      skillAllowlist,
       ...(gradeOverride ? { gradeOverride } : {}),
     },
     preloadSelections,

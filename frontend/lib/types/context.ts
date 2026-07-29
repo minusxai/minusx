@@ -125,7 +125,8 @@ export interface SkillEntry {
  * Data access is always the requesting user's — a definition can never widen it.
  */
 export interface AgentEntry {
-  name: string;                       // unique slug within the context tree
+  name: string;                       // unique canonical key within the context tree
+  displayName?: string;               // human-facing label; absent on legacy entries
   description: string;                // one-liner shown in the chat-settings picker
   prompt: string;                     // persona / instructions body
   /** append = inject into the default analyst prompt; replace = swap out the
@@ -134,7 +135,8 @@ export interface AgentEntry {
   /** Skill names (system or user) whose full content is inlined in the prompt. */
   preloadSkills: string[];
   /** Skill names available in the on-demand catalog (LoadSkill). Non-empty
-   *  restricts the catalog to includeSkills ∪ preloadSkills; [] = full catalog. */
+   *  selections are combined with preloadSkills into the custom agent's exact
+   *  skill allowlist; [] means no on-demand skills. */
   includeSkills: string[];
   gradeOverride?: LlmGrade;           // default LLM grade; an explicit user pick wins
   enabled: boolean;
