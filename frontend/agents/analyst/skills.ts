@@ -63,9 +63,13 @@ export function getPreloadedSkillNames(opts: {
   pageType: string | null;
   selected: AgentSkillSelection[];
   unrestrictedMode: boolean;
+  /** Custom agents opt out so only explicitly selected skills are preloaded. */
+  includePageDefaults?: boolean;
 }): string[] {
-  const { pageType, selected, unrestrictedMode } = opts;
-  const skills = [...(pageType && PAGE_SKILL_MAP[pageType] ? PAGE_SKILL_MAP[pageType] : DEFAULT_PRELOADED_SKILLS)];
+  const { pageType, selected, unrestrictedMode, includePageDefaults = true } = opts;
+  const skills = includePageDefaults
+    ? [...(pageType && PAGE_SKILL_MAP[pageType] ? PAGE_SKILL_MAP[pageType] : DEFAULT_PRELOADED_SKILLS)]
+    : [];
   for (const sel of selected) {
     if (sel.type !== 'system') continue;
     const name = sel.name;

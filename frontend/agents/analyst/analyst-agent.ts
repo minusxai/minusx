@@ -82,12 +82,14 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
     const ctor = this.constructor as typeof RemoteAnalystAgent;
     const selected = this.context.selectedSkills ?? [];
     const userCatalog = this.context.userSkillCatalog ?? [];
+    const customAgent = this.context.customAgent;
+    const hasExplicitSkillSelection = customAgent?.skillAllowlist !== undefined;
     const preloadedNames = getPreloadedSkillNames({
       pageType: this.context.pageType ?? null,
       selected,
       unrestrictedMode: this.context.unrestrictedMode ?? false,
+      includePageDefaults: !hasExplicitSkillSelection,
     });
-    const customAgent = this.context.customAgent;
     return {
       // Branding name the agent introduces itself as (default "MinusX").
       agent_name: this.context.agentName ?? 'MinusX',
@@ -115,7 +117,9 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
         preloaded: new Set(preloadedNames),
         selected,
         userCatalog,
-        allowlist: customAgent?.skillAllowlist ? new Set(customAgent.skillAllowlist) : undefined,
+        allowlist: customAgent?.skillAllowlist !== undefined
+          ? new Set(customAgent.skillAllowlist)
+          : undefined,
       }),
       connection_id: this.context.connectionId ?? '',
       home_folder: this.context.homeFolder ?? '',

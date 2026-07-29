@@ -322,6 +322,11 @@ export class LoadSkill extends MXTool<typeof LoadSkillParams, RemoteAnalystConte
       const error = 'LoadSkill requires a skill name';
       return { content: [{ type: 'text', text: JSON.stringify({ success: false, error }) }], isError: true };
     }
+    const customAgentAllowlist = this.context.customAgent?.skillAllowlist;
+    if (customAgentAllowlist !== undefined && !customAgentAllowlist.includes(name)) {
+      const error = `Skill '${name}' is not available to this custom agent`;
+      return { content: [{ type: 'text', text: JSON.stringify({ success: false, error }) }], isError: true };
+    }
     // System skills live in the shared prompts.yaml — resolve them here.
     const content = loadSkill(name);
     if (content === null) {
