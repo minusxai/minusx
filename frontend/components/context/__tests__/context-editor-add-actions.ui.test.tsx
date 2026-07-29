@@ -185,4 +185,26 @@ describe('ContextEditorV2 add actions outside edit mode', () => {
     expect(screen.getByLabelText('Agent prompt')).toHaveAttribute('data-mentions', 'true');
     expect(screen.getByLabelText('Agent prompt')).toHaveAttribute('data-show-pro-tip', 'false');
   });
+
+  it('stores a friendly agent display name alongside its canonical key', () => {
+    const { onChange } = renderEditor('agents');
+
+    fireEvent.click(screen.getByLabelText('Add agent'));
+    fireEvent.change(screen.getByLabelText('Agent name'), { target: { value: 'CEO Agent' } });
+    expect(screen.getByLabelText('Agent name')).toHaveValue('CEO Agent');
+    expect(screen.getByText('@ceo_agent')).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Builder next'));
+    fireEvent.change(screen.getByLabelText('Agent prompt'), { target: { value: 'Think like a CEO.' } });
+    fireEvent.click(screen.getByLabelText('Builder next'));
+    fireEvent.click(screen.getByLabelText('Builder next'));
+    fireEvent.click(screen.getByLabelText('Save agent'));
+
+    expect(onChange).toHaveBeenCalledWith({
+      agents: [expect.objectContaining({
+        name: 'ceo_agent',
+        displayName: 'CEO Agent',
+        prompt: 'Think like a CEO.',
+      })],
+    });
+  });
 });

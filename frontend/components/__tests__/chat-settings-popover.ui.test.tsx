@@ -92,7 +92,7 @@ describe('ChatSettingsPopover', () => {
           selectedContextPath="/tutorial/context.json"
           selectedVersion={2}
           onContextChange={onContextChange}
-          agentOptions={[{ name: 'sales_helper', description: 'Sales specialist' }]}
+          agentOptions={[{ name: 'sales_helper', displayName: 'Sales Helper', description: 'Sales specialist' }]}
           selectedAgent={selectedAgent}
           onAgentChange={(name) => {
             setSelectedAgent(name);
@@ -178,12 +178,12 @@ describe('ChatSettingsPopover', () => {
     // Agent picker: default + context-defined custom agents, selection round-trips.
     await user.click(agent);
     expect(screen.getByRole('option', { name: 'Analyst agent' })).toBeInTheDocument();
-    const customOption = screen.getByRole('option', { name: /sales_helper/ });
+    const customOption = screen.getByRole('option', { name: /Sales Helper/ });
     expect(customOption).toHaveTextContent('Sales specialist');
     await user.click(customOption);
     expect(onAgentChange).toHaveBeenLastCalledWith('sales_helper');
-    expect(agent).toHaveTextContent('sales_helper');
-    expect(trigger).toHaveTextContent('sales_helper');
+    expect(agent).toHaveTextContent('Sales Helper');
+    expect(trigger).toHaveTextContent('Sales Helper');
 
     // Re-selecting the default analyst clears the selection (null).
     await user.click(agent);

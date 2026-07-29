@@ -133,6 +133,19 @@ describe('Chat honors the selected context file', () => {
     });
   });
 
+  it('preselects a custom agent supplied by an Explore deep link', async () => {
+    renderWithProviders(
+      <ChatInterface
+        contextPath="/org/selected-context"
+        container="page"
+        appState={null}
+        initialAgentName="sales_helper"
+      />,
+    );
+
+    expect(await screen.findByTestId('chat-agent')).toHaveTextContent('sales_helper');
+  });
+
   it('shares the grade selection bidirectionally with the sidebar chat', async () => {
     const store = makeStore();
     store.dispatch(setChatGradeSelection('lite'));

@@ -117,6 +117,19 @@ describe('CustomAgent skill allowlist', () => {
     expect(sp).toContain('- `"dashboards"`');
     expect(sp).toContain('- `"alerts"`');
   });
+
+  it('exposes and preloads no optional skills for an explicit empty allowlist', () => {
+    const sp: string = newCustomAgent({
+      customAgent: def({ skillAllowlist: [] }),
+      pageType: 'explore',
+    }).getSystemPrompt();
+
+    expect(sp).toContain('No additional skills are available for this turn.');
+    expect(sp).not.toContain('- `"dashboards"`');
+    expect(sp).not.toContain('- `"alerts"`');
+    expect(sp).not.toContain('**Skill: questions**');
+    expect(sp).not.toContain('**Skill: explore**');
+  });
 });
 
 describe('CustomAgent without a definition', () => {

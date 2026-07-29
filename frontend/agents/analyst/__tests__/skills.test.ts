@@ -100,6 +100,15 @@ describe('getPreloadedSkillNames', () => {
     expect(getPreloadedSkillNames({ pageType: 'explore', selected: [], unrestrictedMode: true }))
       .toEqual(['explore', 'questions', 'navigation_unrestricted']);
   });
+
+  it('can omit page defaults so custom agents preload only explicit selections', () => {
+    expect(getPreloadedSkillNames({
+      pageType: 'explore',
+      selected: [{ type: 'system', name: 'alerts' }],
+      unrestrictedMode: false,
+      includePageDefaults: false,
+    })).toEqual(['alerts', 'navigation_restricted']);
+  });
 });
 
 describe('buildSkillsCatalog', () => {

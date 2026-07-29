@@ -134,6 +134,24 @@ describe('LoadSkill tool', () => {
     expect(payload.success).toBe(false);
   });
 
+  it('rejects skills outside a custom agent empty allowlist', async () => {
+    const orch = new Orchestrator([], []);
+    const customCtx = {
+      ...ctx,
+      customAgent: {
+        name: 'empty_agent',
+        prompt: 'No optional skills.',
+        promptMode: 'append' as const,
+        skillAllowlist: [],
+      },
+    };
+    const tool = new LoadSkill(orch, { name: 'parameters' }, customCtx);
+    const res = await tool.run();
+    const payload = payloadOf((res as { content: { type: string }[] }).content);
+    expect(payload.success).toBe(false);
+    expect(String(payload.error)).toContain('not available to this custom agent');
+  });
+
   it('is advertised to the LLM as `LoadSkill` (not `LoadSkillFrontend`)', () => {
     const names = WebAnalystAgent.tools.map((t) => t.name);
     expect(names).toContain('LoadSkill');

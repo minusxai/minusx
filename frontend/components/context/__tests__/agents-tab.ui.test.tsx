@@ -70,6 +70,7 @@ function renderTab(overrides: Partial<React.ComponentProps<typeof AgentsTabConte
     onAddAgent,
     onUpdateAgent,
     onDeleteAgent,
+    getAgentExploreHref: (agentName) => `/explore?agent=${agentName}&context=%2Forg%2Fcontext.json`,
   };
   const renderContent = (props: Partial<React.ComponentProps<typeof AgentsTabContent>> = {}) => (
     <Tabs.Root value="agents">
@@ -98,6 +99,23 @@ describe('AgentsTabContent — read view', () => {
     expect(card).toHaveTextContent('dashboards');   // available skills section
     // inherited agents render read-only
     expect(screen.getByLabelText('Inherited agent inherited_agent')).toBeInTheDocument();
+  });
+
+  it('preserves the authored display name and links the play action to Explore', () => {
+    renderTab({
+      content: {
+        ...content,
+        agents: [mkAgent({ name: 'ceo_agent', displayName: 'CEO Agent' })],
+      },
+    });
+
+    const card = screen.getByLabelText('Agent ceo_agent');
+    expect(card).toHaveTextContent('CEO Agent');
+    expect(card).toHaveTextContent('@ceo_agent');
+    expect(screen.getByLabelText('Explore with CEO Agent')).toHaveAttribute(
+      'href',
+      '/explore?agent=ceo_agent&context=%2Forg%2Fcontext.json',
+    );
   });
 
   it('caps long card instructions with an ellipsis while keeping settings visible', () => {
@@ -150,6 +168,19 @@ describe('AgentsTabContent — read view', () => {
     expect(cardText.match(/questions/g)).toHaveLength(1);
     expect(cardText).toContain('dashboards');
   });
+
+  it('shows no available or preloaded skills when both selections are empty', () => {
+    renderTab({
+      content: {
+        ...content,
+        agents: [mkAgent({ name: 'empty_agent', preloadSkills: [], includeSkills: [] })],
+      },
+    });
+
+    const card = screen.getByLabelText('Agent empty_agent');
+    expect(card).not.toHaveTextContent('Full catalog');
+    expect(card.textContent?.match(/None/g)).toHaveLength(2);
+  });
 });
 
 describe('AgentsTabContent — builder', () => {
@@ -159,7 +190,7 @@ describe('AgentsTabContent — builder', () => {
     expect(onStartAddAgent).toHaveBeenCalledTimes(1);
 
     // Step 1: Identity
-    fireEvent.change(screen.getByLabelText('Agent name'), { target: { value: 'growth_guru' } });
+    fireEvent.change(screen.getByLabelText('Agent name'), { target: { value: 'Growth Guru' } });
     fireEvent.change(screen.getByLabelText('Agent description'), { target: { value: 'Growth specialist' } });
     fireEvent.click(screen.getByLabelText('Builder next'));
 
@@ -182,6 +213,7 @@ describe('AgentsTabContent — builder', () => {
     const draft = onAddAgent.mock.calls[0][0];
     expect(draft).toMatchObject({
       name: 'growth_guru',
+      displayName: 'Growth Guru',
       description: 'Growth specialist',
       prompt: 'GROWTH_PROMPT',
       promptMode: 'replace',
@@ -201,10 +233,23 @@ describe('AgentsTabContent — builder', () => {
     expect(screen.getByLabelText('Builder next')).toBeDisabled();
   });
 
+  it('treats an empty skill selection as zero on-demand and zero preloaded', () => {
+    renderTab();
+    fireEvent.click(screen.getByLabelText('Add agent'));
+    fireEvent.change(screen.getByLabelText('Agent name'), { target: { value: 'Empty Agent' } });
+    fireEvent.click(screen.getByLabelText('Builder next'));
+    fireEvent.change(screen.getByLabelText('Agent prompt'), { target: { value: 'Stay focused.' } });
+    fireEvent.click(screen.getByLabelText('Builder next'));
+
+    expect(screen.getByText('0 on demand')).toBeInTheDocument();
+    expect(screen.getByText('0 always loaded')).toBeInTheDocument();
+    expect(screen.queryByText(/Full catalog/i)).not.toBeInTheDocument();
+  });
+
   it('prefills the builder when editing, and saves via onUpdateAgent', () => {
     const { onUpdateAgent } = renderTab();
     fireEvent.click(screen.getByLabelText('Edit agent sales_helper'));
-    expect(screen.getByLabelText('Agent name')).toHaveValue('sales_helper');
+    expect(screen.getByLabelText('Agent name')).toHaveValue('Sales Helper');
     fireEvent.click(screen.getByLabelText('Builder next'));
     expect(screen.getByLabelText('Agent prompt')).toHaveValue('SALES_PROMPT_BODY');
     fireEvent.click(screen.getByLabelText('Builder next'));
@@ -212,7 +257,7 @@ describe('AgentsTabContent — builder', () => {
     fireEvent.click(screen.getByLabelText('Save agent'));
     expect(onUpdateAgent).toHaveBeenCalledTimes(1);
     expect(onUpdateAgent.mock.calls[0][0]).toBe(0); // index of sales_helper
-    expect(onUpdateAgent.mock.calls[0][1]).toMatchObject({ name: 'sales_helper' });
+    expect(onUpdateAgent.mock.calls[0][1]).toMatchObject({ name: 'sales_helper', displayName: 'Sales Helper' });
   });
 
   it('edits Published/Draft status inside the builder without saving early', async () => {

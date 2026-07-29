@@ -163,6 +163,9 @@ describe('custom-agent turns (v3 chat routes)', () => {
     expect(sp).not.toContain('expert data analyst');         // intro gone
     expect(sp).not.toContain('### Response Guidelines');     // guidelines gone
     expect(sp).toContain('## Available Database Schema');   // dynamic sections kept
+    expect(sp).toContain('No additional skills are available for this turn.');
+    expect(sp).not.toContain('**Skill: questions**');
+    expect(sp).not.toContain('**Skill: explore**');
   });
 
   it("applies the agent's gradeOverride, but an explicit client grade wins", async () => {
