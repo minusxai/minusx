@@ -174,6 +174,13 @@ export async function fetchOrgUsage(
  * workspace on "no model configured" for the other two. The model is the
  * `minusx-auto` sentinel, which lets the gateway choose from the routing
  * headers rather than pinning anything here.
+ *
+ * `baseUrl` is pinned rather than left to `MINUSX_GATEWAY_URL`, which is a
+ * DIFFERENT variable addressing the same service's other plane and which
+ * defaults to production. The key was minted by whichever gateway
+ * `MX_GATEWAY_URL` names, so that is the only gateway that can authenticate it;
+ * inheriting the default would send a staging workspace's inference to prod and
+ * fail as an auth error a long way from its cause.
  */
 export function buildGatewayLlmConfig(apiKey: string): LlmConfig {
   const choice = { providerName: GATEWAY_PROVIDER_NAME, model: MINUSX_AUTO_MODEL };
@@ -182,6 +189,7 @@ export function buildGatewayLlmConfig(apiKey: string): LlmConfig {
       name: GATEWAY_PROVIDER_NAME,
       provider: MINUSX_PROVIDER,
       apiKey,
+      baseUrl: `${baseUrl()}/v1`,
     }],
     grades: { lite: { ...choice }, core: { ...choice }, advanced: { ...choice } },
   };

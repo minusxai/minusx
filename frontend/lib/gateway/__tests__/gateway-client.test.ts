@@ -240,4 +240,26 @@ describe('buildGatewayLlmConfig', () => {
       expect(config.grades![grade]!.model).toBe('minusx-auto');
     }
   });
+
+  it('sends inference to the SAME gateway that issued the key', async () => {
+    // Two variables address one service on two planes: MX_GATEWAY_URL is the
+    // control plane (no /v1), MINUSX_GATEWAY_URL the inference endpoint (with
+    // /v1) — and the latter defaults to PRODUCTION. Without pinning the base
+    // URL here, a staging install registers against staging and then bills its
+    // inference to prod, which is a silent cross-environment leak rather than
+    // a visible failure.
+    const { buildGatewayLlmConfig } = await loadClient({
+      ...ON, MX_GATEWAY_URL: 'https://staging-llm.minusxapp.com',
+    });
+    expect(buildGatewayLlmConfig('mxk1_abc').providers![0].baseUrl)
+      .toBe('https://staging-llm.minusxapp.com/v1');
+  });
+
+  it('carries the trailing-slash trim into the inference URL too', async () => {
+    const { buildGatewayLlmConfig } = await loadClient({
+      ...ON, MX_GATEWAY_URL: 'https://llm.minusx.ai/',
+    });
+    expect(buildGatewayLlmConfig('mxk1_abc').providers![0].baseUrl)
+      .toBe('https://llm.minusx.ai/v1');
+  });
 });
