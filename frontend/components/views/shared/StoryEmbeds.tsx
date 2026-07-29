@@ -28,7 +28,11 @@ import StoryParamControl from '@/components/views/story/StoryParamControl';
 import InlineNumber from '@/components/views/story/InlineNumber';
 import { Menu, Portal } from '@chakra-ui/react';
 import { LuEllipsis, LuExternalLink } from 'react-icons/lu';
-import { storyParamToQuestionParameter, type StoryParam } from '@/lib/data/story/story-params';
+import {
+  isStorySqlParamSource,
+  storyParamToQuestionParameter,
+  type StoryParam,
+} from '@/lib/data/story/story-params';
 import type { InlineNumberEmbed } from '@/lib/data/story/story-number';
 import type { InlineQuestionEmbed } from '@/lib/data/story/story-question';
 import type { QuestionContent } from '@/lib/types';
@@ -67,6 +71,14 @@ export type StoryQuestionEditRequest =
   | { kind: 'saved'; questionId: number; vizOverride: VizEnvelope | null; ref: StoryEmbedRef }
   | { kind: 'inline'; embed: InlineQuestionEmbed; ref: StoryEmbedRef };
 
+/** Request to edit a query-backed Param's autocomplete SQL in the story-level editor. */
+export interface StoryParamQueryEditRequest {
+  name: string;
+  query: string;
+  connection: string;
+  ref: StoryEmbedRef;
+}
+
 export interface StoryEmbedsProps {
   /** The iframe's document — portal targets live here; ark-ui floats against it. */
   doc: Document;
@@ -82,6 +94,8 @@ export interface StoryEmbedsProps {
   onEditNumber?: (req: NumberQueryEditRequest) => void;
   /** Story edit mode: opens the question-embed modal (saved / override / ephemeral). */
   onEditQuestion?: (req: StoryQuestionEditRequest) => void;
+  /** Story edit mode: opens the full SQL editor for a query-backed Param source. */
+  onEditParamQuery?: (req: StoryParamQueryEditRequest) => void;
   /** Path of the hosting story — forwarded to embeds' /api/query so guests pass the embed allowlist. */
   storyPath?: string;
   /**
@@ -163,7 +177,7 @@ export function InlineCardActionsMenu({ onEdit }: { onEdit: () => void }) {
 }
 
 export default function StoryEmbeds({
-  doc, targets, inlineTargets, numberTargets, paramTargets, readOnly, editable, paramValues, onParamValuesChange, onEditNumber, onEditQuestion, storyPath, colorMode,
+  doc, targets, inlineTargets, numberTargets, paramTargets, readOnly, editable, paramValues, onParamValuesChange, onEditNumber, onEditQuestion, onEditParamQuery, storyPath, colorMode,
 }: StoryEmbedsProps) {
   // Shared param context (reader's current values), seeded once from the story defaults. StoryEmbeds
   // remounts (with the iframe) when the story content changes, re-seeding.
@@ -176,6 +190,16 @@ export default function StoryEmbeds({
   const externalParameters = paramTargets.map(t => storyParamToQuestionParameter(t.param));
   const extParams = externalParameters.length ? externalParameters : undefined;
   const extValues = externalParameters.length ? values : undefined;
+  const paramQueryEditHandler = (target: ParamTarget, occurrence: number): (() => void) | undefined => {
+    const source = target.param.source;
+    if (!editable || !onEditParamQuery || !source || !isStorySqlParamSource(source)) return undefined;
+    return () => onEditParamQuery({
+      name: target.param.name,
+      query: source.query,
+      connection: source.connection,
+      ref: { format: 'html', occurrence },
+    });
+  };
 
   // Clear the discovery busy stamps (AgentHtml marks every emptied placeholder `data-mx-busy` so
   // the screenshot readiness wait doesn't capture the pre-hydration blank boxes). This effect runs
@@ -258,7 +282,13 @@ export default function StoryEmbeds({
             `number-${i}`,
           ))}
           {paramTargets.map((t, i) => createPortal(
-            <StoryParamControl param={t.param} value={values[t.param.name]} onChange={(v) => setParamValue(t.param.name, v)} />,
+            <StoryParamControl
+              param={t.param}
+              value={values[t.param.name]}
+              filePath={storyPath}
+              onRequestEdit={paramQueryEditHandler(t, i)}
+              onChange={(v) => setParamValue(t.param.name, v)}
+            />,
             t.el,
             `param-${i}-${t.param.name}`,
           ))}

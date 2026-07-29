@@ -4,9 +4,10 @@
 // Rendered when parameter.source.type === 'sql'. Executes the inline query and
 // shows results as a combobox dropdown.
 
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { LuTriangleAlert } from 'react-icons/lu';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/kit/tooltip';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/kit/popover';
 import type { SqlParameterSource } from '@/lib/validation/atlas-schemas';
 import { useQueryResult } from '@/lib/hooks/file-state-hooks';
 import { ROW_H, formatNumStr } from './paramInputShared';
@@ -17,16 +18,20 @@ interface InlineSqlDropdownWidgetProps {
   currentValue: string | number | undefined;
   paramName: string;
   database?: string;
+  /** Hosting file path, used by public-share query authorization. */
+  filePath?: string;
   onChange: (value: string | number) => void;
   onSubmit?: (paramName?: string, value?: string | number) => void;
+  /** Literal story-authored input styling. */
+  inputStyle?: React.CSSProperties;
 }
 
-export function InlineSqlDropdownWidget({ source, paramType, currentValue, paramName, database, onChange, onSubmit }: InlineSqlDropdownWidgetProps) {
+export function InlineSqlDropdownWidget({ source, paramType, currentValue, paramName, database, filePath, onChange, onSubmit, inputStyle }: InlineSqlDropdownWidgetProps) {
   const { data, loading, error } = useQueryResult(
     source.query,
     {},
     database ?? '',
-    { skip: !source.query }
+    { skip: !source.query, filePath }
   );
 
   // Extract distinct values from the first column
@@ -74,21 +79,11 @@ export function InlineSqlDropdownWidget({ source, paramType, currentValue, param
   const [inputDisplay, setInputDisplay] = useState(defaultDisplayValue);
   const committedRef = useRef(defaultDisplayValue);
 
-  // Dropdown open state + fixed-position anchor (position:fixed escapes the
-  // param row's overflow clipping without a portal — kit convention).
+  // The kit Popover is deliberately un-portaled and receives the story surface's
+  // foreignObject positioning fix. Keeping this in the shared widget means stories
+  // only describe the query; they never need to position or size its option menu.
   const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState({ top: 0, left: 0 });
-  const rootRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
   const listboxId = `param-sql-list-${paramName}`;
-
-  const openList = () => {
-    const el = inputRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    setPos({ top: rect.bottom + 4, left: rect.left });
-    setOpen(true);
-  };
 
   // Closing without a selection restores the last committed value (old combobox parity).
   const closeAndRestore = () => {
@@ -96,16 +91,6 @@ export function InlineSqlDropdownWidget({ source, paramType, currentValue, param
     setInputDisplay(committedRef.current);
     setFilterText('');
   };
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (rootRef.current?.contains(e.target as Node)) return;
-      closeAndRestore();
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
 
   const commit = (raw: string) => {
     committedRef.current = raw;
@@ -116,7 +101,7 @@ export function InlineSqlDropdownWidget({ source, paramType, currentValue, param
   };
 
   return (
-    <div className="flex items-center gap-1" ref={rootRef}>
+    <div className="flex items-center gap-1">
       {(error || (values !== null && values.length === 0 && !loading)) && (
         <TooltipProvider>
           <Tooltip>
@@ -131,49 +116,59 @@ export function InlineSqlDropdownWidget({ source, paramType, currentValue, param
         <div aria-hidden="true" className="size-3 shrink-0 animate-spin rounded-full border-2 border-[#16a085]/25 border-t-[#16a085]" />
       )}
 
-      <input
-        ref={inputRef}
-        role="combobox"
-        aria-expanded={open}
-        aria-controls={listboxId}
-        aria-label={`param ${paramName}`}
-        placeholder={paramType === 'number' ? '0 or select…' : 'type or select…'}
-        value={inputDisplay}
-        className="min-w-[100px] border-none bg-transparent px-2 font-mono text-xs outline-none placeholder:text-muted-foreground"
-        style={{ height: ROW_H }}
-        onClick={() => { if (!open) openList(); }}
-        onChange={(e) => {
-          setInputDisplay(e.target.value);
-          setFilterText(e.target.value);
-          if (!open) openList();
+      <Popover
+        open={open}
+        onOpenChange={(nextOpen) => {
+          if (nextOpen) setOpen(true);
+          else closeAndRestore();
         }}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape' && open) {
-            e.stopPropagation();
-            closeAndRestore();
-            return;
-          }
-          if (e.key === 'Enter' || ((e.metaKey || e.ctrlKey) && e.key === 'Enter')) {
-            e.preventDefault();
-            e.stopPropagation();
-            const raw = e.currentTarget.value;
-            commit(raw);
-            setOpen(false);
-            if (onSubmit) {
-              const final: string | number = paramType === 'number'
-                ? (parseFloat(raw) || 0)
-                : raw;
-              onSubmit(paramName, final);
-            }
-          }
-        }}
-      />
-      {open && (
-        <div
+      >
+        <PopoverTrigger asChild>
+          <input
+            role="combobox"
+            aria-expanded={open}
+            aria-controls={listboxId}
+            aria-label={`param ${paramName}`}
+            placeholder={paramType === 'number' ? '0 or select…' : 'type or select…'}
+            value={inputDisplay}
+            className="min-w-[100px] border-none bg-transparent px-2 font-mono text-xs outline-none placeholder:text-muted-foreground"
+            style={{ height: ROW_H, ...inputStyle }}
+            onChange={(e) => {
+              setInputDisplay(e.target.value);
+              setFilterText(e.target.value);
+              if (!open) setOpen(true);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape' && open) {
+                e.stopPropagation();
+                closeAndRestore();
+                return;
+              }
+              if (e.key === 'Enter' || ((e.metaKey || e.ctrlKey) && e.key === 'Enter')) {
+                e.preventDefault();
+                e.stopPropagation();
+                const raw = e.currentTarget.value;
+                commit(raw);
+                setOpen(false);
+                if (onSubmit) {
+                  const final: string | number = paramType === 'number'
+                    ? (parseFloat(raw) || 0)
+                    : raw;
+                  onSubmit(paramName, final);
+                }
+              }
+            }}
+          />
+        </PopoverTrigger>
+        <PopoverContent
           id={listboxId}
           role="listbox"
-          className="fixed z-50 max-h-[240px] min-w-[160px] overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
-          style={{ top: pos.top, left: pos.left }}
+          align="start"
+          side="bottom"
+          sideOffset={4}
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          onCloseAutoFocus={(e) => e.preventDefault()}
+          className="max-h-[min(240px,var(--radix-popover-content-available-height))] w-[var(--radix-popover-trigger-width)] min-w-[160px] overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
         >
           {loading && values === null ? (
             <div className="px-2 py-1.5 text-xs text-muted-foreground">Loading…</div>
@@ -185,7 +180,8 @@ export function InlineSqlDropdownWidget({ source, paramType, currentValue, param
                 key={item}
                 role="option"
                 aria-selected={item === inputDisplay}
-                className="cursor-pointer rounded-sm px-2 py-1.5 text-xs hover:bg-accent hover:text-accent-foreground"
+                title={item}
+                className="cursor-pointer truncate rounded-sm px-2 py-1.5 text-xs hover:bg-accent hover:text-accent-foreground"
                 // preventDefault keeps focus in the input so the click lands before any blur.
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => {
@@ -197,8 +193,8 @@ export function InlineSqlDropdownWidget({ source, paramType, currentValue, param
               </div>
             ))
           )}
-        </div>
-      )}
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }

@@ -14,7 +14,8 @@ import {
   type StorySurface, type StorySurfaceKind,
 } from '@/lib/story-surface';
 import StoryEmbeds, {
-  type ChartTarget, type InlineChartTarget, type NumberTarget, type ParamTarget, type StoryQuestionEditRequest,
+  type ChartTarget, type InlineChartTarget, type NumberTarget, type ParamTarget,
+  type StoryParamQueryEditRequest, type StoryQuestionEditRequest,
 } from '@/components/views/shared/StoryEmbeds';
 import StoryJsxBody, { type StoryJsxEditApi } from '@/components/views/shared/StoryJsxBody';
 import { STORY_FLOATING_CSS } from '@/lib/story-ui';
@@ -77,6 +78,8 @@ interface AgentHtmlProps {
   onEditNumber?: (req: NumberQueryEditRequest) => void;
   /** Request to edit a question embed (saved / override / ephemeral) in the story-level modal. */
   onEditQuestion?: (req: StoryQuestionEditRequest) => void;
+  /** Request to edit a query-backed Param's inline autocomplete SQL. */
+  onEditParamQuery?: (req: StoryParamQueryEditRequest) => void;
   /** When set, a "Interact with {agentName}" pill appears on text selection (edit mode only). */
   selectionSource?: EditWithAgentSource;
   /** Fired (debounced) with the serialized story while editing, so the caller can sync dirty state. */
@@ -95,6 +98,9 @@ interface AgentHtmlProps {
 export interface NumberQueryEdit {
   query: string;
   connection?: string;
+  /** Optional copy override when the shared editor is used for another inline query source. */
+  editorTitle?: string;
+  editorAriaSubject?: string;
   apply: (newQuery: string) => void;
 }
 
@@ -134,7 +140,7 @@ const SINGLE_VALUE_DEFAULT_H = 120;
  * document, so the main root's event delegation would never see interactions inside the iframe.
  */
 const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml(
-  { html, format, width, height, readOnly = false, fluid = false, editable = false, surface: surfaceKind = 'svg', paramValues, onParamValuesChange, onEditNumber, onEditQuestion, selectionSource, onChange, filePath, colorMode, theme, compiledCss },
+  { html, format, width, height, readOnly = false, fluid = false, editable = false, surface: surfaceKind = 'svg', paramValues, onParamValuesChange, onEditNumber, onEditQuestion, onEditParamQuery, selectionSource, onChange, filePath, colorMode, theme, compiledCss },
   ref,
 ) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -217,10 +223,11 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     // Design-system stylesheet (server-compiled Tailwind), via textContent (DOM insertion, not
     // doc.write, so no escaping concerns).
     if (compiledCss) makeStyle('data-mx-tw', compiledCss);
+    // Vendored Tooltip/Popover render un-portaled, and Radix's popper wrapper must be forced to
+    // absolute positioning (fixed is broken inside <svg><foreignObject>). Both JSX stories and
+    // legacy stories can mount live Param controls, so both surfaces need the floating fix.
+    makeStyle('data-mx-floating', STORY_FLOATING_CSS);
     if (isJsx) {
-      // Vendored Tooltip/Popover render un-portaled, and Radix's popper wrapper must be forced to
-      // absolute positioning (fixed is broken inside <svg><foreignObject>).
-      makeStyle('data-mx-floating', STORY_FLOATING_CSS);
       // Platform-provided fonts (theme registry — lib/data/story/story-fonts.ts; neutral default).
       // Live form is URL-loaded static assets; capture splices data-URIs into the parsed copy only.
       const fontCss = getStoryFontCss(theme ?? undefined);
@@ -427,6 +434,7 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
             onChange={onChange}
             onEditNumber={onEditNumber}
             onEditQuestion={onEditQuestion}
+            onEditParamQuery={onEditParamQuery}
             editApiRef={jsxEditApiRef}
           />,
           surfaceRoot,
@@ -447,11 +455,12 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
         onParamValuesChange={onParamValuesChange}
         onEditNumber={onEditNumber}
         onEditQuestion={onEditQuestion}
+        onEditParamQuery={onEditParamQuery}
         storyPath={filePath}
         colorMode={colorMode}
       />,
     );
-  }, [targets, inlineTargets, numberTargets, paramTargets, isJsx, html, readOnly, editable, paramValues, onParamValuesChange, onEditNumber, onEditQuestion, filePath, colorMode]);
+  }, [targets, inlineTargets, numberTargets, paramTargets, isJsx, html, readOnly, editable, paramValues, onParamValuesChange, onEditNumber, onEditQuestion, onEditParamQuery, filePath, colorMode]);
 
   // Keep the iframe's color-mode class in sync without rebuilding the whole document.
   useEffect(() => {
