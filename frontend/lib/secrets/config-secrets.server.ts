@@ -47,8 +47,13 @@ export async function extractConfigSecrets<T>(mode: Mode, content: T): Promise<T
     for (const seg of spec.arrayPath.split('.')) {
       node = node && typeof node === 'object' ? (node as Record<string, unknown>)[seg] : undefined;
     }
-    if (!Array.isArray(node)) continue;
-    for (const [index, element] of (node as Record<string, unknown>[]).entries()) {
+    // A spec may target an array of objects or a single object; normalise the
+    // single case to a one-element list so both share this walk.
+    const elements = Array.isArray(node)
+      ? (node as Record<string, unknown>[])
+      : (node && typeof node === 'object' ? [node as Record<string, unknown>] : []);
+    if (elements.length === 0) continue;
+    for (const [index, element] of elements.entries()) {
       if (!element || typeof element !== 'object') continue;
       // Identity-based ref key (reorder-safe); positional fallback for unnamed elements.
       const identityRaw = element[spec.identityField];

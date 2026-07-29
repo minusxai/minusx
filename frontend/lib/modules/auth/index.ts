@@ -9,6 +9,7 @@ import { hashPassword } from '@/lib/auth/password-utils';
 import workspaceTemplate from '@/lib/database/workspace-template.json';
 import { DEFAULT_STYLES } from '@/lib/branding/whitelabel';
 import { copySeedMxfoodForMode } from '@/lib/object-store';
+import { registerCompanyWithGateway } from '@/lib/gateway/gateway-register.server';
 import { seedLlmConfigFromEnv } from '@/lib/llm/llm-env-seed.server';
 import { MXFOOD_TABLES } from '@/lib/object-store/mxfood-tables';
 import { getRawConfig, saveRawConfig } from '@/lib/data/configs.server';
@@ -88,6 +89,17 @@ export class AuthModule implements IAuthModule {
     });
 
     const warnings: string[] = [];
+
+    // When MX_GATEWAY_URL + MX_GATEWAY_SHARED_SECRET are set, register this
+    // workspace with the MinusX gateway and wire it as the models provider, so
+    // it is usable without configuring one by hand. Runs BEFORE the two seeds
+    // below so an interview-supplied or env-seeded config still wins — an
+    // explicit choice should not be overwritten by the default. Best-effort:
+    // registration has already committed, so an outage leaves a working
+    // workspace rather than an unrepeatable half-registration.
+    if (!input.llm) {
+      await registerCompanyWithGateway({ email: input.adminEmail, workspaceName: input.workspaceName });
+    }
 
     // setup.sh bootstrap: an interview-provided LLM config wins over any env
     // seed — save it FIRST (extract-on-write moves keys into the secrets

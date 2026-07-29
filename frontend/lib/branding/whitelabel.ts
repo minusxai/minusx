@@ -88,6 +88,18 @@ export interface OrgConfig {
    *  user/role/company (see lib/analytics/credit-policy.ts). Replaces the
    *  CREDIT_* / CREDITS_ENABLED / ENFORCE_CREDIT_LIMITS env vars. */
   credits?: CreditsConfig;
+  /** This workspace's identity on the MinusX gateway, written once at
+   *  registration (see lib/gateway/). Absent unless the gateway is configured. */
+  gateway?: GatewayConfig;
+}
+
+/** Gateway identity for this workspace. The two ids are public and safe to log. */
+export interface GatewayConfig {
+  orgId: string;
+  keyId: string;
+  /** Manages the account (status, usage, keys) — NOT an inference credential.
+   *  A `@SECRETS/…` ref at rest. */
+  orgSecret: string;
 }
 
 /**

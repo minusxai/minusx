@@ -17,7 +17,11 @@
 import { SECRET_REF_PREFIX, isSecretRef } from './secret-refs';
 
 export interface ConfigSecretSpec {
-  /** Dotted path to an ARRAY of objects carrying secrets, e.g. 'bots' or 'llm.providers'. */
+  /**
+   * Dotted path to the secret-bearing node: either an ARRAY of objects
+   * ('bots', 'llm.providers') or a SINGLE object ('gateway'). A single object is
+   * treated as a one-element list, so both shapes share one extraction walk.
+   */
   arrayPath: string;
   /** Field on each element that uniquely names it — used to build the ref key. */
   identityField: string;
@@ -29,6 +33,10 @@ export interface ConfigSecretSpec {
 export const CONFIG_SECRET_SPECS: ConfigSecretSpec[] = [
   { arrayPath: 'bots', identityField: 'name', secretFields: ['bot_token', 'signing_secret'] },
   { arrayPath: 'llm.providers', identityField: 'name', secretFields: ['apiKey'] },
+  // Single object, not an array. This secret manages the workspace's gateway
+  // account rather than buying inference, so it must never sit raw in a
+  // document the client and the agent can both read.
+  { arrayPath: 'gateway', identityField: 'orgId', secretFields: ['orgSecret'] },
 ];
 
 /**

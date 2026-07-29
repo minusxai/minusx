@@ -11,7 +11,7 @@
  * injected per call by the plan resolver — never on the model handle.
  */
 import { buildCustomModel, type Api, type Model } from '@/orchestrator/llm';
-import { MINUSX_GATEWAY_URL } from '@/lib/constants';
+import { MX_GATEWAY_URL_PROXY } from '@/lib/config';
 import { MINUSX_PROVIDER, MX_AGENT_HEADER, MX_USE_CASE_HEADER, type LlmAgentKey, type LlmGrade } from './llm-config-types';
 
 /** Model id sentinel telling the gateway to pick the model itself. */
@@ -28,7 +28,7 @@ export const MINUSX_UNCONFIGURED_KEY = 'mx-unconfigured';
 
 export function buildMinusxModel(baseUrl?: string, modelId?: string): Model<Api> {
   return buildCustomModel({
-    baseUrl: baseUrl || MINUSX_GATEWAY_URL,
+    baseUrl: baseUrl || MX_GATEWAY_URL_PROXY,
     id: modelId || MINUSX_AUTO_MODEL,
     provider: MINUSX_PROVIDER,
     name: 'MinusX',
