@@ -94,11 +94,15 @@ The agent never edits JSON. It reads/writes **one JSX document** (the markup pro
 ```jsx
 <Param name="min_mrr" type="number" nullable={true} />          // a plain reader filter
 <Param name="city" type="text" id={1026} column="city" />       // imports type + autocomplete from Q1026
+<Param                                                       // story-local autocomplete SQL;
+  name="city" type="text"                                  // its first result column supplies options
+  query={`SELECT DISTINCT city FROM customers ORDER BY city`}
+  connection="warehouse" />
 ```
 
-On save, `markupToContent` (→ `parseStoryJsx` → `placeholdersToParamJsx`) round-trips each
-`<Param>` to a `<div data-param-*>` placeholder inside `content.story`. For questions it writes
-the `<parameters><item>…</item></parameters>` subtree directly.
+New-format stories store the JSX source directly. The legacy story codec round-trips each
+`<Param>` through a `<div data-param-*>` placeholder inside `content.story`, including inline-SQL
+sources. For questions it writes the `<parameters><item>…</item></parameters>` subtree directly.
 
 **Validation is permissive: the edit is ALWAYS applied; feedback is returned, never blocked.**
 `collectEditValidation` (in `file-state.ts`) runs on every edit and returns `validation: string[]`:
@@ -106,7 +110,7 @@ the `<parameters><item>…</item></parameters>` subtree directly.
 ```
 edit (any) ─▶ validateFileState   (Ajv schema — structural correctness)
    story  ─▶ lintStoryParams      ":city needed by Q5 but no <Param> declared" / type mismatch / declared-but-unused
-          ─▶ lintStoryParamSources "<Param id={1}> imports from question #1, which doesn't exist"   (FIX-1)
+          ─▶ lintStoryParamSources "<Param id={1}> imports from question #1, which doesn't exist" / inline SQL has no connection
    dash   ─▶ lintDashboardParams  ":min_mrr has conflicting types (number vs text) across Q1026, Q1050 — won't share one filter"  (SP5b)
 ```
 

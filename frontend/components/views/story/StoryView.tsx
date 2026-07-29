@@ -6,7 +6,7 @@ import { Box } from '@chakra-ui/react';
 import AgentHtml, { type NumberQueryEdit, type NumberQueryEditRequest } from '@/components/views/shared/AgentHtml';
 import NumberQueryEditor from '@/components/views/story/NumberQueryEditor';
 import StoryQuestionEditor from '@/components/views/story/StoryQuestionEditor';
-import type { StoryQuestionEditRequest } from '@/components/views/shared/StoryEmbeds';
+import type { StoryParamQueryEditRequest, StoryQuestionEditRequest } from '@/components/views/shared/StoryEmbeds';
 import { StoryEmptyState } from '@/components/views/shared/empty-states';
 import { StoryContent, QuestionContent } from '@/lib/types';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
@@ -17,6 +17,7 @@ import {
   updateSavedQuestionVizInJsx, updateInlineQuestionInJsx,
 } from '@/lib/data/story/story-question';
 import { updateNumberQueryInJsx } from '@/lib/data/story/story-number';
+import { updateParamQueryInHtml, updateParamQueryInJsx } from '@/lib/data/story/story-params';
 import { STORY_W } from './ScaledStoryFrame';
 import { PageMarkerDevOverlay } from './PageMarkerDevOverlay';
 
@@ -118,8 +119,9 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
   // AgentHtml/StoryJsxBody) — the onChange contract is identical either way.
   const editing = canEdit && headerEditMode;
 
-  // Inline <Number> query editing opens the full SqlEditor in a light-DOM modal (Monaco can't live
-  // in the story iframe). The story's path feeds schema/connection autocomplete.
+  // Story-local SQL editing (<Number> queries + query-backed <Param> option sources) opens the
+  // full SqlEditor in a light-DOM modal (Monaco can't live in the story iframe). The story's path
+  // feeds schema/connection autocomplete.
   const [numberEdit, setNumberEdit] = useState<NumberQueryEdit | null>(null);
   // Jsx-path number requests carry an AST path instead of an apply closure (the legacy path's
   // apply writes the placeholder's DOM attribute) — normalize by binding the source write-back
@@ -135,6 +137,22 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
       apply: (newQuery) => {
         if (numericId === undefined) return;
         applyStoryHtmlEdit({ fileId: numericId, story: updateNumberQueryInJsx(content.story ?? '', req.astPath, newQuery) });
+      },
+    });
+  }, [numericId, content.story]);
+  const onEditParamQuery = useCallback((req: StoryParamQueryEditRequest) => {
+    setNumberEdit({
+      query: req.query,
+      connection: req.connection,
+      editorTitle: `Edit ${req.name} options query`,
+      editorAriaSubject: 'parameter options query',
+      apply: (newQuery) => {
+        if (numericId === undefined) return;
+        const story = content.story ?? '';
+        const next = req.ref.format === 'jsx'
+          ? updateParamQueryInJsx(story, req.ref.astPath, newQuery)
+          : updateParamQueryInHtml(story, req.ref.occurrence, newQuery);
+        applyStoryHtmlEdit({ fileId: numericId, story: next });
       },
     });
   }, [numericId, content.story]);
@@ -245,6 +263,7 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
             paramValues={content.parameterValues ?? undefined}
             onEditNumber={onEditNumber}
             onEditQuestion={editing ? setQuestionEdit : undefined}
+            onEditParamQuery={editing ? onEditParamQuery : undefined}
             onChange={onStoryChange}
             selectionSource={selectionSource}
           />
