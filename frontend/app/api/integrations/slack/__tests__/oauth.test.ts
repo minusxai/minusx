@@ -376,7 +376,7 @@ describe('oauth-start — host header handling', () => {
     return JSON.parse(Buffer.from(state.slice(0, lastDot), 'base64url').toString());
   }
 
-  it('sets returnUrl to the originating subdomain', async () => {
+  it('sets returnUrl to the originating host', async () => {
     const res = await oauthStartHandler(makeStartRequest('acme.minusx.app'));
     expect(decodeState(res.headers.get('location')!).returnUrl).toBe('https://acme.minusx.app/settings?tab=integrations');
   });

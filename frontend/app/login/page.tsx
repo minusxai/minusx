@@ -7,7 +7,7 @@ import { UserDB } from '@/lib/database/user-db';
 import { MD_LOGIN, MD_REGISTER, LANDING_HTML, ENABLE_ORG_CREATION, AUTH_URL } from '@/lib/config';
 
 export default async function LoginPage() {
-  // Only show landing text on the root domain, not on company subdomains
+  // Only show landing text on the canonical host, not when reached by another one
   const hdrs = await headers();
   const host = hdrs.get('host') || '';
   const rootHost = new URL(AUTH_URL).host;
