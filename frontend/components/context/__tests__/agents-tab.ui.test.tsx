@@ -217,6 +217,20 @@ describe('AgentsTabContent — builder', () => {
     expect(screen.getByLabelText('Agent prompt')).toHaveValue('SALES_PROMPT_BODY');
   });
 
+  it('labels skill provenance and filters the skill card catalog', () => {
+    renderTab();
+    fireEvent.click(screen.getByLabelText('Edit agent sales_helper'));
+    fireEvent.click(screen.getByLabelText('Builder step Skills'));
+
+    expect(screen.getByLabelText('Skill kb_pricing')).toHaveTextContent('User skill');
+    expect(screen.getByLabelText('Skill dashboards')).toHaveTextContent('System skill');
+
+    fireEvent.change(screen.getByLabelText('Search skills'), { target: { value: 'alerts' } });
+    expect(screen.getByLabelText('Skill alerts')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Skill dashboards')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Skill kb_pricing')).not.toBeInTheDocument();
+  });
+
   it('blocks jumping ahead while prerequisites are missing (new agent)', () => {
     renderTab();
     fireEvent.click(screen.getByLabelText('Add agent'));

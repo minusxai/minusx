@@ -11,9 +11,10 @@
  */
 
 import { useState } from 'react';
-import { Box, Button, createListCollection, HStack, Input, Text, Textarea, VStack } from '@chakra-ui/react';
+import { Badge, Box, Button, createListCollection, HStack, Icon, Input, Portal, SimpleGrid, Text, Textarea, VStack } from '@chakra-ui/react';
+import { LuBookOpen, LuCheck, LuCheckCheck, LuLibrary, LuSearch, LuZap } from 'react-icons/lu';
 import { AgentReadView, type AgentDraft } from './AgentReadView';
-import { SelectContent, SelectItem, SelectRoot, SelectTrigger, SelectValueText } from '@/components/ui/select';
+import { SelectContent, SelectItem, SelectPositioner, SelectRoot, SelectTrigger, SelectValueText } from '@/components/ui/select';
 
 const STEPS = ['identity', 'prompt', 'skills', 'review'] as const;
 type Step = (typeof STEPS)[number];
@@ -54,6 +55,7 @@ const GRADE_OPTIONS = createListCollection({
 export function AgentBuilder({ initial, systemSkills, userSkills, onSave, onCancel }: AgentBuilderProps) {
   const [step, setStep] = useState<Step>('identity');
   const [draft, setDraft] = useState<AgentDraft>(initial ?? EMPTY_DRAFT);
+  const [skillQuery, setSkillQuery] = useState('');
   const stepIndex = STEPS.indexOf(step);
 
   const patch = (updates: Partial<AgentDraft>) => setDraft((d) => ({ ...d, ...updates }));
@@ -79,6 +81,14 @@ export function AgentBuilder({ initial, systemSkills, userSkills, onSave, onCanc
     ...userSkills.map((s) => ({ ...s, source: 'user' as const })),
     ...systemSkills.map((s) => ({ ...s, source: 'system' as const })),
   ];
+  const normalizedSkillQuery = skillQuery.trim().toLowerCase();
+  const filteredSkills = normalizedSkillQuery
+    ? allSkills.filter((skill) => (
+      skill.name.toLowerCase().includes(normalizedSkillQuery)
+      || skill.description.toLowerCase().includes(normalizedSkillQuery)
+      || skill.source.includes(normalizedSkillQuery)
+    ))
+    : allSkills;
 
   const label = (text: string) => (
     <Text fontSize="sm" fontWeight="600" color="fg.default" mb={1.5}>{text}</Text>
@@ -200,13 +210,17 @@ export function AgentBuilder({ initial, systemSkills, userSkills, onSave, onCanc
                 >
                   <SelectValueText placeholder="Workspace default" />
                 </SelectTrigger>
-                <SelectContent fontFamily="mono">
-                  {GRADE_OPTIONS.items.map((item) => (
-                    <SelectItem key={item.value} item={item.value}>
-                      {item.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
+                <Portal>
+                  <SelectPositioner>
+                    <SelectContent fontFamily="mono">
+                      {GRADE_OPTIONS.items.map((item) => (
+                        <SelectItem key={item.value} item={item.value}>
+                          {item.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </SelectPositioner>
+                </Portal>
               </SelectRoot>
               {hint('Optional default — a grade the user picks in chat always wins.')}
             </Box>
@@ -215,42 +229,167 @@ export function AgentBuilder({ initial, systemSkills, userSkills, onSave, onCanc
       )}
 
       {step === 'skills' && (
-        <VStack align="stretch" gap={3}>
-          <Text fontSize="sm" color="fg.muted">
-            <b>Preload</b> inlines a skill&apos;s full content into the agent&apos;s prompt every turn.{' '}
-            <b>Available</b> lets the agent load it on demand — leave every &quot;Available&quot; box
-            unchecked for the full catalog.
-          </Text>
-          {allSkills.map((skill) => (
-            <HStack key={`${skill.source}:${skill.name}`} justify="space-between" p={3} border="1px solid" borderColor="border.muted" borderRadius="md">
-              <Box minW={0}>
-                <Text fontSize="sm" fontFamily="mono" fontWeight="600" truncate>{skill.name}</Text>
-                <Text fontSize="xs" color="fg.muted" truncate>{skill.description}</Text>
-              </Box>
-              <HStack gap={2} flexShrink={0}>
-                <Button
-                  aria-label={`Preload skill ${skill.name}`}
-                  aria-pressed={draft.preloadSkills.includes(skill.name)}
-                  size="sm"
-                  variant={draft.preloadSkills.includes(skill.name) ? 'solid' : 'outline'}
-                  colorPalette="teal"
-                  onClick={() => toggleName('preloadSkills', skill.name)}
-                >
-                  Preload
-                </Button>
-                <Button
-                  aria-label={`Include skill ${skill.name}`}
-                  aria-pressed={draft.includeSkills.includes(skill.name)}
-                  size="sm"
-                  variant={draft.includeSkills.includes(skill.name) ? 'solid' : 'outline'}
-                  colorPalette="teal"
-                  onClick={() => toggleName('includeSkills', skill.name)}
-                >
-                  Available
-                </Button>
-              </HStack>
+        <VStack align="stretch" gap={5}>
+          <HStack justify="space-between" align="start" gap={4} flexWrap="wrap">
+            <Box>
+              <Text fontSize="md" fontWeight="700">Skill access</Text>
+              <Text fontSize="sm" color="fg.muted" mt={1}>
+                Choose what the agent can fetch when needed and what it should know on every turn.
+              </Text>
+            </Box>
+            <HStack gap={2} flexWrap="wrap">
+              <Badge size="sm" variant="subtle" colorPalette="gray" borderRadius="full" px={2.5} py={1}>
+                <Icon as={LuLibrary} boxSize={3} mr={1} />
+                {draft.includeSkills.length === 0
+                  ? 'Full catalog on demand'
+                  : `${draft.includeSkills.length} on demand`}
+              </Badge>
+              <Badge size="sm" variant="subtle" colorPalette="teal" borderRadius="full" px={2.5} py={1}>
+                <Icon as={LuZap} boxSize={3} mr={1} />
+                {draft.preloadSkills.length} always loaded
+              </Badge>
             </HStack>
-          ))}
+          </HStack>
+
+          <SimpleGrid columns={{ base: 1, md: 2 }} gap={3}>
+            <HStack align="start" gap={3} p={3} borderTop="1px solid" borderColor="border.muted">
+              <Box
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
+                w="30px"
+                h="30px"
+                flexShrink={0}
+                borderRadius="md"
+                bg="bg.muted"
+                color="fg.muted"
+              >
+                <Icon as={LuCheck} boxSize={4} />
+              </Box>
+              <Box>
+                <Text fontSize="sm" fontWeight="700">On demand</Text>
+                <Text fontSize="xs" color="fg.muted" mt={0.5}>
+                  The agent fetches the skill only when useful. Selecting one narrows the full catalog.
+                </Text>
+              </Box>
+            </HStack>
+            <HStack align="start" gap={3} p={3} borderTop="1px solid" borderColor="border.muted">
+              <Box
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
+                w="30px"
+                h="30px"
+                flexShrink={0}
+                borderRadius="md"
+                bg="accent.teal/12"
+                color="accent.teal"
+              >
+                <Icon as={LuCheckCheck} boxSize={4} />
+              </Box>
+              <Box>
+                <Text fontSize="sm" fontWeight="700">Always loaded</Text>
+                <Text fontSize="xs" color="fg.muted" mt={0.5}>
+                  The full skill is added to every prompt. Use this only for essential instructions.
+                </Text>
+              </Box>
+            </HStack>
+          </SimpleGrid>
+
+          <Box position="relative">
+            <Icon
+              as={LuSearch}
+              position="absolute"
+              left={3}
+              top="50%"
+              transform="translateY(-50%)"
+              boxSize={4}
+              color="fg.subtle"
+              pointerEvents="none"
+            />
+            <Input
+              aria-label="Search skills"
+              value={skillQuery}
+              onChange={(event) => setSkillQuery(event.target.value)}
+              placeholder="Search skills by name, description, or source…"
+              pl={9}
+              bg="bg.panel"
+              fontFamily="mono"
+            />
+          </Box>
+
+          <SimpleGrid columns={{ base: 1, xl: 2 }} gap={3}>
+            {filteredSkills.map((skill) => {
+              const isOnDemand = draft.includeSkills.includes(skill.name);
+              const isAlwaysLoaded = draft.preloadSkills.includes(skill.name);
+              const isSelected = isOnDemand || isAlwaysLoaded;
+              return (
+                <Box
+                  key={`${skill.source}:${skill.name}`}
+                  aria-label={`Skill ${skill.name}`}
+                  display="flex"
+                  flexDirection="column"
+                  minH="158px"
+                  p={4}
+                  border="1px solid"
+                  borderColor={isSelected ? 'accent.teal/35' : 'border.muted'}
+                  borderRadius="lg"
+                  bg={isSelected ? 'accent.teal/5' : 'bg.panel'}
+                  transition="border-color 160ms ease, background 160ms ease, transform 160ms ease"
+                  _hover={{ borderColor: 'accent.teal/35', transform: 'translateY(-1px)' }}
+                >
+                  <HStack justify="space-between" align="start" gap={3}>
+                    <Box minW={0}>
+                      <Text fontSize="sm" fontFamily="mono" fontWeight="700" truncate>{skill.name}</Text>
+                      <Text fontSize="xs" color="fg.muted" mt={1} lineClamp={2}>{skill.description}</Text>
+                    </Box>
+                    <Badge
+                      size="xs"
+                      flexShrink={0}
+                      variant={skill.source === 'user' ? 'subtle' : 'outline'}
+                      colorPalette={skill.source === 'user' ? 'teal' : 'gray'}
+                    >
+                      {skill.source === 'user' ? 'User skill' : 'System skill'}
+                    </Badge>
+                  </HStack>
+
+                  <HStack gap={2} mt="auto" pt={4}>
+                    <Button
+                      aria-label={`Include skill ${skill.name}`}
+                      aria-pressed={isOnDemand}
+                      flex="1"
+                      size="sm"
+                      variant={isOnDemand ? 'subtle' : 'outline'}
+                      colorPalette="teal"
+                      onClick={() => toggleName('includeSkills', skill.name)}
+                    >
+                      <Icon as={LuCheck} boxSize={3.5} />
+                      On demand
+                    </Button>
+                    <Button
+                      aria-label={`Preload skill ${skill.name}`}
+                      aria-pressed={isAlwaysLoaded}
+                      flex="1"
+                      size="sm"
+                      variant={isAlwaysLoaded ? 'solid' : 'outline'}
+                      colorPalette="teal"
+                      onClick={() => toggleName('preloadSkills', skill.name)}
+                    >
+                      <Icon as={LuCheckCheck} boxSize={3.5} />
+                      Always loaded
+                    </Button>
+                  </HStack>
+                </Box>
+              );
+            })}
+          </SimpleGrid>
+          {allSkills.length > 0 && filteredSkills.length === 0 && (
+            <Box py={10} textAlign="center" border="1px dashed" borderColor="border.muted" borderRadius="lg">
+              <Icon as={LuBookOpen} boxSize={5} color="fg.subtle" mb={2} />
+              <Text fontSize="sm" fontWeight="600">No matching skills</Text>
+              <Text fontSize="xs" color="fg.muted" mt={1}>Try a different name, description, or source.</Text>
+            </Box>
+          )}
           {allSkills.length === 0 && (
             <Text fontSize="sm" color="fg.muted">No skills available yet — the agent gets the full catalog.</Text>
           )}

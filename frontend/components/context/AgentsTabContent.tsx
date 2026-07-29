@@ -120,8 +120,7 @@ export function AgentsTabContent({
                       borderColor="border.default"
                       borderRadius="xl"
                       bg={agent.enabled ? 'bg.panel' : 'bg.subtle'}
-                      p={{ base: 4, md: 5 }}
-                      minH="350px"
+                      p={4}
                       boxShadow="sm"
                       transition="transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease"
                       _hover={{
@@ -135,19 +134,19 @@ export function AgentsTabContent({
                         compact
                         muted={!agent.enabled}
                         headerEnd={(
-                          <VStack align="end" gap={2}>
+                          <VStack align="end" gap={1}>
                             {canManageAgents ? (
                               <Box
                                 order={2}
-                                px={2.5}
-                                py={1.5}
+                                px={2}
+                                py={1}
                                 border="1px solid"
                                 borderColor={agent.enabled ? 'accent.teal/30' : 'border.default'}
                                 borderRadius="full"
                                 bg={agent.enabled ? 'accent.teal/12' : 'fg.subtle/10'}
                               >
                                 <Switch.Root
-                                  size="sm"
+                                  size="xs"
                                   colorPalette="teal"
                                   checked={agent.enabled}
                                   onCheckedChange={(e) => onUpdateAgent(index, { enabled: e.checked })}
@@ -156,7 +155,7 @@ export function AgentsTabContent({
                                   <Switch.Control>
                                     <Switch.Thumb />
                                   </Switch.Control>
-                                  <Switch.Label fontSize="xs" fontWeight="700" color={agent.enabled ? 'accent.teal' : 'fg.muted'}>
+                                  <Switch.Label fontSize="2xs" fontWeight="700" color={agent.enabled ? 'accent.teal' : 'fg.muted'}>
                                     {agent.enabled ? 'Published' : 'Draft'}
                                   </Switch.Label>
                                 </Switch.Root>
@@ -164,40 +163,54 @@ export function AgentsTabContent({
                             ) : (
                               <Badge
                                 order={2}
-                                size="sm"
+                                size="xs"
                                 variant="plain"
                                 border="1px solid"
                                 borderColor={agent.enabled ? 'accent.teal/20' : 'border.default'}
                                 bg={agent.enabled ? 'accent.teal/16' : 'fg.subtle/10'}
                                 color={agent.enabled ? 'accent.teal' : 'fg.muted'}
                                 borderRadius="full"
-                                px={2.5}
+                                px={2}
                               >
                                 {agent.enabled ? 'Published' : 'Draft'}
                               </Badge>
                             )}
                             {canManageAgents && (
-                              <HStack order={1} gap={1}>
+                              <HStack
+                                order={1}
+                                gap={0}
+                                p={0.5}
+                                borderRadius="full"
+                                bg="bg.muted"
+                              >
                                 <Button
                                   aria-label={`Edit agent ${agent.name}`}
                                   size="xs"
                                   variant="ghost"
                                   borderRadius="full"
+                                  minW="26px"
+                                  w="26px"
+                                  h="26px"
+                                  p={0}
                                   color="fg.muted"
                                   _hover={{ color: 'accent.teal', bg: 'accent.teal/10' }}
                                   onClick={() => setBuilder({ mode: 'edit', index })}
                                 >
-                                  <Icon as={LuPencil} boxSize={3.5} />
+                                  <Icon as={LuPencil} boxSize={3} />
                                 </Button>
                                 <Button
                                   aria-label={`Delete agent ${agent.name}`}
                                   size="xs"
                                   variant="ghost"
                                   borderRadius="full"
+                                  minW="26px"
+                                  w="26px"
+                                  h="26px"
+                                  p={0}
                                   colorPalette="red"
                                   onClick={() => onDeleteAgent(index)}
                                 >
-                                  <Icon as={LuTrash2} boxSize={3.5} />
+                                  <Icon as={LuTrash2} boxSize={3} />
                                 </Button>
                               </HStack>
                             )}

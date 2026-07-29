@@ -59,7 +59,15 @@ function SkillPills({
 }) {
   if (skills.length === 0) {
     return (
-      <Badge size="sm" variant="subtle" colorPalette="gray" px={2.5} py={1} borderRadius="full">
+      <Badge
+        size={compact ? 'xs' : 'sm'}
+        variant="subtle"
+        colorPalette="gray"
+        px={compact ? 2 : 2.5}
+        py={compact ? 0.5 : 1}
+        borderRadius="full"
+        w="fit-content"
+      >
         {catalog && <Icon as={LuLibrary} boxSize={3} mr={1} />}
         {emptyLabel}
       </Badge>
@@ -79,14 +87,16 @@ function SkillPills({
       {visibleSkills.map((skill) => (
         <Badge
           key={skill}
-          size="sm"
+          size={compact ? 'xs' : 'sm'}
           variant="subtle"
           colorPalette={muted ? 'gray' : 'teal'}
-          px={2.5}
-          py={1}
+          px={compact ? 2 : 2.5}
+          py={compact ? 0.5 : 1}
           borderRadius="full"
           fontFamily="mono"
           fontWeight="600"
+          w="fit-content"
+          justifySelf="start"
           maxW="100%"
           overflow="hidden"
           textOverflow="ellipsis"
@@ -97,14 +107,16 @@ function SkillPills({
       ))}
       {hiddenCount > 0 && (
         <Badge
-          size="sm"
+          size={compact ? 'xs' : 'sm'}
           variant="outline"
           colorPalette="gray"
-          px={2.5}
-          py={1}
+          px={compact ? 2 : 2.5}
+          py={compact ? 0.5 : 1}
           borderRadius="full"
           fontFamily="mono"
           fontWeight="600"
+          w="fit-content"
+          justifySelf="start"
           whiteSpace="nowrap"
         >
           +{hiddenCount} more
@@ -121,19 +133,19 @@ export function AgentReadView({ agent, headerEnd, compact = false, muted = false
     : instructions;
 
   return (
-    <VStack align="stretch" gap={5} h="100%">
-      <HStack align="start" justify="space-between" gap={4} flexWrap="wrap">
-        <HStack align="start" gap={4} minW={0} flex="1">
+    <VStack align="stretch" gap={compact ? 4 : 5} h="100%">
+      <HStack align="start" justify="space-between" gap={compact ? 3 : 4} flexWrap="wrap">
+        <HStack align="start" gap={compact ? 3 : 4} minW={0} flex="1">
           <Box
             aria-hidden="true"
             position="relative"
             display="flex"
             alignItems="center"
             justifyContent="center"
-            w="72px"
-            h="72px"
+            w={compact ? '60px' : '72px'}
+            h={compact ? '60px' : '72px'}
             flexShrink={0}
-            borderRadius="22px 22px 22px 8px"
+            borderRadius={compact ? '18px 18px 18px 7px' : '22px 22px 22px 8px'}
             border="1px solid"
             borderColor={muted ? 'border.default' : 'accent.teal/30'}
             bg={muted ? 'bg.muted' : 'accent.teal/12'}
@@ -142,7 +154,7 @@ export function AgentReadView({ agent, headerEnd, compact = false, muted = false
             transition="transform 180ms ease"
             _groupHover={{ transform: 'translateY(-2px) scale(1.02)' }}
           >
-            <Text fontSize="2xl" lineHeight="1" fontWeight="800" letterSpacing="-0.04em">
+            <Text fontSize={compact ? 'xl' : '2xl'} lineHeight="1" fontWeight="800" letterSpacing="-0.04em">
               {monogram(agent.name)}
             </Text>
             <Box
@@ -152,27 +164,27 @@ export function AgentReadView({ agent, headerEnd, compact = false, muted = false
               display="flex"
               alignItems="center"
               justifyContent="center"
-              w="24px"
-              h="24px"
+              w={compact ? '20px' : '24px'}
+              h={compact ? '20px' : '24px'}
               borderRadius="full"
               bg={muted ? 'fg.subtle' : 'accent.teal'}
               color="white"
-              border="3px solid"
+              border={compact ? '2px solid' : '3px solid'}
               borderColor={muted ? 'bg.subtle' : 'bg.panel'}
             >
-              <Icon as={LuBot} boxSize={3} />
+              <Icon as={LuBot} boxSize={compact ? 2.5 : 3} />
             </Box>
           </Box>
 
           <Box minW={0} pt={0.5}>
-            <Text fontSize="xl" lineHeight="1.15" fontWeight="750" letterSpacing="-0.02em">
+            <Text fontSize={compact ? 'lg' : 'xl'} lineHeight="1.15" fontWeight="750" letterSpacing="-0.02em">
               {displayName(agent.name) || 'Untitled agent'}
             </Text>
             <Text fontSize="xs" fontFamily="mono" color="fg.subtle" mt={1}>
               @{agent.name || 'untitled'}
             </Text>
             {agent.description && (
-              <Text fontSize="sm" color="fg.muted" mt={2} lineClamp={2}>{agent.description}</Text>
+              <Text fontSize="sm" color="fg.muted" mt={compact ? 1.5 : 2} lineClamp={2}>{agent.description}</Text>
             )}
           </Box>
         </HStack>
@@ -180,8 +192,8 @@ export function AgentReadView({ agent, headerEnd, compact = false, muted = false
         {headerEnd && <Box flexShrink={0}>{headerEnd}</Box>}
       </HStack>
 
-      <Box borderTop="1px solid" borderColor="border.muted" pt={4}>
-        <HStack gap={1.5} mb={3} color="fg.muted">
+      <Box borderTop="1px solid" borderColor="border.muted" pt={compact ? 3 : 4}>
+        <HStack gap={1.5} mb={compact ? 2 : 3} color="fg.muted">
           <Icon as={LuQuote} boxSize={3.5} />
           <Text fontSize="2xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.12em">
             Instructions
@@ -189,7 +201,7 @@ export function AgentReadView({ agent, headerEnd, compact = false, muted = false
         </HStack>
         <Text
           fontSize="sm"
-          lineHeight="1.65"
+          lineHeight={compact ? '1.5' : '1.65'}
           whiteSpace="pre-wrap"
           color="fg.default"
           w="100%"
@@ -199,7 +211,7 @@ export function AgentReadView({ agent, headerEnd, compact = false, muted = false
       </Box>
 
       <Box>
-        <HStack gap={3} mb={4}>
+        <HStack gap={3} mb={compact ? 3 : 4}>
           <Text fontSize="2xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.12em" color="fg.muted">
             Settings
           </Text>
@@ -208,7 +220,7 @@ export function AgentReadView({ agent, headerEnd, compact = false, muted = false
         <Box
           display="grid"
           gridTemplateColumns={{ base: '1fr', md: 'repeat(2, minmax(0, 1fr))' }}
-          gap={5}
+          gap={compact ? 4 : 5}
         >
           <Box minW={0}>
             <Text fontSize="2xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.1em" color="fg.subtle" mb={1.5}>
@@ -240,7 +252,7 @@ export function AgentReadView({ agent, headerEnd, compact = false, muted = false
       </Box>
 
       <Box mt="auto">
-        <HStack gap={3} mb={4}>
+        <HStack gap={3} mb={compact ? 3 : 4}>
           <Text fontSize="2xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.12em" color="fg.muted">
             Skills
           </Text>
@@ -249,7 +261,7 @@ export function AgentReadView({ agent, headerEnd, compact = false, muted = false
         <Box
           display="grid"
           gridTemplateColumns={{ base: '1fr', md: 'repeat(2, minmax(0, 1fr))' }}
-          gap={5}
+          gap={compact ? 4 : 5}
         >
           <Box minW={0}>
             <HStack gap={1.5} mb={2} color="fg.muted">
