@@ -11,6 +11,15 @@
  * coarser level ahead of `mode` changes no call site at all.
  */
 
+/**
+ * Request header carrying the sealed namespace from middleware to route handlers.
+ *
+ * Named here rather than in each consumer so the two ends cannot disagree — a mismatch
+ * would present as "no namespace" on every request, which reads like a configuration
+ * problem rather than a typo.
+ */
+export const NAMESPACE_HEADER = 'x-namespace-context';
+
 /** Separator for every level. `/` keeps object-store keys in their natural path shape. */
 export const NAMESPACE_SEPARATOR = '/';
 

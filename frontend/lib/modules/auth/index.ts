@@ -31,7 +31,26 @@ function escapeForJson(s: string): string {
  */
 export class AuthModule implements IAuthModule {
   async handleRequest(_req: NextRequest): Promise<{ context: RequestContext; response?: NextResponse }> {
-    throw new Error('handleRequest() — not yet wired into middleware');
+    return { context: await this.getRequestContext() };
+  }
+
+  /**
+   * Re-establishes the current namespace for work that outlives the request — a
+   * detached chat turn, an after() callback.
+   *
+   * Captured while the request is still alive (the namespace is read from the request
+   * here), then re-entered around the work. Derived from the namespace module, so a
+   * deployment that isolates workspaces needs no override.
+   */
+  async getContextRunner(): Promise<(fn: () => Promise<unknown>) => Promise<unknown>> {
+    const ns = getModules().namespace;
+    const namespace = await ns.isolation().catch(() => null);
+    return namespace == null ? (fn) => fn() : (fn) => ns.with(namespace, fn);
+  }
+
+  /** The namespace this token belongs to, embedded so it survives into later requests. */
+  async getExtraTokenPayload(): Promise<Record<string, unknown>> {
+    return { namespace: await getModules().namespace.isolation().catch(() => undefined) };
   }
 
   async getUserKey(user: { mode: string }): Promise<string> {

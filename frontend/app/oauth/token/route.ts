@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
       return oauthError('invalid_grant', 'Invalid, expired, or already-used authorization code');
     }
 
-    const extra = await getModules().auth.getExtraTokenPayload?.(result.userId, result.scope) ?? {};
+    const extra = await getModules().auth.getExtraTokenPayload?.() ?? {};
     const tokenPair = await OAuthTokenDB.create(result.userId, result.scope, extra);
     const refreshToken = await OAuthRefreshDB.create(result.userId, result.scope);
 
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
       return oauthError('invalid_grant', 'Invalid or expired refresh token');
     }
 
-    const extra = await getModules().auth.getExtraTokenPayload?.(result.userId, result.scope) ?? {};
+    const extra = await getModules().auth.getExtraTokenPayload?.() ?? {};
     const tokenPair = await OAuthTokenDB.create(result.userId, result.scope, extra);
     // Issue a new refresh token (rotation — old one is already consumed)
     const newRefreshToken = await OAuthRefreshDB.create(result.userId, result.scope);

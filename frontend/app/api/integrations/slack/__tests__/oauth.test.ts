@@ -7,7 +7,7 @@ import type { Mock } from 'vitest';
  *   - oauth-start      — admin-gated; mints the HMAC-signed state.
  *   - oauth-callback   — lands on the root domain (Slack's fixed redirect_uri);
  *                        a thin HMAC-verifying forwarder. No DB writes. Redirects
- *                        to the tenant's finish URL (from the auth module).
+ *                        to the tenant's finish URL (from the namespace module).
  *   - oauth-callback-finish — runs on the tenant's host (auth-gated), re-verifies
  *                        the state + the logged-in admin, then exchanges the code
  *                        and writes the bot config in tenant context.
@@ -59,11 +59,11 @@ vi.mock('@/lib/http/with-auth', () => ({
     handler(request, mockUser.value),
 }));
 
-// The root callback asks the auth module where to finalize the install. OSS returns
+// The root callback asks the namespace module where to finalize the install. OSS returns
 // nothing (finish on same host); proprietary returns the tenant subdomain URL.
 const { getFinishUrlMock } = vi.hoisted(() => ({ getFinishUrlMock: vi.fn() }));
 vi.mock('@/lib/modules/registry', () => ({
-  getModules: () => ({ auth: { getSlackInstallFinishUrl: getFinishUrlMock } }),
+  getModules: () => ({ namespace: { installFinishUrl: getFinishUrlMock } }),
 }));
 
 // Must be after vi.mock calls
@@ -194,14 +194,14 @@ describe('oauth-callback — forwarding', () => {
     expect(upsertSlackBotConfig).not.toHaveBeenCalled();
   });
 
-  it('defaults the finish host to the root domain when the auth module returns nothing', async () => {
+  it('defaults the finish host to the root domain when the namespace module returns nothing', async () => {
     getFinishUrlMock.mockReturnValue(null);
     const state = makeState();
     const res = await callbackHandler(makeCallbackRequest({ code: 'c', state }));
     expect(new URL(res.headers.get('location')!).host).toBe('minusx.app');
   });
 
-  it('forwards to the tenant subdomain host supplied by the auth module', async () => {
+  it('forwards to the tenant subdomain host supplied by the namespace module', async () => {
     getFinishUrlMock.mockReturnValue('https://acme.minusx.app/api/integrations/slack/oauth-callback-finish');
     const state = makeState();
     const res = await callbackHandler(makeCallbackRequest({ code: 'c', state }));

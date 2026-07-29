@@ -1,7 +1,8 @@
 import { DEFAULT_ISOLATION } from '@/lib/namespace/types';
 import { getDataVersion } from '@/lib/database/config-store';
 import type { NextRequest } from 'next/server';
-import type { ExternalIdKind, INamespaceModule } from '../types';
+import type { ExternalIdKind, INamespaceModule, RegisterInput, RegisterResult } from '../types';
+import { AuthModule } from '@/lib/modules/auth';
 
 /**
  * Open source Namespace Module.
@@ -34,6 +35,16 @@ export class NamespaceModule implements INamespaceModule {
   /** One workspace, so the fleet minimum is just its own version. */
   async minDataVersion(): Promise<number> {
     return getDataVersion();
+  }
+
+  /** One workspace — provisioning is the ordinary first-run registration. */
+  async provision(input: RegisterInput): Promise<RegisterResult> {
+    return new AuthModule().register(input);
+  }
+
+  /** One host, so the install finishes where it arrived. */
+  installFinishUrl(_returnUrl: string): string | null {
+    return null;
   }
 
   async bindExternalId(_kind: ExternalIdKind, _externalId: string): Promise<void> {}

@@ -85,7 +85,7 @@ export async function GET(request: NextRequest) {
   // returns nothing, the install finishes on the same host. The route itself only
   // verifies the signed state and forwards.
   const finishBase =
-    getModules().auth.getSlackInstallFinishUrl?.(payload.returnUrl) ??
+    getModules().namespace.installFinishUrl(payload.returnUrl) ??
     `${AUTH_URL}/api/integrations/slack/oauth-callback-finish`;
   const finishUrl = new URL(finishBase);
   finishUrl.searchParams.set('code', code);

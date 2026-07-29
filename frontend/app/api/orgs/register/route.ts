@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
       return ApiErrors.validationError('connection requires name, type, and config');
     }
 
-    const result = await getModules().auth.register({
+    const result = await getModules().namespace.provision({
       workspaceName: body.workspaceName,
       adminName: body.adminName,
       adminEmail: body.adminEmail,

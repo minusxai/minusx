@@ -78,9 +78,6 @@ export interface IAuthModule {
    * so that two users can never observe each other's cached results.
    */
   getUserKey(user: { mode: string }): Promise<string>;
-  /** Returns true if request context was established (or no auth module active), false if request should be dropped. */
-  addHeaders(req: NextRequest, headers: Headers, hints?: Record<string, string>): Promise<boolean>;
-  register(input: RegisterInput): Promise<RegisterResult>;
   /** Auth-factory hooks consulted at login/refresh time. OSS: not implemented. */
   getAuthHooks?(): Partial<AuthConfigOptions>;
   /**
@@ -90,15 +87,8 @@ export interface IAuthModule {
    * the request is still active, then used to wrap the background work.
    */
   getContextRunner?(): Promise<(fn: () => Promise<unknown>) => Promise<unknown>>;
-  /** Extra fields to embed in OAuth access token JWT. OSS: returns {}. */
-  getExtraTokenPayload?(userId: number, scope: string | null): Promise<Record<string, unknown>>;
-  /**
-   * Which host should finalize the Slack OAuth install. Slack's redirect_uri is fixed
-   * to the root domain, so the callback may land on a host where the user's session
-   * doesn't apply; returning a finish URL lets a deployment route the finish step to
-   * the host where their session does apply. Not implemented → finish on the same host.
-   */
-  getSlackInstallFinishUrl?(returnUrl: string): string | null;
+  /** Extra fields to embed in an OAuth access token. */
+  getExtraTokenPayload?(): Promise<Record<string, unknown>>;
 }
 
 /** Kinds of third-party identifier that can be bound to a namespace. */
@@ -164,6 +154,25 @@ export interface INamespaceModule {
    * deploy rather than after.
    */
   minDataVersion(): Promise<number>;
+  /**
+   * Create a new namespace and seed it, returning where the caller should land.
+   *
+   * Provisioning, not authentication: a deployment that serves one workspace creates it
+   * on first run, while one serving many creates a new namespace per signup. The
+   * seeding itself is shared — only the namespace creation differs.
+   */
+  provision(input: RegisterInput): Promise<RegisterResult>;
+
+  /**
+   * Where an external integration's install should be finalised, or null to finish it
+   * where it landed.
+   *
+   * Some providers require a fixed redirect URI, so the callback arrives at one host
+   * while the user's session belongs to another. A deployment that serves several
+   * namespaces on different hosts has to hand the install to the right one.
+   */
+  installFinishUrl(returnUrl: string): string | null;
+
   /** Record that `externalId` belongs to the calling namespace. Idempotent. */
   bindExternalId(kind: ExternalIdKind, externalId: string): Promise<void>;
   /** Forget a binding, e.g. on uninstall. Idempotent. */

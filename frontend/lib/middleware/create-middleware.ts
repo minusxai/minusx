@@ -6,12 +6,33 @@ import { CURRENT_TOKEN_VERSION } from '@/lib/auth/auth-constants';
 import { isValidMode } from '@/lib/mode/mode-types';
 import { isValidView, DEFAULT_VIEW } from '@/lib/view/view-types';
 import { getModules } from '@/lib/modules/registry';
+import { NAMESPACE_HEADER } from '@/lib/namespace/types';
 import { E2E_PARAM, E2E_COOKIE, E2E_HEADER, matchesE2ESecret } from '@/lib/auth/e2e-runtime';
 import { EMBED_FRAME_ANCESTORS } from '@/lib/config';
 import { GUEST_COOKIE, verifyGuestToken, isShareGuestPath } from '@/lib/auth/guest-session';
 
 export type AuthReq = NextRequest & { auth: Session | null };
 
+
+/**
+ * Resolve the request's namespace and put it on the request for downstream handlers.
+ *
+ * Sealed rather than passed plain: middleware writes this header and route handlers
+ * trust it to say whose data to return, so its integrity has to be verifiable. Returns
+ * false when no namespace applies, which means reject — there is no safe default.
+ */
+async function attachNamespace(
+  req: NextRequest,
+  headers: Headers,
+  hints?: Record<string, string>,
+): Promise<boolean> {
+  const ns = getModules().namespace;
+  headers.delete(NAMESPACE_HEADER);
+  const namespace = await ns.resolve(req, hints);
+  if (namespace == null) return false;
+  headers.set(NAMESPACE_HEADER, await ns.seal(namespace));
+  return true;
+}
 
 export function createMiddleware() {
   return auth(async (req) => {
@@ -80,7 +101,7 @@ async function routeRequest(req: AuthReq): Promise<NextResponse> {
       requestHeaders.set('x-request-id', requestId);
       requestHeaders.set('x-request-path', pathname);
 
-      await getModules().auth.addHeaders(req as AuthReq, requestHeaders);
+      await attachNamespace(req as NextRequest, requestHeaders);
 
       return NextResponse.next({ request: { headers: requestHeaders } });
     }
@@ -152,7 +173,7 @@ async function routeRequest(req: AuthReq): Promise<NextResponse> {
       requestHeaders.set(E2E_HEADER, '1');
     }
 
-    const hasContext = await getModules().auth.addHeaders(req as AuthReq, requestHeaders);
+    const hasContext = await attachNamespace(req as NextRequest, requestHeaders);
     if (!hasContext) {
       const response = NextResponse.redirect(new URL('/login', req.url));
       for (const name of [

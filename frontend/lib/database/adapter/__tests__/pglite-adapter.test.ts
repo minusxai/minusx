@@ -24,8 +24,6 @@ function makeMockModules(db: DBModule) {
         userId: 1, email: 'test@example.com', name: 'Test User',
         role: 'admin' as const, home_folder: '/org', mode: 'org' as const,
       }),
-      addHeaders: async () => true,
-      register: async () => { throw new Error('not in tests'); },
       getUserKey: async (user: { mode: string }) => user.mode,
     },
     db,
@@ -44,6 +42,8 @@ function makeMockModules(db: DBModule) {
     namespace: {
       resolve: async () => 'mx',
       seal: async (ns: string) => ns,
+      provision: async () => { throw new Error('namespace.provision not available in tests'); },
+      installFinishUrl: () => null,
       with: <T,>(_ns: string, fn: () => Promise<T>) => fn(),
       isolation: async () => 'mx',
       minDataVersion: async () => 38,
