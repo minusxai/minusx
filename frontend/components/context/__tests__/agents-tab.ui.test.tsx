@@ -10,6 +10,24 @@ import { Tabs } from '@chakra-ui/react';
 import { AgentsTabContent } from '@/components/context/AgentsTabContent';
 import type { AgentEntry, ContextContent } from '@/lib/types';
 
+// Lexical's Markdown round-trip is covered by its own tests. Use a textarea
+// here so the builder tests exercise the prompt's controlled wiring directly.
+vi.mock('@/components/lexical/LexicalTextEditor', () => {
+  const React = require('react');
+  return {
+    __esModule: true,
+    default: ({ initialMarkdown, onChange, ariaLabel }: {
+      initialMarkdown: string;
+      onChange: (markdown: string) => void;
+      ariaLabel?: string;
+    }) => React.createElement('textarea', {
+      'aria-label': ariaLabel,
+      defaultValue: initialMarkdown,
+      onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => onChange(event.target.value),
+    }),
+  };
+});
+
 function mkAgent(overrides: Partial<AgentEntry> & { name: string }): AgentEntry {
   return {
     description: `${overrides.name} description`,
@@ -195,6 +213,22 @@ describe('AgentsTabContent — builder', () => {
     expect(onUpdateAgent).toHaveBeenCalledTimes(1);
     expect(onUpdateAgent.mock.calls[0][0]).toBe(0); // index of sales_helper
     expect(onUpdateAgent.mock.calls[0][1]).toMatchObject({ name: 'sales_helper' });
+  });
+
+  it('edits Published/Draft status inside the builder without saving early', async () => {
+    const user = userEvent.setup();
+    const { onUpdateAgent } = renderTab();
+    fireEvent.click(screen.getByLabelText('Edit agent sales_helper'));
+
+    const published = screen.getByLabelText('Agent published');
+    expect(published).toBeChecked();
+    await user.click(published);
+    expect(published).not.toBeChecked();
+    expect(onUpdateAgent).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByLabelText('Builder step Review'));
+    fireEvent.click(screen.getByLabelText('Save agent'));
+    expect(onUpdateAgent).toHaveBeenCalledWith(0, expect.objectContaining({ enabled: false }));
   });
 
   it('deletes an agent', () => {

@@ -10,15 +10,13 @@ import { Box, VStack, HStack, Button, Text, Badge, Field, Input, Collapsible, Ic
 import { memo, useState, useEffect, useCallback } from 'react';
 import { LuTrash2, LuChevronDown, LuChevronRight } from 'react-icons/lu';
 import type { SkillEntry } from '@/lib/types';
-import Editor from '@monaco-editor/react';
-
-const MONACO_READ_ONLY_MESSAGE = { value: 'Switch to edit mode to make changes.' };
+import LexicalTextEditor, { LexicalTextViewer } from '@/components/lexical/LexicalTextEditor';
 
 interface SkillEditorCardProps {
   skill: SkillEntry;
   index: number;
   canManageSkills: boolean;
-  colorMode: string;
+  initiallyExpanded?: boolean;
   siblingNames: Set<string>;
   systemSkillNames: Set<string>;
   onUpdate: (index: number, updates: Partial<SkillEntry>) => void;
@@ -29,13 +27,13 @@ export const SkillEditorCard = memo(function SkillEditorCard({
   skill,
   index,
   canManageSkills,
-  colorMode,
+  initiallyExpanded = false,
   siblingNames,
   systemSkillNames,
   onUpdate,
   onDelete,
 }: SkillEditorCardProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(initiallyExpanded);
   // Reset draft when skill prop changes externally — use a serialized key to detect changes
   const skillKey = `${skill.name}\0${skill.description}\0${skill.content}`;
   const [prevSkillKey, setPrevSkillKey] = useState(skillKey);
@@ -153,26 +151,18 @@ export const SkillEditorCard = memo(function SkillEditorCard({
               </Field.Root>
             </HStack>
 
-            <Box border="1px solid" borderColor="border.default" borderRadius="md" overflow="hidden">
-              <Editor
-                height="220px"
-                language="markdown"
-                value={draft.content}
-                onChange={(value) => setDraft(prev => ({ ...prev, content: value || '' }))}
-                onMount={(editor) => editor.onDidBlurEditorText(flushDraft)}
-                theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
-                options={{
-                  readOnly: !canManageSkills,
-                  readOnlyMessage: MONACO_READ_ONLY_MESSAGE,
-                  minimap: { enabled: false },
-                  wordWrap: 'on',
-                  lineNumbers: 'off',
-                  fontSize: 13,
-                  fontFamily: 'JetBrains Mono, monospace',
-                  scrollBeyondLastLine: false,
-                  automaticLayout: true,
-                }}
-              />
+            <Box h="240px" border="1px solid" borderColor="border.default" borderRadius="md" overflow="hidden" bg="bg.panel">
+              {canManageSkills ? (
+                <LexicalTextEditor
+                  initialMarkdown={draft.content}
+                  onChange={(content) => setDraft(prev => ({ ...prev, content }))}
+                  ariaLabel={`Skill ${index + 1} content`}
+                  placeholder="Write the instructions this skill should provide…"
+                  contentPadding="20px 20px"
+                />
+              ) : (
+                <LexicalTextViewer markdown={draft.content} padding="20px 20px" />
+              )}
             </Box>
           </VStack>
         </Collapsible.Content>

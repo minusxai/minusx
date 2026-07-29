@@ -452,6 +452,10 @@ export function EditorProTip({ mentions, insertMetric }: { mentions?: boolean; i
 interface LexicalTextEditorProps {
   initialMarkdown: string;
   onChange: (markdown: string) => void;
+  /** Accessible name for the content-editable surface. */
+  ariaLabel?: string;
+  /** Empty-state copy shown inside the editor. */
+  placeholder?: string;
   /** If provided, the toolbar is passed to this render prop instead of being rendered inline. */
   renderToolbar?: (toolbar: React.ReactNode) => React.ReactNode;
   /** If provided, an image button appears in the toolbar; returns the public URL to embed. */
@@ -474,7 +478,7 @@ interface LexicalTextEditorProps {
   verticalCenter?: boolean;
 }
 
-export default function LexicalTextEditor({ initialMarkdown, onChange, renderToolbar, onImageUpload, mentions, insertMenu, insertMetric, editWithAgent, onEditorReady, contentPadding = '32px 32px', floatingToolbar, verticalCenter }: LexicalTextEditorProps) {
+export default function LexicalTextEditor({ initialMarkdown, onChange, ariaLabel, placeholder = 'Start writing...', renderToolbar, onImageUpload, mentions, insertMenu, insertMetric, editWithAgent, onEditorReady, contentPadding = '32px 32px', floatingToolbar, verticalCenter }: LexicalTextEditorProps) {
   const colorMode = useAppSelector((state) => state.ui.colorMode);
 
   // Debounce onChange to avoid dispatching on every keystroke
@@ -537,6 +541,7 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
           <RichTextPlugin
             contentEditable={
               <ContentEditable
+                aria-label={ariaLabel}
                 style={{
                   outline: 'none',
                   padding: contentPadding,
@@ -549,7 +554,7 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
             }
             placeholder={
               <div className="pointer-events-none absolute top-[24px] left-[24px] text-sm text-muted-foreground">
-                Start writing...
+                {placeholder}
               </div>
             }
             ErrorBoundary={LexicalErrorBoundary}

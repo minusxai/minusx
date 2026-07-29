@@ -11,10 +11,11 @@
  */
 
 import { useState } from 'react';
-import { Badge, Box, Button, createListCollection, HStack, Icon, Input, Portal, SimpleGrid, Text, Textarea, VStack } from '@chakra-ui/react';
+import { Badge, Box, Button, createListCollection, HStack, Icon, Input, Portal, SimpleGrid, Switch, Text, VStack } from '@chakra-ui/react';
 import { LuBookOpen, LuCheck, LuCheckCheck, LuCircleOff, LuLibrary, LuSearch, LuZap } from 'react-icons/lu';
 import { AgentReadView, type AgentDraft } from './AgentReadView';
 import { SelectContent, SelectItem, SelectPositioner, SelectRoot, SelectTrigger, SelectValueText } from '@/components/ui/select';
+import LexicalTextEditor from '@/components/lexical/LexicalTextEditor';
 
 const STEPS = ['identity', 'prompt', 'skills', 'review'] as const;
 type Step = (typeof STEPS)[number];
@@ -41,6 +42,7 @@ const EMPTY_DRAFT: AgentDraft = {
   promptMode: 'append',
   preloadSkills: [],
   includeSkills: [],
+  enabled: true,
 };
 
 const GRADE_OPTIONS = createListCollection({
@@ -140,6 +142,32 @@ export function AgentBuilder({ initial, systemSkills, userSkills, onSave, onCanc
 
       {step === 'identity' && (
         <VStack align="stretch" gap={5} maxW="640px">
+          {initial && (
+            <HStack justify="space-between" gap={4} pb={3} borderBottom="1px solid" borderColor="border.muted">
+              <Box>
+                <Text fontSize="sm" fontWeight="600">Status</Text>
+                <Text fontSize="xs" color="fg.muted" mt={0.5}>
+                  Published agents appear in the chat agent picker.
+                </Text>
+              </Box>
+              <Box px={2} py={1} borderRadius="full" bg="bg.muted">
+                <Switch.Root
+                  size="xs"
+                  colorPalette="teal"
+                  checked={draft.enabled}
+                  onCheckedChange={(event) => patch({ enabled: event.checked })}
+                >
+                  <Switch.HiddenInput aria-label="Agent published" />
+                  <Switch.Control>
+                    <Switch.Thumb />
+                  </Switch.Control>
+                  <Switch.Label fontSize="2xs" fontWeight="700" color={draft.enabled ? 'accent.teal' : 'fg.muted'}>
+                    {draft.enabled ? 'Published' : 'Draft'}
+                  </Switch.Label>
+                </Switch.Root>
+              </Box>
+            </HStack>
+          )}
           <Box>
             {label('Name')}
             <Input
@@ -170,16 +198,22 @@ export function AgentBuilder({ initial, systemSkills, userSkills, onSave, onCanc
         <VStack align="stretch" gap={5}>
           <Box>
             {label('Persona / instructions')}
-            <Textarea
-              aria-label="Agent prompt"
-              size="md"
-              fontFamily="mono"
-              fontSize="sm"
-              rows={12}
-              value={draft.prompt}
-              onChange={(e) => patch({ prompt: e.target.value })}
-              placeholder="You are a revenue analyst. Always report figures in USD…"
-            />
+            <Box
+              h={{ base: '280px', md: '340px' }}
+              overflow="hidden"
+              border="1px solid"
+              borderColor="border.default"
+              borderRadius="md"
+              bg="bg.panel"
+            >
+              <LexicalTextEditor
+                initialMarkdown={draft.prompt}
+                onChange={(prompt) => patch({ prompt })}
+                ariaLabel="Agent prompt"
+                placeholder="Describe the agent's role, priorities, and operating instructions…"
+                contentPadding="20px 20px"
+              />
+            </Box>
           </Box>
           <HStack gap={8} align="start" flexWrap="wrap">
             <Box>

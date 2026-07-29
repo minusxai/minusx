@@ -1,4 +1,5 @@
 import { fireEvent, screen } from '@testing-library/react';
+import { useState } from 'react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import { setUser } from '@/store/authSlice';
 import { makeStore } from '@/store/store';
@@ -29,6 +30,22 @@ vi.mock('@monaco-editor/react', () => ({
   __esModule: true,
   default: () => null,
 }));
+vi.mock('@/components/lexical/LexicalTextEditor', () => {
+  const React = require('react');
+  return {
+    __esModule: true,
+    default: ({ initialMarkdown, onChange, ariaLabel }: {
+      initialMarkdown: string;
+      onChange: (markdown: string) => void;
+      ariaLabel?: string;
+    }) => React.createElement('textarea', {
+      'aria-label': ariaLabel,
+      defaultValue: initialMarkdown,
+      onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => onChange(event.target.value),
+    }),
+    LexicalTextViewer: ({ markdown }: { markdown: string }) => React.createElement('div', {}, markdown),
+  };
+});
 vi.mock('@/lib/hooks/useUsers', () => ({
   useUsers: () => ({ users: [], loading: false }),
   loadUsers: vi.fn(async () => []),
@@ -66,20 +83,33 @@ function renderEditor(tab: 'skills' | 'agents', content: ContextContent = CONTEN
     role: 'editor',
     mode: 'org',
   }));
+  function ControlledEditor() {
+    const [currentContent, setCurrentContent] = useState(content);
+    const [editMode, setEditMode] = useState(false);
+    return (
+      <ContextEditorV2
+        content={currentContent}
+        fileName="Knowledge Base"
+        isDirty={false}
+        isSaving={false}
+        editMode={editMode}
+        onChange={(updates) => {
+          onChange(updates);
+          setCurrentContent((current) => ({ ...current, ...updates }));
+        }}
+        onMetadataChange={vi.fn()}
+        onSave={vi.fn(async () => {})}
+        onCancel={vi.fn()}
+        onEditModeChange={(nextEditMode) => {
+          onEditModeChange(nextEditMode);
+          setEditMode(nextEditMode);
+        }}
+        file={{ id: 1, path: '/org/context.json', type: 'context' }}
+      />
+    );
+  }
   renderWithProviders(
-    <ContextEditorV2
-      content={content}
-      fileName="Knowledge Base"
-      isDirty={false}
-      isSaving={false}
-      editMode={false}
-      onChange={onChange}
-      onMetadataChange={vi.fn()}
-      onSave={vi.fn(async () => {})}
-      onCancel={vi.fn()}
-      onEditModeChange={onEditModeChange}
-      file={{ id: 1, path: '/org/context.json', type: 'context' }}
-    />,
+    <ControlledEditor />,
     { store },
   );
   return { onChange, onEditModeChange };
@@ -114,6 +144,7 @@ describe('ContextEditorV2 add actions outside edit mode', () => {
     expect(onChange).toHaveBeenCalledWith({
       skills: [expect.objectContaining({ name: 'new_skill', enabled: true })],
     });
+    expect(screen.getByLabelText('Skill 1 content')).toBeVisible();
   });
 
   it('shows Add agent and enters edit mode before opening the agent builder', () => {

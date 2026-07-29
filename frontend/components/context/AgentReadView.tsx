@@ -13,7 +13,7 @@ import type { AgentEntry } from '@/lib/types';
 
 export type AgentDraft = Pick<
   AgentEntry,
-  'name' | 'description' | 'prompt' | 'promptMode' | 'preloadSkills' | 'includeSkills' | 'gradeOverride'
+  'name' | 'description' | 'prompt' | 'promptMode' | 'preloadSkills' | 'includeSkills' | 'gradeOverride' | 'enabled'
 >;
 
 interface AgentReadViewProps {
@@ -74,7 +74,7 @@ function SkillPills({
     );
   }
 
-  const visibleSkills = compact && skills.length > 4 ? skills.slice(0, 3) : skills;
+  const visibleSkills = compact && skills.length > 6 ? skills.slice(0, 6) : skills;
   const hiddenCount = skills.length - visibleSkills.length;
 
   return (

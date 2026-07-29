@@ -13,6 +13,7 @@
  */
 
 import { Box, VStack, HStack, Button, Text, Badge, Collapsible, Icon, Tabs } from '@chakra-ui/react';
+import { useState } from 'react';
 import { LuBookOpen, LuPlus, LuChevronDown, LuChevronRight } from 'react-icons/lu';
 import type { ContextContent, SkillEntry } from '@/lib/types';
 import Editor from '@monaco-editor/react';
@@ -55,6 +56,8 @@ export function SkillsTabContent({
   onUpdateSkill,
   onDeleteSkill,
 }: SkillsTabContentProps) {
+  const [newlyAddedSkillIndex, setNewlyAddedSkillIndex] = useState<number | null>(null);
+
   return (
     <Tabs.Content value="skills">
       {activeTab === 'picker' ? (
@@ -75,6 +78,7 @@ export function SkillsTabContent({
                       variant="outline"
                       onClick={(event) => {
                         event.stopPropagation();
+                        setNewlyAddedSkillIndex(content.skills?.length ?? 0);
                         onAddSkill();
                       }}
                     >
@@ -96,7 +100,7 @@ export function SkillsTabContent({
                         skill={skill}
                         index={index}
                         canManageSkills={canManageSkills}
-                        colorMode={colorMode}
+                        initiallyExpanded={index === newlyAddedSkillIndex}
                         siblingNames={siblingNames}
                         systemSkillNames={systemSkillNames}
                         onUpdate={onUpdateSkill}
