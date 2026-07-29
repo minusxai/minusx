@@ -43,6 +43,7 @@ function makeMockModules(db: DBModule) {
     },
     namespace: {
       resolve: async () => 'mx',
+      seal: async (ns: string) => ns,
       with: <T,>(_ns: string, fn: () => Promise<T>) => fn(),
       isolation: async () => 'mx',
       minDataVersion: async () => 38,

@@ -118,18 +118,26 @@ export type ExternalIdKind = 'slack_team';
  */
 export interface INamespaceModule {
   /**
-   * Request → the wire token that carries the namespace downstream, or null to reject
-   * the request outright.
+   * Request → the namespace it belongs to, or null to reject the request outright.
    *
-   * The token's FORM is opaque to callers by design: a single-namespace deployment can
-   * return the namespace itself, while one serving several can return something signed,
-   * without any call site knowing the difference. Middleware puts it on the request;
-   * `get()` reads it back.
+   * Returns the namespace in its plain form — the same value `isolation()` yields — so
+   * it can be passed straight to `with()`. Use `seal()` when it needs to travel as a
+   * header.
    *
    * `hints` carries identifiers that only the caller can supply — a webhook's workspace
    * id, for instance — for requests whose namespace is not derivable from the URL.
    */
   resolve(req: NextRequest, hints?: Record<string, string>): Promise<string | null>;
+
+  /**
+   * Seal a namespace for transport as a request header.
+   *
+   * Middleware puts the result on the request and route handlers read it back, so it
+   * crosses a boundary where a plain value would be attacker-controllable. A
+   * single-namespace deployment has nothing to protect and returns it unchanged; one
+   * serving several signs it. The sealed FORM is opaque to every caller.
+   */
+  seal(namespace: string): Promise<string>;
 
   /**
    * Establish a namespace where there is no request to read it from: cron, webhooks,

@@ -33,9 +33,17 @@ export function createAuthConfig(options: AuthConfigOptions = {}) {
     const fn = options.refreshUserToken ?? getModuleHooks().refreshUserToken;
     if (fn) return fn(token);
     if (!token.userId) return Promise.resolve(null);
-    return UserDB.getById(token.userId as number).then(u =>
+
+    // The refresh reads the user row, which is namespace-scoped storage — and a token
+    // refresh has no request to derive the namespace from. Re-enter the one the session
+    // was minted in.
+    const read = () => UserDB.getById(token.userId as number).then(u =>
       u ? { home_folder: u.home_folder, role: u.role as string } : null,
     );
+    const ns = token.namespace as string | undefined;
+    return ns && isModulesRegistered()
+      ? getModules().namespace.with(ns, read)
+      : read();
   };
 
   return NextAuth({
@@ -84,6 +92,10 @@ export function createAuthConfig(options: AuthConfigOptions = {}) {
               name: user.name,
               role: user.role as UserRole,
               home_folder: user.home_folder,
+              // Which namespace this session belongs to, captured at login. Middleware
+              // compares it against the namespace the REQUEST resolves to, so a session
+              // minted for one workspace cannot be replayed against another.
+              namespace: isModulesRegistered() ? await getModules().namespace.isolation() : undefined,
               ...((options.mapAuthorizeResult ?? getModuleHooks().mapAuthorizeResult)?.(user) ?? {}),
             };
           } catch (error) {
@@ -148,6 +160,7 @@ export function createAuthConfig(options: AuthConfigOptions = {}) {
           session.user.home_folder = token.home_folder as string;
           session.user.tokenVersion = token.tokenVersion as number | undefined;
           session.user.createdAt = token.createdAt as number | undefined;
+          session.user.namespace = token.namespace as string | undefined;
 
           const doExtraSessionFields = options.extraSessionFields ?? getModuleHooks().extraSessionFields;
           if (doExtraSessionFields) {

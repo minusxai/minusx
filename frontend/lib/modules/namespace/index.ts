@@ -17,6 +17,11 @@ export class NamespaceModule implements INamespaceModule {
     return DEFAULT_ISOLATION;
   }
 
+  /** Nothing to protect — there is only one namespace to be in. */
+  async seal(namespace: string): Promise<string> {
+    return namespace;
+  }
+
   /** Nothing ambient to establish — the namespace is a constant. */
   async with<T>(_namespace: string, fn: () => Promise<T>): Promise<T> {
     return fn();
