@@ -167,6 +167,56 @@ describe('ChatInput: sidebar control layout', () => {
     await waitFor(() => expect(shell).toHaveAttribute('data-collapsed', 'true'));
   });
 
+  it('renders the dimming overlay EXACTLY while the floating composer is expanded; clicking it collapses both', async () => {
+    const store = storeModule.makeStore();
+    renderWithProviders(
+      <ChatInput
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        isAgentRunning={false}
+        databaseName="test_db"
+        onDatabaseChange={vi.fn()}
+        container="floating"
+        isCompact={false}
+      />,
+      { store },
+    );
+
+    const editor = screen.getByLabelText('Chat editor');
+    const shell = editor.closest('[data-collapsed]');
+    // Collapsed bar → no haze. The overlay and the bar share ONE state — they
+    // can never drift (the "haze stuck after collapse" bug).
+    expect(shell).toHaveAttribute('data-collapsed', 'true');
+    expect(screen.queryByLabelText('Collapse chat overlay')).not.toBeInTheDocument();
+
+    fireEvent.focus(editor);
+    await waitFor(() => expect(shell).toHaveAttribute('data-collapsed', 'false'));
+    const overlay = screen.getByLabelText('Collapse chat overlay');
+
+    // Clicking the haze collapses the bar AND removes the haze in one step.
+    fireEvent.click(overlay);
+    await waitFor(() => expect(shell).toHaveAttribute('data-collapsed', 'true'));
+    expect(screen.queryByLabelText('Collapse chat overlay')).not.toBeInTheDocument();
+  });
+
+  it('never renders the dimming overlay for non-floating composers', () => {
+    const store = storeModule.makeStore();
+    renderWithProviders(
+      <ChatInput
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        isAgentRunning={false}
+        databaseName="test_db"
+        onDatabaseChange={vi.fn()}
+        container="sidebar"
+        isCompact={true}
+      />,
+      { store },
+    );
+    fireEvent.focus(screen.getByLabelText('Chat editor'));
+    expect(screen.queryByLabelText('Collapse chat overlay')).not.toBeInTheDocument();
+  });
+
   it('collapses the expanded floating composer with Escape', async () => {
     const user = userEvent.setup();
     const store = storeModule.makeStore();

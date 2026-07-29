@@ -4,7 +4,7 @@ import { memo, useState, useRef, useEffect } from 'react';
 import isEqual from 'lodash/isEqual';
 import { shallowEqualExcept, useStableCallback } from '@/lib/hooks/use-stable-callback';
 import { isComposerFocusPassthrough } from '@/components/explore/composer-focus';
-import { Box, HStack, VStack, IconButton, Icon, Grid, GridItem, Text, Spinner } from '@chakra-ui/react';
+import { Box, HStack, VStack, IconButton, Icon, Grid, GridItem, Text, Spinner, Portal } from '@chakra-ui/react';
 import { LuSendHorizontal, LuPaperclip, LuX } from 'react-icons/lu';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { selectCompanyName } from '@/store/authSlice';
@@ -13,7 +13,7 @@ import { setSidebarPendingMessage, selectChatAttachments, addChatAttachment, rem
 import RegionCaptureButton from '@/components/screenshot/RegionCaptureButton';
 import ImageAnnotatorDialog from '@/components/screenshot/ImageAnnotatorDialog';
 import { uploadBlobOrEmbed } from '@/lib/object-store/client';
-import ChatSettingsPopover from './ChatSettingsPopover';
+import ChatSettingsPopover, { type ChatAgentOption } from './ChatSettingsPopover';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { LexicalMentionEditor, LexicalMentionEditorRef } from '@/components/chat/LexicalMentionEditor';
 import type { DatabaseWithSchema, Attachment, SkillMention, SlashCommand } from '@/lib/types';
@@ -44,6 +44,9 @@ interface ChatInputProps {
   onDatabaseChange: (name: string) => void;
   selectedGrade?: LlmGrade | null;
   onGradeChange?: (grade: LlmGrade | null) => void;
+  agentOptions?: ChatAgentOption[];
+  selectedAgent?: string | null;
+  onAgentChange?: (name: string | null) => void;
   container?: 'page' | 'sidebar' | 'floating';
   isCompact: boolean;
   colSpan?: any;
@@ -72,6 +75,9 @@ function ChatInputInner({
   onDatabaseChange,
   selectedGrade = null,
   onGradeChange,
+  agentOptions,
+  selectedAgent = null,
+  onAgentChange,
   container = 'page',
   isCompact,
   colSpan: colSpanProp,
@@ -151,18 +157,25 @@ function ChatInputInner({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isFloating]);
 
+  // Force the floating composer back to its collapsed pill: Escape, closing
+  // settings on an empty composer, and clicking the dimming overlay all funnel
+  // through here so the collapse semantics can never diverge.
+  const collapseFloating = useStableCallback(() => {
+    setEscapeCollapsed(true);
+    setIsFocused(false);
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  });
+
   useEffect(() => {
     if (!isFloating || isCollapsed) return;
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || chatSettingsOpen) return;
       event.preventDefault();
-      setEscapeCollapsed(true);
-      setIsFocused(false);
-      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+      collapseFloating();
     };
     window.addEventListener('keydown', handleEscape);
     return () => window.removeEventListener('keydown', handleEscape);
-  }, [chatSettingsOpen, isCollapsed, isFloating]);
+  }, [chatSettingsOpen, isCollapsed, isFloating, collapseFloating]);
 
   // Clear input only after preparation completes (isPreparing: true → false)
   // so the text stays visible (greyed) while chart images are being uploaded.
@@ -266,9 +279,7 @@ function ChatInputInner({
     // Popover focus is portaled outside this shell, and focus restoration can leave
     // the editor's old `isFocused` flag behind. Closing settings is an explicit signal
     // that an empty floating composer should return to its pill state.
-    setEscapeCollapsed(true);
-    setIsFocused(false);
-    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    collapseFloating();
   });
 
   // Large pastes (1000s of lines) bog down the Lexical editor — stage them as a
@@ -405,9 +416,32 @@ function ChatInputInner({
             w="100%"
         >
         <GridItem colSpan={colSpan} colStart={colStart}>
+            {/* Dimming overlay — rendered from the SAME `isCollapsed` state as the bar
+                itself, so haze ⇔ expanded can never drift (the "stuck haze" bug came
+                from the wrapper tracking focus separately). Sits BELOW the bar
+                (z 999 < wrapper's 1000) and below the mention menu / settings popover;
+                clicking it collapses the bar and removes itself in one step. */}
+            {isFloating && !isCollapsed && (
+              <Portal>
+                <Box
+                  aria-label="Collapse chat overlay"
+                  position="fixed"
+                  top={0}
+                  left={0}
+                  width="100vw"
+                  height="100vh"
+                  bg="fg.subtle/20"
+                  zIndex={999}
+                  onClick={collapseFloating}
+                />
+              </Portal>
+            )}
             <Box
             mx={isFloating ? 'auto' : undefined}
             width={isFloating ? (isCollapsed ? { base: '85%', md: '450px', lg: '450px' } : { base: '90%', md: '600px', lg: '700px' }) : undefined}
+            // Floating mode: ancestors are pointer-events:none so the rest of the
+            // row lets clicks through — re-enable them on the pill itself only.
+            pointerEvents={isFloating ? 'auto' : undefined}
             transition="width 0.25s ease, border-radius 0.25s ease"
             >
             <Box
@@ -734,6 +768,9 @@ function ChatInputInner({
                       onDatabaseChange={onDatabaseChange}
                       selectedGrade={selectedGrade}
                       onGradeChange={onGradeChange || (() => {})}
+                      agentOptions={agentOptions}
+                      selectedAgent={selectedAgent}
+                      onAgentChange={onAgentChange}
                       modelDisabled={isAgentRunning || remoteSessionActive}
                       selectedContextPath={selectedContextPath || null}
                       selectedVersion={selectedVersion}
@@ -815,9 +852,10 @@ const chatInputPropsEqual = (prev: ChatInputProps, next: ChatInputProps): boolea
   if (!isEqual(prev.availableSkills, next.availableSkills)) return false;
   if (!isEqual(prev.availableCommands, next.availableCommands)) return false;
   if (!isEqual(prev.whitelistedSchemas, next.whitelistedSchemas)) return false;
+  if (!isEqual(prev.agentOptions, next.agentOptions)) return false;
   return shallowEqualExcept(prev, next, [
-    'availableSkills', 'availableCommands', 'whitelistedSchemas',
-    'onSend', 'onStop', 'onDatabaseChange', 'onGradeChange', 'onContextChange', 'onCommandExecute',
+    'availableSkills', 'availableCommands', 'whitelistedSchemas', 'agentOptions',
+    'onSend', 'onStop', 'onDatabaseChange', 'onGradeChange', 'onAgentChange', 'onContextChange', 'onCommandExecute',
   ]);
 };
 

@@ -26,6 +26,12 @@ export interface ChatRequest {
     // connection_id pointer (context whitelist, or the connection's persisted
     // schema as a fallback) in buildServerAgentArgs. See lib/chat/orchestration-core.server.ts.
     context?: string;
+    /** POINTER: context file to resolve server-side (admin context selection). */
+    context_file_id?: number | null;
+    /** POINTER: specific context version (admin version-testing). */
+    context_version?: number | null;
+    /** POINTER: the connection selected in the UI. */
+    connection_id?: string | null;
     app_state?: any;
     page_type?: string;
     skills?: {
@@ -34,6 +40,12 @@ export interface ChatRequest {
     };
     /** Optional model-grade override selected in this chat's composer. */
     grade_override?: LlmGrade;
+    /**
+     * Name of a custom agent defined on the resolved context (AgentEntry.name).
+     * POINTER ONLY — the server resolves the definition from the context file;
+     * an unknown/disabled name falls back to the default analyst.
+     */
+    custom_agent?: string;
   };
   /**
    * Reconnect to an in-flight (or recently finished) turn instead of starting a

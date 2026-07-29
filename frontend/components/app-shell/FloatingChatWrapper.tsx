@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Box, Portal } from '@chakra-ui/react';
+import { Box } from '@chakra-ui/react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { setRightSidebarCollapsed, setSidebarPendingMessage, setChatGradeSelection, setSidebarPendingSlashCommand, setActiveSidebarSection, addChatAttachment } from '@/store/uiSlice';
+import { selectEnableCustomAgents, setRightSidebarCollapsed, setSidebarPendingMessage, setChatAgentSelection, setChatGradeSelection, setSidebarPendingSlashCommand, setActiveSidebarSection, addChatAttachment } from '@/store/uiSlice';
 import { useContext } from '@/lib/hooks/useContext';
 import { useClearChat, useSlashCommands, tryExecuteSlashCommand } from '../explore/slash-commands';
 import { selectDatabase } from '@/lib/utils/database-selector';
@@ -34,12 +34,13 @@ export default function FloatingChatWrapper({
   onContextChange,
   appState,
 }: FloatingChatWrapperProps) {
-  const [isFocused, setIsFocused] = useState(false);
   const dispatch = useAppDispatch();
   const leftSidebarCollapsed = useAppSelector(state => state.ui.leftSidebarCollapsed);
   const rightSidebarCollapsed = useAppSelector(state => state.ui.rightSidebarCollapsed);
   const rightSidebarWidth = useAppSelector(state => state.ui.rightSidebarWidth);
   const selectedGrade = useAppSelector(state => state.ui.chatGradeSelection);
+  const selectedAgent = useAppSelector(state => state.ui.chatAgentSelection);
+  const enableCustomAgents = useAppSelector(selectEnableCustomAgents);
 
   // Load context databases using the shared context path from the parent
   const effectiveContextPath = selectedContextPath || filePath || '/';
@@ -83,22 +84,14 @@ export default function FloatingChatWrapper({
     dispatch(setChatGradeSelection(grade));
   }, [dispatch]);
 
+  const handleAgentChange = useCallback((name: string | null) => {
+    dispatch(setChatAgentSelection(name));
+  }, [dispatch]);
+
   const noop = useCallback(() => {}, []);
 
-  // Track focus from ChatInput via a wrapper that listens for focusin/focusout
-  const handleFocusIn = useCallback(() => setIsFocused(true), []);
-  const handleFocusOut = useCallback((e: React.FocusEvent) => {
-    // Only blur if focus left the wrapper entirely
-    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-      setIsFocused(false);
-    }
-  }, []);
-
   const content = (
-    <Box
-      onFocus={handleFocusIn}
-      onBlur={handleFocusOut}
-    >
+    <Box>
       <ChatInput
         onSend={handleSend}
         onStop={noop}
@@ -108,6 +101,13 @@ export default function FloatingChatWrapper({
         onDatabaseChange={handleDatabaseChange}
         selectedGrade={selectedGrade}
         onGradeChange={handleGradeChange}
+        agentOptions={enableCustomAgents ? (contextInfo.agents ?? []).map(agent => ({
+          name: agent.name,
+          displayName: agent.displayName,
+          description: agent.description,
+        })) : []}
+        selectedAgent={enableCustomAgents ? selectedAgent : null}
+        onAgentChange={handleAgentChange}
         container="floating"
         isCompact={true}
         whitelistedSchemas={contextInfo.databases}
@@ -133,22 +133,12 @@ export default function FloatingChatWrapper({
       opacity={hideFloatingBar ? 0 : 1}
       visibility={hideFloatingBar ? "hidden" : "visible"}
     >
-      {/* Dimming overlay when focused */}
-      {isFocused && (
-        <Portal>
-          <Box
-            position="fixed"
-            top={0}
-            left={0}
-            width="100vw"
-            height="100vh"
-            bg="fg.subtle/20"
-            zIndex={999}
-          />
-        </Portal>
-      )}
+      {/* The dimming overlay lives INSIDE ChatInput (floating mode), driven by the
+          same collapsed/expanded state as the bar — never tracked separately here.
+          Pointer events stay OFF for this full-width row (inherited from the fixed
+          wrapper); ChatInput re-enables them on the centered pill only, so clicks
+          beside the pill fall through to the page. */}
       <Box
-        pointerEvents="auto"
         position="relative"
         zIndex={1000}
       >

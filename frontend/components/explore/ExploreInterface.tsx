@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { useRouter } from '@/lib/navigation/use-navigation';
 import { Box, HStack, VStack, Flex } from '@chakra-ui/react';
 import ChatInterface from './ChatInterface';
 import RightSidebar from '@/components/app-shell/RightSidebar';
@@ -15,6 +14,7 @@ import { useContext } from '@/lib/hooks/useContext';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { ContextContent } from '@/lib/types';
 import type { AppState } from '@/lib/appState';
+import { setActiveConversation } from '@/store/chatSlice';
 
 const EXPLORE_APP_STATE: AppState = { type: 'explore', state: null };
 // ============================================================================
@@ -24,11 +24,19 @@ const EXPLORE_APP_STATE: AppState = { type: 'explore', state: null };
 interface ExploreInterfaceProps {
   conversationId?: number;  // Optional file ID: if provided, continue existing conversation
   filePath?: string;  // Path for context filtering (default: '/org')
+  initialContextPath?: string | null;
+  initialContextVersion?: number;
+  initialAgentName?: string | null;
 }
 
-export default function ExploreInterface({ conversationId, filePath = '/org' }: ExploreInterfaceProps) {
+export default function ExploreInterface({
+  conversationId,
+  filePath = '/org',
+  initialContextPath = null,
+  initialContextVersion,
+  initialAgentName = null,
+}: ExploreInterfaceProps) {
   const dispatch = useAppDispatch();
-  const router = useRouter();
   const user = useAppSelector(state => state.auth.user);
   const view = useAppSelector(selectView);
   const hideTopChrome = viewAtLeast(view, 'file');       // hide breadcrumb
@@ -47,8 +55,17 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
   );
 
   // Context selection state — prefer stored context from conversation over default null
-  const [selectedContextPath, setSelectedContextPath] = useState<string | null>(storedContextPath);
-  const [selectedVersion, setSelectedVersion] = useState<number | undefined>(storedContextVersion);
+  const linkedContextPath = !conversationId ? initialContextPath : null;
+  const linkedContextVersion = !conversationId ? initialContextVersion : undefined;
+  const linkedAgentName = !conversationId ? initialAgentName : null;
+  const [selectedContextPath, setSelectedContextPath] = useState<string | null>(storedContextPath ?? linkedContextPath);
+  const [selectedVersion, setSelectedVersion] = useState<number | undefined>(storedContextVersion ?? linkedContextVersion);
+
+  // A card's play action always starts a fresh chat. Without clearing a prior
+  // in-memory conversation, its stored custom_agent could override the URL.
+  useEffect(() => {
+    if (linkedAgentName) dispatch(setActiveConversation(null));
+  }, [dispatch, linkedAgentName]);
 
   // Find home context (any context file that is direct child of homeFolder)
   const homeFolder = user ? resolveHomeFolderSync(user.mode, user.home_folder || '') : '/org';
@@ -167,6 +184,7 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
               contextVersion={selectedVersion}
               appState={EXPLORE_APP_STATE}
               container="page"
+              initialAgentName={linkedAgentName}
               onContextChange={(path, version) => {
                 setSelectedContextPath(path);
                 setSelectedVersion(version);

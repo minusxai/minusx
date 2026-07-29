@@ -192,7 +192,10 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
           setQuery(hashMatch[1]);
           setMentions(
             availableSkills
-              .filter(skill => skill.name.toLowerCase().includes(nextQuery))
+              .filter(skill => (
+                skill.name.toLowerCase().includes(nextQuery)
+                || (skill.source === 'user' && skill.displayName?.toLowerCase().includes(nextQuery))
+              ))
               .filter(skill => {
                 const key = `${skill.source}:${skill.name}`;
                 if (seen.has(key)) return false;

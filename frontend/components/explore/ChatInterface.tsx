@@ -21,7 +21,7 @@ import { ConversationsAPI } from '@/lib/data/conversations';
 import { useContext } from '@/lib/hooks/useContext';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { toaster } from '@/components/ui/toaster';
-import { selectChatAttachments, selectShowExpandedMessages, selectUnrestrictedMode, setChatGradeSelection, setSidebarPendingSlashCommand } from '@/store/uiSlice';
+import { selectChatAttachments, selectEnableCustomAgents, selectShowExpandedMessages, selectUnrestrictedMode, setChatAgentSelection, setChatGradeSelection, setSidebarPendingSlashCommand } from '@/store/uiSlice';
 import { selectAllowChatQueue } from '@/store/uiSlice';
 import { appStateWithFileScreenshot, markersEnabledForAppState } from '@/lib/screenshot/app-state-screenshot';
 import { readViewportPointer } from '@/lib/screenshot/read-viewport';
@@ -65,6 +65,8 @@ interface ChatInterfaceProps {
   readOnly?: boolean;
   /** Custom empty-state prompts (e.g. story-specific questions). Falls back to generic defaults. */
   suggestedPrompts?: string[];
+  /** Canonical custom-agent key to select for a new Explore deep link. */
+  initialAgentName?: string | null;
 }
 
 export default function ChatInterface({
@@ -78,6 +80,7 @@ export default function ChatInterface({
   onDatabaseChange,
   readOnly = false,
   suggestedPrompts,
+  initialAgentName = null,
 }: ChatInterfaceProps) {
   const router = useRouter();
   const dispatch = useAppDispatch();
@@ -159,6 +162,18 @@ export default function ChatInterface({
     }
   }, [container, dispatch]);
 
+  // Custom-agent selection — exact clone of the grade pattern above.
+  const [localSelectedAgent, setLocalSelectedAgent] = useState<string | null>(initialAgentName);
+  const sharedSelectedAgent = useAppSelector(state => state.ui.chatAgentSelection);
+  const selectedAgent = container === 'sidebar' ? sharedSelectedAgent : localSelectedAgent;
+  const setSelectedAgent = useCallback((name: string | null) => {
+    if (container === 'sidebar') {
+      dispatch(setChatAgentSelection(name));
+    } else {
+      setLocalSelectedAgent(name);
+    }
+  }, [container, dispatch]);
+
   const effectiveUser = useAppSelector(selectEffectiveUser);
   const userIsAdmin = effectiveUser?.role ? isAdmin(effectiveUser.role) : false;
   const devMode = useAppSelector(selectDevMode);
@@ -176,6 +191,28 @@ export default function ChatInterface({
   // See lib/screenshot/app-state-screenshot.ts.
 
   const chatSkills = contextInfo.availableSkills;
+
+  // Custom agents defined on the resolved context (enabled only). Alpha-gated:
+  // with the flag off, no options reach the picker (which then hides its row)
+  // and no selection is ever sent. The picker shows them; the pointer is only
+  // SENT when the selection still resolves — a stale selection (agent deleted /
+  // context switched) is flagged "(missing)" in the popover and the turn
+  // truthfully runs as the default analyst.
+  const enableCustomAgents = useAppSelector(selectEnableCustomAgents);
+  const chatAgentOptions = useMemo(
+    () => enableCustomAgents
+      ? (contextInfo.agents ?? []).map(agent => ({
+        name: agent.name,
+        displayName: agent.displayName,
+        description: agent.description,
+      }))
+      : [],
+    [contextInfo.agents, enableCustomAgents],
+  );
+  const visibleSelectedAgent = enableCustomAgents ? selectedAgent : null;
+  const effectiveSelectedAgent = visibleSelectedAgent && chatAgentOptions.some(agent => agent.name === visibleSelectedAgent)
+    ? visibleSelectedAgent
+    : null;
 
   const uniqueSkills = useCallback((skills: SkillMention[]) => {
     const seen = new Set<string>();
@@ -241,8 +278,10 @@ export default function ChatInterface({
   // when switching away and back; no explicit choice uses Settings → Models.
   useEffect(() => {
     const stored = conversation?.agent_args?.grade_override as LlmGrade | undefined;
+    const storedAgent = conversation?.agent_args?.custom_agent as string | undefined;
     if (container === 'sidebar' && !conversation) return;
     setSelectedGrade(stored ?? null);
+    setSelectedAgent(storedAgent ?? (!providedConversationId ? initialAgentName : null));
     // Only switch selection when the active conversation itself changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationID]);
@@ -601,6 +640,7 @@ export default function ChatInterface({
       ...(config.allowedVizTypes ? { allowed_viz_types: config.allowedVizTypes } : {}),
       ...(allAttachments.length > 0 ? { attachments: allAttachments } : {}),
       ...(selectedGrade ? { grade_override: selectedGrade } : {}),
+      ...(effectiveSelectedAgent ? { custom_agent: effectiveSelectedAgent } : {}),
     };
   }, [
     appState,
@@ -615,6 +655,7 @@ export default function ChatInterface({
     getSkillsFromMessage,
     selectedDatabase,
     selectedGrade,
+    effectiveSelectedAgent,
     store,
     uniqueSkills,
   ]);
@@ -1134,6 +1175,9 @@ export default function ChatInterface({
               onDatabaseChange={handleDatabaseChange}
               selectedGrade={selectedGrade}
               onGradeChange={setSelectedGrade}
+              agentOptions={chatAgentOptions}
+              selectedAgent={visibleSelectedAgent}
+              onAgentChange={setSelectedAgent}
               container={container}
               isCompact={isCompact}
               colSpan={colSpan}

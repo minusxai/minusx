@@ -13,8 +13,19 @@ vi.mock('@/components/file-browser/Breadcrumb', () => ({ default: () => null }))
 vi.mock('@/components/app-shell/RightSidebar', () => ({ default: () => null }));
 vi.mock('@/components/app-shell/MobileRightSidebar', () => ({ default: () => null }));
 vi.mock('@/components/explore/ChatInterface', () => ({
-  default: ({ appState }: { appState?: unknown }) => (
-    <div data-testid="explore-chat" data-app-state={JSON.stringify(appState)} />
+  default: ({ appState, contextPath, contextVersion, initialAgentName }: {
+    appState?: unknown;
+    contextPath: string;
+    contextVersion?: number;
+    initialAgentName?: string | null;
+  }) => (
+    <div
+      data-testid="explore-chat"
+      data-app-state={JSON.stringify(appState)}
+      data-context-path={contextPath}
+      data-context-version={contextVersion}
+      data-agent={initialAgentName}
+    />
   ),
 }));
 
@@ -27,5 +38,20 @@ describe('Explore chat trigger attribution', () => {
     expect(screen.getByTestId('explore-chat').getAttribute('data-app-state')).toBe(
       JSON.stringify({ type: 'explore', state: null }),
     );
+  });
+
+  it('preloads the linked Knowledge Base and custom agent', () => {
+    renderWithProviders(
+      <ExploreInterface
+        initialContextPath="/org/leadership/context.json"
+        initialContextVersion={3}
+        initialAgentName="ceo_agent"
+      />,
+    );
+
+    const chat = screen.getByTestId('explore-chat');
+    expect(chat).toHaveAttribute('data-context-path', '/org/leadership/context.json');
+    expect(chat).toHaveAttribute('data-context-version', '3');
+    expect(chat).toHaveAttribute('data-agent', 'ceo_agent');
   });
 });

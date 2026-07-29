@@ -100,6 +100,15 @@ describe('getPreloadedSkillNames', () => {
     expect(getPreloadedSkillNames({ pageType: 'explore', selected: [], unrestrictedMode: true }))
       .toEqual(['explore', 'questions', 'navigation_unrestricted']);
   });
+
+  it('can omit page defaults so custom agents preload only explicit selections', () => {
+    expect(getPreloadedSkillNames({
+      pageType: 'explore',
+      selected: [{ type: 'system', name: 'alerts' }],
+      unrestrictedMode: false,
+      includePageDefaults: false,
+    })).toEqual(['alerts', 'navigation_restricted']);
+  });
 });
 
 describe('buildSkillsCatalog', () => {
@@ -141,6 +150,45 @@ describe('buildSkillsCatalog', () => {
       userCatalog: [],
     });
     expect(catalog).toBe('No additional skills are available for this turn.');
+  });
+
+  it('restricts system AND user skills to the allowlist when one is set (custom agents)', () => {
+    const catalog = buildSkillsCatalog({
+      tree: TREE,
+      preloaded: new Set(['questions', 'navigation_restricted']),
+      selected: [],
+      userCatalog: [
+        { name: 'allowed_kb', description: 'In the allowlist' },
+        { name: 'blocked_kb', description: 'Not in the allowlist' },
+      ],
+      allowlist: new Set(['dashboards', 'allowed_kb']),
+    });
+    expect(catalog).toContain('  - `"dashboards"` — Dashboards');
+    expect(catalog).toContain('  - `"allowed_kb"` — In the allowlist');
+    expect(catalog).not.toContain('"alerts"');   // system skill outside allowlist
+    expect(catalog).not.toContain('"explore"');  // system skill outside allowlist
+    expect(catalog).not.toContain('blocked_kb'); // user skill outside allowlist
+  });
+
+  it('allowlist does not resurrect preloaded or hidden skills', () => {
+    const catalog = buildSkillsCatalog({
+      tree: TREE,
+      preloaded: new Set(['questions', 'navigation_restricted']),
+      selected: [],
+      userCatalog: [],
+      allowlist: new Set(['questions', 'navigation_restricted', 'navigation_unrestricted']),
+    });
+    expect(catalog).toBe('No additional skills are available for this turn.');
+  });
+
+  it('undefined allowlist leaves the catalog identical to today', () => {
+    const opts = {
+      tree: TREE,
+      preloaded: new Set(['questions', 'explore', 'navigation_restricted']),
+      selected: [] as AgentSkillSelection[],
+      userCatalog: [{ name: 'free_kb', description: 'A KB skill' }],
+    };
+    expect(buildSkillsCatalog({ ...opts, allowlist: undefined })).toBe(buildSkillsCatalog(opts));
   });
 });
 

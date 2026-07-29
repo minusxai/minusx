@@ -30,6 +30,7 @@ import { useStableCallback } from '@/lib/hooks/use-stable-callback';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import type { ContextContent } from '@/lib/types';
 import type { ChatGradeCatalog, LlmGrade } from '@/lib/llm/llm-config-types';
+import { getUserAgentDisplayName } from '@/lib/context/agent-utils';
 import {
   SearchableSelect,
   type SearchableOption,
@@ -66,6 +67,13 @@ const GRADE_META: Record<LlmGrade, { label: string; icon: IconType; description:
 };
 const GRADE_LABELS: Record<LlmGrade, string> = { lite: 'Lite', core: 'Core', advanced: 'Advanced' };
 
+/** The picker's view of a custom agent — a projection of AgentEntry. */
+export interface ChatAgentOption {
+  name: string;
+  displayName?: string;
+  description?: string;
+}
+
 export interface ChatSettingsPopoverProps {
   databaseName: string;
   onDatabaseChange: (name: string) => void;
@@ -75,28 +83,19 @@ export interface ChatSettingsPopoverProps {
   selectedContextPath?: string | null;
   selectedVersion?: number;
   onContextChange: (contextPath: string | null, version?: number) => void;
+  /** Custom agents defined on the resolved context (enabled only). */
+  agentOptions?: ChatAgentOption[];
+  /** Selected custom agent name; null = the default analyst. */
+  selectedAgent?: string | null;
+  onAgentChange?: (name: string | null) => void;
   onOpenChange?: (open: boolean) => void;
   compactSummary?: boolean;
 }
 
 type ComboboxOption = SearchableOption;
 
-const ANALYST_AGENT = 'analyst';
-const AGENT_OPTIONS: ComboboxOption[] = [
-  {
-    value: ANALYST_AGENT,
-    label: 'Analyst agent',
-    subtitle: 'Default assistant',
-    badge: 'Default',
-  },
-  {
-    value: 'custom',
-    label: 'Specialized agents',
-    subtitle: '',
-    badge: 'Coming soon',
-    disabled: true,
-  },
-];
+/** Sentinel for the default analyst (an explicit pick of it = no custom agent). */
+const DEFAULT_AGENT = '__default_agent__';
 
 function SettingsCombobox({
   options,
@@ -137,6 +136,9 @@ export default function ChatSettingsPopover({
   selectedContextPath,
   selectedVersion,
   onContextChange,
+  agentOptions = [],
+  selectedAgent = null,
+  onAgentChange,
   onOpenChange,
   compactSummary = false,
 }: ChatSettingsPopoverProps) {
@@ -246,6 +248,34 @@ export default function ChatSettingsPopover({
   const modelSummary = selectedGrade
     ? GRADE_LABELS[selectedGrade]
     : (catalog ? GRADE_LABELS[catalog.defaultGrade] : 'Default');
+
+  const agentComboboxOptions = useMemo((): ComboboxOption[] => {
+    const options: ComboboxOption[] = [{
+      value: DEFAULT_AGENT,
+      label: 'Analyst agent',
+      subtitle: 'Default assistant',
+      badge: 'Default',
+    }];
+    for (const agent of agentOptions) {
+      options.push({
+        value: agent.name,
+        label: getUserAgentDisplayName(agent),
+        subtitle: agent.description ?? '',
+      });
+    }
+    // A selection whose definition no longer exists on the context (deleted /
+    // disabled / context switched) still renders, flagged, so the user sees why
+    // the turn will run as the default analyst.
+    if (selectedAgent && !agentOptions.some((a) => a.name === selectedAgent)) {
+      options.push({ value: selectedAgent, label: `${selectedAgent} (missing)`, group: 'Selected agent' });
+    }
+    return options;
+  }, [agentOptions, selectedAgent]);
+  const selectedAgentValue = selectedAgent ?? DEFAULT_AGENT;
+  const selectedAgentOption = agentOptions.find((agent) => agent.name === selectedAgent);
+  const agentSummary = selectedAgent
+    ? (selectedAgentOption ? getUserAgentDisplayName(selectedAgentOption) : selectedAgent)
+    : 'Analyst agent';
   const databaseComboboxOptions = useMemo(
     () => databaseOptions.map((name) => ({ value: name, label: name })),
     [databaseOptions],
@@ -302,9 +332,9 @@ export default function ChatSettingsPopover({
             minW={0}
             maxW="100px"
             flexShrink={1}
-            title="Analyst agent"
+            title={agentSummary}
           >
-            Analyst agent
+            {agentSummary}
           </Text>
           <Text aria-hidden="true" fontSize="xs" color="fg.subtle" flexShrink={0}>·</Text>
           {!compactSummary && <Icon as={LuBrainCircuit} boxSize={3.5} color="fg.subtle" flexShrink={0} />}
@@ -505,9 +535,9 @@ export default function ChatSettingsPopover({
                     </Text>
                   </HStack>
                   <SettingsCombobox
-                    options={AGENT_OPTIONS}
-                    value={ANALYST_AGENT}
-                    onChange={() => undefined}
+                    options={agentComboboxOptions}
+                    value={selectedAgentValue}
+                    onChange={(value) => onAgentChange?.(value === DEFAULT_AGENT ? null : value)}
                     label="Agent"
                     placeholder="Analyst agent"
                   />

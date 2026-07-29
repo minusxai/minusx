@@ -76,8 +76,10 @@ describe('ChatSettingsPopover', () => {
     const onDatabaseChange = vi.fn();
     const onGradeChange = vi.fn();
     const onContextChange = vi.fn();
+    const onAgentChange = vi.fn();
     function StatefulPopover() {
       const [selectedGrade, setSelectedGrade] = React.useState<LlmGrade | null>(null);
+      const [selectedAgent, setSelectedAgent] = React.useState<string | null>(null);
       return (
         <ChatSettingsPopover
           databaseName="warehouse"
@@ -90,6 +92,12 @@ describe('ChatSettingsPopover', () => {
           selectedContextPath="/tutorial/context.json"
           selectedVersion={2}
           onContextChange={onContextChange}
+          agentOptions={[{ name: 'sales_helper', displayName: 'Sales Helper', description: 'Sales specialist' }]}
+          selectedAgent={selectedAgent}
+          onAgentChange={(name) => {
+            setSelectedAgent(name);
+            onAgentChange(name);
+          }}
         />
       );
     }
@@ -167,12 +175,76 @@ describe('ChatSettingsPopover', () => {
     expect(onGradeChange).toHaveBeenLastCalledWith(null);
     expect(trigger).toHaveTextContent('Core');
 
+    // Agent picker: default + context-defined custom agents, selection round-trips.
     await user.click(agent);
     expect(screen.getByRole('option', { name: 'Analyst agent' })).toBeInTheDocument();
-    const customAgents = screen.getByRole('option', { name: 'Specialized agents' });
-    expect(customAgents).toHaveAttribute('aria-disabled', 'true');
-    await user.click(customAgents);
+    const customOption = screen.getByRole('option', { name: /Sales Helper/ });
+    expect(customOption).toHaveTextContent('Sales specialist');
+    await user.click(customOption);
+    expect(onAgentChange).toHaveBeenLastCalledWith('sales_helper');
+    expect(agent).toHaveTextContent('Sales Helper');
+    expect(trigger).toHaveTextContent('Sales Helper');
+
+    // Re-selecting the default analyst clears the selection (null).
+    await user.click(agent);
+    await user.click(screen.getByRole('option', { name: 'Analyst agent' }));
+    expect(onAgentChange).toHaveBeenLastCalledWith(null);
     expect(agent).toHaveTextContent('Analyst agent');
+    expect(trigger).toHaveTextContent('Analyst agent');
+  });
+
+  // No custom agents (alpha flag off, or the context defines none) → the Agent
+  // picker still renders, offering only the default analyst — same as before
+  // custom agents existed.
+  it('keeps the Agent picker with only the default option when no custom agents exist', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <ChatSettingsPopover
+        databaseName="warehouse"
+        onDatabaseChange={vi.fn()}
+        selectedGrade={null}
+        onGradeChange={vi.fn()}
+        selectedContextPath="/tutorial/context.json"
+        selectedVersion={2}
+        onContextChange={vi.fn()}
+        agentOptions={[]}
+        selectedAgent={null}
+        onAgentChange={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByLabelText('Chat settings'));
+    const agent = await screen.findByLabelText('Agent');
+    expect(agent).toHaveTextContent('Analyst agent');
+    await user.click(agent);
+    expect(screen.getByRole('option', { name: 'Analyst agent' })).toBeInTheDocument();
+    expect(screen.getAllByRole('option')).toHaveLength(1);
+  });
+
+  it('flags a selected agent that no longer exists on the context as missing', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <ChatSettingsPopover
+        databaseName="warehouse"
+        onDatabaseChange={vi.fn()}
+        selectedGrade={null}
+        onGradeChange={vi.fn()}
+        selectedContextPath="/tutorial/context.json"
+        selectedVersion={2}
+        onContextChange={vi.fn()}
+        agentOptions={[]}
+        selectedAgent="ghost_agent"
+        onAgentChange={vi.fn()}
+      />,
+    );
+
+    const trigger = screen.getByLabelText('Chat settings');
+    expect(trigger).toHaveTextContent('ghost_agent');
+    await user.click(trigger);
+    const agent = await screen.findByLabelText('Agent');
+    expect(agent).toHaveTextContent('ghost_agent');
+    await user.click(agent);
+    expect(screen.getByRole('option', { name: /ghost_agent/ })).toHaveTextContent(/missing/i);
   });
 
   // The workspace default is the grade every chat actually runs on. Badging it

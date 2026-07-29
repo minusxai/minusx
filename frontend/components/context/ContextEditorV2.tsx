@@ -6,12 +6,12 @@
  * All changes go through onChange immediately
  */
 
-import { Box, VStack, HStack, Text, Badge, Tabs } from '@chakra-ui/react';
+import { Box, VStack, HStack, Text, Tabs } from '@chakra-ui/react';
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { LuCircleAlert } from 'react-icons/lu';
-import type { ContextContent, ContextVersion, PublishedVersions, DocEntry, SkillEntry } from '@/lib/types';
+import type { ContextContent, ContextVersion, PublishedVersions, DocEntry, SkillEntry, AgentEntry } from '@/lib/types';
 import { StatusBanner } from '@/components/shared/StatusBanner';
 import type { RunOptions } from '@/components/shared/RunNowHeader';
 import type { JobRun } from '@/lib/types';
@@ -28,11 +28,16 @@ import CodeView from '../views/CodeView';
 import { useAppSelector } from '@/store/hooks';
 import { shallowEqual } from 'react-redux';
 import { selectConnectionsLoading, selectPersistableContent, selectMergedContent } from '@/store/filesSlice';
+import { selectEnableCustomAgents } from '@/store/uiSlice';
 import { HIDDEN_SYSTEM_FOLDERS } from '@/lib/mode/path-resolver';
 import { canEdit } from '@/lib/auth/role-helpers';
 import { useContext as useKnowledgeContext } from '@/lib/hooks/useContext';
 import { DatabasesTabContent } from './DatabasesTabContent';
 import { SkillsTabContent } from './SkillsTabContent';
+import { AgentsTabContent } from './AgentsTabContent';
+import type { AgentDraft } from './AgentReadView';
+import { uniqueUserSkillName } from '@/lib/context/skill-utils';
+import { buildAgentExploreHref, uniqueUserAgentName } from '@/lib/context/agent-utils';
 import { EvalsTabContent } from './EvalsTabContent';
 
 type DatabaseSelection = {
@@ -85,6 +90,28 @@ interface ContextEditorV2Props {
 
 const MONACO_READ_ONLY_MESSAGE = { value: 'Switch to edit mode to make changes.' };
 
+/** Uniform count marker for the top tabs (Docs / Skills / Agents / Evals). */
+function TabCount({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <Box
+      display="inline-flex"
+      alignItems="center"
+      justifyContent="center"
+      w="18px"
+      h="18px"
+      borderRadius="full"
+      bg="accent.teal/20"
+      color="accent.teal"
+      fontSize="2xs"
+      fontWeight="700"
+      ml={1}
+    >
+      {count}
+    </Box>
+  );
+}
+
 export default function ContextEditorV2({
   content,
   fileName,
@@ -119,11 +146,23 @@ export default function ContextEditorV2({
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  type TopTab = 'databases' | 'docs' | 'skills' | 'evals';
-  const validTabs: TopTab[] = ['databases', 'docs', 'skills', 'evals'];
+  // Alpha flag (Settings → Developer Tools → Alpha Flags): custom agents are
+  // hidden entirely — no tab, and ?tab=agents deep links fall back to Databases.
+  const enableCustomAgents = useAppSelector(selectEnableCustomAgents);
+
+  type TopTab = 'databases' | 'docs' | 'skills' | 'agents' | 'evals';
+  const validTabs: TopTab[] = enableCustomAgents
+    ? ['databases', 'docs', 'skills', 'agents', 'evals']
+    : ['databases', 'docs', 'skills', 'evals'];
   const parseTab = (val: string | null): TopTab => validTabs.includes(val as TopTab) ? val as TopTab : 'databases';
 
   const [topTab, setTopTabState] = useState<TopTab>(() => parseTab(searchParams.get('tab')));
+
+  // If the flag is switched off while the Agents tab is open, land on Databases
+  // rather than an empty tab body.
+  useEffect(() => {
+    if (!enableCustomAgents && topTab === 'agents') setTopTabState('databases');
+  }, [enableCustomAgents, topTab]);
 
   const setTopTab = useCallback((tab: TopTab) => {
     setTopTabState(tab);
@@ -149,7 +188,7 @@ export default function ContextEditorV2({
   const filesState = useAppSelector(state => state.files.files, shallowEqual); // Moved here for consistent hooks order
 
   const [userSkillsOpen, setUserSkillsOpen] = useState(true);
-  const [systemSkillsOpen, setSystemSkillsOpen] = useState(false);
+  const [systemSkillsOpen, setSystemSkillsOpen] = useState(true);
   const contextDir = useMemo(() => file?.path.substring(0, file.path.lastIndexOf('/')) || '/', [file?.path]);
   const contextInfo = useKnowledgeContext(contextDir, currentVersion, true);
   const systemSkills = useMemo(() => (
@@ -180,6 +219,10 @@ export default function ContextEditorV2({
   const mentionSchemas = useMemo(
     () => (content.fullSchema || []).filter(db => db.schemas.length > 0),
     [content.fullSchema],
+  );
+  const editorMentions = useMemo(
+    () => ({ whitelistedSchemas: mentionSchemas }),
+    [mentionSchemas],
   );
 
   // Compute immediate child paths for path filtering UI
@@ -341,28 +384,23 @@ export default function ContextEditorV2({
     }
   };
 
-  const canManageSkills = editMode && canEdit(user?.role || 'viewer');
+  const canEditContext = canEdit(user?.role || 'viewer');
+  const canManageSkills = editMode && canEditContext;
   const systemSkillNames = new Set(systemSkills.map(skill => skill.name.toLowerCase()));
 
   const makeSkillName = useCallback((name: string, ignoreIndex?: number) => {
-    const base = name.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || 'skill';
-    const existing = new Set((content.skills || [])
+    const existing = (content.skills || [])
       .filter((_, index) => index !== ignoreIndex)
       .map(skill => skill.name)
-      .concat(systemSkills.map(skill => skill.name)));
-    let candidate = base;
-    let suffix = 2;
-    while (existing.has(candidate)) {
-      candidate = `${base}_${suffix}`;
-      suffix += 1;
-    }
-    return candidate;
+      .concat(systemSkills.map(skill => skill.name));
+    return uniqueUserSkillName(name, existing);
   }, [content.skills, systemSkills]);
 
   const handleAddSkill = () => {
     const now = new Date().toISOString();
     const skill: SkillEntry = {
       name: makeSkillName('new_skill'),
+      displayName: 'New skill',
       description: '',
       content: '',
       enabled: true,
@@ -378,7 +416,9 @@ export default function ContextEditorV2({
     const current = skills[index];
     if (!current) return;
     const next = { ...current, ...updates, updatedAt: new Date().toISOString() };
-    if (updates.name !== undefined) {
+    if (updates.displayName !== undefined) {
+      next.name = makeSkillName(updates.displayName, index);
+    } else if (updates.name !== undefined) {
       next.name = makeSkillName(updates.name, index);
     }
     skills[index] = next;
@@ -389,8 +429,50 @@ export default function ContextEditorV2({
     onChange({ skills: (content.skills || []).filter((_, i) => i !== index) });
   }, [content.skills, onChange]);
 
+  // Custom agents — same permission gate and slug discipline as skills.
+  const canManageAgents = canManageSkills;
+  const makeAgentName = useCallback((name: string, ignoreIndex?: number) => {
+    const existing = (content.agents || [])
+      .filter((_, index) => index !== ignoreIndex)
+      .map(agent => agent.name)
+      .concat(['analyst']); // reserved: the default analyst's picker slot
+    return uniqueUserAgentName(name, existing);
+  }, [content.agents]);
+
+  const handleAddAgent = useCallback((draft: AgentDraft) => {
+    const now = new Date().toISOString();
+    const agent: AgentEntry = {
+      ...draft,
+      name: makeAgentName(draft.displayName),
+      displayName: draft.displayName,
+      enabled: true,
+      createdAt: now,
+      updatedAt: now,
+      createdBy: user?.id || 1,
+    };
+    onChange({ agents: [...(content.agents || []), agent] });
+  }, [content.agents, makeAgentName, onChange, user?.id]);
+
+  const handleUpdateAgent = useCallback((index: number, updates: Partial<AgentEntry>) => {
+    const agents = [...(content.agents || [])];
+    const current = agents[index];
+    if (!current) return;
+    const next = { ...current, ...updates, updatedAt: new Date().toISOString() };
+    if (updates.displayName !== undefined) {
+      next.name = makeAgentName(updates.displayName, index);
+    } else if (updates.name !== undefined) {
+      next.name = makeAgentName(updates.name, index);
+    }
+    agents[index] = next;
+    onChange({ agents });
+  }, [content.agents, makeAgentName, onChange]);
+
+  const handleDeleteAgent = useCallback((index: number) => {
+    onChange({ agents: (content.agents || []).filter((_, i) => i !== index) });
+  }, [content.agents, onChange]);
+
   return (
-    <VStack gap={6} align="stretch" p={3}>
+    <VStack gap={6} align="stretch" p={3} pb={{ base: '140px', md: '180px' }}>
       {/* Document Header */}
       <Box borderBottomWidth="1px" borderColor="border.muted" pb={2}>
         <DocumentHeader
@@ -483,7 +565,7 @@ export default function ContextEditorV2({
           persistableContent={codeViewPersistableContent}
           mergedContent={codeViewMergedContent}
           editable={editMode}
-          omitKeys={['fullSchema', 'parentSchema', 'fullDocs', 'fullAnnotations', 'fullMetrics', 'fullViews', 'parentViews', 'parentSemanticModels', 'fullSkills']}
+          omitKeys={['fullSchema', 'parentSchema', 'fullDocs', 'fullAnnotations', 'fullMetrics', 'fullViews', 'parentViews', 'parentSemanticModels', 'fullSkills', 'fullAgents']}
           xmlContentTransform={shapeContextForAgent}
         />
       ) : (
@@ -499,40 +581,21 @@ export default function ContextEditorV2({
           </Tabs.Trigger>
           <Tabs.Trigger value="docs" fontFamily="mono" fontSize="sm">
             Docs
-            {(content.docs?.length ?? 0) > 0 && (
-              <Box
-                display="inline-flex"
-                alignItems="center"
-                justifyContent="center"
-                w="18px"
-                h="18px"
-                // p={2}
-                borderRadius="full"
-                bg="accent.teal/20"
-                color="accent.teal"
-                fontSize="3xs"
-                fontWeight="700"
-                ml={1}
-              >
-                {content.docs!.length}
-              </Box>
-            )}
+            <TabCount count={content.docs?.length ?? 0} />
           </Tabs.Trigger>
           <Tabs.Trigger value="skills" fontFamily="mono" fontSize="sm">
             Skills
-            {(content.skills?.length ?? 0) > 0 && (
-              <Badge size="xs" colorPalette="gray" variant="subtle" ml={1.5}>
-                {content.skills!.length}
-              </Badge>
-            )}
+            <TabCount count={(content.skills?.length ?? 0) + systemSkills.length} />
           </Tabs.Trigger>
+          {enableCustomAgents && (
+            <Tabs.Trigger value="agents" fontFamily="mono" fontSize="sm">
+              Agents
+              <TabCount count={content.agents?.length ?? 0} />
+            </Tabs.Trigger>
+          )}
           <Tabs.Trigger value="evals" fontFamily="mono" fontSize="sm">
             Evals
-            {(content.evals?.length ?? 0) > 0 && (
-              <Badge size="xs" colorPalette="gray" variant="subtle" ml={1.5}>
-                {content.evals!.length}
-              </Badge>
-            )}
+            <TabCount count={content.evals?.length ?? 0} />
           </Tabs.Trigger>
         </Tabs.List>
 
@@ -564,7 +627,7 @@ export default function ContextEditorV2({
             inheritedDocs={content.fullDocs}
             originalDocs={originalDocs}
             availableChildPaths={availableChildPaths}
-            mentions={{ whitelistedSchemas: mentionSchemas }}
+            mentions={editorMentions}
             editMode={editMode}
           />
           ) : (
@@ -604,17 +667,46 @@ export default function ContextEditorV2({
           colorMode={colorMode}
           content={content}
           onChange={onChange}
+          canAddSkill={canEditContext}
           canManageSkills={canManageSkills}
           systemSkills={systemSkills}
           systemSkillNames={systemSkillNames}
+          mentions={editorMentions}
           userSkillsOpen={userSkillsOpen}
           onUserSkillsOpenChange={setUserSkillsOpen}
           systemSkillsOpen={systemSkillsOpen}
           onSystemSkillsOpenChange={setSystemSkillsOpen}
-          onAddSkill={handleAddSkill}
+          onAddSkill={() => {
+            if (!editMode) onEditModeChange(true);
+            handleAddSkill();
+          }}
           onUpdateSkill={handleUpdateSkill}
           onDeleteSkill={handleDeleteSkill}
         />
+
+        {/* Agents Tab */}
+        {enableCustomAgents && <AgentsTabContent
+          activeTab={activeTab}
+          colorMode={colorMode}
+          content={content}
+          onChange={onChange}
+          canAddAgent={canEditContext}
+          canManageAgents={canManageAgents}
+          systemSkills={systemSkills}
+          mentions={editorMentions}
+          onStartAddAgent={() => {
+            if (!editMode) onEditModeChange(true);
+          }}
+          onAddAgent={handleAddAgent}
+          onUpdateAgent={handleUpdateAgent}
+          onDeleteAgent={handleDeleteAgent}
+          getAgentExploreHref={(agentName) => buildAgentExploreHref({
+            agentName,
+            contextPath: file?.path,
+            contextVersion: currentVersion,
+            currentSearchParams: searchParams,
+          })}
+        />}
 
         {/* Evals Tab */}
         <EvalsTabContent

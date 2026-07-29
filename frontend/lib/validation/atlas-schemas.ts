@@ -850,6 +850,7 @@ export type SemanticModelV2 = Static<typeof SemanticModelV2>;
 
 const CtxSkillEntry = Type.Object({
   name: Type.String(),
+  displayName: Type.Optional(Type.String()),
   description: Type.String(),
   content: Type.String(),
   enabled: Type.Boolean(),

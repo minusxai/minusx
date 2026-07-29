@@ -109,7 +109,7 @@ async function computeContextSchema(file: DbFile, user: EffectiveUser): Promise<
   // parentSchema is only the editor's available-to-whitelist menu, so it may also cap the table list.
   const fullSchema = boundFullSchema(withViews) as ContextContent['fullSchema'];
   const parentSchema = boundSchema(computed.parentSchema) as ContextContent['parentSchema'];
-  const { fullDocs, fullMetrics, fullAnnotations, fullSkills } = computed;
+  const { fullDocs, fullMetrics, fullAnnotations, fullSkills, fullAgents } = computed;
 
   // Authored semantic models inherit like metrics: fullSemanticModels is
   // INHERITED-ONLY (ancestor's), mirroring fullMetrics — the version's own
@@ -137,7 +137,8 @@ async function computeContextSchema(file: DbFile, user: EffectiveUser): Promise<
         parentViews,
         parentSemanticModels,
         viewProblems,
-        fullSkills
+        fullSkills,
+        fullAgents
       }
     };
   } else {
@@ -148,6 +149,7 @@ async function computeContextSchema(file: DbFile, user: EffectiveUser): Promise<
         versions: [publishedVersion],  // Only their published version
         published: { all: publishedVersionNumber },  // Hide other publish info
         skills: content.skills || [],
+        agents: content.agents || [],
         fullSchema,
         parentSchema,
         fullDocs,
@@ -158,7 +160,8 @@ async function computeContextSchema(file: DbFile, user: EffectiveUser): Promise<
         parentViews,
         parentSemanticModels,
         viewProblems,
-        fullSkills
+        fullSkills,
+        fullAgents
       }
     };
   }

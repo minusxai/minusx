@@ -78,6 +78,22 @@ async function mkPublishedContext(name: string, path: string, content: ContextCo
   return id;
 }
 
+/** Minimal enabled AgentEntry for seeding contexts. */
+function mkAgentEntry(name: string, prompt: string): import('@/lib/types').AgentEntry {
+  return {
+    name,
+    description: `${name} description`,
+    prompt,
+    promptMode: 'append',
+    preloadSkills: [],
+    includeSkills: [],
+    enabled: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    createdBy: 1,
+  };
+}
+
 describe('Context Loader Integration with Versioning', () => {
   let duckdbConnectionId: number;
   let bigqueryConnectionId: number;
@@ -240,6 +256,10 @@ describe('Context Loader Integration with Versioning', () => {
           createdBy: 1
         }
       ],
+      agents: [
+        mkAgentEntry('parent_agent', 'You are the parent agent'),
+        mkAgentEntry('shared_agent', 'Parent shared agent prompt')
+      ],
       fullSchema: [],
       fullDocs: [],
       fullSkills: []
@@ -292,6 +312,10 @@ describe('Context Loader Integration with Versioning', () => {
           updatedAt: new Date().toISOString(),
           createdBy: 1
         }
+      ],
+      agents: [
+        mkAgentEntry('shared_agent', 'Sales shared agent prompt'),
+        mkAgentEntry('sales_agent', 'You are the sales agent')
       ],
       fullSchema: [],
       fullDocs: [],
@@ -390,6 +414,25 @@ describe('Context Loader Integration with Versioning', () => {
 
       expect(content.fullSkills?.map(skill => skill.name).sort()).toEqual(['parent_skill', 'shared_skill']);
       expect(content.skills?.map(skill => skill.name).sort()).toEqual(['sales_skill', 'shared_skill']);
+    });
+
+    it('should always inherit parent agents to children (non-admin sees agents + fullAgents)', async () => {
+      const { data: contexts } = await FilesAPI.loadFiles([salesContextId], nonAdminUser);
+      const content = contexts[0].content as ContextContent;
+
+      // fullAgents = ancestor's fullAgents merged with ancestor's own agents
+      expect(content.fullAgents?.map(agent => agent.name).sort()).toEqual(['parent_agent', 'shared_agent']);
+      // own agents preserved through the non-admin content rebuild
+      expect(content.agents?.map(agent => agent.name).sort()).toEqual(['sales_agent', 'shared_agent']);
+    });
+
+    it('should expose fullAgents on the root context load (own agents are not fullAgents)', async () => {
+      const { data: contexts } = await FilesAPI.loadFiles([orgContextId], nonAdminUser);
+      const content = contexts[0].content as ContextContent;
+
+      // Root inherits nothing; its own agents stay on content.agents (mirrors fullSkills)
+      expect(content.fullAgents).toEqual([]);
+      expect(content.agents?.map(agent => agent.name).sort()).toEqual(['parent_agent', 'shared_agent']);
     });
 
     it('should inherit parent schema based on published version (admin sees same as non-admin)', async () => {

@@ -322,10 +322,24 @@ export class LoadSkill extends MXTool<typeof LoadSkillParams, RemoteAnalystConte
       const error = 'LoadSkill requires a skill name';
       return { content: [{ type: 'text', text: JSON.stringify({ success: false, error }) }], isError: true };
     }
+    const customAgentAllowlist = this.context.customAgent?.skillAllowlist;
+    if (customAgentAllowlist !== undefined && !customAgentAllowlist.includes(name)) {
+      const error = `Skill '${name}' is not available to this custom agent`;
+      return { content: [{ type: 'text', text: JSON.stringify({ success: false, error }) }], isError: true };
+    }
     // System skills live in the shared prompts.yaml — resolve them here.
     const content = loadSkill(name);
     if (content === null) {
-      // Not a system skill. Bridge to the frontend ONLY when the name matches a user-defined
+      // Not a system skill. A server-built catalog entry (custom-agent turns)
+      // carries the skill body — resolve it inline, no browser round-trip.
+      const catalogEntry = (this.context.userSkillCatalog ?? []).find((sk) => sk.name === name);
+      if (catalogEntry?.content) {
+        return {
+          content: [{ type: 'text', text: JSON.stringify({ success: true, skill: name, content: catalogEntry.content }) }],
+          isError: false,
+        };
+      }
+      // Bridge to the frontend ONLY when the name matches a user-defined
       // Knowledge Base skill (the browser resolves its content). A name that matches NEITHER is a
       // guess — fail fast WITH the valid names so the agent self-corrects in one step, instead of
       // a wasted browser round-trip ending in an unhelpful "not found".

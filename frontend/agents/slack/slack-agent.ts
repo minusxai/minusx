@@ -52,6 +52,8 @@ export class SlackAgent extends RemoteAnalystAgent {
       // `<viz>` envelope grammar (Vega-Lite specs, shipped recipes, table/pivot
       // sources) the agent needs to chart ExecuteQuery results in Slack.
       skills_catalog: '',
+      // Slack never runs custom agents; the slot must still be filled.
+      agent_persona: '',
       connection_id: ctx.connectionId ?? '',
       home_folder: ctx.homeFolder ?? '',
       preloaded_skills: buildPreloadedSkillsContent({

@@ -8,7 +8,13 @@ const { IMG } = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/navigation/use-navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
-vi.mock('@/lib/hooks/useContext', () => ({ useContext: () => ({ databases: [], availableSkills: [] }) }));
+vi.mock('@/lib/hooks/useContext', () => ({
+  useContext: () => ({
+    databases: [],
+    availableSkills: [],
+    agents: [{ name: 'yoyo', description: 'momo' }],
+  }),
+}));
 
 // Stand in for ChatInput: controls that exercise model selection and message hand-off.
 vi.mock('@/components/explore/ChatInput', () => ({
@@ -17,15 +23,27 @@ vi.mock('@/components/explore/ChatInput', () => ({
     onSend: (m: string, a: unknown[]) => void;
     selectedGrade?: string | null;
     onGradeChange?: (grade: string) => void;
+    agentOptions?: { name: string; description?: string }[];
+    selectedAgent?: string | null;
+    onAgentChange?: (name: string | null) => void;
   }) => React.createElement(
     'div',
-    null,
+    // The real ChatInput re-enables pointer events on its pill (the floating
+    // wrapper row is pointer-events:none so clicks beside the pill fall through);
+    // the mock must mirror that or userEvent refuses to click inside it.
+    { style: { pointerEvents: 'auto' } },
     React.createElement('button', { 'aria-label': 'send-test', onClick: () => props.onSend('summarize this', [IMG]) }, 'send'),
     React.createElement('button', {
       'aria-label': 'select-grade-test',
       onClick: () => props.onGradeChange?.('advanced'),
     }, 'grade'),
+    React.createElement('button', {
+      'aria-label': 'select-agent-test',
+      onClick: () => props.onAgentChange?.('yoyo'),
+    }, 'agent'),
     React.createElement('span', { 'data-testid': 'selected-grade' }, props.selectedGrade ?? 'default'),
+    React.createElement('span', { 'data-testid': 'selected-agent' }, props.selectedAgent ?? 'default'),
+    React.createElement('span', { 'data-testid': 'agent-options' }, props.agentOptions?.map((agent) => agent.name).join(',') ?? ''),
   ),
 }));
 
@@ -34,7 +52,7 @@ import { screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import * as storeModule from '@/store/store';
-import { selectChatAttachments, setChatGradeSelection } from '@/store/uiSlice';
+import { selectChatAttachments, setChatAgentSelection, setChatGradeSelection, setEnableCustomAgents } from '@/store/uiSlice';
 import FloatingChatWrapper from '@/components/app-shell/FloatingChatWrapper';
 
 describe('FloatingChatWrapper: attachment hand-off to the sidebar chat', () => {
@@ -61,5 +79,32 @@ describe('FloatingChatWrapper: attachment hand-off to the sidebar chat', () => {
       store.dispatch(setChatGradeSelection('lite'));
     });
     expect(screen.getByTestId('selected-grade')).toHaveTextContent('lite');
+  });
+
+  // Custom agents are alpha-gated: no flag → the context's agents never reach
+  // the picker and any lingering shared selection is withheld.
+  it('withholds context agents from the picker when the alpha flag is off', () => {
+    const store = storeModule.makeStore();
+    store.dispatch(setChatAgentSelection('yoyo'));
+    renderWithProviders(<FloatingChatWrapper appState={null} />, { store });
+
+    expect(screen.getByTestId('agent-options')).toHaveTextContent(/^$/);
+    expect(screen.getByTestId('selected-agent')).toHaveTextContent('default');
+  });
+
+  it('offers context agents and shares the agent selection with the sidebar chat', async () => {
+    const store = storeModule.makeStore();
+    store.dispatch(setEnableCustomAgents(true));
+    renderWithProviders(<FloatingChatWrapper appState={null} />, { store });
+
+    expect(screen.getByTestId('agent-options')).toHaveTextContent('yoyo');
+    await userEvent.click(screen.getByLabelText('select-agent-test'));
+    expect(screen.getByTestId('selected-agent')).toHaveTextContent('yoyo');
+    expect(store.getState().ui.chatAgentSelection).toBe('yoyo');
+
+    act(() => {
+      store.dispatch(setChatAgentSelection(null));
+    });
+    expect(screen.getByTestId('selected-agent')).toHaveTextContent('default');
   });
 });

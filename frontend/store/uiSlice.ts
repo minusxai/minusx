@@ -15,6 +15,8 @@ interface UIState {
   devMode: boolean;
   sidebarPendingMessage: string | null;
   chatGradeSelection: LlmGrade | null;
+  /** Sidebar chat's selected custom agent (AgentEntry.name); null = default analyst. */
+  chatAgentSelection: string | null;
   sidebarPendingSlashCommand: string | null;
   activeSidebarSection: string | null;
   askForConfirmation: boolean;
@@ -41,6 +43,8 @@ interface UIState {
   queueStrategy: 'end-of-turn' | 'mid-turn';
   unrestrictedMode: boolean;
   showExpandedMessages: boolean;
+  /** Alpha flag: custom agents (Agents tab on contexts + agent picker in chat). */
+  enableCustomAgents: boolean;
   homePage: {
     showFeedSummary: boolean;
     showRecentQuestions: boolean;
@@ -61,6 +65,7 @@ const initialState: UIState = {
   devMode: false,
   sidebarPendingMessage: null,
   chatGradeSelection: null,
+  chatAgentSelection: null,
   sidebarPendingSlashCommand: null,
   activeSidebarSection: null,
   askForConfirmation: false,
@@ -81,6 +86,7 @@ const initialState: UIState = {
   queueStrategy: 'end-of-turn',
   unrestrictedMode: false,
   showExpandedMessages: false,
+  enableCustomAgents: false,
   homePage: {
     showFeedSummary: true,
     showRecentQuestions: true,
@@ -129,6 +135,9 @@ const uiSlice = createSlice({
     },
     setChatGradeSelection: (state, action: PayloadAction<LlmGrade | null>) => {
       state.chatGradeSelection = action.payload;
+    },
+    setChatAgentSelection: (state, action: PayloadAction<string | null>) => {
+      state.chatAgentSelection = action.payload;
     },
     setSidebarPendingSlashCommand: (state, action: PayloadAction<UIState['sidebarPendingSlashCommand']>) => {
       state.sidebarPendingSlashCommand = action.payload;
@@ -242,14 +251,20 @@ const uiSlice = createSlice({
         try { localStorage.setItem('showExpandedMessages', String(action.payload)); } catch { /* ignore */ }
       }
     },
+    setEnableCustomAgents: (state, action: PayloadAction<boolean>) => {
+      state.enableCustomAgents = action.payload;
+      if (typeof window !== 'undefined') {
+        try { localStorage.setItem('enableCustomAgents', String(action.payload)); } catch { /* ignore */ }
+      }
+    },
     setHomePageConfig: (state, action: PayloadAction<Partial<UIState['homePage']>>) => {
       Object.assign(state.homePage, action.payload);
       if (typeof window !== 'undefined') {
         try { localStorage.setItem('homePage', JSON.stringify(state.homePage)); } catch { /* ignore */ }
       }
     },
-    setBulkUiFlags: (state, action: PayloadAction<{ devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; vizV2?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; showExpandedMessages?: boolean; homePage?: Partial<UIState['homePage']> }>) => {
-      const { devMode, askForConfirmation, showAdvanced, vizV2, allowChatQueue, queueStrategy, showSuggestedQuestions, showTrustScore, unrestrictedMode, showExpandedMessages, homePage } = action.payload;
+    setBulkUiFlags: (state, action: PayloadAction<{ devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; vizV2?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; showExpandedMessages?: boolean; enableCustomAgents?: boolean; homePage?: Partial<UIState['homePage']> }>) => {
+      const { devMode, askForConfirmation, showAdvanced, vizV2, allowChatQueue, queueStrategy, showSuggestedQuestions, showTrustScore, unrestrictedMode, showExpandedMessages, enableCustomAgents, homePage } = action.payload;
       if (devMode !== undefined) state.devMode = devMode;
       if (askForConfirmation !== undefined) state.askForConfirmation = askForConfirmation;
       if (showAdvanced !== undefined) state.showAdvanced = showAdvanced;
@@ -260,6 +275,7 @@ const uiSlice = createSlice({
       if (showTrustScore !== undefined) state.showTrustScore = showTrustScore;
       if (unrestrictedMode !== undefined) state.unrestrictedMode = unrestrictedMode;
       if (showExpandedMessages !== undefined) state.showExpandedMessages = showExpandedMessages;
+      if (enableCustomAgents !== undefined) state.enableCustomAgents = enableCustomAgents;
       if (homePage !== undefined) Object.assign(state.homePage, homePage);
     },
   },
@@ -275,6 +291,7 @@ export const {
   setDevMode,
   setSidebarPendingMessage,
   setChatGradeSelection,
+  setChatAgentSelection,
   setSidebarPendingSlashCommand,
   setActiveSidebarSection,
   setAskForConfirmation,
@@ -296,6 +313,7 @@ export const {
   setQueueStrategy,
   setUnrestrictedMode,
   setShowExpandedMessages,
+  setEnableCustomAgents,
   setHomePageConfig,
   setBulkUiFlags,
   pushView,
@@ -353,4 +371,5 @@ export const selectShowSuggestedQuestions = (state: RootState) => state.ui.showS
 export const selectShowTrustScore = (state: RootState) => state.ui.showTrustScore;
 export const selectUnrestrictedMode = (state: RootState) => state.ui.unrestrictedMode;
 export const selectShowExpandedMessages = (state: RootState) => state.ui.showExpandedMessages ?? false;
+export const selectEnableCustomAgents = (state: RootState) => state.ui.enableCustomAgents ?? false;
 export const selectHomePage = (state: RootState) => state.ui.homePage;

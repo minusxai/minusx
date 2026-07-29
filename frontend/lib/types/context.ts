@@ -9,6 +9,7 @@ import type { ScheduledJobContent } from './jobs';
 import type { DatabaseWithSchema } from './connections';
 import type { Test } from './evals';
 import type { SkillMention } from './chat';
+import type { LlmGrade } from '@/lib/llm/llm-config-types';
 import type { SemanticModelV2 } from './semantic';
 import type { ViewDef, ViewProblem } from './views';
 
@@ -106,9 +107,38 @@ export interface TableAnnotation {
 }
 
 export interface SkillEntry {
-  name: string;
+  name: string;               // unique canonical key used by agents and LoadSkill
+  displayName?: string;       // human-facing label; absent on legacy entries
   description: string;
   content: string;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: number;
+}
+
+/**
+ * A user-defined custom agent, stored on the context content (like SkillEntry —
+ * content-level, not versioned, inherited down the context tree via fullAgents).
+ * The agent runs the same loop/toolset as the general analyst; the definition
+ * only shapes the prompt (persona), skill exposure, and default LLM grade.
+ * Data access is always the requesting user's — a definition can never widen it.
+ */
+export interface AgentEntry {
+  name: string;                       // unique canonical key within the context tree
+  displayName?: string;               // human-facing label; absent on legacy entries
+  description: string;                // one-liner shown in the chat-settings picker
+  prompt: string;                     // persona / instructions body
+  /** append = inject into the default analyst prompt; replace = swap out the
+   *  instructional body (dynamic schema/context/skills sections are kept). */
+  promptMode: 'append' | 'replace';
+  /** Skill names (system or user) whose full content is inlined in the prompt. */
+  preloadSkills: string[];
+  /** Skill names available in the on-demand catalog (LoadSkill). Non-empty
+   *  selections are combined with preloadSkills into the custom agent's exact
+   *  skill allowlist; [] means no on-demand skills. */
+  includeSkills: string[];
+  gradeOverride?: LlmGrade;           // default LLM grade; an explicit user pick wins
   enabled: boolean;
   createdAt: string;
   updatedAt: string;
@@ -166,6 +196,7 @@ export type ContextContent = PartialBy<ScheduledJobContent, 'schedule' | 'recipi
   parentSemanticModels?: SemanticModelV2[]; // Computed by loader - inherited semantic models on offer
   viewProblems?: ViewProblem[];        // Computed by loader - views DISABLED here, and why
   fullSkills?: SkillEntry[];           // Computed by loader - inherited user-defined skills
+  fullAgents?: AgentEntry[];           // Computed by loader - inherited user-defined agents
 
   // Working fields (exposed by container for editing current version)
   databases?: DatabaseContext[] | '*'; // Current version's whitelist (container only); '*' = expose all
@@ -182,6 +213,9 @@ export type ContextContent = PartialBy<ScheduledJobContent, 'schedule' | 'recipi
 
   // User-defined skills (stored at content level, independent of versions)
   skills?: SkillEntry[];
+
+  // User-defined custom agents (stored at content level, independent of versions)
+  agents?: AgentEntry[];
 };
 
 /**
@@ -220,6 +254,7 @@ export interface ContextInfo {
   databases: DatabaseWithSchema[];        // Whitelisted schemas (or all if no context)
   contextDocs?: ResolvedContextDocs;      // Resolved docs (structure); undefined if no context
   skills: SkillEntry[];                   // Resolved user-defined skills for this context
+  agents: AgentEntry[];                   // Resolved custom agents (inherited + own, enabled only)
   availableSkills: SkillMention[];        // Resolved user-defined skills plus system skills for # mentions
   hasContext: boolean;                    // True if context file found
   contextLoading: boolean;                // True if context file is loading

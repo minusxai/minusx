@@ -13,13 +13,15 @@ import 'server-only';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { FilesAPI } from '@/lib/data/files.server';
 import { listAllConnections, getPersistedConnectionSchema } from '@/lib/data/connections.server';
-import { findNearestContextPath } from '@/lib/context/context-utils';
+import { findNearestContextPath, mergeByName, mergeSkillsByName } from '@/lib/context/context-utils';
 import { resolveHomeFolderSync, resolvePath } from '@/lib/mode/path-resolver';
 import { getWhitelistedSchemaForUser } from '@/lib/sql/schema-filter';
 import { resolveContextDocs } from '@/lib/sql/context-docs';
 import { selectDatabase } from '@/lib/utils/database-selector';
 import { connectionTypeToDialect } from '@/lib/types';
-import type { ContextContent, DatabaseWithSchema, ResolvedContextDocs, TableAnnotation } from '@/lib/types';
+import type { ContextContent, DatabaseWithSchema, ResolvedContextDocs, TableAnnotation, AgentSkillSelection, AgentUserSkillCatalogItem } from '@/lib/types';
+import type { ResolvedCustomAgent } from '@/agents/analyst/types';
+import { LLM_GRADES, type LlmGrade } from '@/lib/llm/llm-config-types';
 
 export interface ServerAgentArgs {
   connection_id?: string;
@@ -39,6 +41,71 @@ export interface ServerAgentArgs {
    * Notes section is char-budgeted, so this is how the agent recovers the rest.
    */
   annotations?: TableAnnotation[];
+  /**
+   * ALL enabled user skills from the resolved context, WITH content — the
+   * server-side skill catalog. Merged over the client-sent catalog (which only
+   * carries names) so LoadSkill resolves user skills in-process on every turn
+   * instead of bridging to the browser. Absent when no context resolved.
+   */
+  user_skill_catalog?: AgentUserSkillCatalogItem[];
+  /**
+   * Custom-agent definition resolved from the context's agents/fullAgents when
+   * `options.customAgentName` was passed AND matched an enabled entry.
+   * Absent = run as the default analyst.
+   */
+  custom_agent?: {
+    resolved: ResolvedCustomAgent;
+    /** Preload selections (system names + user skills WITH content) to merge into selectedSkills. */
+    preloadSelections: AgentSkillSelection[];
+  };
+}
+
+/**
+ * Resolve a custom-agent definition by name from a loaded context. Malformed,
+ * disabled, or missing entries resolve to undefined (caller falls back to the
+ * default analyst). Skill names that are neither user skills nor system skills
+ * are passed through as system selections and silently skipped downstream
+ * (same posture as buildPreloadedSkillsContent).
+ */
+function resolveCustomAgentFromContext(
+  content: ContextContent,
+  name: string,
+): ServerAgentArgs['custom_agent'] {
+  const entry = mergeByName(content.fullAgents || [], content.agents || [])
+    .find((a) => a?.name === name && a.enabled === true);
+  if (!entry || typeof entry.prompt !== 'string' || entry.prompt.length === 0) return undefined;
+
+  const userSkills = mergeSkillsByName(content.fullSkills || [], content.skills || [])
+    .filter((s) => s.enabled);
+  const userByName = new Map(userSkills.map((s) => [s.name, s]));
+  const preload = Array.isArray(entry.preloadSkills) ? entry.preloadSkills.filter((n) => typeof n === 'string') : [];
+  const include = Array.isArray(entry.includeSkills) ? entry.includeSkills.filter((n) => typeof n === 'string') : [];
+
+  const preloadSelections: AgentSkillSelection[] = preload.map((n) => {
+    const user = userByName.get(n);
+    return user
+      ? { type: 'user' as const, name: n, content: user.content, description: user.description }
+      : { type: 'system' as const, name: n };
+  });
+
+  // Custom-agent skill selection is exact: empty include/preload arrays mean
+  // no optional skills, rather than an unrestricted catalog.
+  const skillAllowlist = [...new Set([...include, ...preload])];
+  const gradeOverride: LlmGrade | undefined =
+    typeof entry.gradeOverride === 'string' && (LLM_GRADES as readonly string[]).includes(entry.gradeOverride)
+      ? entry.gradeOverride
+      : undefined;
+
+  return {
+    resolved: {
+      name: entry.name,
+      prompt: entry.prompt,
+      promptMode: entry.promptMode === 'replace' ? 'replace' : 'append',
+      skillAllowlist,
+      ...(gradeOverride ? { gradeOverride } : {}),
+    },
+    preloadSelections,
+  };
 }
 
 function flattenSchemaForPrompt(
@@ -76,6 +143,12 @@ export interface BuildServerAgentArgsOptions {
    * picking the context's first whitelisted database.
    */
   connectionId?: string;
+  /**
+   * Name of a custom agent (AgentEntry.name) to resolve from the loaded
+   * context's agents/fullAgents. Unknown/disabled names resolve to nothing —
+   * the caller falls back to the default analyst.
+   */
+  customAgentName?: string;
 }
 
 /**
@@ -101,6 +174,8 @@ export async function buildServerAgentArgs(
   let databases: DatabaseWithSchema[] | undefined;
   let resolvedDocs: ResolvedContextDocs = { docs: [] };
   let annotations: TableAnnotation[] | undefined;
+  let customAgent: ServerAgentArgs['custom_agent'];
+  let userSkillCatalog: AgentUserSkillCatalogItem[] | undefined;
 
   try {
     const effectiveHomeFolder = resolveHomeFolderSync(user.mode, user.home_folder || '');
@@ -131,9 +206,20 @@ export async function buildServerAgentArgs(
       databases = getWhitelistedSchemaForUser(contextContent, user.userId, options?.contextVersion);
       resolvedDocs = resolveContextDocs(contextContent, user.userId, options?.contextVersion);
       annotations = contextContent.fullAnnotations;
+      // The server-side user-skill catalog (names + CONTENT) — built for every
+      // turn so LoadSkill resolves user skills in-process; the client-sent
+      // catalog only ever carries names.
+      userSkillCatalog = mergeSkillsByName(contextContent.fullSkills || [], contextContent.skills || [])
+        .filter((s) => s.enabled)
+        .map((s) => ({ name: s.name, description: s.description, content: s.content }));
+      if (options?.customAgentName) {
+        customAgent = resolveCustomAgentFromContext(contextContent, options.customAgentName);
+      }
     }
   } catch {
-    // Proceed without context — agent can still use SearchDBSchema tool
+    // Proceed without context — agent can still use SearchDBSchema tool.
+    // NOTE: this also drops any requested custom agent — a context that fails to
+    // load degrades the turn to the default analyst (deliberate fallback).
   }
 
   // Pick a default connection ONLY when there's an unambiguous single target:
@@ -187,5 +273,7 @@ export async function buildServerAgentArgs(
     schema,
     context_docs: resolvedDocs,
     annotations,
+    ...(userSkillCatalog ? { user_skill_catalog: userSkillCatalog } : {}),
+    ...(customAgent ? { custom_agent: customAgent } : {}),
   };
 }

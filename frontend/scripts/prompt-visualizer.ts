@@ -84,6 +84,7 @@ function buildVars(pageType: string | null) {
       connection_id: 'connection_1',
       home_folder: '/org',
       preloaded_skills: buildPreloadedSkillsContent({ tree: PROMPTS, skillNames: preloadedNames, selected: [] }),
+      agent_persona: '',
     } as Record<string, string>,
   };
 }

@@ -95,7 +95,7 @@ export type {
 // Context domain — see lib/types/context.ts
 export type {
   WhitelistNode, Whitelist, NameWhitelist, WhitelistItem, DocEntry, MetricDef, ColumnAnnotation,
-  TableAnnotation, SkillEntry, DatabaseContext, ContextVersion, PublishedVersions,
+  TableAnnotation, SkillEntry, AgentEntry, DatabaseContext, ContextVersion, PublishedVersions,
   ContextContent, ResolvedContextDoc, ResolvedContextDocs, ContextInfo,
 } from './types/context';
 

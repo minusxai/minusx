@@ -452,12 +452,18 @@ export function EditorProTip({ mentions, insertMetric }: { mentions?: boolean; i
 interface LexicalTextEditorProps {
   initialMarkdown: string;
   onChange: (markdown: string) => void;
+  /** Accessible name for the content-editable surface. */
+  ariaLabel?: string;
+  /** Empty-state copy shown inside the editor. */
+  placeholder?: string;
   /** If provided, the toolbar is passed to this render prop instead of being rendered inline. */
   renderToolbar?: (toolbar: React.ReactNode) => React.ReactNode;
   /** If provided, an image button appears in the toolbar; returns the public URL to embed. */
   onImageUpload?: (file: File) => Promise<string>;
   /** If provided, enables the @ / @@ mention typeahead (tables, questions, dashboards). */
   mentions?: MentionsConfig;
+  /** Shows the inline "+ / @" helper beneath the toolbar. */
+  showProTip?: boolean;
   /** Enables the "+" insert menu (image block). */
   insertMenu?: boolean;
   /** Adds a Metric option (chip with name/description/SQL) to the "+" insert menu. */
@@ -474,7 +480,7 @@ interface LexicalTextEditorProps {
   verticalCenter?: boolean;
 }
 
-export default function LexicalTextEditor({ initialMarkdown, onChange, renderToolbar, onImageUpload, mentions, insertMenu, insertMetric, editWithAgent, onEditorReady, contentPadding = '32px 32px', floatingToolbar, verticalCenter }: LexicalTextEditorProps) {
+export default function LexicalTextEditor({ initialMarkdown, onChange, ariaLabel, placeholder = 'Start writing...', renderToolbar, onImageUpload, mentions, showProTip = true, insertMenu, insertMetric, editWithAgent, onEditorReady, contentPadding = '32px 32px', floatingToolbar, verticalCenter }: LexicalTextEditorProps) {
   const colorMode = useAppSelector((state) => state.ui.colorMode);
 
   // Debounce onChange to avoid dispatching on every keystroke
@@ -523,7 +529,7 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
             rendering <EditorProTip> itself (the context docs Diff wrapper does). The
             floating selection toolbar (dashboard text blocks) never shows it — a
             permanent hint line would break WYSIWYG. */}
-        {!renderToolbar && !floatingToolbar && (insertMenu || mentions) && (
+        {showProTip && !renderToolbar && !floatingToolbar && (insertMenu || mentions) && (
           <EditorProTip mentions={!!mentions} insertMetric={insertMetric} />
         )}
 
@@ -537,6 +543,7 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
           <RichTextPlugin
             contentEditable={
               <ContentEditable
+                aria-label={ariaLabel}
                 style={{
                   outline: 'none',
                   padding: contentPadding,
@@ -549,7 +556,7 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, renderToo
             }
             placeholder={
               <div className="pointer-events-none absolute top-[24px] left-[24px] text-sm text-muted-foreground">
-                Start writing...
+                {placeholder}
               </div>
             }
             ErrorBoundary={LexicalErrorBoundary}
