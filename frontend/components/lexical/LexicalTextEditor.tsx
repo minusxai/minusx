@@ -462,6 +462,8 @@ interface LexicalTextEditorProps {
   onImageUpload?: (file: File) => Promise<string>;
   /** If provided, enables the @ / @@ mention typeahead (tables, questions, dashboards). */
   mentions?: MentionsConfig;
+  /** Shows the inline "+ / @" helper beneath the toolbar. */
+  showProTip?: boolean;
   /** Enables the "+" insert menu (image block). */
   insertMenu?: boolean;
   /** Adds a Metric option (chip with name/description/SQL) to the "+" insert menu. */
@@ -478,7 +480,7 @@ interface LexicalTextEditorProps {
   verticalCenter?: boolean;
 }
 
-export default function LexicalTextEditor({ initialMarkdown, onChange, ariaLabel, placeholder = 'Start writing...', renderToolbar, onImageUpload, mentions, insertMenu, insertMetric, editWithAgent, onEditorReady, contentPadding = '32px 32px', floatingToolbar, verticalCenter }: LexicalTextEditorProps) {
+export default function LexicalTextEditor({ initialMarkdown, onChange, ariaLabel, placeholder = 'Start writing...', renderToolbar, onImageUpload, mentions, showProTip = true, insertMenu, insertMetric, editWithAgent, onEditorReady, contentPadding = '32px 32px', floatingToolbar, verticalCenter }: LexicalTextEditorProps) {
   const colorMode = useAppSelector((state) => state.ui.colorMode);
 
   // Debounce onChange to avoid dispatching on every keystroke
@@ -527,7 +529,7 @@ export default function LexicalTextEditor({ initialMarkdown, onChange, ariaLabel
             rendering <EditorProTip> itself (the context docs Diff wrapper does). The
             floating selection toolbar (dashboard text blocks) never shows it — a
             permanent hint line would break WYSIWYG. */}
-        {!renderToolbar && !floatingToolbar && (insertMenu || mentions) && (
+        {showProTip && !renderToolbar && !floatingToolbar && (insertMenu || mentions) && (
           <EditorProTip mentions={!!mentions} insertMetric={insertMetric} />
         )}
 

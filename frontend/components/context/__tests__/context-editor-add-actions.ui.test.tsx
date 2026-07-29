@@ -34,14 +34,16 @@ vi.mock('@/components/lexical/LexicalTextEditor', () => {
   const React = require('react');
   return {
     __esModule: true,
-    default: ({ initialMarkdown, onChange, ariaLabel, mentions }: {
+    default: ({ initialMarkdown, onChange, ariaLabel, mentions, showProTip }: {
       initialMarkdown: string;
       onChange: (markdown: string) => void;
       ariaLabel?: string;
       mentions?: unknown;
+      showProTip?: boolean;
     }) => React.createElement('textarea', {
       'aria-label': ariaLabel,
       'data-mentions': mentions ? 'true' : 'false',
+      'data-show-pro-tip': String(showProTip ?? true),
       defaultValue: initialMarkdown,
       onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => onChange(event.target.value),
     }),
@@ -148,6 +150,7 @@ describe('ContextEditorV2 add actions outside edit mode', () => {
     });
     expect(screen.getByLabelText('Skill 1 content')).toBeVisible();
     expect(screen.getByLabelText('Skill 1 content')).toHaveAttribute('data-mentions', 'true');
+    expect(screen.getByLabelText('Skill 1 content')).toHaveAttribute('data-show-pro-tip', 'false');
   });
 
   it('shows Add agent and enters edit mode before opening the agent builder', () => {
@@ -162,5 +165,6 @@ describe('ContextEditorV2 add actions outside edit mode', () => {
     fireEvent.change(screen.getByLabelText('Agent name'), { target: { value: 'new_agent' } });
     fireEvent.click(screen.getByLabelText('Builder next'));
     expect(screen.getByLabelText('Agent prompt')).toHaveAttribute('data-mentions', 'true');
+    expect(screen.getByLabelText('Agent prompt')).toHaveAttribute('data-show-pro-tip', 'false');
   });
 });

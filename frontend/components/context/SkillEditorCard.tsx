@@ -162,6 +162,7 @@ export const SkillEditorCard = memo(function SkillEditorCard({
                   placeholder="Write the instructions this skill should provide…"
                   contentPadding="20px 20px"
                   mentions={mentions}
+                  showProTip={false}
                 />
               ) : (
                 <LexicalTextViewer markdown={draft.content} padding="20px 20px" />

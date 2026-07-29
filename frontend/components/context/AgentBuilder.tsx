@@ -214,6 +214,7 @@ export function AgentBuilder({ initial, systemSkills, userSkills, mentions, onSa
                 placeholder="Describe the agent's role, priorities, and operating instructions…"
                 contentPadding="20px 20px"
                 mentions={mentions}
+                showProTip={false}
               />
             </Box>
           </Box>
