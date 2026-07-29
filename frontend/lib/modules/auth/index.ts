@@ -119,7 +119,11 @@ export class AuthModule implements IAuthModule {
     // outage leaves a working workspace rather than a half-registration that
     // cannot be repeated.
     if (!input.llm) {
-      await registerCompanyWithGateway({ email: input.adminEmail, workspaceName: input.workspaceName });
+      await registerCompanyWithGateway({
+        email: input.adminEmail,
+        workspaceName: input.workspaceName,
+        appUrl: input.appUrl,
+      });
     }
 
     // setup.sh bootstrap: the interview-provided LLM config, saved here so a

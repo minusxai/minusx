@@ -45,6 +45,13 @@ export interface RegisterInput {
   adminPassword: string;
   inviteCode?: string;
   /**
+   * Where this workspace will be reached, if that is not the deployment's own
+   * `AUTH_URL`. A deployment serving several workspaces gives each its own host,
+   * and support identifiers are useless if every one of them reports the same
+   * address. Defaults to `AUTH_URL`.
+   */
+  appUrl?: string;
+  /**
    * Optional bootstrap payload (setup.sh CLI interview): saved into the org
    * config at registration — with API keys secret-extracted — so the setup
    * wizard's Models stage is already complete on first login. Raw keys inline;

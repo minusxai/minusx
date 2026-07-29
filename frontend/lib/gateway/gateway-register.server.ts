@@ -28,7 +28,7 @@ import { GATEWAY_CONFIG_KEY, type GatewayCredentials } from './gateway-types';
  * they are returned exactly once and cannot be re-read.
  */
 export async function registerCompanyWithGateway(
-  input: { email: string; workspaceName: string },
+  input: { email: string; workspaceName: string; appUrl?: string },
 ): Promise<GatewayCredentials | null> {
   if (!gatewayEnabled()) return null;
 

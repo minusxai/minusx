@@ -77,7 +77,7 @@ async function call<T>(
  * persist them immediately — there is no way to read them back.
  */
 export async function createGatewayOrg(
-  input: { email: string; workspaceName: string },
+  input: { email: string; workspaceName: string; appUrl?: string },
 ): Promise<GatewayCredentials | null> {
   if (!gatewayEnabled()) return null;
 
@@ -88,18 +88,21 @@ export async function createGatewayOrg(
     headers: { 'x-mx-shared-secret': MX_GATEWAY_SHARED_SECRET! },
     body: JSON.stringify({
       email: input.email,
-      // Identifiers the service carries back to us for support. An install IS
-      // one workspace — registration refuses a second — so its name and the
-      // admin email are what exist at this point.
+      // Identifiers the service carries back to us for support: together they
+      // answer "which workspace is this, where is it reached, what is it
+      // running". An org id on its own is not something a human can act on.
+      // Always all three, even when unset — the localhost/`unknown` defaults
+      // are themselves the signal, where an absent key would just look like an
+      // older client.
       //
-      // The origin and build go with them because an org id on its own is not
-      // something a human can act on: together these answer "which install is
-      // this, where does it run, and what is it running". Always all three,
-      // even when unset — the localhost/`unknown` defaults are themselves the
-      // signal, where an absent key would just look like an older client.
+      // `appUrl` is passed rather than always AUTH_URL because a deployment can
+      // serve more than one workspace, each reached at its own host. Defaulting
+      // to AUTH_URL would make every workspace on such a deployment report the
+      // same address — which is precisely the field that is supposed to tell
+      // them apart.
       props: {
         workspace_name: input.workspaceName,
-        app_url: AUTH_URL,
+        app_url: input.appUrl || AUTH_URL,
         app_commit: GIT_COMMIT_SHA,
       },
     }),
