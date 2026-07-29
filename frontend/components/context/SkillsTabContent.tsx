@@ -12,15 +12,112 @@
  * survives the toggle, matching pre-extraction behavior.
  */
 
-import { Box, VStack, HStack, Button, Text, Badge, Collapsible, Icon, Tabs } from '@chakra-ui/react';
+import { Box, VStack, HStack, Button, Text, Badge, Collapsible, Icon, Tabs, SimpleGrid } from '@chakra-ui/react';
 import { useState } from 'react';
-import { LuBookOpen, LuPlus, LuChevronDown, LuChevronRight } from 'react-icons/lu';
+import {
+  LuBell,
+  LuBookOpen,
+  LuBraces,
+  LuChevronDown,
+  LuChevronRight,
+  LuCircleHelp,
+  LuCompass,
+  LuFileText,
+  LuFiles,
+  LuLayers3,
+  LuLayoutDashboard,
+  LuLockKeyhole,
+  LuNotebookTabs,
+  LuPlus,
+  LuSearch,
+  LuSlidersHorizontal,
+  LuSparkles,
+} from 'react-icons/lu';
+import type { IconType } from 'react-icons';
 import type { ContextContent, SkillEntry } from '@/lib/types';
 import Editor from '@monaco-editor/react';
 import { SkillEditorCard } from './SkillEditorCard';
 import type { MentionsConfig } from '@/components/lexical/LexicalTextEditor';
 
 const MONACO_READ_ONLY_MESSAGE = { value: 'Switch to edit mode to make changes.' };
+
+const SYSTEM_SKILL_ICONS: Record<string, IconType> = {
+  questions: LuCircleHelp,
+  dashboards: LuLayoutDashboard,
+  contexts: LuLayers3,
+  semantic_models: LuBraces,
+  reports: LuFileText,
+  alerts: LuBell,
+  parameters: LuSlidersHorizontal,
+  app_guide: LuCompass,
+  explore: LuSearch,
+  large_file: LuFiles,
+  stories: LuBookOpen,
+  notebooks: LuNotebookTabs,
+};
+
+function SystemSkillTile({ skill }: { skill: { name: string; description: string } }) {
+  const SkillIcon = SYSTEM_SKILL_ICONS[skill.name.toLowerCase()] ?? LuSparkles;
+
+  return (
+    <Box
+      role="group"
+      aria-label={`System skill ${skill.name}`}
+      minH="88px"
+      px={3.5}
+      py={3}
+      border="1px solid"
+      borderColor="border.muted"
+      borderRadius="lg"
+      bg="bg.panel"
+      transition="transform 160ms ease, border-color 160ms ease, background 160ms ease"
+      _hover={{
+        transform: 'translateY(-1px)',
+        borderColor: 'accent.teal/40',
+        bg: 'bg.subtle',
+      }}
+    >
+      <HStack align="start" gap={3}>
+        <Box
+          display="grid"
+          placeItems="center"
+          w="38px"
+          h="38px"
+          flexShrink={0}
+          border="1px solid"
+          borderColor="accent.teal/20"
+          borderRadius="md"
+          bg="accent.teal/10"
+          color="accent.teal"
+          transition="background 160ms ease, color 160ms ease"
+          _groupHover={{ bg: 'accent.teal/15' }}
+        >
+          <Icon as={SkillIcon} boxSize={4.5} />
+        </Box>
+        <Box minW={0} pt={0.5}>
+          <Text
+            fontSize="sm"
+            fontFamily="mono"
+            fontWeight="700"
+            color="fg.default"
+            lineHeight="1.25"
+          >
+            {skill.name}
+          </Text>
+          <Text
+            fontSize="xs"
+            color="fg.muted"
+            mt={1.5}
+            lineHeight="1.5"
+            lineClamp={2}
+          >
+            {skill.description || 'Built-in product guidance.'}
+          </Text>
+        </Box>
+      </HStack>
+    </Box>
+  );
+}
 
 interface SkillsTabContentProps {
   activeTab: 'picker' | 'yaml';
@@ -64,15 +161,33 @@ export function SkillsTabContent({
   return (
     <Tabs.Content value="skills">
       {activeTab === 'picker' ? (
-        <VStack gap={4} align="stretch">
+        <VStack gap={7} align="stretch">
           <Collapsible.Root open={userSkillsOpen} onOpenChange={(e) => onUserSkillsOpenChange(e.open)}>
-            <Box border="1px solid" borderColor="border.muted" borderRadius="md" p={3}>
+            <Box>
               <Collapsible.Trigger asChild>
-                <HStack mb={userSkillsOpen ? 3 : 0} justify="space-between" cursor="pointer">
-                  <HStack gap={2}>
-                    <Icon as={userSkillsOpen ? LuChevronDown : LuChevronRight} boxSize={4} color="fg.muted" />
-                    <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="wider" color="fg.muted">User Skills</Text>
-                    <Badge size="xs" colorPalette="teal" variant="subtle">{content.skills?.length ?? 0}</Badge>
+                <HStack justify="space-between" cursor="pointer" gap={4}>
+                  <HStack gap={3} minW={0}>
+                    <Box
+                      display="grid"
+                      placeItems="center"
+                      w="30px"
+                      h="30px"
+                      borderRadius="md"
+                      bg="accent.teal/10"
+                      color="accent.teal"
+                      flexShrink={0}
+                    >
+                      <Icon as={userSkillsOpen ? LuChevronDown : LuChevronRight} boxSize={4} />
+                    </Box>
+                    <Box minW={0} textAlign="left">
+                      <HStack gap={2}>
+                        <Text fontSize="sm" fontWeight="700" color="fg.default">Your skills</Text>
+                        <Badge size="xs" colorPalette="teal" variant="subtle">{content.skills?.length ?? 0}</Badge>
+                      </HStack>
+                      <Text fontSize="xs" color="fg.muted" mt={0.5} truncate>
+                        Custom instructions maintained in this Knowledge Base.
+                      </Text>
+                    </Box>
                   </HStack>
                   {canAddSkill && (
                     <Button
@@ -92,7 +207,7 @@ export function SkillsTabContent({
                 </HStack>
               </Collapsible.Trigger>
               <Collapsible.Content>
-                <VStack align="stretch" gap={3}>
+                <VStack align="stretch" gap={3} pt={4}>
                   {(content.skills || []).map((skill, index) => {
                     const siblingNames = new Set((content.skills || [])
                       .filter((_, otherIndex) => otherIndex !== index)
@@ -113,8 +228,8 @@ export function SkillsTabContent({
                     );
                   })}
                   {(content.skills || []).length === 0 && (
-                    <Text fontSize="sm" color="fg.muted">
-                      No user-defined skills yet.
+                    <Text py={5} textAlign="center" fontSize="sm" color="fg.muted">
+                      No custom skills yet.
                     </Text>
                   )}
                 </VStack>
@@ -123,30 +238,54 @@ export function SkillsTabContent({
           </Collapsible.Root>
 
           <Collapsible.Root open={systemSkillsOpen} onOpenChange={(e) => onSystemSkillsOpenChange(e.open)}>
-            <Box border="1px solid" borderColor="border.muted" borderRadius="md" p={3}>
+            <Box pt={5} borderTop="1px solid" borderColor="border.muted">
               <Collapsible.Trigger asChild>
-                <HStack mb={systemSkillsOpen ? 3 : 0} justify="space-between" cursor="pointer">
-                  <HStack gap={2}>
-                    <Icon as={systemSkillsOpen ? LuChevronDown : LuChevronRight} boxSize={4} color="fg.muted" />
-                    <Icon as={LuBookOpen} boxSize={4} color="fg.muted" />
-                    <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="wider" color="fg.muted">System Skills</Text>
-                    <Badge size="xs" colorPalette="gray" variant="subtle">{systemSkills.length}</Badge>
+                <HStack justify="space-between" cursor="pointer" gap={4}>
+                  <HStack gap={3} minW={0}>
+                    <Box
+                      display="grid"
+                      placeItems="center"
+                      w="30px"
+                      h="30px"
+                      borderRadius="md"
+                      bg="bg.muted"
+                      color="fg.muted"
+                      flexShrink={0}
+                    >
+                      <Icon as={systemSkillsOpen ? LuChevronDown : LuChevronRight} boxSize={4} />
+                    </Box>
+                    <Box minW={0} textAlign="left">
+                      <HStack gap={2}>
+                        <Text fontSize="sm" fontWeight="700" color="fg.default">System skills</Text>
+                        <Badge size="xs" colorPalette="gray" variant="subtle">{systemSkills.length}</Badge>
+                      </HStack>
+                      <Text fontSize="xs" color="fg.muted" mt={0.5} truncate>
+                        Built-in product knowledge maintained by MinusX.
+                      </Text>
+                    </Box>
                   </HStack>
-                  <Badge size="xs" colorPalette="gray" variant="subtle">Read only</Badge>
+                  <HStack gap={1.5} color="fg.subtle" flexShrink={0}>
+                    <Icon as={LuLockKeyhole} boxSize={3} />
+                    <Text fontSize="2xs" fontWeight="700" textTransform="uppercase" letterSpacing="wide">
+                      Read only
+                    </Text>
+                  </HStack>
                 </HStack>
               </Collapsible.Trigger>
               <Collapsible.Content>
-                <VStack align="stretch" gap={2}>
+                <SimpleGrid
+                  aria-label="System skills catalog"
+                  columns={{ base: 1, lg: 2 }}
+                  gap={3}
+                  pt={4}
+                >
                   {systemSkills.map(skill => (
-                    <Box key={skill.name} p={3} border="1px solid" borderColor="border.muted" borderRadius="md" bg="bg.subtle">
-                      <Text fontSize="sm" fontFamily="mono" fontWeight="700" color="fg.default">{skill.name}</Text>
-                      <Text fontSize="xs" color="fg.muted" mt={1}>{skill.description}</Text>
-                    </Box>
+                    <SystemSkillTile key={skill.name} skill={skill} />
                   ))}
                   {systemSkills.length === 0 && (
                     <Text fontSize="sm" color="fg.muted">System skills are not loaded yet.</Text>
                   )}
-                </VStack>
+                </SimpleGrid>
               </Collapsible.Content>
             </Box>
           </Collapsible.Root>

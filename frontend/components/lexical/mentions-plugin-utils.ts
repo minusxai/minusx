@@ -102,6 +102,7 @@ export function getTableColumns(
 
 export function getMentionPrimaryText(mention: MentionOption) {
   if (isSlashCommand(mention)) return mention.label;
+  if (mention.type === 'skill' && mention.source === 'user' && mention.displayName) return mention.displayName;
   return 'display_text' in mention ? mention.display_text : mention.name;
 }
 

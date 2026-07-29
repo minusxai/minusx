@@ -11,6 +11,7 @@ import { memo, useState, useEffect, useCallback } from 'react';
 import { LuTrash2, LuChevronDown, LuChevronRight } from 'react-icons/lu';
 import type { SkillEntry } from '@/lib/types';
 import LexicalTextEditor, { LexicalTextViewer, type MentionsConfig } from '@/components/lexical/LexicalTextEditor';
+import { getUserSkillDisplayName, uniqueUserSkillName } from '@/lib/context/skill-utils';
 
 interface SkillEditorCardProps {
   skill: SkillEntry;
@@ -37,22 +38,23 @@ export const SkillEditorCard = memo(function SkillEditorCard({
 }: SkillEditorCardProps) {
   const [expanded, setExpanded] = useState(initiallyExpanded);
   // Reset draft when skill prop changes externally — use a serialized key to detect changes
-  const skillKey = `${skill.name}\0${skill.description}\0${skill.content}`;
+  const displayName = getUserSkillDisplayName(skill);
+  const skillKey = `${skill.name}\0${skill.displayName ?? ''}\0${skill.description}\0${skill.content}`;
   const [prevSkillKey, setPrevSkillKey] = useState(skillKey);
   const [draft, setDraft] = useState({
-    name: skill.name,
+    displayName,
     description: skill.description,
     content: skill.content,
   });
 
   if (prevSkillKey !== skillKey) {
     setPrevSkillKey(skillKey);
-    setDraft({ name: skill.name, description: skill.description, content: skill.content });
+    setDraft({ displayName, description: skill.description, content: skill.content });
   }
 
   useEffect(() => {
     if (
-      draft.name === skill.name &&
+      draft.displayName === displayName &&
       draft.description === skill.description &&
       draft.content === skill.content
     ) {
@@ -62,22 +64,20 @@ export const SkillEditorCard = memo(function SkillEditorCard({
       onUpdate(index, draft);
     }, 300);
     return () => window.clearTimeout(timeout);
-  }, [draft, index, onUpdate, skill.content, skill.description, skill.name]);
+  }, [displayName, draft, index, onUpdate, skill.content, skill.description]);
 
   const flushDraft = useCallback(() => {
     if (
-      draft.name !== skill.name ||
+      draft.displayName !== displayName ||
       draft.description !== skill.description ||
       draft.content !== skill.content
     ) {
       onUpdate(index, draft);
     }
-  }, [draft, index, onUpdate, skill.content, skill.description, skill.name]);
+  }, [displayName, draft, index, onUpdate, skill.content, skill.description]);
 
-  const normalizedName = draft.name.trim().toLowerCase();
-  const duplicateName = siblingNames.has(normalizedName);
-  const systemCollision = systemSkillNames.has(normalizedName);
-  const invalidName = !/^[a-z0-9_]+$/.test(draft.name.trim()) || duplicateName || systemCollision;
+  const canonicalName = uniqueUserSkillName(draft.displayName, [...siblingNames, ...systemSkillNames]);
+  const invalidName = draft.displayName.trim().length === 0;
 
   return (
     <Collapsible.Root open={expanded} onOpenChange={(e) => setExpanded(e.open)}>
@@ -97,15 +97,18 @@ export const SkillEditorCard = memo(function SkillEditorCard({
               <Badge size="sm" colorPalette={skill.enabled ? 'green' : 'gray'} variant="subtle" flexShrink={0}>
                 {skill.enabled ? 'Enabled' : 'Disabled'}
               </Badge>
-              <Text fontSize="sm" fontFamily="mono" fontWeight="700" color="fg.default" truncate maxW="260px">
-                {draft.name || 'unnamed_skill'}
+              <Text fontSize="sm" fontWeight="700" color="fg.default" truncate maxW="260px">
+                {draft.displayName || 'Untitled skill'}
+              </Text>
+              <Text fontSize="xs" fontFamily="mono" color="fg.subtle" truncate flexShrink={0}>
+                #{canonicalName}
               </Text>
               <Text fontSize="sm" color="fg.muted" truncate flex={1}>
                 {draft.description || 'No description'}
               </Text>
               {invalidName && (
                 <Text fontSize="xs" color="accent.danger" flexShrink={0}>
-                  {duplicateName ? 'Duplicate name' : systemCollision ? 'Conflicts with system skill' : 'Invalid name'}
+                  Name is required
                 </Text>
               )}
             </HStack>
@@ -135,12 +138,15 @@ export const SkillEditorCard = memo(function SkillEditorCard({
               <Field.Root flex={1} invalid={invalidName}>
                 <Field.Label>Name</Field.Label>
                 <Input
-                  value={draft.name}
+                  aria-label={`Skill ${index + 1} name`}
+                  value={draft.displayName}
                   disabled={!canManageSkills}
-                  onChange={(e) => setDraft(prev => ({ ...prev, name: e.target.value }))}
+                  onChange={(e) => setDraft(prev => ({ ...prev, displayName: e.target.value }))}
                   onBlur={flushDraft}
-                  fontFamily="mono"
                 />
+                <Text fontSize="2xs" color="fg.subtle" mt={1.5}>
+                  Saved internally as <Text as="span" fontFamily="mono" fontWeight="600">#{canonicalName}</Text>
+                </Text>
               </Field.Root>
               <Field.Root flex={2}>
                 <Field.Label>Description</Field.Label>

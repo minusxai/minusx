@@ -1,4 +1,4 @@
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import { setUser } from '@/store/authSlice';
@@ -135,22 +135,40 @@ describe('ContextEditorV2 add actions outside edit mode', () => {
     });
 
     expect(screen.getByRole('tab', { name: /Skills/ })).toHaveTextContent('3');
+    expect(screen.getByLabelText('System skills catalog')).toBeVisible();
+    expect(screen.getByLabelText('System skill dashboards')).toBeVisible();
+    expect(screen.getByLabelText('System skill alerts')).toBeVisible();
     expect(screen.getByText('Build dashboard views')).toBeVisible();
     expect(screen.getByText('Configure alerting')).toBeVisible();
   });
 
-  it('shows Add skill and enters edit mode before adding the default skill', () => {
+  it('shows Add skill and keeps a friendly display name alongside its canonical key', async () => {
     const { onChange, onEditModeChange } = renderEditor('skills');
 
     fireEvent.click(screen.getByLabelText('Add skill'));
 
     expect(onEditModeChange).toHaveBeenCalledWith(true);
     expect(onChange).toHaveBeenCalledWith({
-      skills: [expect.objectContaining({ name: 'new_skill', enabled: true })],
+      skills: [expect.objectContaining({ name: 'new_skill', displayName: 'New skill', enabled: true })],
     });
     expect(screen.getByLabelText('Skill 1 content')).toBeVisible();
     expect(screen.getByLabelText('Skill 1 content')).toHaveAttribute('data-mentions', 'true');
     expect(screen.getByLabelText('Skill 1 content')).toHaveAttribute('data-show-pro-tip', 'false');
+
+    const nameInput = screen.getByLabelText('Skill 1 name');
+    fireEvent.change(nameInput, { target: { value: 'Revenue & Growth / Q3' } });
+
+    expect(nameInput).toHaveValue('Revenue & Growth / Q3');
+    expect(screen.getAllByText('#revenue_growth_q3').length).toBeGreaterThan(0);
+    await waitFor(() => {
+      expect(onChange).toHaveBeenCalledWith({
+        skills: [expect.objectContaining({
+          name: 'revenue_growth_q3',
+          displayName: 'Revenue & Growth / Q3',
+        })],
+      });
+    });
+    expect(nameInput).toHaveValue('Revenue & Growth / Q3');
   });
 
   it('shows Add agent and enters edit mode before opening the agent builder', () => {

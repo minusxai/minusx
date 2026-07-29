@@ -30,7 +30,7 @@ export interface AgentBuilderProps {
   /** Prefill for editing; omit for a new agent. */
   initial?: AgentDraft;
   systemSkills: { name: string; description: string }[];
-  userSkills: { name: string; description: string }[];
+  userSkills: { name: string; displayName?: string; description: string }[];
   mentions?: MentionsConfig;
   onSave: (draft: AgentDraft) => void;
   onCancel: () => void;
@@ -97,12 +97,13 @@ export function AgentBuilder({ initial, systemSkills, userSkills, mentions, onSa
 
   const allSkills = [
     ...userSkills.map((s) => ({ ...s, source: 'user' as const })),
-    ...systemSkills.map((s) => ({ ...s, source: 'system' as const })),
+    ...systemSkills.map((s) => ({ ...s, displayName: undefined, source: 'system' as const })),
   ];
   const normalizedSkillQuery = skillQuery.trim().toLowerCase();
   const filteredSkills = normalizedSkillQuery
     ? allSkills.filter((skill) => (
       skill.name.toLowerCase().includes(normalizedSkillQuery)
+      || skill.displayName?.toLowerCase().includes(normalizedSkillQuery)
       || skill.description.toLowerCase().includes(normalizedSkillQuery)
       || skill.source.includes(normalizedSkillQuery)
     ))
@@ -377,7 +378,12 @@ export function AgentBuilder({ initial, systemSkills, userSkills, mentions, onSa
                 >
                   <HStack justify="space-between" align="start" gap={3}>
                     <Box minW={0}>
-                      <Text fontSize="sm" fontFamily="mono" fontWeight="700" truncate>{skill.name}</Text>
+                      <Text fontSize="sm" fontWeight="700" truncate>{skill.displayName || skill.name}</Text>
+                      {skill.displayName && (
+                        <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" mt={0.5} truncate>
+                          #{skill.name}
+                        </Text>
+                      )}
                       <Text fontSize="xs" color="fg.muted" mt={1} lineClamp={2}>{skill.description}</Text>
                     </Box>
                     <Badge

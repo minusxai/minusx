@@ -45,6 +45,7 @@ export type SkillMention =
   | (Omit<ChatMentionData, 'type' | 'source'> & {
       type: 'skill';
       source: 'user';
+      displayName?: string;
       description?: string;
       content?: string;
     });

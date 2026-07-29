@@ -12,6 +12,7 @@ import { Badge, Box, Button, HStack, Icon, SimpleGrid, Switch, Tabs, Text, VStac
 import { LuPencil, LuPlus, LuTrash2 } from 'react-icons/lu';
 import type { AgentEntry, ContextContent } from '@/lib/types';
 import { mergeSkillsByName } from '@/lib/context/context-utils';
+import { getUserSkillDisplayName } from '@/lib/context/skill-utils';
 import Editor from '@monaco-editor/react';
 import { AgentBuilder } from './AgentBuilder';
 import { AgentReadView, type AgentDraft } from './AgentReadView';
@@ -55,7 +56,11 @@ export function AgentsTabContent({
   const inheritedAgents = content.fullAgents || [];
   const userSkills = mergeSkillsByName(content.fullSkills || [], content.skills || [])
     .filter((skill) => skill.enabled)
-    .map((skill) => ({ name: skill.name, description: skill.description }));
+    .map((skill) => ({
+      name: skill.name,
+      displayName: getUserSkillDisplayName(skill),
+      description: skill.description,
+    }));
 
   // React's prop-derived state adjustment: page-level Cancel flips this flag
   // outside the tab, so clear any nested builder in the same render cycle.

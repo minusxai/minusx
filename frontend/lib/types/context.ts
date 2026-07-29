@@ -107,7 +107,8 @@ export interface TableAnnotation {
 }
 
 export interface SkillEntry {
-  name: string;
+  name: string;               // unique canonical key used by agents and LoadSkill
+  displayName?: string;       // human-facing label; absent on legacy entries
   description: string;
   content: string;
   enabled: boolean;

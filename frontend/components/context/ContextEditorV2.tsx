@@ -35,6 +35,7 @@ import { DatabasesTabContent } from './DatabasesTabContent';
 import { SkillsTabContent } from './SkillsTabContent';
 import { AgentsTabContent } from './AgentsTabContent';
 import type { AgentDraft } from './AgentReadView';
+import { uniqueUserSkillName } from '@/lib/context/skill-utils';
 import { EvalsTabContent } from './EvalsTabContent';
 
 type DatabaseSelection = {
@@ -374,24 +375,18 @@ export default function ContextEditorV2({
   const systemSkillNames = new Set(systemSkills.map(skill => skill.name.toLowerCase()));
 
   const makeSkillName = useCallback((name: string, ignoreIndex?: number) => {
-    const base = name.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '') || 'skill';
-    const existing = new Set((content.skills || [])
+    const existing = (content.skills || [])
       .filter((_, index) => index !== ignoreIndex)
       .map(skill => skill.name)
-      .concat(systemSkills.map(skill => skill.name)));
-    let candidate = base;
-    let suffix = 2;
-    while (existing.has(candidate)) {
-      candidate = `${base}_${suffix}`;
-      suffix += 1;
-    }
-    return candidate;
+      .concat(systemSkills.map(skill => skill.name));
+    return uniqueUserSkillName(name, existing);
   }, [content.skills, systemSkills]);
 
   const handleAddSkill = () => {
     const now = new Date().toISOString();
     const skill: SkillEntry = {
       name: makeSkillName('new_skill'),
+      displayName: 'New skill',
       description: '',
       content: '',
       enabled: true,
@@ -407,7 +402,9 @@ export default function ContextEditorV2({
     const current = skills[index];
     if (!current) return;
     const next = { ...current, ...updates, updatedAt: new Date().toISOString() };
-    if (updates.name !== undefined) {
+    if (updates.displayName !== undefined) {
+      next.name = makeSkillName(updates.displayName, index);
+    } else if (updates.name !== undefined) {
       next.name = makeSkillName(updates.name, index);
     }
     skills[index] = next;

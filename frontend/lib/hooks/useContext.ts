@@ -108,6 +108,7 @@ export function useContext(path: string, version?: number, isFolderScope?: boole
           type: 'skill' as const,
           source: 'user' as const,
           name: skill.name,
+          displayName: skill.displayName,
           description: skill.description,
           content: skill.content,
         })),
