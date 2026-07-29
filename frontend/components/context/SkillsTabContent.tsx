@@ -18,6 +18,7 @@ import { LuBookOpen, LuPlus, LuChevronDown, LuChevronRight } from 'react-icons/l
 import type { ContextContent, SkillEntry } from '@/lib/types';
 import Editor from '@monaco-editor/react';
 import { SkillEditorCard } from './SkillEditorCard';
+import type { MentionsConfig } from '@/components/lexical/LexicalTextEditor';
 
 const MONACO_READ_ONLY_MESSAGE = { value: 'Switch to edit mode to make changes.' };
 
@@ -30,6 +31,7 @@ interface SkillsTabContentProps {
   canManageSkills: boolean;
   systemSkills: { name: string; description: string }[];
   systemSkillNames: Set<string>;
+  mentions?: MentionsConfig;
   userSkillsOpen: boolean;
   onUserSkillsOpenChange: (open: boolean) => void;
   systemSkillsOpen: boolean;
@@ -48,6 +50,7 @@ export function SkillsTabContent({
   canManageSkills,
   systemSkills,
   systemSkillNames,
+  mentions,
   userSkillsOpen,
   onUserSkillsOpenChange,
   systemSkillsOpen,
@@ -101,6 +104,7 @@ export function SkillsTabContent({
                         index={index}
                         canManageSkills={canManageSkills}
                         initiallyExpanded={index === newlyAddedSkillIndex}
+                        mentions={mentions}
                         siblingNames={siblingNames}
                         systemSkillNames={systemSkillNames}
                         onUpdate={onUpdateSkill}

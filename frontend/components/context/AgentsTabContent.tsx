@@ -15,6 +15,7 @@ import { mergeSkillsByName } from '@/lib/context/context-utils';
 import Editor from '@monaco-editor/react';
 import { AgentBuilder } from './AgentBuilder';
 import { AgentReadView, type AgentDraft } from './AgentReadView';
+import type { MentionsConfig } from '@/components/lexical/LexicalTextEditor';
 
 const MONACO_READ_ONLY_MESSAGE = { value: 'Switch to edit mode to make changes.' };
 
@@ -26,6 +27,7 @@ interface AgentsTabContentProps {
   canAddAgent: boolean;
   canManageAgents: boolean;
   systemSkills: { name: string; description: string }[];
+  mentions?: MentionsConfig;
   onStartAddAgent: () => void;
   onAddAgent: (draft: AgentDraft) => void;
   onUpdateAgent: (index: number, updates: Partial<AgentEntry>) => void;
@@ -42,6 +44,7 @@ export function AgentsTabContent({
   canAddAgent,
   canManageAgents,
   systemSkills,
+  mentions,
   onStartAddAgent,
   onAddAgent,
   onUpdateAgent,
@@ -80,6 +83,7 @@ export function AgentsTabContent({
               initial={builder.mode === 'edit' ? agents[builder.index] : undefined}
               systemSkills={systemSkills}
               userSkills={userSkills}
+              mentions={mentions}
               onSave={handleSave}
               onCancel={() => setBuilder(null)}
             />

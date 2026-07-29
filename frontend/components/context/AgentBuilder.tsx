@@ -15,7 +15,7 @@ import { Badge, Box, Button, createListCollection, HStack, Icon, Input, Portal, 
 import { LuBookOpen, LuCheck, LuCheckCheck, LuCircleOff, LuLibrary, LuSearch, LuZap } from 'react-icons/lu';
 import { AgentReadView, type AgentDraft } from './AgentReadView';
 import { SelectContent, SelectItem, SelectPositioner, SelectRoot, SelectTrigger, SelectValueText } from '@/components/ui/select';
-import LexicalTextEditor from '@/components/lexical/LexicalTextEditor';
+import LexicalTextEditor, { type MentionsConfig } from '@/components/lexical/LexicalTextEditor';
 
 const STEPS = ['identity', 'prompt', 'skills', 'review'] as const;
 type Step = (typeof STEPS)[number];
@@ -31,6 +31,7 @@ export interface AgentBuilderProps {
   initial?: AgentDraft;
   systemSkills: { name: string; description: string }[];
   userSkills: { name: string; description: string }[];
+  mentions?: MentionsConfig;
   onSave: (draft: AgentDraft) => void;
   onCancel: () => void;
 }
@@ -64,7 +65,7 @@ function normalizeSkillAccess(draft: AgentDraft): AgentDraft {
 
 type SkillAccessMode = 'excluded' | 'demand' | 'always';
 
-export function AgentBuilder({ initial, systemSkills, userSkills, onSave, onCancel }: AgentBuilderProps) {
+export function AgentBuilder({ initial, systemSkills, userSkills, mentions, onSave, onCancel }: AgentBuilderProps) {
   const [step, setStep] = useState<Step>('identity');
   const [draft, setDraft] = useState<AgentDraft>(() => normalizeSkillAccess(initial ?? EMPTY_DRAFT));
   const [skillQuery, setSkillQuery] = useState('');
@@ -212,6 +213,7 @@ export function AgentBuilder({ initial, systemSkills, userSkills, onSave, onCanc
                 ariaLabel="Agent prompt"
                 placeholder="Describe the agent's role, priorities, and operating instructions…"
                 contentPadding="20px 20px"
+                mentions={mentions}
               />
             </Box>
           </Box>

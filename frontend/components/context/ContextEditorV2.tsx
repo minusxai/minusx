@@ -205,6 +205,10 @@ export default function ContextEditorV2({
     () => (content.fullSchema || []).filter(db => db.schemas.length > 0),
     [content.fullSchema],
   );
+  const editorMentions = useMemo(
+    () => ({ whitelistedSchemas: mentionSchemas }),
+    [mentionSchemas],
+  );
 
   // Compute immediate child paths for path filtering UI
   const availableChildPaths = useMemo(() => {
@@ -614,7 +618,7 @@ export default function ContextEditorV2({
             inheritedDocs={content.fullDocs}
             originalDocs={originalDocs}
             availableChildPaths={availableChildPaths}
-            mentions={{ whitelistedSchemas: mentionSchemas }}
+            mentions={editorMentions}
             editMode={editMode}
           />
           ) : (
@@ -658,6 +662,7 @@ export default function ContextEditorV2({
           canManageSkills={canManageSkills}
           systemSkills={systemSkills}
           systemSkillNames={systemSkillNames}
+          mentions={editorMentions}
           userSkillsOpen={userSkillsOpen}
           onUserSkillsOpenChange={setUserSkillsOpen}
           systemSkillsOpen={systemSkillsOpen}
@@ -679,6 +684,7 @@ export default function ContextEditorV2({
           canAddAgent={canEditContext}
           canManageAgents={canManageAgents}
           systemSkills={systemSkills}
+          mentions={editorMentions}
           onStartAddAgent={() => {
             if (!editMode) onEditModeChange(true);
           }}

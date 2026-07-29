@@ -34,12 +34,14 @@ vi.mock('@/components/lexical/LexicalTextEditor', () => {
   const React = require('react');
   return {
     __esModule: true,
-    default: ({ initialMarkdown, onChange, ariaLabel }: {
+    default: ({ initialMarkdown, onChange, ariaLabel, mentions }: {
       initialMarkdown: string;
       onChange: (markdown: string) => void;
       ariaLabel?: string;
+      mentions?: unknown;
     }) => React.createElement('textarea', {
       'aria-label': ariaLabel,
+      'data-mentions': mentions ? 'true' : 'false',
       defaultValue: initialMarkdown,
       onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => onChange(event.target.value),
     }),
@@ -145,6 +147,7 @@ describe('ContextEditorV2 add actions outside edit mode', () => {
       skills: [expect.objectContaining({ name: 'new_skill', enabled: true })],
     });
     expect(screen.getByLabelText('Skill 1 content')).toBeVisible();
+    expect(screen.getByLabelText('Skill 1 content')).toHaveAttribute('data-mentions', 'true');
   });
 
   it('shows Add agent and enters edit mode before opening the agent builder', () => {
@@ -155,5 +158,9 @@ describe('ContextEditorV2 add actions outside edit mode', () => {
     expect(onEditModeChange).toHaveBeenCalledWith(true);
     expect(screen.getByLabelText('Agent name')).toBeInTheDocument();
     expect(onChange).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText('Agent name'), { target: { value: 'new_agent' } });
+    fireEvent.click(screen.getByLabelText('Builder next'));
+    expect(screen.getByLabelText('Agent prompt')).toHaveAttribute('data-mentions', 'true');
   });
 });

@@ -10,13 +10,14 @@ import { Box, VStack, HStack, Button, Text, Badge, Field, Input, Collapsible, Ic
 import { memo, useState, useEffect, useCallback } from 'react';
 import { LuTrash2, LuChevronDown, LuChevronRight } from 'react-icons/lu';
 import type { SkillEntry } from '@/lib/types';
-import LexicalTextEditor, { LexicalTextViewer } from '@/components/lexical/LexicalTextEditor';
+import LexicalTextEditor, { LexicalTextViewer, type MentionsConfig } from '@/components/lexical/LexicalTextEditor';
 
 interface SkillEditorCardProps {
   skill: SkillEntry;
   index: number;
   canManageSkills: boolean;
   initiallyExpanded?: boolean;
+  mentions?: MentionsConfig;
   siblingNames: Set<string>;
   systemSkillNames: Set<string>;
   onUpdate: (index: number, updates: Partial<SkillEntry>) => void;
@@ -28,6 +29,7 @@ export const SkillEditorCard = memo(function SkillEditorCard({
   index,
   canManageSkills,
   initiallyExpanded = false,
+  mentions,
   siblingNames,
   systemSkillNames,
   onUpdate,
@@ -159,6 +161,7 @@ export const SkillEditorCard = memo(function SkillEditorCard({
                   ariaLabel={`Skill ${index + 1} content`}
                   placeholder="Write the instructions this skill should provide…"
                   contentPadding="20px 20px"
+                  mentions={mentions}
                 />
               ) : (
                 <LexicalTextViewer markdown={draft.content} padding="20px 20px" />
