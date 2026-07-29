@@ -252,8 +252,8 @@ describe('buildGatewayLlmConfig', () => {
     // This config document is saved at registration and never rewritten, so a
     // URL written here outlives every later change of address — including an
     // internal container hostname, which would be baked in permanently.
-    // Inference instead resolves from MINUSX_GATEWAY_URL, derived from the same
-    // origin, so moving the gateway moves every workspace with it.
+    // Inference instead resolves from MX_GATEWAY_URL_PROXY, derived from the
+    // same origin, so moving the gateway moves every workspace with it.
     const { buildGatewayLlmConfig } = await loadClient({
       ...ON, MX_GATEWAY_URL: 'https://staging-llm.minusxapp.com',
     });

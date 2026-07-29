@@ -179,7 +179,7 @@ export async function fetchOrgUsage(
  * pinned URL is frozen into the workspace forever — moving the gateway later
  * would leave every already-registered workspace calling the old address, and
  * an internal address (a container hostname, say) would be baked in for good.
- * Left unset, inference resolves from `MINUSX_GATEWAY_URL`, which is derived
+ * Left unset, inference resolves from `MX_GATEWAY_URL_PROXY`, which derives
  * from the same origin this client registered against, so the two cannot drift
  * and the deployment stays free to move.
  */

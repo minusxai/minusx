@@ -1,18 +1,25 @@
 /**
- * One gateway, two planes — and one variable that moves both.
+ * One gateway, two planes — and how they are addressed.
  *
- * `MX_GATEWAY_URL` is the origin; inference is that plus `/v1`. Before this was
- * derived, pointing an install at a staging gateway meant setting two variables
- * that had to agree, and forgetting the second sent inference to PRODUCTION
- * while the control plane talked to staging. That failed as an auth error a
- * long way from its cause, because the key had been minted by the other one.
+ * `MX_GATEWAY_URL` is the origin: the control plane (orgs, credits, status)
+ * sits at its root, inference at its `/v1`. That is one variable for the normal
+ * case, which matters because two that can disagree eventually do — and the
+ * disagreement surfaces as an auth failure against a gateway that never minted
+ * the key, a long way from its cause.
+ *
+ * `MX_GATEWAY_URL_PROXY` exists because the two planes are only ONE origin from
+ * outside. Behind the reverse proxy they are separate services on separate
+ * ports, so an install on the same network as the gateway cannot reach both
+ * through a single address. Setting it is how you say "these really are two
+ * places" — deliberately, rather than by forgetting to keep a second variable
+ * in step.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const ORIGINAL = { ...process.env };
 
 async function load(env: Record<string, string | undefined>) {
-  for (const k of ['MX_GATEWAY_URL', 'MINUSX_GATEWAY_URL']) {
+  for (const k of ['MX_GATEWAY_URL', 'MX_GATEWAY_URL_PROXY']) {
     delete (process.env as Record<string, string | undefined>)[k];
   }
   for (const [k, v] of Object.entries(env)) {
@@ -29,28 +36,36 @@ describe('the gateway URLs', () => {
   it('defaults to the managed gateway when nothing is set', async () => {
     const c = await load({});
     expect(c.MX_GATEWAY_ORIGIN).toBe('https://llm.minusx.ai');
-    expect(c.MINUSX_GATEWAY_URL).toBe('https://llm.minusx.ai/v1');
+    expect(c.MX_GATEWAY_URL_PROXY).toBe('https://llm.minusx.ai/v1');
   });
 
-  it('moves inference with the origin — the whole point', async () => {
+  it('moves inference with the origin, so staging is ONE variable', async () => {
     const c = await load({ MX_GATEWAY_URL: 'https://staging-llm.minusxapp.com' });
-    expect(c.MINUSX_GATEWAY_URL).toBe('https://staging-llm.minusxapp.com/v1');
+    expect(c.MX_GATEWAY_URL_PROXY).toBe('https://staging-llm.minusxapp.com/v1');
   });
 
   it('tolerates a trailing slash rather than emitting a double one', async () => {
     const c = await load({ MX_GATEWAY_URL: 'https://staging-llm.minusxapp.com/' });
     expect(c.MX_GATEWAY_ORIGIN).toBe('https://staging-llm.minusxapp.com');
-    expect(c.MINUSX_GATEWAY_URL).toBe('https://staging-llm.minusxapp.com/v1');
+    expect(c.MX_GATEWAY_URL_PROXY).toBe('https://staging-llm.minusxapp.com/v1');
   });
 
-  it('ignores a stray MINUSX_GATEWAY_URL rather than letting it disagree', async () => {
-    // There is no second variable any more. Honouring one that happened to be
-    // left in an environment is how the two drift apart again — and the drift
-    // surfaces as an auth failure against a gateway that never minted the key.
+  it('lets the two planes be genuinely different addresses', async () => {
+    // The case the single variable cannot express: an install sharing a network
+    // with the gateway reaches the control plane and the inference proxy as two
+    // separate services, never through one origin.
     const c = await load({
-      MX_GATEWAY_URL: 'https://staging-llm.minusxapp.com',
-      MINUSX_GATEWAY_URL: 'https://stale-leftover.internal/v1',
+      MX_GATEWAY_URL: 'http://admin:4001',
+      MX_GATEWAY_URL_PROXY: 'http://gateway:4000/v1',
     });
-    expect(c.MINUSX_GATEWAY_URL).toBe('https://staging-llm.minusxapp.com/v1');
+    expect(c.MX_GATEWAY_ORIGIN).toBe('http://admin:4001');
+    expect(c.MX_GATEWAY_URL_PROXY).toBe('http://gateway:4000/v1');
+  });
+
+  it('does not append /v1 to an override that already carries it', async () => {
+    // The override is the FULL inference URL, not an origin — it has to be,
+    // because the port it lives on is not the port the control plane is on.
+    const c = await load({ MX_GATEWAY_URL_PROXY: 'http://gateway:4000/v1' });
+    expect(c.MX_GATEWAY_URL_PROXY).toBe('http://gateway:4000/v1');
   });
 });

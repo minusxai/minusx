@@ -79,6 +79,7 @@ interface EnvironmentConfig {
   // means none of that code runs.
   MX_GATEWAY_SHARED_SECRET: string | undefined;
   MX_GATEWAY_URL: string | undefined;
+  MX_GATEWAY_URL_PROXY: string | undefined;
   MAX_CONCURRENT_QUERIES: number;
   QUERY_TIMEOUT_MS: number;
   /** Server-side wall-clock bound on one query execution (runQuery) — the backstop for callers
@@ -190,6 +191,7 @@ const config: EnvironmentConfig = {
   MAX_AGENTS_CONCURRENCY: process.env.MAX_AGENTS_CONCURRENCY,
   MX_GATEWAY_SHARED_SECRET: process.env.MX_GATEWAY_SHARED_SECRET,
   MX_GATEWAY_URL: process.env.MX_GATEWAY_URL,
+  MX_GATEWAY_URL_PROXY: process.env.MX_GATEWAY_URL_PROXY,
   MAX_CONCURRENT_QUERIES: getOptionalNumber(process.env.MAX_CONCURRENT_QUERIES, 10),
   QUERY_SERVER_TIMEOUT_MS: getOptionalNumber(process.env.QUERY_SERVER_TIMEOUT_MS, 180_000),
   // Client-side wall-clock cap for a single /api/query call (chat/tool-triggered
@@ -336,10 +338,17 @@ export const MX_GATEWAY_ORIGIN: string =
   (config.MX_GATEWAY_URL || 'https://llm.minusx.ai').replace(/\/+$/, '');
 
 /**
- * Inference endpoint. Purely DERIVED — there is deliberately no second variable
- * for it. One that could disagree with the origin is one that eventually will,
- * and the failure it produces is an auth error against a gateway that never
- * minted the key: a long way from its cause. An install that wants a different
- * inference endpoint entirely configures a provider in Settings → Models.
+ * Inference endpoint — the full URL, not an origin.
+ *
+ * DERIVED from `MX_GATEWAY_ORIGIN` by default, so the normal case is one
+ * variable: two that can disagree eventually do, and the disagreement surfaces
+ * as an auth failure against a gateway that never minted the key.
+ *
+ * Overridable because the single origin is a property of the REVERSE PROXY, not
+ * of the gateway. Behind it the control plane and the inference proxy are
+ * separate services on separate ports, so an install sharing a network with the
+ * gateway cannot reach both through one address. Setting this says "these are
+ * genuinely two places" — a deliberate act, not a variable left out of step.
  */
-export const MINUSX_GATEWAY_URL: string = `${MX_GATEWAY_ORIGIN}/v1`;
+export const MX_GATEWAY_URL_PROXY: string =
+  config.MX_GATEWAY_URL_PROXY || `${MX_GATEWAY_ORIGIN}/v1`;

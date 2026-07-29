@@ -30,7 +30,8 @@ Model providers, keys, and assignments are configured **in the app** (setup wiza
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `MX_GATEWAY_URL` | `https://llm.minusx.ai` | Origin of the managed MinusX gateway (the default provider). Inference is this plus `/v1` — there is no separate variable for it. Replaces `MINUSX_GATEWAY_URL`, which no longer has any effect; note this one takes the origin, **without** the `/v1`. |
+| `MX_GATEWAY_URL` | `https://llm.minusx.ai` | Origin of the managed MinusX gateway (the default provider). Inference derives from it, so this is normally the only one you set. Takes the origin, **without** `/v1`. Replaces `MINUSX_GATEWAY_URL`, which no longer has any effect. |
+| `MX_GATEWAY_URL_PROXY` | `MX_GATEWAY_URL` + `/v1` | Full inference URL. Only needed when the control plane and the inference proxy are not reachable through one origin — e.g. addressing them directly on a shared network rather than through the reverse proxy. |
 | `MAX_LLM_CONCURRENCY` | unlimited | Cap on concurrent in-flight LLM requests. |
 | `BOOT_WARM_CHAT` | `true` | Warm the chat runtime at boot so the first message isn't a cold start. `false` to disable. |
 
