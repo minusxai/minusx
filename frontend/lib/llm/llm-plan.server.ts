@@ -4,9 +4,10 @@
  *
  * Resolution per call: selector (agent + optional code-owned grade) → the
  * agent's grade policy (config over built-in defaults) → a grade → a model:
- *   1. `llm.grades[grade]` (explicit mapping: one provider+model per grade)
- *   2. the minusx provider entry, if configured (fully managed, keyed — the
- *      gateway routes the grade)
+ *   1. the minusx provider entry, if configured (fully managed, keyed — the
+ *      gateway routes the grade, and owns EVERY grade: picking it is picking
+ *      managed model selection, so a stored mapping cannot escape it)
+ *   2. `llm.grades[grade]` (explicit mapping: one provider+model per grade)
  *   3. the workspace's SOLE bring-your-own-key provider, run as "Auto" (the
  *      compatibility.json default for the grade) — connecting one provider
  *      powers every grade with no further setup
@@ -106,16 +107,22 @@ export function buildPlanStep(entry: LlmProviderEntry, choice: LlmModelChoice, g
 
 /** Resolve one grade's model from an (already secret-resolved) LlmConfig. */
 function planFromConfig(llm: LlmConfig, agent: LlmAgentKey, grade: LlmGrade, catalog: ModelCatalog | null): LlmPlanStep {
+  // MinusX first, ahead of any stored grade mapping. Choosing the managed
+  // gateway is choosing to have model selection managed, and a per-grade
+  // mapping alongside it produces a half-managed workspace: some grades routed
+  // by MinusX, others pinned to a vendor model it knows nothing about, and no
+  // single place that answers "what runs this?". Settings hides the per-grade
+  // pickers while MinusX is configured, but a mapping stored before it was
+  // added would otherwise still be honoured here.
+  const minusx = findMinusxProvider(llm);
+  if (minusx) return buildPlanStep(minusx, { providerName: minusx.name }, grade, agent);
+
   const choice = llm.grades?.[grade];
   if (choice) {
     const entry = findLlmProvider(llm, choice.providerName);
     if (!entry) throw new Error(`Grade '${grade}' references unknown provider '${choice.providerName}'`);
     return buildPlanStep(entry, choice, grade, agent, catalog);
   }
-  // No mapping: a configured minusx provider handles every grade (the gateway
-  // routes the grade itself).
-  const minusx = findMinusxProvider(llm);
-  if (minusx) return buildPlanStep(minusx, { providerName: minusx.name }, grade, agent);
   // Still no mapping, but the workspace has exactly ONE bring-your-own-key
   // provider with curation for this grade: run it as "Auto". Connecting a
   // single provider is the overwhelmingly common setup, and requiring three

@@ -226,7 +226,13 @@ describe('resolveLlmPlan', () => {
     expect((plan.callOptions?.headers as Record<string, string>)[MX_USE_CASE_HEADER]).toBe('lite');
   });
 
-  it('an explicit grade mapping beats the minusx catch-all for that grade only', async () => {
+  it('the minusx provider owns EVERY grade — an explicit mapping cannot escape it', async () => {
+    // Choosing the managed gateway is choosing to have model selection managed.
+    // A per-grade mapping alongside it is a half-managed workspace: some grades
+    // routed by MinusX, others pinned to a vendor model that MinusX knows
+    // nothing about, and no single place that answers "what runs this?".
+    // Configuring MinusX therefore wins over any stored grade mapping rather
+    // than merely filling the gaps between them.
     await setLlmConfig({
       providers: [
         { name: 'mx', provider: 'minusx', apiKey: 'mx-key' },
@@ -234,11 +240,25 @@ describe('resolveLlmPlan', () => {
       ],
       grades: { advanced: { providerName: 'a', model: 'claude-opus-4-8' } },
     } satisfies LlmConfig);
-    const advancedPlan = (await resolveLlmPlan({ agent: 'analyst' }, 'advanced'))!;
-    expect((advancedPlan.model as { provider: string }).provider).toBe('anthropic');
-    const corePlan = (await resolveLlmPlan({ agent: 'analyst' }))!;
-    expect((corePlan.model as { provider: string }).provider).toBe('minusx');
-    expect((corePlan.callOptions?.headers as Record<string, string>)[MX_USE_CASE_HEADER]).toBe('core');
+
+    for (const grade of ['lite', 'core', 'advanced'] as const) {
+      const plan = (await resolveLlmPlan({ agent: 'analyst' }, grade === 'lite' ? undefined : grade))!;
+      expect((plan.model as { provider: string }).provider).toBe('minusx');
+    }
+    const advanced = (await resolveLlmPlan({ agent: 'analyst' }, 'advanced'))!;
+    expect((advanced.model as { id: string }).id).toBe(MINUSX_AUTO_MODEL);
+    expect((advanced.callOptions?.headers as Record<string, string>)[MX_USE_CASE_HEADER]).toBe('advanced');
+  });
+
+  it('leaves grade mappings alone when there is no minusx provider', async () => {
+    // The override only loses to MinusX. Without one, an explicit mapping is
+    // still the most specific answer and must win.
+    await setLlmConfig({
+      providers: [{ name: 'a', provider: 'anthropic', apiKey: 'k' }],
+      grades: { advanced: { providerName: 'a', model: 'claude-opus-4-8' } },
+    } satisfies LlmConfig);
+    const plan = (await resolveLlmPlan({ agent: 'analyst' }, 'advanced'))!;
+    expect((plan.model as { id: string }).id).toBe('claude-opus-4-8');
   });
 
   it('resolves a model-less registry mapping (Auto) to the compatibility default per grade', async () => {
