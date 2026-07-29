@@ -72,7 +72,9 @@ async function routeRequest(req: AuthReq): Promise<NextResponse> {
       pathname.startsWith('/api/integrations/slack/interact') ||
       pathname === '/api/integrations/slack/oauth-callback' ||
       pathname.startsWith('/api/health') ||
-      pathname === '/api/jobs/cron'
+      pathname === '/api/jobs/cron' ||
+      // Shared-secret gated, and consumed by CI/deploy tooling that has no session.
+      pathname === '/api/admin/fleet-version'
     ) {
       const requestHeaders = new Headers(req.headers);
       requestHeaders.set('x-request-id', requestId);

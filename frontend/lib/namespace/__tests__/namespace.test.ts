@@ -56,12 +56,26 @@ describe('namespaced()', () => {
 
 describe('namespacedChannel()', () => {
   it('avoids separators that would need quoting in an identifier', () => {
-    expect(namespacedChannel('123', 'conv_5')).toBe('123_conv_5');
-    expect(namespacedChannel('mx', 'conv_5')).toBe('mx_conv_5');
+    expect(namespacedChannel('123', 'conv_5')).toBe('ns123_conv_5');
+    expect(namespacedChannel('mx', 'conv_5')).toBe('nsmx_conv_5');
   });
 
   it('sanitises anything that is not identifier-safe', () => {
-    expect(namespacedChannel('mx/org', 'conv_5')).toBe('mx_org_conv_5');
-    expect(namespacedChannel('a-b.c', 'x')).toBe('a_b_c_x');
+    expect(namespacedChannel('mx/org', 'conv_5')).toBe('nsmx_org_conv_5');
+    expect(namespacedChannel('a-b.c', 'x')).toBe('nsa_b_c_x');
+  });
+
+  it('never starts with a digit, whatever the isolation value is', () => {
+    // An identifier beginning with a digit is a malformed numeric literal to Postgres,
+    // so LISTEN throws and the stream silently never subscribes. A numeric isolation
+    // value — a workspace id, say — hits this immediately.
+    for (const isolation of ['1', '42', '0', '7abc']) {
+      const channel = namespacedChannel(isolation, 'conv_7');
+      expect(channel, `isolation=${isolation}`).toMatch(/^[A-Za-z_][A-Za-z0-9_]*$/);
+    }
+  });
+
+  it('still distinguishes isolations that differ only in digits', () => {
+    expect(namespacedChannel('1', 'conv_7')).not.toBe(namespacedChannel('2', 'conv_7'));
   });
 });

@@ -69,7 +69,11 @@ export function namespaced(level: string, key: string): string {
 /**
  * Notification channel names are SQL identifiers, so they cannot carry `/` without
  * quoting. Same isolation level, different join.
+ *
+ * The leading `ns` is not decoration: an identifier may not START with a digit, and a
+ * numeric isolation value would otherwise produce `1_conv_7`, which Postgres rejects as
+ * a malformed numeric literal. LISTEN then throws and the stream never subscribes.
  */
 export function namespacedChannel(isolation: string, channel: string): string {
-  return `${isolation.replace(/[^a-zA-Z0-9_]/g, '_')}_${channel}`;
+  return `ns${isolation.replace(/[^a-zA-Z0-9_]/g, '_')}_${channel}`;
 }
