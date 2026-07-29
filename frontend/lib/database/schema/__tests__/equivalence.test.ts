@@ -60,7 +60,7 @@ describe('rendered schema', () => {
     // Both default to the safe-looking answer if forgotten, and both fail OPEN: a
     // table nobody scoped is shared, a unique nobody scoped is global.
     for (const table of TABLES) {
-      expect(table.scope, `${table.name}.scope`).toMatch(/^(shared|per-namespace)$/);
+      expect(table.scope, `${table.name}.scope`).toMatch(/^(shared|per-namespace|public)$/);
       for (const u of table.uniques ?? []) {
         expect(u.scope, `${table.name} UNIQUE(${u.columns.join(',')})`).toMatch(/^(scoped|global)$/);
       }

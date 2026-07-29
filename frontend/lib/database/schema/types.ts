@@ -61,6 +61,13 @@ export interface Index {
   name: string;
   columns: readonly IndexColumn[];
   unique?: boolean;
+  /**
+   * Whether a UNIQUE index holds within a namespace or across the whole deployment.
+   * Same meaning as `Unique.scope`, and only meaningful when `unique` is set — a
+   * variant that scopes indexes must leave a `global` one alone or it silently weakens
+   * the invariant. Defaults to `scoped`.
+   */
+  scope?: UniquenessScope;
   /** Partial-index predicate, rendered after WHERE. */
   where?: string;
   /** Index access method. Omitted means the default (btree). */
@@ -83,12 +90,22 @@ export type IndexColumn =
  * Where a table's rows live.
  *
  * `shared` — one set of rows for the whole deployment.
- * `per-namespace` — rows belong to a namespace and a variant scopes them.
+ * `per-namespace` — rows belong to a namespace, and only that namespace can see them.
+ * `public` — rows belong to a namespace, but ANY namespace may read them.
+ *
+ * `public` exists for the questions that must be answered before the namespace is
+ * known: which namespace owns a given third-party workspace, what data version each is
+ * on. Every other table is unreadable at that point, since a namespace-scoped policy has
+ * nothing to compare against yet. Writes stay scoped — only reads cross the boundary.
+ *
+ * The cost is the contract: anything stored in a `public` table is readable by every
+ * namespace, so nothing namespace-private may go there. That is a rule about content,
+ * which the type cannot enforce — it has to be held deliberately.
  *
  * Declared here rather than as a name list held by the consumer: a list rots the day
  * a table is added, and it fails open.
  */
-export type TableScope = 'shared' | 'per-namespace';
+export type TableScope = 'shared' | 'per-namespace' | 'public';
 
 export interface Table {
   name: string;

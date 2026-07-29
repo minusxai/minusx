@@ -164,6 +164,13 @@ TABLE messages
   idx  CREATE INDEX idx_messages_errors ON public.messages USING btree (conversation_id, created_at) WHERE (kind = 'error'::text)
   idx  CREATE UNIQUE INDEX messages_conversation_id_seq_key ON public.messages USING btree (conversation_id, seq)
   idx  CREATE UNIQUE INDEX messages_pkey ON public.messages USING btree (id)
+TABLE public_data
+  col  key text NOT NULL
+  col  updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+  col  value text NOT NULL
+  con  public_data_pkey PRIMARY KEY (key)
+  idx  CREATE UNIQUE INDEX idx_public_data_binding_unique ON public.public_data USING btree (key) WHERE (key ~~ 'binding:%'::text)
+  idx  CREATE UNIQUE INDEX public_data_pkey ON public.public_data USING btree (key)
 TABLE queries
   col  connection_name character varying
   col  created_at timestamp with time zone NOT NULL DEFAULT now()

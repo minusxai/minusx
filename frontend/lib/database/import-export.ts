@@ -112,7 +112,12 @@ async function importToDatabase(_dbPath: string, initData: InitData): Promise<vo
   }
 
   await db.exec(`DELETE FROM configs WHERE key IN ('data_version', 'schema_version')`);
-  await db.exec(`INSERT INTO configs (key, value) VALUES ('data_version', $1)`, [initData.version.toString()]);
+  // data_version lives in public_data — see getDataVersion for why.
+  await db.exec(
+    `INSERT INTO public_data (key, value) VALUES ('data_version', $1)
+     ON CONFLICT ON CONSTRAINT public_data_pkey DO UPDATE SET value = EXCLUDED.value`,
+    [initData.version.toString()],
+  );
   await db.exec(`INSERT INTO configs (key, value) VALUES ('schema_version', $1)`, [LATEST_SCHEMA_VERSION.toString()]);
 }
 

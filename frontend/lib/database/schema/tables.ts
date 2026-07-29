@@ -379,6 +379,33 @@ export const QUERY_CACHE = {
   indexes: [{ name: 'idx_query_cache_expire', columns: ['expire_at'] }],
 } as const satisfies Schema[number];
 
+export const PUBLIC_DATA = {
+  name: 'public_data',
+  scope: 'public',
+  columns: [
+    { name: 'key', type: 'TEXT', notNull: true },
+    { name: 'value', type: 'TEXT', notNull: true },
+    { name: 'updated_at', type: 'TIMESTAMP', default: 'CURRENT_TIMESTAMP' },
+  ],
+  primaryKey: ['key'],
+  indexes: [
+    /**
+     * Some keys identify their namespace rather than describing it — a third-party
+     * workspace id, for instance — and those must resolve to exactly ONE namespace or
+     * the lookup they exist for is ambiguous. Global, therefore, and partial: it
+     * constrains only the keys that carry that meaning, leaving ordinary per-namespace
+     * keys (`data_version`) free to repeat.
+     */
+    {
+      name: 'idx_public_data_binding_unique',
+      columns: ['key'],
+      unique: true,
+      scope: 'global',
+      where: "key LIKE 'binding:%'",
+    },
+  ],
+} as const satisfies Schema[number];
+
 /**
  * The complete schema, in dependency-free order (there are no foreign keys — see
  * ./types.ts — so the only ordering constraint is a table before its own indexes).
@@ -386,5 +413,5 @@ export const QUERY_CACHE = {
 export const TABLES: Schema = [
   USERS, FILES, SECRETS, JOB_RUNS, CONFIGS,
   FILE_EVENTS, LLM_CALL_EVENTS, LLM_LOGS, QUERIES, QUERY_EXECUTION_EVENTS,
-  FEEDBACK_EVENTS, APP_EVENTS, CONVERSATIONS, MESSAGES, QUERY_CACHE,
+  FEEDBACK_EVENTS, APP_EVENTS, CONVERSATIONS, MESSAGES, QUERY_CACHE, PUBLIC_DATA,
 ];

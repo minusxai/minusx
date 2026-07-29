@@ -40,13 +40,36 @@ async function setConfigValue(key: string, value: string, db?: QueryContext): Pr
   );
 }
 
+/**
+ * The workspace's data version.
+ *
+ * Stored in `public_data` rather than `configs` because a deployment serving several
+ * workspaces has to answer "what is the oldest version any of them is on?" before
+ * knowing which workspace a request belongs to — and namespace-scoped storage cannot be
+ * read at that point.
+ *
+ * Falls back to `configs` for workspaces written before the move; the fallback can go
+ * once no deployment still holds the old row.
+ */
 export async function getDataVersion(db?: QueryContext): Promise<number> {
-  const version = await getConfigValue('data_version', db);
-  return version ? parseInt(version, 10) : 0;
+  const exec = resolveExec(db);
+  try {
+    const result = await exec(`SELECT value FROM public_data WHERE key = 'data_version'`);
+    const v = result.rows[0]?.value;
+    if (v) return parseInt(v, 10);
+  } catch { /* table absent on an un-migrated database — fall through */ }
+
+  const legacy = await getConfigValue('data_version', db);
+  return legacy ? parseInt(legacy, 10) : 0;
 }
 
 export async function setDataVersion(version: number, db?: QueryContext): Promise<void> {
-  await setConfigValue('data_version', version.toString(), db);
+  const exec = resolveExec(db);
+  await exec(
+    `INSERT INTO public_data (key, value, updated_at) VALUES ('data_version', $1, CURRENT_TIMESTAMP)
+     ON CONFLICT ON CONSTRAINT public_data_pkey DO UPDATE SET value = $2, updated_at = CURRENT_TIMESTAMP`,
+    [version.toString(), version.toString()],
+  );
 }
 
 export async function getSchemaVersion(db?: QueryContext): Promise<number> {

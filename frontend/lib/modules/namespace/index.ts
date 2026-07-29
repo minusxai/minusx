@@ -32,7 +32,7 @@ export class NamespaceModule implements INamespaceModule {
     return DEFAULT_ISOLATION;
   }
 
-  /** One workspace, so the fleet minimum is just its own version. */
+  /** One workspace, so the minimum across workspaces is just its own version. */
   async minDataVersion(): Promise<number> {
     return getDataVersion();
   }
