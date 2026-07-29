@@ -6,9 +6,9 @@
  * behavior change.
  */
 
-import { Box, VStack, HStack, Button, Text, Badge, Field, Input, Collapsible, Icon, Switch } from '@chakra-ui/react';
+import { Box, VStack, HStack, Button, Text, Field, Input, Collapsible, Icon, Switch } from '@chakra-ui/react';
 import { memo, useState, useEffect, useCallback } from 'react';
-import { LuTrash2, LuChevronDown, LuChevronRight } from 'react-icons/lu';
+import { LuTrash2, LuChevronRight } from 'react-icons/lu';
 import type { SkillEntry } from '@/lib/types';
 import LexicalTextEditor, { LexicalTextViewer, type MentionsConfig } from '@/components/lexical/LexicalTextEditor';
 import { getUserSkillDisplayName, uniqueUserSkillName } from '@/lib/context/skill-utils';
@@ -81,53 +81,132 @@ export const SkillEditorCard = memo(function SkillEditorCard({
 
   return (
     <Collapsible.Root open={expanded} onOpenChange={(e) => setExpanded(e.open)}>
-      <Box border="1px solid" borderColor={invalidName ? 'accent.danger' : 'border.muted'} borderRadius="md" overflow="hidden">
+      <Box
+        role="group"
+        border="1px solid"
+        borderColor={invalidName ? 'accent.danger' : 'border.muted'}
+        borderRadius="lg"
+        overflow="hidden"
+        bg={skill.enabled ? 'bg.panel' : 'bg.subtle'}
+        transition="border-color 160ms ease, box-shadow 160ms ease"
+        _hover={{
+          borderColor: invalidName ? 'accent.danger' : skill.enabled ? 'accent.teal/40' : 'border.emphasized',
+          boxShadow: 'xs',
+        }}
+      >
         <Collapsible.Trigger asChild>
           <HStack
-            px={3}
-            py={2.5}
+            minH="68px"
+            px={3.5}
+            py={3}
             justify="space-between"
             align="center"
+            gap={3}
             cursor="pointer"
-            bg="bg.surface"
-            _hover={{ bg: 'bg.muted' }}
           >
-            <HStack gap={2} minW={0} flex={1}>
-              <Icon as={expanded ? LuChevronDown : LuChevronRight} boxSize={4} color="fg.muted" flexShrink={0} />
-              <Badge size="sm" colorPalette={skill.enabled ? 'green' : 'gray'} variant="subtle" flexShrink={0}>
-                {skill.enabled ? 'Enabled' : 'Disabled'}
-              </Badge>
-              <Text fontSize="sm" fontWeight="700" color="fg.default" truncate maxW="260px">
-                {draft.displayName || 'Untitled skill'}
-              </Text>
-              <Text fontSize="xs" fontFamily="mono" color="fg.subtle" truncate flexShrink={0}>
-                #{canonicalName}
-              </Text>
-              <Text fontSize="sm" color="fg.muted" truncate flex={1}>
-                {draft.description || 'No description'}
-              </Text>
-              {invalidName && (
-                <Text fontSize="xs" color="accent.danger" flexShrink={0}>
-                  Name is required
+            <Box
+              display="grid"
+              placeItems="center"
+              w="28px"
+              h="28px"
+              flexShrink={0}
+              borderRadius="md"
+              color={expanded ? 'accent.teal' : 'fg.muted'}
+              bg={expanded ? 'accent.teal/10' : 'transparent'}
+              transition="background 160ms ease, color 160ms ease"
+              _groupHover={{ color: 'accent.teal' }}
+            >
+              <Icon
+                as={LuChevronRight}
+                boxSize={4}
+                transform={expanded ? 'rotate(90deg)' : 'rotate(0deg)'}
+                transition="transform 160ms ease"
+              />
+            </Box>
+
+            <Box minW={0} flex={1} textAlign="left">
+              <HStack gap={2} minW={0}>
+                <Text fontSize="sm" fontWeight="700" color="fg.default" truncate>
+                  {draft.displayName || 'Untitled skill'}
                 </Text>
-              )}
-            </HStack>
-            {canManageSkills && (
-              <HStack gap={2} onClick={(event) => event.stopPropagation()} flexShrink={0}>
-                <Switch.Root
-                  size="sm"
-                  checked={skill.enabled}
-                  onCheckedChange={(e) => onUpdate(index, { enabled: e.checked })}
-                  colorPalette="green"
-                >
-                  <Switch.HiddenInput />
-                  <Switch.Control>
-                    <Switch.Thumb />
-                  </Switch.Control>
-                </Switch.Root>
-                <Button size="xs" variant="ghost" colorPalette="red" onClick={() => onDelete(index)}>
-                  <LuTrash2 />
-                </Button>
+                {invalidName && (
+                  <Text fontSize="2xs" color="accent.danger" flexShrink={0}>
+                    Name is required
+                  </Text>
+                )}
+              </HStack>
+              <HStack gap={1.5} minW={0} mt={1}>
+                <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" truncate flexShrink={0}>
+                  #{canonicalName}
+                </Text>
+                <Text aria-hidden="true" fontSize="xs" color="fg.subtle">·</Text>
+                <Text fontSize="xs" color="fg.muted" truncate>
+                  {draft.description || 'No description yet'}
+                </Text>
+              </HStack>
+            </Box>
+
+            {canManageSkills ? (
+              <HStack
+                gap={0}
+                p={0.5}
+                flexShrink={0}
+                border="1px solid"
+                borderColor="border.muted"
+                borderRadius="full"
+                bg="bg.muted"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <Box px={1.5} py={0.5}>
+                  <Switch.Root
+                    size="xs"
+                    checked={skill.enabled}
+                    onCheckedChange={(e) => onUpdate(index, { enabled: e.checked })}
+                    colorPalette="teal"
+                  >
+                    <Switch.HiddenInput aria-label={`Skill ${draft.displayName || canonicalName} enabled`} />
+                    <Switch.Control>
+                      <Switch.Thumb />
+                    </Switch.Control>
+                    <Switch.Label
+                      fontSize="2xs"
+                      fontWeight="700"
+                      color={skill.enabled ? 'accent.teal' : 'fg.muted'}
+                    >
+                      {skill.enabled ? 'Enabled' : 'Disabled'}
+                    </Switch.Label>
+                  </Switch.Root>
+                </Box>
+                <Box pl={0.5} borderLeft="1px solid" borderColor="border.default">
+                  <Button
+                    aria-label={`Delete skill ${draft.displayName || canonicalName}`}
+                    size="xs"
+                    variant="ghost"
+                    borderRadius="full"
+                    minW="26px"
+                    w="26px"
+                    h="26px"
+                    p={0}
+                    color="fg.muted"
+                    _hover={{ color: 'accent.danger', bg: 'bg.panel' }}
+                    onClick={() => onDelete(index)}
+                  >
+                    <Icon as={LuTrash2} boxSize={3} />
+                  </Button>
+                </Box>
+              </HStack>
+            ) : (
+              <HStack gap={1.5} flexShrink={0} color="fg.muted">
+                <Box
+                  aria-hidden="true"
+                  w="6px"
+                  h="6px"
+                  borderRadius="full"
+                  bg={skill.enabled ? 'accent.teal' : 'fg.subtle'}
+                />
+                <Text fontSize="2xs" fontWeight="700">
+                  {skill.enabled ? 'Enabled' : 'Disabled'}
+                </Text>
               </HStack>
             )}
           </HStack>
