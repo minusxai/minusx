@@ -150,7 +150,7 @@ describe('custom-agent turns (v3 chat routes)', () => {
     expect(sp).not.toContain('- `"alerts"`');               // outside allowlist
   });
 
-  it('assembles the replace prompt: persona replaces the instructional body', async () => {
+  it('assembles the replace prompt: persona replaces the intro + guidelines', async () => {
     const conv = await createConversation({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent' });
     const ctx = await previewNextChatContext(
       { user_message: 'q', agent_args: { custom_agent: 'terse_bot', context_file_id: contextFileId } },
@@ -159,7 +159,9 @@ describe('custom-agent turns (v3 chat routes)', () => {
     );
     const sp = typeof ctx.systemPrompt === 'string' ? ctx.systemPrompt : JSON.stringify(ctx.systemPrompt);
     expect(sp).toContain('REPLACE_PERSONA_MARKER');
-    expect(sp).not.toContain('## Application Structure');
+    expect(sp).toContain('## Application Structure');        // app structure kept
+    expect(sp).not.toContain('expert data analyst');         // intro gone
+    expect(sp).not.toContain('### Response Guidelines');     // guidelines gone
     expect(sp).toContain('## Available Database Schema');   // dynamic sections kept
   });
 

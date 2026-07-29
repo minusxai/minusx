@@ -1130,9 +1130,10 @@ prompts:
       {attachments}
       <Question>{goal}</Question>
   # Custom agents in `replace` prompt mode: the author's prompt replaces the default
-  # INSTRUCTIONAL body (intro/app/tools/guidelines). The DYNAMIC runtime sections —
-  # schema, context docs, skills, connection, home folder — are still appended: the
-  # author cannot hand-write those and the tools depend on them.
+  # intro + guidelines. The app structure and the DYNAMIC runtime sections — schema,
+  # context docs, skills, connection, home folder — are still included: the author
+  # cannot hand-write those and the tools depend on them. The persona renders twice
+  # (top + the default persona-slot position) to bracket the app/available-info blocks.
   custom_agent_replace:
     system: |
       {agent_persona}

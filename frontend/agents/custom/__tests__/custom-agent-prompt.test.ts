@@ -1,8 +1,9 @@
 // CustomAgent system-prompt assembly: user-defined agents (AgentEntry on the
 // context file) resolved server-side into `context.customAgent`. Append mode
 // injects the persona into the default analyst prompt; replace mode swaps out
-// the instructional body but KEEPS the dynamic runtime sections (schema,
-// context docs, skills catalog + preloaded skills, connection, home folder).
+// the intro + guidelines but KEEPS the app structure and the dynamic runtime
+// sections (schema, context docs, skills catalog + preloaded skills,
+// connection, home folder).
 
 import { Orchestrator } from '@/orchestrator/orchestrator';
 import { CustomAgent } from '../custom-agent';
@@ -62,18 +63,21 @@ describe('CustomAgent append mode', () => {
 describe('CustomAgent replace mode', () => {
   const replaceDef = def({ promptMode: 'replace', prompt: 'REPLACE_PERSONA: terse SQL bot.' });
 
-  it('replaces the instructional body but keeps the dynamic runtime sections', () => {
+  it('replaces the intro + guidelines but keeps app structure and dynamic runtime sections', () => {
     const sp: string = newCustomAgent({ customAgent: replaceDef }).getSystemPrompt();
     expect(sp).toContain('REPLACE_PERSONA');
-    // dynamic sections survive
+    // app structure + dynamic sections survive
+    expect(sp).toContain('## Application Structure');
     expect(sp).toContain('## Available Database Schema');
     expect(sp).toContain('## Context');
     expect(sp).toContain('conn-7');           // connection_section
     expect(sp).toContain('/org/sales');       // home_folder_section
     expect(sp).toContain('LoadSkill');        // skills catalog advertised
     expect(sp).toContain('**Skill: questions**'); // preloaded skills still inlined
-    // default instructional body is gone
-    expect(sp).not.toContain('## Application Structure');
+    // default intro + guidelines are gone
+    expect(sp).not.toContain('expert data analyst');   // intro
+    expect(sp).not.toContain('### Response Guidelines'); // guidelines
+    expect(sp).not.toContain('### Workflow');            // guidelines
   });
 
   it('renders persona braces literally in replace mode too', () => {

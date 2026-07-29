@@ -28,10 +28,11 @@ export class CustomAgent extends WebAnalystAgent {
     // Append mode (and the no-definition fallback) renders the default analyst
     // prompt — buildSystemPromptVars injects the persona into {agent_persona}.
     if (!def || def.promptMode === 'append') return super.getSystemPrompt();
-    // Replace mode: the author's prompt replaces the instructional body; the
-    // dynamic runtime sections (schema, context, skills, connection, home
-    // folder) are still appended by the replace template. The persona is
-    // substituted as a VALUE (never template-resolved) so braces stay literal.
+    // Replace mode: the author's prompt replaces the default intro + guidelines;
+    // the app structure and dynamic runtime sections (schema, context, skills,
+    // connection, home folder) are still rendered by the replace template. The
+    // persona is substituted as a VALUE (never template-resolved) so braces stay
+    // literal.
     return renderPrompt('custom_agent_replace.system', {
       ...this.buildSystemPromptVars(),
       agent_persona: def.prompt,

@@ -37,7 +37,7 @@ describe('bundled prompts (standalone-safe, no backend filesystem)', () => {
     expect(empty).not.toContain('PERSONA_SLOT_MARKER');
   });
 
-  it('renders custom_agent_replace.system: persona + dynamic sections, no default instructional body', () => {
+  it('renders custom_agent_replace.system: persona + app structure + dynamic sections, no intro/guidelines', () => {
     const out = renderPrompt('custom_agent_replace.system', {
       ...SYSTEM_VARS,
       agent_persona: 'REPLACE_BODY_MARKER',
@@ -45,9 +45,11 @@ describe('bundled prompts (standalone-safe, no backend filesystem)', () => {
       connection_id: 'conn-x',
     });
     expect(out).toContain('REPLACE_BODY_MARKER');
+    expect(out).toContain('## Application Structure');
     expect(out).toContain('## Available Database Schema');
     expect(out).toContain('conn-x');
-    expect(out).not.toContain('## Application Structure');
+    expect(out).not.toContain('expert data analyst');    // intro
+    expect(out).not.toContain('### Response Guidelines'); // guidelines
   });
 
   it('lists real skills from the bundle', () => {
