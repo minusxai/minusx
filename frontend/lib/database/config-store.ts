@@ -63,6 +63,39 @@ export async function getDataVersion(db?: QueryContext): Promise<number> {
   return legacy ? parseInt(legacy, 10) : 0;
 }
 
+/**
+ * The oldest data version any workspace in reach is on.
+ *
+ * Identical to `getDataVersion` for a single workspace — MIN over one row is that row.
+ * It is a separate function because the caller that needs the aggregate reads with
+ * wider visibility than an ordinary request has, and the QUERY should live here either
+ * way: a caller that restates it drifts the day this storage moves again, which is
+ * exactly what happened when the value moved out of `configs`.
+ */
+export async function getMinDataVersion(
+  db?: QueryContext,
+  { legacyFallback = true }: { legacyFallback?: boolean } = {},
+): Promise<number> {
+  const exec = resolveExec(db);
+  try {
+    const result = await exec(
+      `SELECT MIN(value::int) AS min FROM public_data WHERE key = 'data_version'`,
+    );
+    const v = result.rows[0]?.min;
+    if (v != null) return Number(v);
+  } catch { /* table absent on an un-migrated database — fall through */ }
+
+  // `configs` holds one workspace's value, so reading it is only meaningful when the
+  // caller IS that workspace. A caller aggregating over several passes false: there is
+  // no single legacy row to fall back to, and reaching for one would answer a different
+  // question than the one asked. 0 then means "not determinable", which every caller
+  // already treats as refuse-to-proceed.
+  if (!legacyFallback) return 0;
+
+  const legacy = await getConfigValue('data_version', db);
+  return legacy ? parseInt(legacy, 10) : 0;
+}
+
 export async function setDataVersion(version: number, db?: QueryContext): Promise<void> {
   const exec = resolveExec(db);
   await exec(

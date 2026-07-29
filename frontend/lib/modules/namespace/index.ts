@@ -1,5 +1,5 @@
 import { DEFAULT_ISOLATION } from '@/lib/namespace/types';
-import { getDataVersion } from '@/lib/database/config-store';
+import { getMinDataVersion } from '@/lib/database/config-store';
 import type { NextRequest } from 'next/server';
 import type { ExternalIdKind, INamespaceModule, RegisterInput, RegisterResult } from '../types';
 import { AuthModule } from '@/lib/modules/auth';
@@ -34,7 +34,7 @@ export class NamespaceModule implements INamespaceModule {
 
   /** One workspace, so the minimum across workspaces is just its own version. */
   async minDataVersion(): Promise<number> {
-    return getDataVersion();
+    return getMinDataVersion();
   }
 
   /** One workspace — provisioning is the ordinary first-run registration. */
