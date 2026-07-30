@@ -29,13 +29,16 @@ import * as explainModule from '@/lib/hooks/useExplainQuestion';
 
 const Q_ID = 301;
 
-function makeQuestionFile(): DbFile {
+function makeQuestionFile(vizType: string = 'table', viz?: unknown): DbFile {
   return {
     id: Q_ID,
     name: 'Revenue by Region',
     type: 'question' as const,
     path: '/org/Revenue by Region',
-    content: { query: 'SELECT 1', vizSettings: { type: 'table' as const }, connection_name: '' } as QuestionContent,
+    content: (viz
+      // Viz-first: `viz` is authoritative and vizSettings is absent entirely.
+      ? { query: 'SELECT 1', viz, connection_name: '' }
+      : { query: 'SELECT 1', vizSettings: { type: vizType as 'table' }, connection_name: '' }) as QuestionContent,
     created_at: '2025-01-01T00:00:00Z',
     updated_at: '2025-01-01T00:00:00Z',
     references: [] as number[],
@@ -44,10 +47,10 @@ function makeQuestionFile(): DbFile {
   } as DbFile;
 }
 
-function setup() {
+function setup(vizType?: string, viz?: unknown) {
   const store = storeModule.makeStore();
   vi.spyOn(storeModule, 'getStore').mockReturnValue(store);
-  store.dispatch(setFile({ file: makeQuestionFile(), references: [] }));
+  store.dispatch(setFile({ file: makeQuestionFile(vizType, viz), references: [] }));
   return store;
 }
 
@@ -114,6 +117,58 @@ describe('SmartEmbeddedQuestionContainer chrome', () => {
     expect(onEdit).toHaveBeenCalled();
     fireEvent.click(screen.getByLabelText('Remove from dashboard'));
     expect(onRemove).toHaveBeenCalled();
+  });
+
+  it('edit mode: the drag surface covers the whole tile for a static chart', async () => {
+    // Unchanged behaviour for everything that has nothing to interact with:
+    // grabbing anywhere on the card drags it.
+    const store = setup('table');
+    renderWithProviders(<SmartEmbeddedQuestionContainer questionId={Q_ID} showTitle editMode />, { store });
+    await screen.findByText('Revenue by Region');
+    expect(screen.getByLabelText('Drag tile')).toHaveClass('inset-0');
+  });
+
+  it('edit mode: the drag surface does NOT cover an interactive map', async () => {
+    // A full-tile drag surface sits above the chart and eats every wheel, drag and
+    // hover before Vega sees them — so pan/zoom/tooltips are dead on exactly the
+    // charts that have them. Geo charts get a header-strip grab area instead, which
+    // keeps the tile draggable without owning the whole surface.
+    for (const vizType of ['choropleth', 'point_map', 'geo']) {
+      const store = setup(vizType);
+      const { unmount } = renderWithProviders(
+        <SmartEmbeddedQuestionContainer questionId={Q_ID} showTitle editMode />, { store });
+      await screen.findByText('Revenue by Region');
+      const handle = screen.getByLabelText('Drag tile');
+      expect(handle, vizType).not.toHaveClass('inset-0');
+      expect(handle, vizType).toHaveClass('top-0');
+      unmount();
+    }
+  });
+
+  it('edit mode: spares a VIZ-FIRST map, where legacy vizSettings does not exist', async () => {
+    // `viz` is authoritative when present and `vizSettings` is then ignored — a
+    // viz-first file omits it entirely. Reading only the legacy field therefore
+    // classifies every V2-authored map as static and re-covers it with the
+    // full-card overlay, which is the exact bug this fix exists to remove.
+    for (const recipe of ['minusx/choropleth@1', 'minusx/point-map@1']) {
+      const store = setup(undefined, { source: { kind: 'recipe', recipe }, encoding: {} });
+      const { unmount } = renderWithProviders(
+        <SmartEmbeddedQuestionContainer questionId={Q_ID} showTitle editMode />, { store });
+      await screen.findByText('Revenue by Region');
+      expect(screen.getByLabelText('Drag tile'), recipe).not.toHaveClass('inset-0');
+      unmount();
+    }
+  });
+
+  it('edit mode: spares a DETACHED map, which has no recipe id left', async () => {
+    // Detaching a map drops the recipe id but keeps the signals, so capability —
+    // the mxViewParams signal — is what identifies it, not the id.
+    const store = setup(undefined, {
+      source: { kind: 'vega', spec: { signals: [{ name: 'mxViewParams' }] } }, encoding: {},
+    });
+    renderWithProviders(<SmartEmbeddedQuestionContainer questionId={Q_ID} showTitle editMode />, { store });
+    await screen.findByText('Revenue by Region');
+    expect(screen.getByLabelText('Drag tile')).not.toHaveClass('inset-0');
   });
 
   it('unknown question id: shows the loading state, never a crash', () => {

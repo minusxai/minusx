@@ -19,6 +19,7 @@ import { POINT_MAP_DEFAULT_TILE_URL, POINT_MAP_DARK_TILE_URL } from '@/lib/viz/v
 import { buildTooltipPlan, buildTooltipData, renderSharedTooltipHtml, type TooltipPlan, type TooltipEntry } from '@/lib/viz/tooltip-plan';
 import { SharedTooltip } from '@/lib/viz/shared-tooltip';
 import { injectGuideMark, GUIDE_WIDTH, GUIDE_OPACITY, GUIDE_BAND_OPACITY } from '@/lib/viz/guide-mark';
+import { isInteractiveMapEnvelope } from '@/lib/viz/interactive-map';
 
 // Tooltip value/x formatters. Tooltips show the FULL number ("2,574", not the axis's
 // "2.6k") and a readable date — the chart's own d3 format is for the axis, not here.
@@ -34,20 +35,10 @@ const makeXFormatter = (plan: TooltipPlan) => (raw: unknown): string => {
 // mxGuideH signals) lives in ./guide-mark — extracted so its bounds invariant is
 // unit-tested (mxGuideH rests at 0 so the guide never feeds the fit solver; see guide-mark.ts).
 
-// Interactive maps (drag pan, wheel zoom, +/- buttons, persisted view) are detected by
-// CAPABILITY — the `mxViewParams` signal — not by recipe id, so a DETACHED map (kind:
-// 'vega', no recipe) stays fully interactive. Recipe ids are still a fast path.
-const POINT_MAP_RECIPE = 'minusx/point-map@1';
-const CHOROPLETH_RECIPE = 'minusx/choropleth@1';
-const recipeOf = (env: VizEnvelope): string | undefined => (env.source as unknown as { recipe?: string })?.recipe;
-// Does a raw (detached) native-Vega spec declare this signal? Lets map capabilities
-// survive detach, when the recipe id is gone but the signals remain in the spec.
-const specHasSignal = (env: VizEnvelope, name: string): boolean => {
-  const src = env.source as unknown as { kind?: string; spec?: { signals?: Array<{ name?: string }> } };
-  return src.kind === 'vega' && Array.isArray(src.spec?.signals) && src.spec.signals.some(s => s?.name === name);
-};
-const isInteractiveMap = (env: VizEnvelope): boolean =>
-  recipeOf(env) === POINT_MAP_RECIPE || recipeOf(env) === CHOROPLETH_RECIPE || specHasSignal(env, 'mxViewParams');
+// Interactive maps (drag pan, wheel zoom, +/- buttons, persisted view). The predicate
+// lives in lib/viz/interactive-map so the dashboard tile — which must not cover these
+// with its edit-mode drag surface — asks the identical question.
+const isInteractiveMap = isInteractiveMapEnvelope;
 const hasSignal = (view: View, name: string): boolean => {
   try { view.signal(name); return true; } catch { return false; }
 };

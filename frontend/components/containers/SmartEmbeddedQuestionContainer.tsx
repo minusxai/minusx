@@ -7,6 +7,7 @@ import { selectMergedContent, selectEffectiveName } from '@/store/filesSlice';
 import { QuestionContent, QuestionParameter } from '@/lib/types';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import { applyVizOverride } from '@/lib/data/story/story-question';
+import { isInteractiveMapContent } from '@/lib/viz/interactive-map';
 import EmbeddedQuestionContainer from './EmbeddedQuestionContainer';
 import { Link } from '@/components/ui/Link';
 import { LuEllipsis, LuSparkles, LuExternalLink, LuTrash2, LuPencil } from 'react-icons/lu';
@@ -95,6 +96,11 @@ function SmartEmbeddedQuestionContainerInner({
     () => (rawMergedContent ? applyVizOverride(rawMergedContent, vizOverride) : rawMergedContent),
     [rawMergedContent, vizOverride],
   );
+
+  // Charts that respond to wheel/drag/hover — the only ones whose surface the
+  // edit-mode drag overlay must not cover. Shared with VegaChart so the two cannot
+  // disagree; it reads `viz` first because that is authoritative when present.
+  const isInteractiveViz = useMemo(() => isInteractiveMapContent(mergedContent), [mergedContent]);
 
   // Use effective name so pending renames are reflected immediately in the dashboard card
   const effectiveName = useAppSelector(state => selectEffectiveName(state, questionId));
@@ -201,12 +207,29 @@ function SmartEmbeddedQuestionContainerInner({
           <TileSpinner className="size-6" />
         </div>
       )}
-      {/* Edit mode: overlay makes entire card draggable, blocks chart interaction */}
+      {/*
+        Edit mode grab surface.
+
+        For a static chart it covers the whole card: there is nothing underneath to
+        interact with, and grabbing anywhere is the nicer gesture. The clip-path
+        already spares the bottom-right corner so the map zoom buttons stay clickable.
+
+        An INTERACTIVE map is the exception. The overlay sits above the chart and is
+        what the browser hit-tests, so Vega never receives the wheel, drag or hover —
+        pan, zoom and tooltips are all dead on precisely the charts that have them.
+        Those tiles get a header-height strip instead: still draggable, but it no
+        longer owns the chart surface.
+      */}
       {editMode && (
         <>
           <div
-            className="drag-handle absolute inset-0 z-[1] cursor-move"
-            style={{ clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 24px), calc(100% - 24px) 100%, 0 100%)' }}
+            aria-label="Drag tile"
+            className={
+              isInteractiveViz
+                ? 'drag-handle absolute inset-x-0 top-0 h-10 z-[1] cursor-move'
+                : 'drag-handle absolute inset-0 z-[1] cursor-move'
+            }
+            style={isInteractiveViz ? undefined : { clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 24px), calc(100% - 24px) 100%, 0 100%)' }}
           />
           <div className="absolute top-2 right-2 z-[2] flex items-center gap-0.5 rounded-md border border-border bg-popover p-0.5 text-popover-foreground shadow-sm">
             {onEdit && (
