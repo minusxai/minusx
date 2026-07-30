@@ -53,7 +53,8 @@ describe('getMentions — whitelist is the ceiling', () => {
     withTestConnection: true,
     customInit: async () => {
       const { getModules } = await import('@/lib/modules/registry');
-      await getModules().db.exec(
+      const db = getModules().db;
+      await db.exec(
         `UPDATE files SET content = $1 WHERE path = $2`,
         [
           JSON.stringify({
@@ -65,6 +66,12 @@ describe('getMentions — whitelist is the ceiling', () => {
           }),
           '/org/connections/test_connection',
         ],
+      );
+      await db.exec(
+        `INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at)
+         SELECT COALESCE(MAX(id), 0) + 1, $1, $2, 'story', $3, '[]', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+         FROM files`,
+        ['Mentionable Story', '/org/mentionable-story', JSON.stringify({ story: 'A saved story' })],
       );
     },
   });
@@ -97,5 +104,18 @@ describe('getMentions — whitelist is the ceiling', () => {
     );
 
     expect(tableNames(result)).toEqual([]);
+  });
+
+  it('offers stories alongside questions and dashboards in saved-file mentions', async () => {
+    const result = await CompletionsAPI.getMentions(
+      { prefix: 'mentionable', mentionType: 'questions', whitelistedSchemas: [] },
+      mockUser,
+    );
+
+    expect(result.suggestions).toContainEqual(expect.objectContaining({
+      name: 'Mentionable Story',
+      type: 'story',
+    }));
+    expect(result.suggestions.some((suggestion) => suggestion.type === 'table')).toBe(false);
   });
 });

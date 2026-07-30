@@ -1448,6 +1448,7 @@ const questions: AvailableQuestion[] = [
   { id: 1, name: 'Revenue by Month', alias: 'revenue_by_month_1', type: 'question' },
   { id: 2, name: 'User Growth', alias: 'user_growth_2', type: 'question' },
   { id: 3, name: 'Sales Dashboard', alias: 'sales_dashboard_3', type: 'dashboard' },
+  { id: 4, name: 'Quarterly Story', alias: 'quarterly_story_4', type: 'story' },
 ];
 
 describe('getMentionCompletionsLocal', () => {
@@ -1462,11 +1463,12 @@ describe('getMentionCompletionsLocal', () => {
     expect(names).toContain('user_events');
   });
 
-  it('includes questions and dashboards when mentionType is "all"', () => {
+  it('includes questions, dashboards, and stories when mentionType is "all"', () => {
     const result = getMentionCompletionsLocal('', schemaData, questions, 'all');
     const names = result.map(s => s.name);
     expect(names).toContain('Revenue by Month');
     expect(names).toContain('Sales Dashboard');
+    expect(names).toContain('Quarterly Story');
   });
 
   it('tags each table mention with its connection (database) name', () => {
@@ -1515,11 +1517,12 @@ describe('getMentionCompletionsLocal', () => {
     expect(types).not.toContain('table');
     expect(types).toContain('question');
     expect(types).toContain('dashboard');
+    expect(types).toContain('story');
   });
 
-  it('returns all questions/dashboards with empty prefix', () => {
+  it('returns all saved files with empty prefix', () => {
     const result = getMentionCompletionsLocal('', schemaData, questions, 'questions');
-    expect(result).toHaveLength(3);
+    expect(result).toHaveLength(4);
   });
 
   // --- Insert text format ---
@@ -1542,7 +1545,7 @@ describe('getMentionCompletionsLocal', () => {
 
   it('handles empty schema data', () => {
     const result = getMentionCompletionsLocal('', [], questions, 'all');
-    expect(result.length).toBe(3); // only questions
+    expect(result.length).toBe(4); // only saved files
   });
 
   it('handles empty questions', () => {
