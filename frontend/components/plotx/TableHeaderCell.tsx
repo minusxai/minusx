@@ -18,8 +18,9 @@ import {
   FACET_PICKER_RATIO,
 } from './table-v2-utils'
 
-// Accent constants (the app palette — same values the converted pivot uses).
-const TEAL = '#16a085'
+// Accent token: themable via --mx-table-accent (story/table css overrides),
+// falling back to the app teal so default visuals are unchanged.
+const TEAL = 'var(--mx-table-accent, #16a085)'
 const mix = (color: string, pct: number) => `color-mix(in srgb, ${color} ${pct}%, transparent)`
 
 // Small 16px icon-button used for the sort/filter/format toggles.
@@ -88,23 +89,27 @@ export const TableHeaderCell = ({
 
   return (
     <th
-      // Stable class contract for css overrides (Viz V2 table / story styling)
-      className={`mx-th ${cssColumnClass(header.id)} relative min-w-[100px] px-4 py-3 text-left align-top text-xs font-bold text-foreground`}
-      style={{
-        width: header.getSize(),
-        borderRight: displayIndex < totalHeaders - 1 ? '1px solid var(--border)' : undefined,
-        borderBottom: isAccented ? `2px solid ${TEAL}` : '1px solid var(--border)',
-        ...(isAccented ? { background: mix(TEAL, 5) } : {}),
-      }}
+      // Stable class contract for css overrides (Viz V2 table / story styling).
+      // Structural looks (borders, accent bg) live in TABLE_BASE_CSS as
+      // low-specificity :where() rules so author css can override them; the
+      // dynamic width rides a custom property consumed there for the same reason.
+      className={`mx-th ${cssColumnClass(header.id)} ${isAccented ? 'mx-th-accented ' : ''}relative min-w-[100px] px-4 py-3 text-left align-top text-xs font-bold text-foreground`}
+      style={{ '--mx-col-w': `${header.getSize()}px` } as React.CSSProperties}
     >
-      {/* Resize handle */}
+      {/* Resize handle. The resize handler must receive the OWNING document —
+          inside a story the table renders in an iframe, and TanStack registers
+          the drag (mousemove/mouseup) listeners on the document passed to it
+          (falling back to the top document, where iframe events never arrive).
+          NOTE: keep quotes/apostrophes out of comments in this file — the
+          recipe-class extractor (generate-story-ui-classes) pairs quote chars
+          naively across the whole source. */}
       <div
-        className={`absolute inset-y-0 right-0 z-[3] w-[4px] cursor-col-resize touch-none select-none hover:opacity-100 ${
+        aria-label={`Resize column ${header.id}`}
+        className={`mx-resize-handle absolute inset-y-0 right-0 z-[3] w-[4px] cursor-col-resize touch-none select-none hover:opacity-100 ${
           header.column.getIsResizing() ? 'opacity-100' : 'opacity-0'
         }`}
-        style={{ background: TEAL }}
-        onMouseDown={header.getResizeHandler()}
-        onTouchStart={header.getResizeHandler()}
+        onMouseDown={(e) => header.getResizeHandler(e.currentTarget.ownerDocument)(e)}
+        onTouchStart={(e) => header.getResizeHandler(e.currentTarget.ownerDocument)(e)}
       />
       <div className="flex flex-col items-start gap-1">
         {/* Column name + sort + filter controls */}
@@ -117,7 +122,7 @@ export const TableHeaderCell = ({
           })}
           <span
             aria-label={`Column header ${getDisplayName(header.id)}`}
-            className="min-w-0 flex-1 cursor-pointer truncate uppercase tracking-[0.05em] hover:text-[#16a085]"
+            className="min-w-0 flex-1 cursor-pointer truncate uppercase tracking-[0.05em] hover:text-[var(--mx-table-accent,#16a085)]"
             onClick={header.column.getToggleSortingHandler()}
           >
             {getDisplayName(header.id)}
@@ -202,7 +207,7 @@ export const TableHeaderCell = ({
                       )
                     }}
                     autoFocus
-                    className="h-6 w-full min-w-0 rounded-sm border border-border bg-popover px-1.5 font-mono text-xs text-foreground outline-none placeholder:text-muted-foreground focus:border-[#16a085]"
+                    className="h-6 w-full min-w-0 rounded-sm border border-border bg-popover px-1.5 font-mono text-xs text-foreground outline-none placeholder:text-muted-foreground focus:border-[var(--mx-table-accent,#16a085)]"
                   />
                   {hasActiveFilter && (
                     <button

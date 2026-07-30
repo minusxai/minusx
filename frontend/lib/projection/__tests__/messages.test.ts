@@ -182,3 +182,93 @@ describe('projectMessages — tool results', () => {
     expect(projectMessages([tr])[0]).toBe(tr);
   });
 });
+
+// EditFile attaches a full-view screenshot to EVERY edit's tool result, and origNonText used to
+// preserve every one of them forever — N edits of one file meant N screenshots in the prompt for
+// the rest of the conversation. Only the LATEST screenshot per file is still true of the file;
+// older ones are superseded by definition, so the pass drops them and leaves a stub saying why.
+describe('projectMessages — superseded EditFile screenshots', () => {
+  const augmentedFor = (id: number): AugmentedFiles => ({
+    file: {
+      id,
+      data: { id, name: `f${id}`, path: `/org/f${id}`, type: 'story', isDirty: false },
+      content: { markup: `<story id="${id}"/>` },
+    },
+    references: [],
+  });
+
+  const editResult = (fileId: number, tag: string): ToolResultMessage => ({
+    role: 'toolResult', toolCallId: tag, toolName: 'EditFile',
+    content: [
+      { type: 'text', text: '{"success":true}' },
+      { type: 'image', url: `https://s3/${tag}.jpg` },
+    ],
+    details: {
+      __augmented: [augmentedFor(fileId)],
+      __jsonTag: 'Files',
+      __status: { success: true },
+      __screenshotOf: fileId,
+    } satisfies AugmentedToolDetails,
+    isError: false, timestamp: 0,
+  });
+
+  const imagesOf = (m: Message) =>
+    (Array.isArray(m.content) ? m.content : []).filter((c) => c.type !== 'text');
+  const textOf = (m: Message) =>
+    (Array.isArray(m.content) ? m.content : []).filter((c): c is TextContent => c.type === 'text').map((c) => c.text).join('\n');
+
+  it('keeps only the LATEST screenshot per file and stubs the earlier ones', () => {
+    const msgs = [editResult(1, 'e1'), editResult(1, 'e2'), editResult(2, 'other'), editResult(1, 'e3')];
+    const [a, b, other, c] = projectMessages(msgs);
+    expect(imagesOf(a)).toEqual([]);
+    expect(imagesOf(b)).toEqual([]);
+    expect(imagesOf(c)).toEqual([{ type: 'image', url: 'https://s3/e3.jpg' }]);
+    // a different file's screenshot is untouched (it is that file's latest)
+    expect(imagesOf(other)).toEqual([{ type: 'image', url: 'https://s3/other.jpg' }]);
+    // the superseded ones say WHY the image is gone
+    expect(textOf(a)).toContain('screenshot omitted');
+    expect(textOf(b)).toContain('screenshot omitted');
+    expect(textOf(c)).not.toContain('screenshot omitted');
+  });
+
+  it('leaves a single EditFile screenshot alone (nothing supersedes it)', () => {
+    const [only] = projectMessages([editResult(5, 'solo')]);
+    expect(imagesOf(only)).toEqual([{ type: 'image', url: 'https://s3/solo.jpg' }]);
+    expect(textOf(only)).not.toContain('screenshot omitted');
+  });
+
+  it('does not stub a result that never carried a screenshot (deterministic fallback)', () => {
+    const noShot: ToolResultMessage = {
+      role: 'toolResult', toolCallId: 'd1', toolName: 'EditFile',
+      content: [{ type: 'text', text: '{"success":true}' }],
+      details: { __augmented: [augmentedFor(9)], __jsonTag: 'Files', __status: { success: true } } satisfies AugmentedToolDetails,
+      isError: false, timestamp: 0,
+    };
+    const [a, b] = projectMessages([noShot, editResult(9, 'later')]);
+    expect(textOf(a)).not.toContain('screenshot omitted');
+    expect(imagesOf(b)).toHaveLength(1);
+  });
+
+  // The handler emits `{type:'image_url', image_url:{url}}`, NOT the `{type:'image'}` shape the
+  // other tests use — pruning must key off "not text", the same predicate the pass filters on.
+  it('strips the handler\'s real image_url block shape too', () => {
+    const withImageUrl = (fileId: number, tag: string): ToolResultMessage => ({
+      ...editResult(fileId, tag),
+      content: [
+        { type: 'text', text: '{"success":true}' },
+        { type: 'image_url', image_url: { url: `https://s3/${tag}.jpg` } } as unknown as TextContent,
+      ],
+    });
+    const [older, newer] = projectMessages([withImageUrl(8, 'u1'), withImageUrl(8, 'u2')]);
+    expect(imagesOf(older)).toEqual([]);
+    expect(textOf(older)).toContain('screenshot omitted');
+    expect(imagesOf(newer)).toHaveLength(1);
+  });
+
+  it('is PURE — the input messages, their content arrays and details are unmutated', () => {
+    const msgs = [editResult(3, 'p1'), editResult(3, 'p2')];
+    const snapshot = JSON.stringify(msgs);
+    projectMessages(msgs);
+    expect(JSON.stringify(msgs)).toBe(snapshot);
+  });
+});

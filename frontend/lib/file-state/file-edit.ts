@@ -158,7 +158,7 @@ export interface EditFileStrOptions {
   fileId: number;
   oldMatch: string;    // String to search for
   newMatch: string;    // String to replace with
-  replaceAll?: boolean; // default true: replace all occurrences; false: error if multiple found
+  replaceAll?: boolean; // default false: error if oldMatch matches more than once; true: replace every occurrence (reported via `occurrences`)
 }
 
 /**
@@ -197,7 +197,9 @@ export function buildCurrentFileStr(state: ReturnType<typeof getStore>['getState
  *
  * Searches for oldMatch in the FULL file JSON (including name, path, type, content)
  * and replaces with newMatch. Detects what changed and updates Redux accordingly.
- * Uses string replace (replaces first occurrence only).
+ * By default the match must be UNIQUE (errors if oldMatch occurs more than once);
+ * pass replaceAll: true to deliberately replace every occurrence (the result then
+ * reports the occurrence count).
  * Validates JSON after edit.
  * Changes are stored in Redux but NOT saved to database until PublishFile is called.
  *
@@ -206,7 +208,7 @@ export function buildCurrentFileStr(state: ReturnType<typeof getStore>['getState
  */
 export async function editFileStr(
   options: EditFileStrOptions
-): Promise<{ success: boolean; diff?: string; error?: string; validation?: string[]; normalized?: boolean }> {
+): Promise<{ success: boolean; diff?: string; error?: string; validation?: string[]; normalized?: boolean; occurrences?: number }> {
   const { fileId, oldMatch, newMatch } = options;
   const state = getStore().getState();
 
@@ -226,13 +228,13 @@ export async function editFileStr(
     return { success: false, error: `String "${oldMatch}" not found in file` };
   }
 
-  const replaceAll = options.replaceAll ?? true;
+  const replaceAll = options.replaceAll ?? false;
+  const count = fullFileStr.split(effectiveOldMatch).length - 1;
   let editedStr: string;
 
   if (!replaceAll) {
-    const count = fullFileStr.split(effectiveOldMatch).length - 1;
     if (count > 1) {
-      return { success: false, error: `oldMatch found ${count} times — it is not unique. Either (a) add more surrounding context to oldMatch so it matches exactly one location, or (b) use replaceAll=true to replace all ${count} occurrences` };
+      return { success: false, error: `oldMatch found ${count} times — it is not unique. Either (a) extend oldMatch with more surrounding context so it matches exactly one location, or (b) pass replaceAll: true ONLY if you intend to change all ${count} occurrences` };
     }
     editedStr = fullFileStr.replace(effectiveOldMatch, effectiveNewMatch);
   } else {
@@ -296,7 +298,14 @@ export async function editFileStr(
   const diff = generateDiff(fullFileStr, canonicalStr);
   const normalized = canonicalStr !== editedStr;
 
-  return { success: true, diff, ...(normalized ? { normalized } : {}), ...(validation.length ? { validation } : {}) };
+  // Multi-site replaces must be visible: report how many occurrences a replaceAll edit changed.
+  return {
+    success: true,
+    diff,
+    ...(replaceAll && count > 1 ? { occurrences: count } : {}),
+    ...(normalized ? { normalized } : {}),
+    ...(validation.length ? { validation } : {}),
+  };
 }
 
 /**

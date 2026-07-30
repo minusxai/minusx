@@ -15,6 +15,16 @@
 export const AGENT_IMAGE_MAX_PX = 512;
 
 /**
+ * HEIGHT cap (px) for a FULL-HEIGHT agent capture (the post-edit review screenshot of a whole
+ * file view). Without it a long story rasterizes at AGENT_IMAGE_MAX_PX × several-thousand px —
+ * pure image tokens for something the model can barely read anyway. The cap DOWNSCALES the whole
+ * view (never crops: the review contract is "the whole rendered view"), so at this value an
+ * 800×6000 css story lands at 341×2560 instead of 512×3840 — ~1.5× fewer pixels with the width
+ * still legible. Raising it costs tokens; lowering it costs legibility (the width shrinks with it).
+ */
+export const AGENT_IMAGE_MAX_H_PX = 2560;
+
+/**
  * Longest-side cap (px) for an image shown to the USER before it becomes an agent image — today the
  * region-capture crop the annotator displays and lets the user draw on. Larger than
  * AGENT_IMAGE_MAX_PX so the annotator canvas is crisp on a retina screen (a 512px bitmap stretched

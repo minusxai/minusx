@@ -4,6 +4,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseJsx } from '../parse';
 import { validateJsx } from '../validate';
+import { JSX_STORY_COMPONENT_NAMES } from '../components';
 import type { ValidateOptions } from '../types';
 
 const OPTS: ValidateOptions = { components: ['Question'] };
@@ -74,5 +75,36 @@ describe('validateJsx — component registry', () => {
   it('restricts HTML tags when allowedHtmlTags is provided', () => {
     expect(errors(`<marquee>x</marquee>`, { components: ['Question'], allowedHtmlTags: ['div', 'p'] }).length).toBeGreaterThan(0);
     expect(errors(`<div>x</div>`, { components: ['Question'], allowedHtmlTags: ['div', 'p'] })).toEqual([]);
+  });
+});
+
+describe('validateJsx — unknown-component error guidance', () => {
+  it('keeps the stable "Unknown component" prefix', () => {
+    const errs = errors(`<Chart />`, { components: ['Question'] });
+    expect(errs[0].message).toMatch(/^Unknown component <Chart> — not in the component registry/);
+  });
+
+  it('lists the registered components so the model can recover', () => {
+    const errs = errors(`<Chart />`, { components: ['Question', 'Card'] });
+    expect(errs[0].message).toContain('Question');
+    expect(errs[0].message).toContain('Card');
+  });
+
+  it('flags a LEGACY story component with migration guidance', () => {
+    // The exact failure mode of the bug: agent authors <PageHeader>/<Eyebrow>/<Headline>
+    // in a new-format story. The error must say these are legacy and point at plain
+    // HTML + Tailwind / the registered set — not just "unknown".
+    for (const tag of ['PageHeader', 'Eyebrow', 'Headline']) {
+      const errs = errors(`<${tag}>x</${tag}>`, { components: JSX_STORY_COMPONENT_NAMES });
+      expect(errs.length).toBeGreaterThan(0);
+      expect(errs[0].message).toMatch(new RegExp(`^Unknown component <${tag}> — not in the component registry`));
+      expect(errs[0].message).toMatch(/legacy/i);
+      expect(errs[0].message).toMatch(/plain HTML/i);
+    }
+  });
+
+  it('does not emit legacy guidance for an ordinary unknown component', () => {
+    const errs = errors(`<Chart />`, { components: JSX_STORY_COMPONENT_NAMES });
+    expect(errs[0].message).not.toMatch(/legacy/i);
   });
 });

@@ -98,10 +98,10 @@ describe('Conversation too long gate', () => {
     expect(queryByLabelText('conversation too long warning')).toBeNull();
   });
 
-  it('shows the gate when over the limit (150k) with 2+ user messages', async () => {
+  it('shows the gate when over the limit (300k) with 2+ user messages', async () => {
     const store = storeModule.makeStore();
     vi.spyOn(storeModule, 'getStore').mockReturnValue(store);
-    store.dispatch(loadConversation({ conversation: makeConversation(2, 300_000), setAsActive: true }));
+    store.dispatch(loadConversation({ conversation: makeConversation(2, 350_000), setAsActive: true }));
 
     const { findByLabelText, queryByLabelText } = renderWithProviders(
       <ChatInterface contextPath="/org/context" container="page" appState={null} />,
@@ -113,12 +113,13 @@ describe('Conversation too long gate', () => {
     expect(queryByLabelText('chat input')).toBeNull();
   });
 
-  it('does NOT gate a normal turn under the limit (~100k), even with 2+ messages', async () => {
-    // The threshold must sit below the model window (~200k-400k) so it warns before the hard error,
-    // but a normal turn well under it stays usable — no naggy lock-out.
+  it('does NOT gate a long-but-allowed turn under the limit (200k), even with 2+ messages', async () => {
+    // Max conversation length is 300k tokens (product decision 2026-07-31): a conversation at
+    // 200k — over the OLD 150k limit — must stay usable; only past 300k does the gate replace
+    // the input.
     const store = storeModule.makeStore();
     vi.spyOn(storeModule, 'getStore').mockReturnValue(store);
-    store.dispatch(loadConversation({ conversation: makeConversation(2, 100_000), setAsActive: true }));
+    store.dispatch(loadConversation({ conversation: makeConversation(2, 200_000), setAsActive: true }));
 
     const { findByLabelText, queryByLabelText } = renderWithProviders(
       <ChatInterface contextPath="/org/context" container="page" appState={null} />,

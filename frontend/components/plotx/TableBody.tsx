@@ -1,7 +1,7 @@
 import type { Row } from '@tanstack/react-table'
 import type { VirtualItem } from '@tanstack/react-virtual'
 import { getContrastText } from '@/lib/chart/conditional-format-utils'
-import { ROW_HEIGHT, cssColumnClass, type ColumnType } from './table-v2-utils'
+import { cssColumnClass, type ColumnType } from './table-v2-utils'
 
 interface TableBodyProps {
   enableDrilldown?: boolean
@@ -46,7 +46,6 @@ export const TableBody = ({
       {virtualItems.map((virtualRow) => {
         const row = tableRows[virtualRow.index]
         const original = row.original
-        const lastColIdx = visibleColIds.length - 1
         return (
           <tr
             key={row.id}
@@ -54,27 +53,26 @@ export const TableBody = ({
             // mx-* is the STABLE class contract (css overrides); table-v2-row is internal.
             // Zebra parity rides DATA-index classes (virtualization spacers break
             // nth-child) — the stripe itself is a CSS default in TableV2, overridable.
-            className={`table-v2-row mx-row ${virtualRow.index % 2 === 1 ? 'mx-row-odd' : 'mx-row-even'}`}
-            style={{
-              height: wrapColumns?.size ? undefined : ROW_HEIGHT,
-              cursor: onRowClick ? 'pointer' : undefined,
-            }}
+            // Row height / cursor are :where() rules in TABLE_BASE_CSS keyed off
+            // these state classes — never inline — so author css can override.
+            className={`table-v2-row mx-row ${virtualRow.index % 2 === 1 ? 'mx-row-odd' : 'mx-row-even'}${wrapColumns?.size ? ' mx-row-wrap' : ''}${onRowClick ? ' mx-row-clickable' : ''}`}
             onClick={onRowClick ? () => onRowClick(original, virtualRow.index) : undefined}
           >
-            {visibleColIds.map((colId, cellIdx) => {
+            {visibleColIds.map((colId) => {
               const shouldWrap = wrapColumns?.has(colId)
               const cellBg = getCellBg(original, colId)
               return (
                 <td
                   key={colId}
                   data-col-id={colId}
-                  className={`table-v2-cell mx-cell ${cssColumnClass(colId)}`}
+                  // Width rides a custom property; borders/wrap are :where() rules
+                  // in TABLE_BASE_CSS. Only data-driven conditional-format colors
+                  // stay inline (genuinely dynamic per cell).
+                  className={`table-v2-cell mx-cell ${cssColumnClass(colId)}${shouldWrap ? ' mx-cell-wrap' : ''}`}
                   style={{
-                    width: colSizes[colId],
-                    borderRight: cellIdx < lastColIdx ? '1px solid var(--border)' : undefined,
+                    '--mx-col-w': `${colSizes[colId]}px`,
                     ...(cellBg ? { backgroundColor: cellBg, color: getContrastText(cellBg) } : undefined),
-                    ...(shouldWrap ? { whiteSpace: 'normal', wordBreak: 'break-word' } : undefined),
-                  }}
+                  } as React.CSSProperties}
                 >
                   {renderCell?.(colId, original[colId], original) ?? formatCell(colId, original[colId], columnTypes[colIndexMap[colId]])}
                 </td>

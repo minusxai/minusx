@@ -21,7 +21,7 @@ const EditFileParams = Type.Object({
   changes: Type.Optional(Type.Array(Type.Object({
     oldMatch: Type.String({ description: 'Existing substring to replace.' }),
     newMatch: Type.String({ description: 'Replacement text.' }),
-    replaceAll: Type.Optional(Type.Boolean({ description: 'Replace every occurrence (default true).' })),
+    replaceAll: Type.Optional(Type.Boolean({ description: 'Default false: oldMatch must match exactly ONE location — the change fails if it occurs more than once (extend oldMatch with surrounding context until unique). Set true explicitly ONLY for an intentional multi-site rename; the result then reports how many occurrences were replaced.' })),
   }), { description: 'Markup find-and-replace edits. Optional — omit (or pass []) for a rename-only edit that just sets `name`.' })),
   rawData: Type.Optional(Type.Boolean({ description: "Default false. The response echoes the updated query RESULT (not the markup — you already know your edit): a chart viz returns an IMAGE + summary, a table/number viz returns the rows + summary. Set true to get rows even for a chart viz." })),
   review: Type.Optional(Type.Boolean({ description: 'Default true: the response includes the FULL post-edit review (screenshot of the rendered result + rules + LLM visual judge + score) — this takes a few seconds. Set false to skip it on INTERMEDIATE edits of a planned batch (the fast rules-based rubric is still attached); keep it on (default) for the last edit of a batch so you see the real grade.' })),

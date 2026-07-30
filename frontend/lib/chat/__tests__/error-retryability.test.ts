@@ -37,6 +37,21 @@ describe('classifyErrorRetryability', () => {
       expect(classifyErrorRetryability(msg)).toBe('terminal');
     });
 
+    // Output-cap truncation (stopReason 'length' with a large output) is DETERMINISTIC: an
+    // identical re-run streams the same long response into the same cap. It must NOT fall through
+    // to the transient default — the historical gap made "Try again" just re-fail.
+    const outputCap = [
+      "LLM response truncated (stop reason 'length'): the response hit the maximum output length. Ask for a shorter or more focused result.",
+      "LLM response truncated (stop reason 'length'): the conversation has filled the model's context window (198000 tokens), leaving no room to respond. Start a new conversation.",
+    ];
+    it.each(outputCap)('output-cap truncation: %s', (msg) => {
+      expect(classifyErrorRetryability(msg)).toBe('terminal');
+      // Reuses the context_length reason: the banner copy ("grew too long or hit a limit — start a
+      // new chat") is accurate for both truncation variants, and every TerminalErrorReason must map
+      // to banner copy (Record<TerminalErrorReason, …>), so a new reason is not free.
+      expect(classifyTerminalReason(msg)).toBe('context_length');
+    });
+
     it('malformed request (400 invalid_request that is not a context overflow)', () => {
       expect(classifyErrorRetryability(
         '400 {"type":"error","error":{"type":"invalid_request_error","message":"messages: at least one message is required"}}',

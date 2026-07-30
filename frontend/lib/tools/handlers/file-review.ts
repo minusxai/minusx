@@ -12,13 +12,13 @@ import { selectFile, selectMergedContent } from '@/store/filesSlice';
 import { getStore } from '@/store/store';
 import { captureFileViewWithReadiness } from '@/lib/screenshot/capture';
 import type { FileViewReadiness } from '@/lib/screenshot/readiness';
-import { AGENT_IMAGE_MAX_PX } from '@/lib/screenshot/constants';
+import { AGENT_IMAGE_MAX_PX, AGENT_IMAGE_MAX_H_PX } from '@/lib/screenshot/constants';
 import { uploadBlobOrEmbed } from '@/lib/object-store/client';
 import { FilesAPI } from '@/lib/data/files';
 import { isRubricFileType, scoreFileDeterministic } from '@/lib/rubric/registry';
 import { buildVizTypeCtx } from '@/lib/rubric/refs';
 import { toAgentRubric } from '@/lib/rubric/scoring';
-import type { AgentRubric, DeterministicContext } from '@/lib/rubric/types';
+import type { AgentRubric, DeterministicContext, RubricCategory, RubricGrade, RubricSeverity } from '@/lib/rubric/types';
 import { inlineQuestionFromEl } from '@/lib/data/story/story-question';
 import { envelopeVizType } from '@/lib/viz/viz-templates';
 import type { QuestionContent } from '@/lib/types';
@@ -37,6 +37,12 @@ export interface FileReview {
    * the visual judge is skipped — it would grade the same mid-load pixels.
    */
   renderPending?: string;
+  /**
+   * Set when a step of the review DEGRADED silently — the view couldn't be captured/uploaded, or
+   * the visual judge didn't answer in time. Surfaced in the tool status so "no screenshot / rules
+   * only" reads as a known failure instead of looking like a clean full review.
+   */
+  reviewNote?: string;
 }
 
 /** The LLM-facing warning attached to a mid-load capture. */
@@ -114,6 +120,9 @@ export async function captureFileScreenshot(
   // of its spinner, with `readiness.settled === false` telling the caller to say so.
   const { blob, readiness } = await captureFileViewWithReadiness(fileId, {
     colorMode: opts.colorMode, fullHeight: !!opts.fullHeight, maxWidth: AGENT_IMAGE_MAX_PX, format: 'jpeg',
+    // A full-height capture of a long story is maxWidth × several-thousand px — thousands of image
+    // tokens per edit. Cap the height too (downscales the whole view; never crops).
+    maxHeight: AGENT_IMAGE_MAX_H_PX,
     readinessTimeoutMs: 20000,
   });
   return { url: await uploadBlobOrEmbed(blob, 'screenshot.jpg', 'image/jpeg'), readiness };
@@ -134,10 +143,18 @@ export async function reviewFile(
 
   let screenshotUrl: string | undefined;
   let readiness: FileViewReadiness | undefined;
+  let reviewNote: string | undefined;
   try {
     ({ url: screenshotUrl, readiness } = await captureFileScreenshot(fileId, opts));
-  } catch {
-    // View not mounted (background draft/edit) or capture failed — rules-only review below.
+  } catch (err) {
+    // "not found" = the view isn't mounted (background draft/edit) — the EXPECTED degradation, no
+    // note. Anything else (serialization, rasterize, a timed-out upload) is a real failure the
+    // agent should see rather than infer from a missing image.
+    const message = err instanceof Error ? err.message : String(err);
+    if (!/not found/i.test(message)) {
+      reviewNote = `Screenshot unavailable for this review (capture/upload failed: ${message}). ` +
+        'The rubric below is rules-only — do not assume the rendered view is broken.';
+    }
   }
 
   // Mid-load capture (the readiness wait timed out with embeds still loading): the screenshot
@@ -150,6 +167,7 @@ export async function reviewFile(
       screenshotUrl,
       reviewMode: 'deterministic',
       renderPending: renderPendingNote(readiness.busyCount),
+      ...(reviewNote ? { reviewNote } : {}),
     };
   }
 
@@ -160,10 +178,66 @@ export async function reviewFile(
       // static CSS estimate for the width rules.
       const measuredEmbeds = measureStoryEmbeds(fileId);
       const { report } = await FilesAPI.getRubric(fileId, { screenshotUrl, content: merged, ...(measuredEmbeds ? { measuredEmbeds } : {}) });
-      if (report) return { rubric: toAgentRubric(report), screenshotUrl, reviewMode: 'full' };
+      if (report) return { rubric: toAgentRubric(report), screenshotUrl, reviewMode: 'full', ...(reviewNote ? { reviewNote } : {}) };
+      reviewNote = JUDGE_UNAVAILABLE_NOTE;
     } catch {
-      // Judge/API failure — fall through to deterministic, but keep the screenshot.
+      // Judge/API failure or its timeout — fall through to deterministic, but keep the screenshot
+      // AND say so: a silently rules-only review looks identical to a clean full review.
+      reviewNote = JUDGE_UNAVAILABLE_NOTE;
     }
   }
-  return { rubric: deterministicAgentRubric(fileId), screenshotUrl, reviewMode: 'deterministic' };
+  return {
+    rubric: deterministicAgentRubric(fileId),
+    screenshotUrl,
+    reviewMode: 'deterministic',
+    ...(reviewNote ? { reviewNote } : {}),
+  };
+}
+
+/** Note attached when the visual judge didn't answer (error or timeout) but the screenshot exists. */
+const JUDGE_UNAVAILABLE_NOTE =
+  'The LLM visual judge did not complete (error or timeout) — the rubric below is rules-only. ' +
+  'Judge the screenshot yourself, or re-run ReviewFile for a graded pass.';
+
+/**
+ * The rubric as echoed in a TOOL STATUS: every EditFile appends one permanently to the
+ * conversation, so it carries only what the skill loop acts on — `overall`/`grade` to know when to
+ * stop, and per finding the id, severity, short title, and the imperative `fix`. The prose fields
+ * (`detail`, `source`, `deduction`) are dropped, and a `warn`'s `fix` is clipped; `error` findings
+ * (which gate the score to 0 and MUST be fixed) keep their full instruction.
+ */
+export interface CompactRubricFinding {
+  ruleId: string;
+  category: RubricCategory;
+  severity: RubricSeverity;
+  title: string;
+  detail: string;
+  fix: string;
+}
+export interface CompactAgentRubric {
+  overall: number;
+  grade: RubricGrade;
+  categories: Array<{ category: RubricCategory; score: number; findings: CompactRubricFinding[] }>;
+}
+
+export function compactAgentRubric(rubric: AgentRubric): CompactAgentRubric {
+  const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+  return {
+    overall: rubric.overall,
+    grade: rubric.grade,
+    categories: rubric.categories.map((c) => ({
+      category: c.category,
+      score: c.score,
+      findings: c.findings.map((f) => ({
+        ruleId: f.ruleId,
+        category: f.category,
+        severity: f.severity,
+        title: clip(f.title, 120),
+        // `title` is a generic label ("Undeclared parameter"); `detail` carries WHICH thing is
+        // wrong (":start"), so a clipped detail is what makes a finding locatable — keep it.
+        detail: clip(f.detail, 140),
+        fix: f.severity === 'error' ? f.fix : clip(f.fix, 200),
+      })),
+    })),
+  };
 }

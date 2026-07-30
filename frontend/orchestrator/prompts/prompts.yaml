@@ -800,7 +800,7 @@ templates:
       ## Large File Handling
 
       Reason for these instructions: 
-      The current AppState you are working with is very large (>50k tokens). 3 issues can occur:
+      The file you are working with is very large — its markup alone runs to many thousands of tokens. 3 issues can occur:
         - You can exceed context limit
         - You can exceed output limit
         - Edits are more likely to fail, and you are more likely to get derailed
@@ -810,8 +810,11 @@ templates:
       2. **Avoid echoing back large content** — don't repeat the full file content in your responses or tool calls.
       3. **Break complex changes into steps** — if multiple changes are needed, do them one at a time.
 
-      MANDATORY FIRST STEP — DO THIS BEFORE ANY TOOL CALL: Send a prominent message to the user, nicely formatted, informing them about the large file, and that you will make small, targeted changes. Do NOT call any tool until after sending this message. This is non-negotiable.
-      THEN, continue with the requested changes. DO NOT just stop after the large file notice — continue with the requested changes, but in small, targeted edits.
+      ONCE PER CONVERSATION — tell the user, then never again:
+      - If you have NOT already told the user about the large file earlier in this conversation: before any tool call, send a prominent message, nicely formatted, informing them about the large file and that you will make small, targeted changes. Do NOT call any tool until after sending it.
+      - If you HAVE already told them earlier in this conversation (check the messages above): do NOT repeat the notice, do not mention the file size again — silently follow the working guidelines above and get straight to the requested changes.
+
+      Either way, DO NOT just stop after the notice — continue with the requested changes, in small, targeted edits.
   skill_stories:
     description: Create stunning, vibrant, visually thrilling single-file data stories (shadcn JSX + live chart embeds) that communicate a narrative from data and analysis.
     content: |-
@@ -850,6 +853,11 @@ templates:
       ```
 
       Also populate `suggestedQuestions`: 2 to 3 short, specific questions a reader of THIS story would naturally ask next, grounded in the narrative ("Which region drove the Q3 drop?", "How does this compare to last year?"). They surface as one-tap prompts in the reader's chat panel and on the public share gate, so make them concrete and answerable, never generic filler. Omit only when no meaningful follow-up exists.
+
+      ### Editing an existing story
+
+      - Keep edits minimal and scoped to the section/beat the user asked about: a story body is long and repetitive (Tailwind class strings, heights, section shells recur), so never rewrite whole sections when a targeted change will do.
+      - When the user requests a targeted change ("fix the headline in the churn section"), change ONLY that — do not restyle, rephrase, or "improve" other parts of the story in the same edit. Rubric-driven polish belongs to build passes (Procedures, section 5), not to user-requested tweaks.
 
       ---
 
@@ -1077,6 +1085,7 @@ templates:
 
     ### EditFile Tips
     - Copy the `oldMatch` snippet verbatim from the file's `<file_markup>` block (in AppState / ReadFiles). **Shortest unique match wins** — longer matches fail more often.
+    - Each change replaces exactly ONE occurrence by default: if `oldMatch` appears more than once the change fails — extend it with surrounding context until it is unique. Pass `replaceAll: true` ONLY for an intentional multi-site rename (the result reports how many occurrences were replaced).
     - Match the markup text directly — e.g. `<type>table</type>`, or a raw SQL fragment inside the query's {{`…`}} child. The markup is clean text (no JSON escaping), so `oldMatch` is a short literal substring.
     - **One element per change entry**. Don't span multiple markup elements in a single oldMatch (e.g. `<query>` + `<parameters>` together) — use separate entries in `changes` instead.
     - Group related changes (e.g. updating both a query and its viz settings) into a single EditFile call with multiple entries in `changes` — this is more efficient and atomic than multiple tool calls.

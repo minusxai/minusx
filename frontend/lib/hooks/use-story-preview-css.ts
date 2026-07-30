@@ -8,12 +8,14 @@
  * without any network traffic. Results are memoized by story text so repeated renders and
  * edit keystrokes don't re-hit the API.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { hasDesignSystemMarker, type CompiledCssStoryContent } from '@/lib/data/story/story-css';
 
 // eslint-disable-next-line no-restricted-syntax -- client-only hook: the cache lives in one browser tab (keyed by story text), never across server requests
 const cache = new Map<string, string | null>();
 const CACHE_MAX = 20;
+/** Trailing-edge wait between compiles during a rapid burst of changes (typing). */
+const DEBOUNCE_MS = 300;
 
 function remember(story: string, css: string | null) {
   if (cache.size >= CACHE_MAX) {
@@ -50,11 +52,19 @@ export function useStoryPreviewCss(
   // Best available value right now: cached preview → persisted → null. The persisted CSS is
   // served while a stale-preview fetch is in flight so the story never flashes unstyled.
   const [fetched, setFetched] = useState<{ story: string; css: string | null } | null>(null);
+  // When the last compile request FIRED — drives the leading-edge debounce below.
+  const lastFireRef = useRef(0);
 
   useEffect(() => {
     if (!needsPreview || cached !== undefined) return;
     let cancelled = false;
+    // Leading-edge debounce: an isolated change (an agent EditFile landing, a modal apply)
+    // compiles IMMEDIATELY — making it wait a flat 300ms only stretches the window where the
+    // new story renders against stale CSS (the S7 style snap). Only rapid consecutive changes
+    // (a WYSIWYG typing burst) fall back to the trailing-edge 300ms wait.
+    const delay = Date.now() - lastFireRef.current < DEBOUNCE_MS ? DEBOUNCE_MS : 0;
     const t = setTimeout(() => {
+      lastFireRef.current = Date.now();
       fetch('/api/story-css', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -67,7 +77,7 @@ export function useStoryPreviewCss(
           if (!cancelled) setFetched({ story, css });
         })
         .catch(() => {}); // best-effort: a failed preview just renders with the persisted CSS
-    }, 300); // debounce mid-edit keystrokes
+    }, delay);
     return () => { cancelled = true; clearTimeout(t); };
   }, [needsPreview, cached, story, isJsx]);
 

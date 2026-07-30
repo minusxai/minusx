@@ -43,6 +43,29 @@ export interface AugmentedToolDetails {
   __augmented: AugmentedFiles[];
   __jsonTag?: string;
   __status?: unknown;
+  /**
+   * File id whose FULL-VIEW SCREENSHOT rides in this tool result's content (EditFile's post-edit
+   * review). Set ONLY when a screenshot was actually captured — a deterministic-fallback review
+   * leaves it unset, so nothing claims an image that never existed. The handler guarantees the
+   * screenshot is the message's ONLY non-text block (its chart-image path is mutually exclusive
+   * with the screenshot path), which is what lets the pass drop images wholesale below.
+   */
+  __screenshotOf?: number;
+}
+
+/** The stub left where a superseded screenshot was, so the model knows why the image is gone. */
+export const SUPERSEDED_SCREENSHOT_STUB =
+  '[screenshot omitted — superseded by a newer edit of this file; the latest screenshot is below]';
+
+/**
+ * The file id this message carries a screenshot for, or undefined. ONE predicate, used by both
+ * the pre-scan and the rewrite — if they disagreed we would keep two screenshots or strip them all.
+ */
+function screenshotTargetOf(m: Message): number | undefined {
+  if (m.role !== 'toolResult' || !hasAugmented(m.details)) return undefined;
+  const id = m.details.__screenshotOf;
+  if (typeof id !== 'number') return undefined;
+  return (Array.isArray(m.content) ? m.content : []).some((c) => c.type !== 'text') ? id : undefined;
 }
 
 function hasAugmented(details: unknown): details is AugmentedToolDetails {
@@ -64,8 +87,10 @@ function stripQueryData(files: AugmentedFiles): AugmentedFiles {
 }
 
 /** Render the app-state blocks for one user turn, advancing the memo. File pages go through the
- *  facet projector (summary only — no row data); folder/explore render their JSON inline. */
-function renderAppState(memo: FacetMemo, appState: AppState | undefined): (TextContent | ImageContent)[] {
+ *  facet projector (summary only — no row data); folder/explore render their JSON inline.
+ *  Exported so the size probe (`./app-state-size`) can measure the REAL prompt footprint of an app
+ *  state through this exact path instead of re-deriving it. */
+export function renderAppState(memo: FacetMemo, appState: AppState | undefined): (TextContent | ImageContent)[] {
   if (appState?.type === 'file' && appState.state) {
     const files: AugmentedFiles = stripQueryData(compressedToAugmentedFiles(appState.state));
     return renderProjectedFiles(projectFiles(memo, files), { jsonTag: 'AppState' });
@@ -76,7 +101,18 @@ function renderAppState(memo: FacetMemo, appState: AppState | undefined): (TextC
 
 export function projectMessages(messages: Message[]): Message[] {
   const memo = new FacetMemo();
-  return messages.map((m): Message => {
+  // Pre-scan: the LAST message carrying a screenshot per file id. Every EARLIER screenshot of that
+  // file is superseded by definition — the file no longer looks like that — so the rewrite below
+  // drops its image and leaves the stub. This is the one place the pass rewrites an EARLIER turn
+  // (the header's byte-stability note): the invalidation point is the PREVIOUS screenshot-bearing
+  // edit, which in an edit loop sits near the tail, so only a short cache suffix is clipped and
+  // everything before it stays byte-identical.
+  const latestShotIdx = new Map<number, number>();
+  messages.forEach((m, i) => {
+    const fileId = screenshotTargetOf(m);
+    if (fileId !== undefined) latestShotIdx.set(fileId, i);
+  });
+  return messages.map((m, i): Message => {
     if (m.role === 'user') {
       const wm = m as Message & WithAppState;
       if (wm._appState === undefined && wm._currentTime === undefined && wm._viewport === undefined) return m;
@@ -104,8 +140,15 @@ export function projectMessages(messages: Message[]): Message[] {
       );
       // Preserve any non-text blocks (e.g. chart images) the handler attached to the original
       // content — the facet projector only emits text/markup/query blocks today.
-      const origNonText = (Array.isArray(m.content) ? m.content : []).filter((c) => c.type !== 'text');
-      return { ...m, content: [...statusBlocks, ...fileBlocks, ...origNonText] };
+      const shotOf = screenshotTargetOf(m);
+      const superseded = shotOf !== undefined && latestShotIdx.get(shotOf) !== i;
+      const origNonText = superseded
+        ? []
+        : (Array.isArray(m.content) ? m.content : []).filter((c) => c.type !== 'text');
+      const stubBlocks: TextContent[] = superseded
+        ? [{ type: 'text', text: SUPERSEDED_SCREENSHOT_STUB }]
+        : [];
+      return { ...m, content: [...statusBlocks, ...fileBlocks, ...origNonText, ...stubBlocks] };
     }
     return m;
   });

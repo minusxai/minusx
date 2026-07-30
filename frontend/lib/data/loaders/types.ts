@@ -12,6 +12,15 @@ import { EffectiveUser } from '@/lib/auth/auth-helpers';
 export interface LoaderOptions {
   refresh?: boolean;            // Force refresh of cached data and WAIT for it (user-initiated)
   backgroundRefresh?: boolean;  // Serve cached data now, refresh behind the scenes (e.g. post-save)
+  /**
+   * Skip expensive/fallible enrichment and serve the raw DB content.
+   * Used by callers that only need stored fields (e.g. file search): the context
+   * loader's fullSchema computation (which THROWS on unmigrated contexts), the
+   * connection loader's schema introspection (which can block for minutes), and
+   * the story loader's CSS recompile are all skipped. Sanitization that must
+   * never be skipped (connection secret redaction) still runs.
+   */
+  skipEnrichment?: boolean;
 }
 
 /**

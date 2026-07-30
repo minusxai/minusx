@@ -93,3 +93,36 @@ export function getStoryFontCss(theme = 'neutral'): string {
   const assets = STORY_FONT_THEMES[theme] ?? STORY_FONT_THEMES.neutral;
   return assets.map(fontFaceRule).join('\n');
 }
+
+// eslint-disable-next-line no-restricted-syntax -- client-only registry: fonts are warmed once per browser tab; never across server requests
+const preloadedAssets = new Set<string>();
+
+/**
+ * Warm the TOP document's font cache for a theme's story fonts (FontFace API, best-effort).
+ *
+ * Every agent edit rebuilds the story iframe from scratch; its @font-face rules are
+ * `font-display: swap`, so a cold font cache paints fallback text that re-lays-out when the
+ * font arrives (the visible font flash on every edit). Registering + loading the same
+ * same-origin assets ONCE in the parent document keeps the font files hot, so a remounted
+ * iframe's identical @font-face resolves instantly. Idempotent per distinct asset
+ * (family+url+weight+style — all themes draw from the same bundled catalog, so warming one
+ * theme mostly covers the rest); safe no-op where FontFace is unavailable (SSR, jsdom).
+ */
+export function preloadStoryFonts(theme = 'neutral'): void {
+  if (typeof document === 'undefined' || typeof FontFace !== 'function') return;
+  const assets = STORY_FONT_THEMES[theme] ?? STORY_FONT_THEMES.neutral;
+  for (const a of assets) {
+    const key = `${a.family}|${a.url}|${a.weight ?? ''}|${a.style ?? ''}`;
+    if (preloadedAssets.has(key)) continue;
+    preloadedAssets.add(key);
+    try {
+      const face = new FontFace(a.family, `url("${a.url}")`, {
+        ...(a.weight ? { weight: a.weight } : {}),
+        ...(a.style ? { style: a.style } : {}),
+        display: 'swap',
+      } as FontFaceDescriptors);
+      document.fonts.add(face);
+      void face.load().catch(() => {}); // best-effort warmup — a failed load just falls back to swap
+    } catch { /* invalid descriptor / unsupported environment — fallback behavior unchanged */ }
+  }
+}

@@ -12,8 +12,10 @@ import type { CustomLoader } from './types';
 import { withCompiledStoryCss, storyCssCompileVersion } from '@/lib/data/story/story-css.server';
 import type { CompiledCssStoryContent } from '@/lib/data/story/story-css';
 
-export const storyLoader: CustomLoader = async (file) => {
+export const storyLoader: CustomLoader = async (file, _user, options) => {
   if (file.type !== 'story') return file;
+  // Raw-content mode (e.g. file search): skip the CSS staleness recompile.
+  if (options?.skipEnrichment) return file;
   const content = file.content as CompiledCssStoryContent | null;
   if (!content?.story) return file;
   if (content.cssCompileVersion === storyCssCompileVersion()) return file;

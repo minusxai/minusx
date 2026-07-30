@@ -39,9 +39,15 @@ import { exposedColumns } from '@/lib/types/views';
 // eslint-disable-next-line no-restricted-syntax -- server-side per-process request coalescing; entries are short-lived (deleted on settle)
 const inflightContextLoads = new Map<string, Promise<DbFile>>();
 
-export const contextLoader: CustomLoader = async (file: DbFile, user: EffectiveUser, _options?) => {
+export const contextLoader: CustomLoader = async (file: DbFile, user: EffectiveUser, options?) => {
   // Skip if metadata-only
   if (file.content === null) {
+    return file;
+  }
+  // Raw-content mode (e.g. file search): serve stored content without the
+  // fullSchema computation, which loads every connection and THROWS on
+  // unmigrated (version-less) contexts.
+  if (options?.skipEnrichment) {
     return file;
   }
   const key = `${file.id}:${user.userId}:${user.mode}`;

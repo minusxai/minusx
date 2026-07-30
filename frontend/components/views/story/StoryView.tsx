@@ -18,6 +18,8 @@ import {
 } from '@/lib/data/story/story-question';
 import { updateNumberQueryInJsx } from '@/lib/data/story/story-number';
 import { updateParamQueryInHtml, updateParamQueryInJsx } from '@/lib/data/story/story-params';
+import { preloadStoryFonts } from '@/lib/data/story/story-fonts';
+import { useStoryRebuildStability } from '@/lib/hooks/use-story-rebuild-stability';
 import { STORY_W } from './ScaledStoryFrame';
 import { PageMarkerDevOverlay } from './PageMarkerDevOverlay';
 
@@ -31,53 +33,6 @@ function hashStory(s: string): number {
   let h = 5381;
   for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
   return h;
-}
-
-/**
- * Keep page scroll steady across the intentional iframe remount. An agent edit remounts
- * <AgentHtml> (keyed on the story hash), tearing down the iframe; it regrows from height 0,
- * so the page content briefly shrinks and the browser clamps scroll toward the top. We pin
- * the story box's min-height to its last measured height right BEFORE the rebuild
- * (adjust-state-during-render, so the style lands in the SAME commit as the child's rebuild —
- * no visible collapse), and release once the new content settles. Timing-based by nature (the
- * iframe regrows async), so it's verified in-browser, not jsdom.
- */
-function usePinHeightAcrossRebuild(
-  boxRef: React.RefObject<HTMLDivElement | null>,
-  renderKey: string,
-): number | null {
-  const [pinHeight, setPinHeight] = useState<number | null>(null);
-  // State (not refs): the render-phase branch below reads these, and refs can't be read
-  // during render. `lastHeight` is the last STABLE measured height; the observer records
-  // it only on settle, so this stays one update per resize-burst (no render storm).
-  const [lastHeight, setLastHeight] = useState(0);
-  const [prevKey, setPrevKey] = useState(renderKey);
-  const settleRef = useRef(0);
-
-  // Adjust-state-during-render: the instant the render key changes (imminent iframe remount),
-  // pin to the last stable height so the box can't collapse in this same commit.
-  if (prevKey !== renderKey) {
-    setPrevKey(renderKey);
-    if (lastHeight > 0) setPinHeight(lastHeight);
-  }
-
-  useEffect(() => {
-    const box = boxRef.current;
-    if (!box || typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(() => {
-      // Debounce to when the (re)built content stops resizing, then record the stable
-      // height and release the pin — one state update per settle, not per resize frame.
-      if (settleRef.current) window.clearTimeout(settleRef.current);
-      settleRef.current = window.setTimeout(() => {
-        const h = box.querySelector('iframe')?.offsetHeight ?? box.offsetHeight;
-        if (h > 0) setLastHeight(h);
-        setPinHeight(null);
-      }, 150);
-    });
-    ro.observe(box.querySelector('iframe') ?? box);
-    return () => { ro.disconnect(); if (settleRef.current) window.clearTimeout(settleRef.current); };
-  }, [boxRef, renderKey]); // re-observe the fresh iframe after each remount
-  return pinHeight;
 }
 
 interface StoryViewProps {
@@ -194,10 +149,20 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
   const htmlForRender = session.editing ? session.snapshot : liveStory;
 
   // Keyed to remount AgentHtml on content change (see hashStory); the same key drives the
-  // scroll-preservation pin so it fires exactly when the iframe rebuilds.
+  // rebuild-stability hook (height pin + scroll restore) so it fires exactly when the iframe
+  // rebuilds — see lib/hooks/use-story-rebuild-stability.
   const canvasRef = useRef<HTMLDivElement>(null);
   const renderKey = `${session.key}:${hashStory(htmlForRender)}`;
-  const pinHeight = usePinHeightAcrossRebuild(canvasRef, renderKey);
+  const pinHeight = useStoryRebuildStability(canvasRef, renderKey);
+
+  // Warm the TOP document's font cache for the theme's platform fonts, so every iframe
+  // remount (each agent edit) re-registers its font-display:swap @font-face against
+  // already-cached files instead of flashing fallback text (jsx stories only — legacy
+  // stories bring their own @import fonts).
+  const themeName = content.theme ?? undefined;
+  useEffect(() => {
+    if (storyFormat === 'jsx') preloadStoryFonts(themeName);
+  }, [storyFormat, themeName]);
 
   const onStoryChange = useCallback((story: string) => {
     // Record our own serialized echo so the render-phase logic above doesn't mistake it for an

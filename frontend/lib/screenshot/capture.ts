@@ -29,6 +29,25 @@ const bgFor = (colorMode: 'light' | 'dark'): string => (colorMode === 'dark' ? '
 const mimeFor = (format: ScreenshotOptions['format']): string => (format === 'png' ? 'image/png' : 'image/jpeg');
 
 /**
+ * The output scale for a full-element capture: whichever of the caps binds TIGHTEST, so the whole
+ * element always fits (downscaled, never cropped). `maxWidth` alone reproduces the old behavior;
+ * `maxHeight` additionally bounds a very tall page (a full-height story capture would otherwise be
+ * maxWidth × several-thousand px). With neither cap, `pixelRatio` (default 0.75) is used as-is.
+ * Pure → unit-testable via the capture tests.
+ */
+export function fitScale(
+  cssWidth: number,
+  cssHeight: number,
+  opts: { maxWidth?: number; maxHeight?: number; pixelRatio?: number },
+): number {
+  const caps: number[] = [];
+  if (opts.maxWidth != null && cssWidth > 0) caps.push(opts.maxWidth / cssWidth);
+  if (opts.maxHeight != null && cssHeight > 0) caps.push(opts.maxHeight / cssHeight);
+  if (caps.length === 0) return opts.pixelRatio ?? 0.75;
+  return Math.min(...caps);
+}
+
+/**
  * Draw a rasterized SVG image to an output canvas at `scale` (of its CSS size), background filled,
  * optional marker gutter, and encode to a Blob. Shared tail of both capture paths.
  */
@@ -62,7 +81,7 @@ async function captureFromSvgStory(element: HTMLElement, opts: CaptureOptions): 
   const cssWidth = svg.getBoundingClientRect().width || svg.width.baseVal.value;
   const cssHeight = svg.getBoundingClientRect().height || svg.height.baseVal.value;
   if (!cssWidth || !cssHeight) return null;
-  const scale = opts.maxWidth != null ? opts.maxWidth / cssWidth : (opts.pixelRatio ?? 0.75);
+  const scale = fitScale(cssWidth, cssHeight, opts);
   const img = await svgToImage(await serializeStorySvg(svg));
   return rasterToBlob(img, cssWidth, cssHeight, scale, opts);
 }
@@ -146,7 +165,7 @@ export async function captureElementBlob(element: HTMLElement, opts: CaptureOpti
   // width; else use pixelRatio (default 0.75).
   const cssWidth = element.offsetWidth || element.getBoundingClientRect().width || 1;
   const cssHeight = element.offsetHeight || element.getBoundingClientRect().height || 1;
-  const scale = opts.maxWidth != null ? opts.maxWidth / cssWidth : (opts.pixelRatio ?? 0.75);
+  const scale = fitScale(cssWidth, cssHeight, opts);
   const svgString = await serializeElementToSvg(element, {
     backgroundColor: opts.backgroundColor ?? bgFor(opts.colorMode),
     filter: opts.filter,
