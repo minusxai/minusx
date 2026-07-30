@@ -132,6 +132,58 @@ export function stampFormValues(liveRoot: Element, cloneRoot: Element): void {
   }
 }
 
+/**
+ * Inherited typography the standalone SVG loses: the serialized document has NO <html>/<body>, so
+ * Tailwind preflight's html-level environment (line-height: 1.5, the default font stack,
+ * text-size-adjust, tab-size — compiled into every story's compiledCss) matches nothing there.
+ * Without these, text falls back to UA serif / line-height normal and re-wraps.
+ */
+const INHERITED_TYPOGRAPHY_PROPS = [
+  'color',
+  'font-family',
+  'font-size',
+  'line-height',
+  'letter-spacing',
+  '-webkit-text-size-adjust',
+  'tab-size',
+] as const;
+
+/**
+ * Bake the LIVE root's computed typography inline on the CLONE root. Computed styles on the live
+ * element (inside the iframe) already resolve preflight + theme, so this restores the inherited
+ * environment the detached copy loses. Values explicitly set inline on the root are never clobbered.
+ */
+export function applyInheritedTypography(liveRoot: Element, cloneRoot: Element): void {
+  const win = liveRoot.ownerDocument.defaultView;
+  const style = (cloneRoot as HTMLElement).style;
+  if (!win || !style) return;
+  const cs = win.getComputedStyle(liveRoot);
+  for (const prop of INHERITED_TYPOGRAPHY_PROPS) {
+    if (style.getPropertyValue(prop)) continue; // an explicit inline value on the root wins
+    const value = cs.getPropertyValue(prop);
+    if (value) style.setProperty(prop, value);
+  }
+}
+
+/**
+ * Await `doc.fonts.ready`, bounded by `timeoutMs` — a stuck font load must delay a capture briefly,
+ * never hang it. Resolves immediately when the document has no FontFaceSet (jsdom). Never throws.
+ */
+export async function awaitFontsReady(doc: Document, timeoutMs = 3000): Promise<void> {
+  const ready = doc.fonts?.ready;
+  if (!ready) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<void>((resolve) => { timer = setTimeout(resolve, timeoutMs); });
+  try {
+    await Promise.race([
+      Promise.resolve(ready).then(() => undefined, () => undefined),
+      timeout,
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** The live story `<svg>` hosted inside `element` (an iframe host), or null if it isn't an SVG story. */
 export function findStorySvg(element: HTMLElement): SVGSVGElement | null {
   const iframe = element.tagName === 'IFRAME'
@@ -147,12 +199,16 @@ export function findStorySvg(element: HTMLElement): SVGSVGElement | null {
  */
 export async function serializeStorySvg(svg: SVGSVGElement): Promise<string> {
   const doc = svg.ownerDocument;
+  // Story webfonts load in the IFRAME document (the svg's owner), not the top document — wait for
+  // them (bounded) so serialization reflects loaded-font layout, not a fallback-font one.
+  await awaitFontsReady(doc);
   const clone = svg.cloneNode(true) as SVGSVGElement;
   const liveRoot = svg.querySelector('foreignObject > *');
   const cloneRoot = clone.querySelector('foreignObject > *');
   if (liveRoot && cloneRoot) {
     applyScrollOffsets(liveRoot, cloneRoot);
     stampFormValues(liveRoot, cloneRoot);
+    applyInheritedTypography(liveRoot, cloneRoot);
     // Color-mode stamp: the standalone document has NO <html> element (its root is the <svg>),
     // so `.dark`-scoped story/kit rules would never match. Stamping the CLONED root with the
     // current mode class keeps them resolving. (The Chakra `chakra-theme` token-host stamp is
@@ -221,9 +277,7 @@ export async function svgToImage(svgString: string): Promise<HTMLImageElement> {
     img.onerror = () => reject(new Error('SVG rasterize failed'));
   });
   img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgString)}`;
-  try {
-    await document.fonts?.ready;
-  } catch { /* fonts that fail to load must not fail the capture */ }
+  await awaitFontsReady(document); // never throws; bounded so a stuck load can't hang capture
   if (typeof img.decode === 'function') {
     await img.decode();
   } else {

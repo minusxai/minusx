@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   inlineFontUrls, applyScrollOffsets, collectSurfaceCss, clearFontDataUrlCache,
-  stampFormValues, serializeStorySvg, svgToImage,
+  stampFormValues, serializeStorySvg, svgToImage, applyInheritedTypography, awaitFontsReady,
 } from '@/lib/story-surface/serialize';
 import { clearStoryFontCache } from '@/lib/html/resolve-story-fonts';
 
@@ -254,6 +254,123 @@ describe('serializeStorySvg — self-contained root', () => {
       expect(out).toMatch(/<div[^>]*class="authored light"/);
       expect(root.getAttribute('class')).toBe('authored');
     });
+  });
+});
+
+// INHERITED TYPOGRAPHY: the standalone SVG document has NO <html>/<body>, so Tailwind preflight's
+// html-level typography (line-height: 1.5, font-family stack, text-size-adjust, tab-size) matches
+// nothing in the detached copy — text fell back to UA serif / line-height normal and re-wrapped.
+// The serializer must snapshot the LIVE root's computed typography and bake it inline on the clone.
+describe('inherited typography snapshot', () => {
+  const makeSvg = () => {
+    const svgNs = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNs, 'svg') as SVGSVGElement;
+    const fo = document.createElementNS(svgNs, 'foreignObject');
+    const root = document.createElement('div');
+    fo.appendChild(root);
+    svg.appendChild(fo);
+    document.body.appendChild(svg);
+    return { svg, root };
+  };
+
+  afterEach(() => { document.querySelectorAll('svg').forEach((s) => s.remove()); });
+
+  // jsdom's getComputedStyle does not cascade ancestor (html-level) rules, so the preflight
+  // environment is simulated by mocking the computed style of the live root — the seam the
+  // serializer must read (computed styles in the real iframe already resolve preflight + theme).
+  const mockComputed = (values: Record<string, string>) =>
+    vi.spyOn(window, 'getComputedStyle').mockReturnValue({
+      getPropertyValue: (p: string) => values[p] ?? '',
+    } as unknown as CSSStyleDeclaration);
+
+  it('applyInheritedTypography bakes computed typography inline on the clone root', () => {
+    const { root } = makeSvg();
+    mockComputed({
+      'font-family': 'Inter, sans-serif',
+      'line-height': '1.5',
+      'font-size': '16px',
+      'letter-spacing': 'normal',
+      color: 'rgb(10, 10, 10)',
+      '-webkit-text-size-adjust': '100%',
+      'tab-size': '4',
+    });
+    const clone = root.cloneNode(true) as HTMLElement;
+    applyInheritedTypography(root, clone);
+    expect(clone.style.getPropertyValue('font-family')).toBe('Inter, sans-serif');
+    expect(clone.style.getPropertyValue('line-height')).toBe('1.5');
+    expect(clone.style.getPropertyValue('font-size')).toBe('16px');
+    expect(clone.style.getPropertyValue('color')).toBe('rgb(10, 10, 10)');
+    expect(clone.style.getPropertyValue('-webkit-text-size-adjust')).toBe('100%');
+    expect(clone.style.getPropertyValue('tab-size')).toBe('4');
+    // The LIVE root is never touched.
+    expect(root.getAttribute('style')).toBeNull();
+  });
+
+  it('never clobbers values explicitly set inline on the clone root', () => {
+    const { root } = makeSvg();
+    root.style.setProperty('line-height', '2');
+    mockComputed({ 'line-height': '1.5', 'font-family': 'Inter, sans-serif' });
+    const clone = root.cloneNode(true) as HTMLElement;
+    applyInheritedTypography(root, clone);
+    expect(clone.style.getPropertyValue('line-height')).toBe('2'); // explicit inline wins
+    expect(clone.style.getPropertyValue('font-family')).toBe('Inter, sans-serif');
+  });
+
+  it('serializeStorySvg carries the inherited typography inline on the serialized story root', async () => {
+    const { svg } = makeSvg();
+    mockComputed({ 'font-family': 'Georgia, serif', 'line-height': '1.5' });
+    const out = await serializeStorySvg(svg);
+    expect(out).toMatch(/<div[^>]*style="[^"]*font-family:\s*Georgia, serif/);
+    expect(out).toMatch(/<div[^>]*style="[^"]*line-height:\s*1\.5/);
+  });
+});
+
+// FONT READINESS: story webfonts are injected inside the IFRAME document, so awaiting only the top
+// document's fonts.ready is vacuous — rasterization could race the data-URI faces. The serializer
+// must await the svg's OWNER document fonts, bounded by a timeout so a stuck load can't hang capture.
+describe('awaitFontsReady — owner-document font readiness', () => {
+  it('awaits the given document\'s fonts.ready', async () => {
+    let awaited = false;
+    const doc = document.implementation.createHTMLDocument('t');
+    Object.defineProperty(doc, 'fonts', {
+      value: { ready: Promise.resolve().then(() => { awaited = true; }) },
+      configurable: true,
+    });
+    await awaitFontsReady(doc);
+    expect(awaited).toBe(true);
+  });
+
+  it('resolves after the timeout when fonts.ready never settles (stuck load must not hang capture)', async () => {
+    const doc = document.implementation.createHTMLDocument('t');
+    Object.defineProperty(doc, 'fonts', {
+      value: { ready: new Promise(() => {}) }, // never resolves
+      configurable: true,
+    });
+    await expect(awaitFontsReady(doc, 20)).resolves.toBeUndefined();
+  });
+
+  it('resolves when the document has no fonts API (jsdom)', async () => {
+    const doc = document.implementation.createHTMLDocument('t');
+    await expect(awaitFontsReady(doc)).resolves.toBeUndefined();
+  });
+
+  it('serializeStorySvg awaits the svg OWNER document\'s fonts.ready before serializing', async () => {
+    const svgNs = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNs, 'svg') as SVGSVGElement;
+    svg.appendChild(document.createElementNS(svgNs, 'foreignObject'));
+    document.body.appendChild(svg);
+    let awaited = false;
+    Object.defineProperty(document, 'fonts', {
+      value: { ready: Promise.resolve().then(() => { awaited = true; }) },
+      configurable: true,
+    });
+    try {
+      await serializeStorySvg(svg);
+      expect(awaited).toBe(true);
+    } finally {
+      delete (document as unknown as Record<string, unknown>).fonts;
+      svg.remove();
+    }
   });
 });
 

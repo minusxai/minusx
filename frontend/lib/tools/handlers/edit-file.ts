@@ -109,6 +109,7 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
   // rename-only edit (no `changes`), so it doesn't dirty the markup or re-run queries needlessly.
   const diffs: string[] = [];
   const autoCorrections: string[] = [];
+  const replaceNotes: string[] = [];
   let editValidation: string[] | undefined;
   let editNormalized = false;
   if (changes.length > 0) {
@@ -166,9 +167,25 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
         };
         return { content: failureContent, details: { success: false, error: failureContent.error } };
       }
-      workingStr = (replaceAll ?? true)
-        ? workingStr.replaceAll(effectiveOld, effectiveNew)
-        : workingStr.replace(effectiveOld, effectiveNew);
+      // Default is REPLACE-ONE: a short match that occurs multiple times fails instead of
+      // silently rewriting every occurrence (unrelated Tailwind class strings, heights, …).
+      const occurrences = workingStr.split(effectiveOld).length - 1;
+      if (!(replaceAll ?? false)) {
+        if (occurrences > 1) {
+          const err = `oldMatch found ${occurrences} times — it is not unique. Either (a) extend oldMatch with more surrounding context so it matches exactly one location, or (b) pass replaceAll: true ONLY if you intend to change all ${occurrences} occurrences`;
+          const failureContent = {
+            success: false,
+            error: `Change ${i + 1}/${changes.length} failed: ${err}. No changes were applied (all changes in one EditFile call apply atomically).`,
+            failedIndex: i,
+          };
+          return { content: failureContent, details: { success: false, error: failureContent.error } };
+        }
+        workingStr = workingStr.replace(effectiveOld, effectiveNew);
+      } else {
+        workingStr = workingStr.replaceAll(effectiveOld, effectiveNew);
+        // Multi-site replaces must be visible in the result status.
+        if (occurrences > 1) replaceNotes.push(`Change ${i + 1}: replaced ${occurrences} occurrences of "${oldMatch}"`);
+      }
     }
 
     // Inline viz validation (RFC §11, compiler model): a changed V2 envelope is
@@ -464,6 +481,8 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
     ...(titleWarning ? { titleWarning } : {}),
     ...(editValidation?.length ? { validation: editValidation } : {}),
     ...(autoCorrections.length > 0 ? { autoCorrections } : {}),
+    // replaceAll edits that touched multiple sites — surfaced so multi-site rewrites are visible.
+    ...(replaceNotes.length > 0 ? { replaceNotes } : {}),
     // The health rubric for the edited file. ALWAYS fix `error` findings (an error gates the
     // score to 0); try to fix `warn` findings. Full (screenshot + rules + visual judge) when
     // the view was captured; rules-only otherwise.

@@ -3,7 +3,7 @@
  * drafts (dirty, or missing persisted CSS) fetch the preview compile; legacy stories never
  * fetch and never style.
  */
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { useStoryPreviewCss, useHeldStoryRender } from '@/lib/hooks/use-story-preview-css';
 
 const TW = (cls: string) => `<div data-design="tw" class="${cls}">x</div>`;
@@ -57,6 +57,54 @@ describe('useStoryPreviewCss', () => {
     // Serving stale so there's no unstyled flash, but flagged not-ready so the caller can hold the frame.
     expect(result.current).toEqual({ css: '.stale{}', ready: false });
     await waitFor(() => expect(result.current).toEqual({ css: '.fresh-b{}', ready: true }));
+  });
+});
+
+describe('useStoryPreviewCss — leading-edge compile (agent edits should not eat a 300ms debounce)', () => {
+  function mockPendingFetch() {
+    // Never resolves: these tests assert WHEN the request fires, not what it returns.
+    const fn = vi.fn().mockReturnValue(new Promise(() => {}));
+    vi.stubGlobal('fetch', fn);
+    return fn;
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('fires the compile IMMEDIATELY for the first change (no debounce before the first request)', () => {
+    vi.useFakeTimers();
+    const fetchFn = mockPendingFetch();
+    renderHook(() =>
+      useStoryPreviewCss({ story: TW('lead-first bg-red-50'), compiledCss: '.stale{}' }, true),
+    );
+    act(() => { vi.advanceTimersByTime(0); });
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('debounces only rapid consecutive changes (a typing burst compiles at the trailing edge)', () => {
+    vi.useFakeTimers();
+    const fetchFn = mockPendingFetch();
+    const { rerender } = renderHook(
+      ({ story }: { story: string }) => useStoryPreviewCss({ story, compiledCss: '.stale{}' }, true),
+      { initialProps: { story: TW('burst-1 bg-red-100') } },
+    );
+    act(() => { vi.advanceTimersByTime(0); });
+    expect(fetchFn).toHaveBeenCalledTimes(1); // leading edge
+
+    // Two keystrokes 100ms apart: neither fires immediately…
+    act(() => { vi.advanceTimersByTime(100); });
+    rerender({ story: TW('burst-2 bg-red-200') });
+    act(() => { vi.advanceTimersByTime(100); });
+    rerender({ story: TW('burst-3 bg-red-300') });
+    act(() => { vi.advanceTimersByTime(100); });
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+
+    // …the burst compiles once at the trailing edge, with the LATEST story.
+    act(() => { vi.advanceTimersByTime(300); });
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+    const lastBody = String((fetchFn.mock.calls.at(-1) as unknown[])[1] && (fetchFn.mock.calls.at(-1)![1] as RequestInit).body);
+    expect(lastBody).toContain('burst-3');
   });
 });
 

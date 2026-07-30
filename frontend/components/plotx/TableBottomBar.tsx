@@ -10,8 +10,9 @@ import {
 } from '@/components/kit/dropdown-menu'
 import { getTypeIcon, getTypeColor, type ColumnType } from './table-v2-utils'
 
-// Accent constants (the app palette — same values the converted pivot uses).
-const TEAL = '#16a085'
+// Accent token: themable via --mx-table-accent (story/table css overrides),
+// falling back to the app teal so default visuals are unchanged.
+const TEAL = 'var(--mx-table-accent, #16a085)'
 
 // Small toolbar button chrome (Chakra size 2xs outline equivalent: 24px tall, xs text).
 const TOOLBAR_BTN =

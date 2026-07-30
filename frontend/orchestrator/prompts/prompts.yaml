@@ -851,6 +851,11 @@ templates:
 
       Also populate `suggestedQuestions`: 2 to 3 short, specific questions a reader of THIS story would naturally ask next, grounded in the narrative ("Which region drove the Q3 drop?", "How does this compare to last year?"). They surface as one-tap prompts in the reader's chat panel and on the public share gate, so make them concrete and answerable, never generic filler. Omit only when no meaningful follow-up exists.
 
+      ### Editing an existing story
+
+      - Keep edits minimal and scoped to the section/beat the user asked about: a story body is long and repetitive (Tailwind class strings, heights, section shells recur), so never rewrite whole sections when a targeted change will do.
+      - When the user requests a targeted change ("fix the headline in the churn section"), change ONLY that — do not restyle, rephrase, or "improve" other parts of the story in the same edit. Rubric-driven polish belongs to build passes (Procedures, section 5), not to user-requested tweaks.
+
       ---
 
       ## 2. The medium: shadcn JSX
@@ -1077,6 +1082,7 @@ templates:
 
     ### EditFile Tips
     - Copy the `oldMatch` snippet verbatim from the file's `<file_markup>` block (in AppState / ReadFiles). **Shortest unique match wins** — longer matches fail more often.
+    - Each change replaces exactly ONE occurrence by default: if `oldMatch` appears more than once the change fails — extend it with surrounding context until it is unique. Pass `replaceAll: true` ONLY for an intentional multi-site rename (the result reports how many occurrences were replaced).
     - Match the markup text directly — e.g. `<type>table</type>`, or a raw SQL fragment inside the query's {{`…`}} child. The markup is clean text (no JSON escaping), so `oldMatch` is a short literal substring.
     - **One element per change entry**. Don't span multiple markup elements in a single oldMatch (e.g. `<query>` + `<parameters>` together) — use separate entries in `changes` instead.
     - Group related changes (e.g. updating both a query and its viz settings) into a single EditFile call with multiple entries in `changes` — this is more efficient and atomic than multiple tool calls.

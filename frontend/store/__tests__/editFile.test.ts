@@ -601,14 +601,16 @@ describe('editFile - Dashboard content validation', () => {
   // Markup note: a dashboard projects to uniform nested markup — an `<assets>` block of
   // `<item>` references and a `<layout>` block of `<item>` grid placements. To preserve the
   // intent (the validation gate rejects malformed dashboard content with "Invalid dashboard
-  // content"), we set a non-integer id; with replaceAll both the assets `<id>` (AssetReference,
-  // Type.Integer) and the layout item `<id>` reject.
+  // content"), we set a non-integer id; with replaceAll: true (explicit — the default is now
+  // replace-one/fail-on-duplicates) both the assets `<id>` (AssetReference, Type.Integer) and
+  // the layout item `<id>` reject.
   it('flags non-integer id in FileAssetRef as validation feedback', async () => {
     await readFiles([dashboardId]);
     const result = await editFileStr({
       fileId: dashboardId,
       oldMatch: '<id>99</id>',
       newMatch: '<id>99.5</id>',
+      replaceAll: true,
     });
     expect(result.success).toBe(true);
     expect((result.validation ?? []).length).toBeGreaterThan(0);

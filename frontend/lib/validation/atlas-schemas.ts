@@ -11,6 +11,7 @@
  * No codegen step — edit this file and consumers re-build on next module load.
  */
 import { Type, type Static, type TSchema } from 'typebox';
+import { STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/component-names';
 
 /** JSON-Schema string enum: `{ type:'string', enum:[...] }` with a literal-union Static type. */
 const StringEnum = <const T extends readonly string[]>(values: T, description?: string) =>
@@ -524,13 +525,13 @@ export const StoryContent = Type.Object({
     'v4 utility then works (arbitrary values like text-[13px] included) — the platform compiles exactly the ' +
     'classes you use at save time. Responsiveness: Tailwind CONTAINER-QUERY variants (`@lg:`, `@2xl:`, `@3xl:` — ' +
     'NEVER viewport `md:`/`lg:`), collapsing every multi-column band to one column on narrow widths; wrap wide ' +
-    'tables in `overflow-x-auto`. Dark/light: `dark:` variants follow the app mode. Story COMPONENTS replace ' +
-    'hand-built containers AND carry the design (components-first is the default): <PageHeader>/<PageFooter>, ' +
-    '<Section>, <Eyebrow>, <Headline>, <Standfirst>, <Grid cols={2|3|4}>, <Card>, <Stat>+<StatLabel>/<StatValue>/' +
-    '<StatDelta tone="up|down|neutral">, <FigurePlate> (chart + styled caption <p>), <Takeaways> (self-styling ' +
-    '<ul>), <Pill tone="neutral|good|bad|warn|info">, <Callout tone="info|good|warn|bad">, <Quote> — text goes in ' +
-    'CHILDREN, props are enums plus an optional `class` for accent-level tweaks; they nest freely with HTML and ' +
-    'embeds. A <style> ' +
+    'tables in `overflow-x-auto`. Dark/light: `dark:` variants follow the app mode. COMPONENTS: the body is ' +
+    'STATIC JSX — plain HTML content tags styled with Tailwind (use `class=`) plus the registered shadcn/ui ' +
+    'component set (use `className=`; standard shadcn props/variants): ' +
+    STORY_UI_COMPONENT_NAME_LIST.join(', ') + '. ' +
+    'These and the platform embeds <Question/>, <Number/>, <Param/> (below) are the ONLY Capitalized tags ' +
+    'allowed — any other Capitalized tag fails validation, so build everything else from plain HTML + Tailwind ' +
+    'utilities. Components nest freely with HTML and embeds. A <style> ' +
     'block is allowed ONLY for web-font @imports, motif/signature CSS utilities cannot express, and keyframes — ' +
     'keep it short and scoped under your root class; rules targeting body or html will NOT apply. <script> tags, ' +
     'event-handler attributes, and iframes are stripped at render time. Write it like a designed long-form ' +

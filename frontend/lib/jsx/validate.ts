@@ -6,7 +6,14 @@
  * give the "static" guarantee for free — this pass enforces it.
  */
 import { immutableSet } from '@/lib/utils/immutable-collections';
+import { STORY_COMPONENT_NAMES } from '@/lib/data/story/story-components';
 import type { JsxNode, JsxElement, ValidationError, ValidateOptions } from './types';
+
+// The retired legacy story design-system tags (<PageHeader>, <Eyebrow>, …). When one of
+// these shows up unregistered (a new-format story validated against the shadcn registry),
+// the error steers the model to the CURRENT authoring path instead of letting it retry
+// the same legacy tags.
+const LEGACY_STORY_COMPONENT_NAMES = immutableSet(STORY_COMPONENT_NAMES);
 
 // Lowercase HTML tags that can introduce active content / navigation hijacking.
 const DANGEROUS_TAGS = immutableSet([
@@ -70,7 +77,15 @@ function validateElement(el: JsxElement, components: Set<string>, allowedHtml: S
   // Tag allowlist.
   if (el.isComponent) {
     if (!components.has(el.tag)) {
-      errors.push({ message: `Unknown component <${el.tag}> — not in the component registry`, tag: el.tag, start: el.start, end: el.end });
+      // Stable prefix (asserted by callers/tests) + recovery guidance: name the legacy
+      // trap when it applies, and ALWAYS list the registered set so the model can pick
+      // a real component instead of retrying the same unknown tag.
+      let message = `Unknown component <${el.tag}> — not in the component registry.`;
+      if (LEGACY_STORY_COMPONENT_NAMES.has(el.tag)) {
+        message += ` <${el.tag}> is a LEGACY story component that is no longer available — rebuild it with plain HTML tags + Tailwind utilities, or use the registered components.`;
+      }
+      message += ` Registered components: ${[...components].join(', ')}.`;
+      errors.push({ message, tag: el.tag, start: el.start, end: el.end });
     }
   } else if (DANGEROUS_TAGS.has(el.tag.toLowerCase())) {
     errors.push({ message: `Disallowed tag <${el.tag}>`, tag: el.tag, start: el.start, end: el.end });

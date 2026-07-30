@@ -1319,6 +1319,9 @@ describe('Phase 1: Unified File System API E2E', () => {
         });
 
         expect(result.success).toBe(true);
+        // Multi-site replaces must be VISIBLE: the result reports how many occurrences changed.
+        // 'foo' appears 4x in the markup: description "foo foo" + query "SELECT foo FROM foo_table".
+        expect(result.occurrences).toBe(4);
         const [aug] = await readFiles([id], {});
         const content = compressAugmentedFile(aug).fileState.content as any;
         expect(content.description).toBe('bar bar');
@@ -1383,7 +1386,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         expect(result.error).toMatch(/oldMatch found \d+ times/);
       });
 
-      it('default (replaceAll omitted) replaces all occurrences', async () => {
+      it('default (replaceAll omitted) FAILS when oldMatch is not unique', async () => {
 
         const id = await DocumentDB.create(
           'Default ReplaceAll',
@@ -1400,18 +1403,51 @@ describe('Phase 1: Unified File System API E2E', () => {
         const file = await DocumentDB.getById(id);
         (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [file] } });
 
-        // replaceAll omitted — should default to true and replace all
+        // replaceAll omitted — default is FALSE: a repeated short match must error rather
+        // than silently rewriting every occurrence (the "unrelated parts changed" bug).
         const result = await editFileStr({
           fileId: id,
           oldMatch: 'abc',
           newMatch: 'xyz',
         });
 
-        expect(result.success).toBe(true);
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/not unique/);
+        expect(result.error).toMatch(/replaceAll/);
+        // Nothing applied.
         const [aug] = await readFiles([id], {});
         const content = compressAugmentedFile(aug).fileState.content as any;
-        expect(content.description).toBe('xyz xyz');
-        expect(content.query).toContain('xyz');
+        expect(content.description).toBe('abc abc');
+      });
+
+      it('default (replaceAll omitted) replaces a unique match', async () => {
+
+        const id = await DocumentDB.create(
+          'Default Unique',
+          '/org/default-unique',
+          'question',
+          {
+            description: 'only one target here',
+            query: 'SELECT 1',
+            connection_name: 'test_db',
+            vizSettings: { type: 'table' as const, xCols: [], yCols: [] }
+          } as QuestionContent,
+          []
+        );
+        const file = await DocumentDB.getById(id);
+        (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [file] } });
+
+        const result = await editFileStr({
+          fileId: id,
+          oldMatch: 'only one target here',
+          newMatch: 'the replaced target',
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.occurrences).toBeUndefined();
+        const [aug] = await readFiles([id], {});
+        const content = compressAugmentedFile(aug).fileState.content as any;
+        expect(content.description).toBe('the replaced target');
       });
     });
   });

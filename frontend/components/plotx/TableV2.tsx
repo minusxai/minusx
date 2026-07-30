@@ -351,7 +351,7 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
             // mx-* classes are the STABLE contract for css overrides (Viz V2 table
             // source `css` field / story-level styling) — documented in atlas-schemas.
             className="mx-table w-full border-collapse table-fixed text-sm"
-            style={{ minWidth: `${visibleColumnCount * 150}px` }}
+            style={{ '--mx-table-min-w': `${visibleColumnCount * 150}px` } as React.CSSProperties}
           >
             {/* Header */}
             <thead className="sticky top-0 z-[2] bg-muted">
@@ -425,11 +425,17 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
   )
 }
 
-// Default flat-table chrome (zebra stripe, row/cell hover, cell typography,
-// scrollbar). Kept at zero specificity via :where() so the envelope's scoped css
-// field (`.mx-viz-scope-X { .mx-row-odd { … } }`, 0-2-0) overrides every rule
-// here. `!important` on row hover matches the previous behaviour (the hover wins
-// over the zebra default, both being stylesheet rules).
+// Default flat-table chrome (structure, zebra stripe, row/cell hover, cell
+// typography, scrollbar). Kept at zero specificity via :where() so the
+// envelope's scoped css field (`.mx-viz-scope-X { .mx-row-odd { … } }`, 0-2-0)
+// — and any author rule on the .mx-* contract — overrides every rule here.
+// Structural declarations (widths, borders, row height, accent) deliberately
+// live HERE rather than as inline style= (inline would defeat the contract);
+// dynamic values ride custom properties (--mx-table-min-w, --mx-col-w) set
+// inline, so an author `width:` rule still wins. The row-hover rule carries no
+// !important: its bare :hover (0-1-0) already beats the zebra :where() default.
+// The teal accent is themable via --mx-table-accent (fallback keeps the exact
+// previous #16a085 default).
 const TABLE_BASE_CSS = `
 .table-v2-scroll::-webkit-scrollbar { height: 6px; width: 6px; }
 .table-v2-scroll::-webkit-scrollbar-track { background: transparent; }
@@ -437,10 +443,27 @@ const TABLE_BASE_CSS = `
 .table-v2-scroll::-webkit-scrollbar-thumb:hover { background: rgba(128,128,128,0.5); }
 .table-v2-scroll::-webkit-scrollbar-corner { background: transparent; }
 .mx-facet-list::-webkit-scrollbar { width: 4px; }
-.mx-facet-list::-webkit-scrollbar-thumb { background: #16a085; border-radius: 2px; }
+.mx-facet-list::-webkit-scrollbar-thumb { background: var(--mx-table-accent, #16a085); border-radius: 2px; }
+:where(.mx-table) { min-width: var(--mx-table-min-w); }
+:where(.mx-table .mx-th) {
+  width: var(--mx-col-w);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+:where(.mx-table .mx-th:last-child) { border-right: none; }
+:where(.mx-table .mx-th.mx-th-accented) {
+  border-bottom: 2px solid var(--mx-table-accent, #16a085);
+  background: color-mix(in srgb, var(--mx-table-accent, #16a085) 5%, transparent);
+}
+:where(.mx-table .mx-resize-handle) { background: var(--mx-table-accent, #16a085); }
+:where(.table-v2-scroll .table-v2-row) { height: ${ROW_HEIGHT}px; }
+:where(.table-v2-scroll .table-v2-row.mx-row-wrap) { height: auto; }
+:where(.table-v2-scroll .table-v2-row.mx-row-clickable) { cursor: pointer; }
 :where(.table-v2-scroll) :where(.mx-row-odd) { background: var(--muted); }
-:where(.table-v2-scroll .table-v2-row):hover { background: var(--accent) !important; }
+:where(.table-v2-scroll .table-v2-row):hover { background: var(--accent); }
 :where(.table-v2-scroll .table-v2-cell) {
+  width: var(--mx-col-w);
+  border-right: 1px solid var(--border);
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 0.875rem;
   color: var(--foreground);
@@ -451,5 +474,7 @@ const TABLE_BASE_CSS = `
   white-space: nowrap;
   cursor: pointer;
 }
+:where(.table-v2-scroll .table-v2-cell:last-child) { border-right: none; }
+:where(.table-v2-scroll .table-v2-cell.mx-cell-wrap) { white-space: normal; word-break: break-word; }
 :where(.table-v2-scroll .table-v2-cell):hover { background: color-mix(in srgb, var(--muted-foreground) 12%, transparent); }
 `
