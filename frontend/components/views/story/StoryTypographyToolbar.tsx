@@ -21,7 +21,7 @@ import { useEffect, useRef, useState, type MouseEvent, type ChangeEvent, type Re
 import { Box, HStack, IconButton, Text, Portal } from '@chakra-ui/react';
 import {
   LuAArrowDown, LuAArrowUp, LuBold, LuItalic, LuUnderline,
-  LuAlignLeft, LuAlignCenter, LuAlignRight, LuCircleSlash2,
+  LuAlignLeft, LuAlignCenter, LuAlignRight, LuAlignJustify, LuCircleSlash2,
   LuBaseline, LuPaintBucket, LuArrowUpToLine, LuArrowUpFromLine,
   LuArrowDownToLine, LuArrowDownFromLine, LuMoveHorizontal, LuEllipsis,
 } from 'react-icons/lu';
@@ -228,6 +228,7 @@ export default function StoryTypographyToolbar({ target, active, onApply }: Stor
           {toggleButton('align', 'text-left', 'Align left', <LuAlignLeft />)}
           {toggleButton('align', 'text-center', 'Align center', <LuAlignCenter />)}
           {toggleButton('align', 'text-right', 'Align right', <LuAlignRight />)}
+          {toggleButton('align', 'text-justify', 'Align justify', <LuAlignJustify />)}
           {divider}
           <ColorSwatchControl
             label="Text color"

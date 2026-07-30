@@ -89,6 +89,11 @@ describe('applyTypographyChoice', () => {
     expect(applyTypographyChoice('hover:font-bold', 'weight', null)).toBe('');
   });
 
+  it('justify is a fourth alignment choice, mutually exclusive with the others', () => {
+    expect(applyTypographyChoice('text-center', 'align', 'text-justify')).toBe('text-justify');
+    expect(currentChoice('text-justify', 'align')).toBe('text-justify');
+  });
+
   it('independent toggles compose (bold + italic + underline)', () => {
     let cls = applyTypographyChoice('', 'weight', 'font-bold');
     cls = applyTypographyChoice(cls, 'fontStyle', 'italic');

@@ -76,8 +76,10 @@ describe('StoryTypographyToolbar', () => {
     expect(el.className).toBe('text-center');
     fireEvent.click(screen.getByLabelText('Align right'));
     expect(el.className).toBe('text-right');
+    fireEvent.click(screen.getByLabelText('Align justify'));
+    expect(el.className).toBe('text-justify');
     // Clicking the active alignment clears it.
-    fireEvent.click(screen.getByLabelText('Align right'));
+    fireEvent.click(screen.getByLabelText('Align justify'));
     expect(el.className).toBe('');
   });
 

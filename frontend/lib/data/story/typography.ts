@@ -34,7 +34,7 @@ export const TYPOGRAPHY_GROUPS = {
   weight: ['font-bold'],
   fontStyle: ['italic'],
   decoration: ['underline'],
-  align: ['text-left', 'text-center', 'text-right'],
+  align: ['text-left', 'text-center', 'text-right', 'text-justify'],
 } as const satisfies Record<string, readonly string[]>;
 
 export type TypographyGroup = keyof typeof TYPOGRAPHY_GROUPS;
