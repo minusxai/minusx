@@ -428,10 +428,10 @@ export default function ChatInterface({
   // the last call's `usage.totalTokens` IS the size of the entire conversation — stamped onto
   // conversation meta server-side at turn end (`lastContextTokens`) and carried on the conversation
   // row, so this works on reload for every role (the display wire strips per-message usage). The
-  // chat models in use are ~200k–400k window, so the threshold must sit BELOW that — 150k gives
-  // headroom to warn before the hard "exceeds the context window" API error. (It must NOT be raised
-  // above the window, or the warning never fires and users just hit the hard error.)
-  const TOKEN_LIMIT = 150_000;
+  // Max conversation length: 300k tokens (product decision 2026-07-31). NOTE: this only warns
+  // BEFORE the hard "exceeds the context window" API error on models with a >300k window; on a
+  // 200k-window model the hard error fires first and this gate is the post-hoc lock-out.
+  const TOKEN_LIMIT = 300_000;
   const tokenLimitExceeded = useMemo(() => {
     if (!conversation?.lastContextTokens || conversation.lastContextTokens <= TOKEN_LIMIT) return false;
     // Gate only makes sense once there's accumulated history to shed by starting
