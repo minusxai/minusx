@@ -18,7 +18,7 @@ import {
 import { DatabaseWithSchema } from '@/lib/types';
 import { FilesAPI } from '@/lib/data/files.server';
 import { getCompletionsLocal } from '@/lib/sql/autocomplete';
-import { getMentionCompletionsLocal } from '@/lib/sql/mention-completions';
+import { getMentionCompletionsLocal, type AvailableMentionFile } from '@/lib/sql/mention-completions';
 import { parseSqlToIrLocal, UnsupportedSQLError } from '@/lib/sql/sql-to-ir';
 import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
 
@@ -57,13 +57,13 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
       }
     }
 
-    // Get available questions and dashboards for mentions
-    const availableQuestions: any[] = [];
+    // Get available saved files for mentions
+    const availableFiles: AvailableMentionFile[] = [];
     try {
       // Load questions
       const questionsResult = await FilesAPI.getFiles({ type: 'question' }, user);
       questionsResult.data.forEach((q: any) => {
-        availableQuestions.push({
+        availableFiles.push({
           id: q.id,
           name: q.name,
           type: 'question',
@@ -71,18 +71,29 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
         });
       });
 
-      // Load dashboards (both @ and @@ show dashboards)
+      // Load dashboards (both @ and @@ show saved files)
       const dashboardsResult = await FilesAPI.getFiles({ type: 'dashboard' }, user);
       dashboardsResult.data.forEach((d: any) => {
-        availableQuestions.push({
+        availableFiles.push({
           id: d.id,
           name: d.name,
           type: 'dashboard',
           alias: d.name.toLowerCase().replace(/[^a-z0-9]+/g, '_') + '_' + d.id
         });
       });
+
+      // Load stories
+      const storiesResult = await FilesAPI.getFiles({ type: 'story' }, user);
+      storiesResult.data.forEach((s: any) => {
+        availableFiles.push({
+          id: s.id,
+          name: s.name,
+          type: 'story',
+          alias: s.name.toLowerCase().replace(/[^a-z0-9]+/g, '_') + '_' + s.id
+        });
+      });
     } catch (error) {
-      console.warn('[Completions] Failed to load questions/dashboards:', error);
+      console.warn('[Completions] Failed to load mentionable files:', error);
     }
 
     // Run mention completions locally
@@ -90,7 +101,7 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
       const suggestions = getMentionCompletionsLocal(
         prefix,
         schemaData,
-        availableQuestions,
+        availableFiles,
         mentionType,
       );
       return {
