@@ -70,7 +70,7 @@ import { InsertMenuPlugin } from './InsertMenuPlugin';
 import { EditSelectionPlugin } from './EditSelectionPlugin';
 import type { EditWithAgentSource } from '@/lib/chat/edit-with-agent';
 
-/** Config for the optional @ / @@ mention typeahead (tables, questions, dashboards). */
+/** Config for the optional @ / @@ mention typeahead (tables, questions, dashboards, stories). */
 export interface MentionsConfig {
   databaseName?: string;
   whitelistedSchemas?: DatabaseWithSchema[];
@@ -460,7 +460,7 @@ interface LexicalTextEditorProps {
   renderToolbar?: (toolbar: React.ReactNode) => React.ReactNode;
   /** If provided, an image button appears in the toolbar; returns the public URL to embed. */
   onImageUpload?: (file: File) => Promise<string>;
-  /** If provided, enables the @ / @@ mention typeahead (tables, questions, dashboards). */
+  /** If provided, enables the @ / @@ mention typeahead (tables, questions, dashboards, stories). */
   mentions?: MentionsConfig;
   /** Shows the inline "+ / @" helper beneath the toolbar. */
   showProTip?: boolean;

@@ -52,7 +52,7 @@ export const FILE_TYPE_METADATA = {
   story: {
     label: 'Story',
     icon: LuScrollText,
-    color: 'accent.sun',         // Turquoise cyan (#1abc9c)
+    color: 'accent.sun',         // Pumpkin orange (#d35400)
     category: 'analytics',
     supported: true,
     h: 'none',
@@ -301,8 +301,23 @@ export const ACCENT_HEX = {
   teal: '#16a085',         // Green Sea teal
   info: '#3498db',         // Info blue
   cyan: '#1abc9c',         // Turquoise cyan
+  sun: '#d35400',          // Pumpkin orange
   muted: '#7f8c8d',        // Muted gray
 } as const;
+
+/** Resolve Chakra semantic accent tokens in non-Chakra renderers such as Lexical. */
+export const ACCENT_TOKEN_HEX: Readonly<Record<string, string>> = {
+  'accent.primary': ACCENT_HEX.primary,
+  'accent.danger': ACCENT_HEX.danger,
+  'accent.secondary': ACCENT_HEX.secondary,
+  'accent.success': ACCENT_HEX.success,
+  'accent.warning': ACCENT_HEX.warning,
+  'accent.teal': ACCENT_HEX.teal,
+  'accent.info': ACCENT_HEX.info,
+  'accent.cyan': ACCENT_HEX.cyan,
+  'accent.sun': ACCENT_HEX.sun,
+  'accent.muted': ACCENT_HEX.muted,
+};
 
 /**
  * Table mention metadata (not a file type, used for schema table mentions)

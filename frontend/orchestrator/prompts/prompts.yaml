@@ -552,12 +552,13 @@ templates:
 
       ### Writing reportPrompt
       - Write the report as natural-language instructions: what to analyze, what to compare, what to highlight.
-      - To point the report at a specific saved **question**, **dashboard**, or **table**, embed a *mention* inline. A mention renders in markdown as `@` immediately followed by a compact JSON object (no spaces inside):
+      - To point the report at a specific saved **question**, **dashboard**, **story**, or **table**, embed a *mention* inline. A mention renders in markdown as `@` immediately followed by a compact JSON object (no spaces inside):
         - Question: `@{"type":"question","name":"Weekly Revenue","id":123}`
         - Dashboard: `@{"type":"dashboard","name":"Growth","id":45}`
+        - Story: `@{"type":"story","name":"Quarterly Business Review","id":67}`
         - Table: `@{"type":"table","name":"orders","schema":"public"}`
-      - Always resolve the real `id` first (from app state or SearchFiles) before writing a question/dashboard mention.
-      - Prefer mentioning an existing question or dashboard over describing raw SQL: at run time the report agent reads each mentioned file and reuses its already-computed query results, only querying the warehouse directly for whatever the mentioned files don't cover.
+      - Always resolve the real `id` first (from app state or SearchFiles) before writing a saved-file mention.
+      - Prefer mentioning an existing question, dashboard, or story over describing raw SQL: at run time the report agent reads each mentioned file and reuses its already-computed query results, only querying the warehouse directly for whatever the mentioned files don't cover.
 
       ### Report Page Behavior
       - All changes are made with EditFile on `reportPrompt`, `schedule`, and `recipients`. Don't create files or navigate away unless the user explicitly asks.
@@ -722,7 +723,7 @@ templates:
       Go to `/explore` and type a natural language question. The agent will write and run SQL for you.
 
       **Setting up a report** (editor+)
-      Navigate to `/new/report`. Write a freeform report prompt (mention questions/dashboards with @), set a schedule, and add recipients.
+      Navigate to `/new/report`. Write a freeform report prompt (mention questions/dashboards/stories with @), set a schedule, and add recipients.
 
       **Setting up an alert** (editor+)
       Navigate to `/new/alert`. Link a question, define a condition and threshold, set a schedule, and add recipients.

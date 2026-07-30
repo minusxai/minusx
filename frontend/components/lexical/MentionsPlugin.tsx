@@ -164,7 +164,7 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
         const offset = anchor.offset;
         const textBeforeCursor = text.slice(0, offset);
 
-        // Check for @@ (questions only)
+        // Check for @@ (saved files only)
         const doubleAtMatch = textBeforeCursor.match(/@@([\w_]*)$/);
         if (doubleAtMatch) {
           setMentionType('questions');

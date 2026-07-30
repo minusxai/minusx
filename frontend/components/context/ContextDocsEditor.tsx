@@ -86,7 +86,7 @@ interface ContextDocsEditorProps {
   originalDocs?: DocEntry[];
   /** Child folder paths offered by the child-path selector. */
   availableChildPaths?: string[];
-  /** Enables the @ / @@ mention typeahead (tables, questions, dashboards). */
+  /** Enables the @ / @@ mention typeahead (tables, questions, dashboards, stories). */
   mentions?: MentionsConfig;
   editMode?: boolean;
   editorHeight?: string;

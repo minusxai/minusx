@@ -1,6 +1,6 @@
 import React from 'react';
 import { DecoratorNode, LexicalNode, NodeKey, SerializedLexicalNode, Spread } from 'lexical';
-import { FILE_TYPE_METADATA, TABLE_MENTION_METADATA, COLUMN_MENTION_METADATA, METRIC_MENTION_METADATA, ACCENT_HEX, getMentionColors } from '@/lib/ui/file-metadata';
+import { FILE_TYPE_METADATA, TABLE_MENTION_METADATA, COLUMN_MENTION_METADATA, METRIC_MENTION_METADATA, ACCENT_HEX, ACCENT_TOKEN_HEX, getMentionColors } from '@/lib/ui/file-metadata';
 import type { ChatMentionData } from '@/lib/types';
 
 /**
@@ -9,7 +9,7 @@ import type { ChatMentionData } from '@/lib/types';
  */
 export function getMentionChipMetadata(
   data: ChatMentionData,
-  colorMap: Record<string, string>,
+  colorMap: Readonly<Record<string, string>>,
 ) {
   if (data.type === 'table') {
     return {
@@ -107,19 +107,7 @@ export class MentionNode extends DecoratorNode<React.ReactElement> {
         : undefined;
     const isSkill = data.type === 'skill';
 
-    const colorMap: Record<string, string> = {
-      'accent.primary': ACCENT_HEX.primary,
-      'accent.danger': ACCENT_HEX.danger,
-      'accent.secondary': ACCENT_HEX.secondary,
-      'accent.success': ACCENT_HEX.success,
-      'accent.warning': ACCENT_HEX.warning,
-      'accent.teal': ACCENT_HEX.teal,
-      'accent.info': ACCENT_HEX.info,
-      'accent.cyan': ACCENT_HEX.cyan,
-      'accent.muted': ACCENT_HEX.muted,
-    };
-
-    const metadata = getMentionChipMetadata(data, colorMap);
+    const metadata = getMentionChipMetadata(data, ACCENT_TOKEN_HEX);
 
     // Map mention type to the accent hex for the icon (fg.muted → theme token)
     const iconColor = isSkill ? ACCENT_HEX.teal
@@ -128,6 +116,7 @@ export class MentionNode extends DecoratorNode<React.ReactElement> {
       : data.type === 'metric' ? ACCENT_HEX.teal
       : data.type === 'question' ? ACCENT_HEX.primary
       : data.type === 'dashboard' ? ACCENT_HEX.danger
+      : data.type === 'story' ? ACCENT_HEX.sun
       : 'var(--muted-foreground)';
 
     const IconCmp = metadata.icon;

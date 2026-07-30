@@ -5,25 +5,28 @@
 import type { DatabaseWithSchema } from '@/lib/types';
 import type { MentionItem } from '@/lib/data/completions/types';
 
-export interface AvailableQuestion {
+export interface AvailableMentionFile {
   id: number;
   name: string;
   alias: string;
-  type: 'question' | 'dashboard';
+  type: 'question' | 'dashboard' | 'story';
 }
+
+/** @deprecated Use AvailableMentionFile. Retained for callers that use the old name. */
+export type AvailableQuestion = AvailableMentionFile;
 
 /**
  * Get mention suggestions for chat interface.
  *
  * @param prefix - Text after @ or @@ symbol
  * @param schemaData - Database schema information
- * @param availableQuestions - List of available questions and dashboards
- * @param mentionType - "all" (@ — tables + questions) or "questions" (@@ — questions only)
+ * @param availableFiles - List of mentionable saved files
+ * @param mentionType - "all" (@ — tables + files) or "questions" (@@ — files only)
  */
 export function getMentionCompletionsLocal(
   prefix: string,
   schemaData: DatabaseWithSchema[],
-  availableQuestions: AvailableQuestion[],
+  availableFiles: AvailableMentionFile[],
   mentionType: 'all' | 'questions',
 ): MentionItem[] {
   const suggestions: MentionItem[] = [];
@@ -59,8 +62,8 @@ export function getMentionCompletionsLocal(
     }
   }
 
-  // Question/dashboard mentions
-  for (const q of availableQuestions) {
+  // Saved-file mentions
+  for (const q of availableFiles) {
     if (prefixLower && !(
       q.name.toLowerCase().startsWith(prefixLower) ||
       q.alias.toLowerCase().startsWith(prefixLower)

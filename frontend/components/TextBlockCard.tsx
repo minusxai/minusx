@@ -79,7 +79,7 @@ function TextBlockCard({
     }
   }, []);
 
-  // @ / @@ mention typeahead over the dashboard context's tables + questions.
+  // @ / @@ mention typeahead over the dashboard context's tables + saved files.
   const { databases: schemaData } = useSchemaContext(filePath || '/org');
   const mentions = useMemo<MentionsConfig>(() => ({ whitelistedSchemas: schemaData }), [schemaData]);
 
