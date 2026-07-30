@@ -11,7 +11,7 @@ import type { QueryIR, AnyQueryIR } from '@/lib/sql/ir-types';
  */
 export interface MentionsOptions {
   prefix: string;
-  mentionType: 'all' | 'questions';  // @ = all, @@ = questions only
+  mentionType: 'all' | 'questions';  // @ = tables + files, @@ = files only
   databaseName?: string;
   whitelistedSchemas?: DatabaseWithSchema[];  // From context - if provided, only show these tables
 }
@@ -25,7 +25,7 @@ export interface MentionItem {
   schema?: string;
   /** Connection (database) name — propagated onto table mentions to disambiguate the same schema.table across connections. */
   connection?: string;
-  type: 'table' | 'question' | 'dashboard';
+  type: 'table' | 'question' | 'dashboard' | 'story';
   display_text: string;
   insert_text: string;
 }

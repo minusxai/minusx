@@ -1,20 +1,8 @@
 import React from 'react';
 import { Box, Icon, Text } from '@chakra-ui/react';
 import type { ChatMentionData } from '@/lib/types';
-import { ACCENT_HEX } from '@/lib/ui/file-metadata';
+import { ACCENT_TOKEN_HEX } from '@/lib/ui/file-metadata';
 import { getMentionChipMetadata } from '../lexical/MentionNode';
-
-const COLOR_MAP: Record<string, string> = {
-  'accent.primary': ACCENT_HEX.primary,
-  'accent.danger': ACCENT_HEX.danger,
-  'accent.secondary': ACCENT_HEX.secondary,
-  'accent.success': ACCENT_HEX.success,
-  'accent.warning': ACCENT_HEX.warning,
-  'accent.teal': ACCENT_HEX.teal,
-  'accent.info': ACCENT_HEX.info,
-  'accent.cyan': ACCENT_HEX.cyan,
-  'accent.muted': ACCENT_HEX.muted,
-};
 
 interface MentionChipProps {
   data: ChatMentionData;
@@ -36,7 +24,7 @@ export function MentionChip({ data, raw }: MentionChipProps) {
       : undefined;
   const isSkill = data.type === 'skill';
 
-  const metadata = getMentionChipMetadata(data, COLOR_MAP);
+  const metadata = getMentionChipMetadata(data, ACCENT_TOKEN_HEX);
 
   // Map mention type to Chakra semantic color token for the icon
   const iconColorToken = isSkill ? 'accent.teal'
@@ -45,6 +33,7 @@ export function MentionChip({ data, raw }: MentionChipProps) {
     : data.type === 'metric' ? 'accent.teal'
     : data.type === 'question' ? 'accent.primary'
     : data.type === 'dashboard' ? 'accent.danger'
+    : data.type === 'story' ? 'accent.sun'
     : 'fg.muted';
 
   return (

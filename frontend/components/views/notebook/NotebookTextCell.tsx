@@ -73,7 +73,7 @@ export default function NotebookTextCell({
     }
   }, []);
 
-  // @ / @@ mention typeahead over the notebook context's tables + questions.
+  // @ / @@ mention typeahead over the notebook context's tables + saved files.
   const { databases: schemaData } = useSchemaContext(filePath || '/org');
   const mentions = useMemo<MentionsConfig>(() => ({ whitelistedSchemas: schemaData }), [schemaData]);
 

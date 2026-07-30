@@ -26,7 +26,7 @@ import type { LlmGrade } from '@/lib/llm/llm-config-types';
 
 const CHAT_PRO_TIPS = [
   { shortcut: '@', detail: 'to mention tables & columns' },
-  { shortcut: '@@', detail: 'to mention questions & dashboards' },
+  { shortcut: '@@', detail: 'to mention questions, dashboards & stories' },
   { shortcut: '#', detail: 'to invoke skills' },
   { shortcut: '/', detail: 'to run commands' },
 ] as const;

@@ -1,24 +1,11 @@
 import { MentionItem } from '@/lib/data/completions/types';
-import { FILE_TYPE_METADATA, TABLE_MENTION_METADATA, ACCENT_HEX } from '@/lib/ui/file-metadata';
+import { FILE_TYPE_METADATA, TABLE_MENTION_METADATA, ACCENT_HEX, ACCENT_TOKEN_HEX } from '@/lib/ui/file-metadata';
 import type { DatabaseWithSchema, SkillMention, SlashCommand } from '@/lib/types';
 import type { ColumnInfo } from '@/lib/hooks/use-table-columns';
 import { LuTerminal } from 'react-icons/lu';
 
 export type MentionOption = MentionItem | SkillMention | SlashCommand;
 export type MentionTrigger = 'all' | 'questions' | 'skills' | 'commands';
-
-// Map semantic token to hex value
-const colorMap: Record<string, string> = {
-  'accent.primary': ACCENT_HEX.primary,
-  'accent.danger': ACCENT_HEX.danger,
-  'accent.secondary': ACCENT_HEX.secondary,
-  'accent.success': ACCENT_HEX.success,
-  'accent.warning': ACCENT_HEX.warning,
-  'accent.teal': ACCENT_HEX.teal,
-  'accent.info': ACCENT_HEX.info,
-  'accent.cyan': ACCENT_HEX.cyan,
-  'accent.muted': ACCENT_HEX.muted,
-};
 
 export function isSlashCommand(option: MentionOption): option is SlashCommand {
   return option.type === 'command';
@@ -55,7 +42,7 @@ export function getMentionBadgeInfo(option: MentionOption) {
   return {
     label: metadata.label.toUpperCase(),
     icon: metadata.icon,
-    color: colorMap[metadata.color] || ACCENT_HEX.muted,
+    color: ACCENT_TOKEN_HEX[metadata.color] || ACCENT_HEX.muted,
   };
 }
 
@@ -76,8 +63,8 @@ export function getFilteredMentions(mentions: MentionOption[], mentionType: Ment
 export function getDropdownTitle(mentionType: MentionTrigger) {
   if (mentionType === 'commands') return 'Commands';
   if (mentionType === 'skills') return 'Skills';
-  if (mentionType === 'questions') return 'Questions';
-  return 'Tables, Questions & Dashboards';
+  if (mentionType === 'questions') return 'Questions, Dashboards & Stories';
+  return 'Tables, Questions, Dashboards & Stories';
 }
 
 export type { ColumnInfo } from '@/lib/hooks/use-table-columns';
