@@ -10,6 +10,7 @@ import ConvoDebugContainer from './ConvoDebugContainer';
 import UsageDialog from './UsageDialog';
 import { useClearChat, useSlashCommands, tryExecuteSlashCommand } from './slash-commands';
 import { AppState } from '@/lib/appState';
+import { shouldInjectLargeFileSkill } from '@/lib/projection/app-state-size';
 import dynamic from 'next/dynamic';
 import ThinkingIndicator from './ThinkingIndicator';
 import RemoteSessionBanner from './RemoteSessionBanner';
@@ -606,9 +607,9 @@ export default function ChatInterface({
       };
     });
 
-    const LARGE_APP_STATE_THRESHOLD = 200_000; //~50k tokens
-    const appStateSize = appState ? JSON.stringify(appState).length : 0;
-    if (appStateSize > LARGE_APP_STATE_THRESHOLD && !agentSelectedSkills.some(s => s.name === 'large_file')) {
+    // Measured on the PROJECTED app state (what the LLM actually receives) — not the raw Redux
+    // object, which carries query-result rows and reference content the projection pass strips.
+    if (shouldInjectLargeFileSkill(appState) && !agentSelectedSkills.some(s => s.name === 'large_file')) {
       agentSelectedSkills.push({ type: 'system', name: 'large_file' });
     }
 

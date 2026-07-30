@@ -131,7 +131,12 @@ export async function getQueryResult(
     // (e.g. the conversation's Stop). Whichever aborts first cancels the request — so a
     // stuck query surfaces as an error and frees its semaphore slot instead of hanging.
     const controller = new AbortController();
-    const timeoutMs = getQueryTimeoutMs();
+    // The caller may ask for a TIGHTER bound than the configured one (never a looser one).
+    const configuredTimeoutMs = getQueryTimeoutMs();
+    const override = options.timeoutMs;
+    const timeoutMs = override != null && override > 0
+      ? (configuredTimeoutMs > 0 ? Math.min(configuredTimeoutMs, override) : override)
+      : configuredTimeoutMs;
     let timedOut = false;
     const timer = timeoutMs > 0
       ? setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs)

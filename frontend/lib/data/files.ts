@@ -280,11 +280,23 @@ class FilesDataLayerClient implements IFilesDataLayer {
    * scoreFile/scoreFileDeterministicResolved rather than through this data layer, so there is
    * no matching server-side implementation to keep in sync.
    */
-  async getRubric(id: number, options: GetRubricOptions = {}): Promise<GetRubricResult> {
+  async getRubric(
+    id: number,
+    options: GetRubricOptions = {},
+    fetchOpts: { timeoutMs?: number } = {},
+  ): Promise<GetRubricResult> {
+    // The LLM visual judge runs behind this route, so it is UNBOUNDED server work in the middle of
+    // an agent tool call. Bound it: on timeout the fetch rejects and the caller degrades to the
+    // rules-only rubric instead of holding the tool open.
+    const timeoutMs = fetchOpts.timeoutMs ?? 30_000;
+    const signal = typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+      ? AbortSignal.timeout(timeoutMs)
+      : undefined;
     const res = await fetch(`${API_BASE}/api/files/${id}/rubric`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(options),
+      ...(signal ? { signal } : {}),
     });
 
     if (!res.ok) {

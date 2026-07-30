@@ -75,6 +75,22 @@ describe('captureElementBlob — serialization capture, no snapdom', () => {
     expect(made[0].height).toBe(200);
   });
 
+  // A full-height story capture is 512 × several-thousand px — pure image tokens for the LLM.
+  // maxHeight bounds the OTHER axis: the scale honors whichever cap binds first, so the whole
+  // view stays visible (no crop) at a smaller size.
+  it('honors maxHeight when the element is very tall — scale is the tighter of the two caps', async () => {
+    await captureElementBlob(el(800, 6000), { colorMode: 'light', maxWidth: 512, maxHeight: 2560 });
+    // width cap alone → 0.64 (512 × 3840); height cap → 2560/6000 = 0.4267 wins
+    expect(made[0].height).toBe(2560);
+    expect(made[0].width).toBe(341);
+  });
+
+  it('ignores maxHeight when the width cap already binds tighter', async () => {
+    await captureElementBlob(el(800, 400), { colorMode: 'light', maxWidth: 400, maxHeight: 2560 });
+    expect(made[0].width).toBe(400);
+    expect(made[0].height).toBe(200);
+  });
+
   it('scales by pixelRatio (default 0.75) when no maxWidth is given', async () => {
     await captureElementBlob(el(800, 400), { colorMode: 'light' });
     expect(made[0].width).toBe(600);

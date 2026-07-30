@@ -18,6 +18,21 @@ export interface UploadResult {
 /** 50 MB client-side guard. */
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
+/**
+ * Wall-clock cap per network hop in {@link uploadBlobOrEmbed}. That helper runs INSIDE agent tool
+ * calls (the post-edit review screenshot), where an un-timed fetch means the tool sits open until
+ * the browser gives up — one of the ways an EditFile used to take minutes. Interactive uploads
+ * (`uploadFile`, user-initiated, with progress UI) keep no timeout on purpose.
+ */
+const UPLOAD_HOP_TIMEOUT_MS = 10_000;
+
+/** AbortSignal.timeout with a guard for environments (older jsdom/node) that lack it. */
+function hopSignal(ms: number): AbortSignal | undefined {
+  return typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+    ? AbortSignal.timeout(ms)
+    : undefined;
+}
+
 function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -39,7 +54,7 @@ export async function uploadBlobOrEmbed(
   contentType: string,
 ): Promise<string> {
   const params = new URLSearchParams({ filename, contentType, keyType: 'charts' });
-  const res = await fetch(`/api/object-store/upload-url?${params}`);
+  const res = await fetch(`/api/object-store/upload-url?${params}`, { signal: hopSignal(UPLOAD_HOP_TIMEOUT_MS) });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     const message = typeof body.error === 'string' ? body.error : body.error?.message;
@@ -51,7 +66,9 @@ export async function uploadBlobOrEmbed(
     return blobToDataUrl(blob);
   }
 
-  const putRes = await fetch(uploadUrl, { method: 'PUT', body: blob, headers: { 'Content-Type': contentType } });
+  const putRes = await fetch(uploadUrl, {
+    method: 'PUT', body: blob, headers: { 'Content-Type': contentType }, signal: hopSignal(UPLOAD_HOP_TIMEOUT_MS),
+  });
   if (!putRes.ok) throw new Error(`Upload failed (${putRes.status})`);
   return publicUrl;
 }

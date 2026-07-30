@@ -5,6 +5,12 @@
 export interface ScreenshotOptions {
   pixelRatio?: number;         // Retina scaling (default: 2)
   maxWidth?: number;           // Cap output width in px; pixelRatio is derived automatically
+  /**
+   * Cap output HEIGHT in px. Combined with maxWidth by taking whichever cap binds tighter, so the
+   * FULL element still fits in the output (downscaled, never cropped). Used by full-height agent
+   * captures, where a tall page would otherwise rasterize at maxWidth × thousands of px.
+   */
+  maxHeight?: number;
   backgroundColor?: string;    // Background color
   quality?: number;            // JPEG quality (0-1, default: 1.0)
   format?: 'png' | 'jpeg';     // Output format (default: 'png')

@@ -69,4 +69,14 @@ export interface GetQueryResultOptions {
    * the built-in wall-clock timeout — whichever fires first aborts the /api/query fetch.
    */
   signal?: AbortSignal;
+  /**
+   * Tighter wall-clock cap (ms) for THIS call than the runtime QUERY_TIMEOUT_MS — used by callers
+   * whose run is a courtesy (an agent warming a story's embeds) and must not wait the full 120s.
+   * Never loosens the configured timeout; the shorter of the two wins.
+   *
+   * NOTE it only applies when this call actually EXECUTES the query: identical in-flight queries
+   * are deduped (PromiseManager), and a joiner inherits the original call's timeout. Callers that
+   * need a hard bound must also bound their own await.
+   */
+  timeoutMs?: number;
 }

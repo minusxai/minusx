@@ -32,10 +32,80 @@ import { canCreateFileByRole } from '@/lib/auth/access-rules.client';
 import { selectEffectiveUser } from '@/store/authSlice';
 import type { FrontendToolHandler } from './types';
 import { renderFileChartImageBlocks } from './chart-images';
-import { deterministicAgentRubric, reviewFile } from './file-review';
+import { compactAgentRubric, deterministicAgentRubric, reviewFile } from './file-review';
 import { vizWarningForQuestion } from './viz-warning';
 import { cacheSpreadsheetSource } from '@/lib/spreadsheet/result-cache';
 import { getSpreadsheetExecution } from '@/lib/spreadsheet/materialize';
+
+/**
+ * Wall-clock budget for the WHOLE post-edit query re-run wave (a story's embeds today).
+ *
+ * Much shorter than the client query timeout (QUERY_TIMEOUT_MS, 120s by default): these runs are a
+ * courtesy — they warm the cache so the response and the screenshot show live numbers — and must
+ * never be the reason a tool call sits open for minutes. The budget can't be enforced by passing a
+ * timeout INTO getQueryResult: identical in-flight queries are deduped by PromiseManager, so an
+ * await here usually JOINS a promise the re-rendering view already armed with the full 120s. The
+ * bound therefore lives at the await site (see settleWithinBudget). An abandoned run keeps going
+ * and still lands in the Redux cache for the next turn — "timedOut" means "not observed in time",
+ * not "cancelled".
+ */
+const EMBED_RERUN_BUDGET_MS = 12_000;
+
+/** One best-effort background run triggered by an edit, and how it ended. */
+export interface RunOutcome {
+  label: string;
+  status: 'ok' | 'failed' | 'timedOut';
+  error?: string;
+}
+
+/**
+ * Await a set of best-effort runs under ONE shared deadline, reporting each run's outcome instead
+ * of swallowing it. Resolves at the budget even if some runs never settle, so the caller's total
+ * latency is bounded by `budgetMs` rather than by the slowest run.
+ */
+export async function settleWithinBudget(
+  runs: Array<{ label: string; promise: Promise<unknown> }>,
+  budgetMs: number,
+): Promise<RunOutcome[]> {
+  if (runs.length === 0) return [];
+  const TIMED_OUT = Symbol('timedOut');
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<typeof TIMED_OUT>((resolve) => {
+    timer = setTimeout(() => resolve(TIMED_OUT), budgetMs);
+  });
+  try {
+    return await Promise.all(runs.map(async ({ label, promise }): Promise<RunOutcome> => {
+      // Attach the handlers up front so an abandoned rejection never surfaces as unhandled.
+      const settled: Promise<RunOutcome> = promise.then(
+        () => ({ label, status: 'ok' as const }),
+        (e) => ({ label, status: 'failed' as const, error: e instanceof Error ? e.message : String(e) }),
+      );
+      const outcome = await Promise.race([settled, deadline]);
+      return outcome === TIMED_OUT ? { label, status: 'timedOut' } : outcome;
+    }));
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
+ * Fold run outcomes into the LLM-facing `queryExecution` block. Returns undefined when everything
+ * ran — a clean edit stays silent; a broken or hung query is never reported as plain success.
+ */
+function executionReport(outcomes: RunOutcome[]): {
+  failed?: string[]; timedOut?: string[]; note: string;
+} | undefined {
+  const failed = outcomes.filter((o) => o.status === 'failed').map((o) => `${o.label}: ${o.error}`);
+  const timedOut = outcomes.filter((o) => o.status === 'timedOut').map((o) => o.label);
+  if (failed.length === 0 && timedOut.length === 0) return undefined;
+  return {
+    ...(failed.length ? { failed } : {}),
+    ...(timedOut.length ? { timedOut } : {}),
+    note: 'The edit IS staged, but these queries did not return, so any results/screenshot below may '
+      + `be stale or empty for them (timed out = still running past this edit's ${Math.round(EMBED_RERUN_BUDGET_MS / 1000)}s wait, not cancelled). `
+      + 'Fix a FAILED query before continuing; for a timed-out one, re-check with ReviewFile or ReadFiles rather than assuming the content is broken.',
+  };
+}
 
 /**
  * Checks whether any parameter's source changed and, if so, verifies the referenced
@@ -278,6 +348,9 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
 
   // Auto-execute query for questions (agent sees results immediately)
   let vizPostValidation: string | null = null;
+  // Every best-effort re-run this edit triggers, and how it ended. Reported in `queryExecution`
+  // below: a failed/hung query used to be console.warn'd while the edit reported plain success.
+  const runOutcomes: RunOutcome[] = [];
   if (fileState?.type === 'question') {
     const updatedState = getStore().getState();
     const finalContent = selectMergedContent(updatedState, fileId) as any;
@@ -328,7 +401,13 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
           }
         }
       } catch (execErr) {
+        // Never fails the edit — but it IS reported (see queryExecution in the status).
         console.warn('[EditFile] Auto-execute failed (edit still staged):', execErr);
+        runOutcomes.push({
+          label: 'question query',
+          status: 'failed',
+          error: execErr instanceof Error ? execErr.message : String(execErr),
+        });
       }
     }
   }
@@ -370,6 +449,11 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
         await getQueryResult({ query: cell.query, params, database: cell.connection_name, filePath: fileState?.path });
       } catch (execErr) {
         console.warn('[EditFile] Notebook cell auto-execute failed (edit still staged):', execErr);
+        runOutcomes.push({
+          label: `notebook cell ${cell.id}`,
+          status: 'failed',
+          error: execErr instanceof Error ? execErr.message : String(execErr),
+        });
       }
     }
   }
@@ -387,16 +471,19 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
     // storyEmbedRuns is the SAME extraction the client + server augmentation use, so the params
     // (and therefore query hashes) match the cache the response reads from. Run the embeds in
     // PARALLEL (bounded by the shared querySemaphore) rather than serially — a story has many
-    // embeds, and N × latency serialized was a big contributor to slow/"hung" story edits. Each
-    // getQueryResult is bounded by QUERY_TIMEOUT_MS and honors the conversation's Stop signal.
-    // Best-effort: a failed/timed-out run never fails the staged edit.
-    await Promise.all(storyEmbedRuns(html, inheritedParams).map(r =>
-      getQueryResult(
-        { query: r.query, params: r.params, database: r.connection, filePath: fileState?.path },
-        { signal: context.signal },
-      ).catch(execErr => {
-        console.warn('[EditFile] Story embed auto-execute failed (edit still staged):', execErr);
-      }),
+    // embeds, and N × latency serialized was a big contributor to slow/"hung" story edits. The
+    // WAVE is bounded by EMBED_RERUN_BUDGET_MS, NOT by each query's own 120s timeout: one slow
+    // embed used to hold the whole tool call open for ~2 minutes. Best-effort: a failed or
+    // unfinished run never fails the staged edit — it is reported in `queryExecution` instead.
+    runOutcomes.push(...await settleWithinBudget(
+      storyEmbedRuns(html, inheritedParams).map(r => ({
+        label: `story embed [${r.query.replace(/\s+/g, ' ').slice(0, 60)}]`,
+        promise: getQueryResult(
+          { query: r.query, params: r.params, database: r.connection, filePath: fileState?.path },
+          { signal: context.signal, timeoutMs: EMBED_RERUN_BUDGET_MS },
+        ),
+      })),
+      EMBED_RERUN_BUDGET_MS,
     ));
   }
 
@@ -468,6 +555,7 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
   const titleWarning = fileState?.type && isTitleMissing(fileState.type, selectEffectiveName(getStore().getState(), fileId))
     ? missingTitleFeedback(fileState.type)
     : null;
+  const queryExecution = executionReport(runOutcomes);
   const status = {
     success: true,
     isDirty: true,
@@ -486,15 +574,27 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
     // The health rubric for the edited file. ALWAYS fix `error` findings (an error gates the
     // score to 0); try to fix `warn` findings. Full (screenshot + rules + visual judge) when
     // the view was captured; rules-only otherwise.
-    ...(review.rubric ? { rubric: review.rubric } : {}),
+    // Echoed COMPACT (see compactAgentRubric): every edit appends one of these to the conversation
+    // for good, so it carries the loop's fields (score, severity, title, fix) and not the prose.
+    ...(review.rubric ? { rubric: compactAgentRubric(review.rubric) } : {}),
     // Mid-load capture: the screenshot below shows embeds that were still loading — the note
     // tells the agent not to treat them as broken (and that the visual judge was skipped).
     ...(review.renderPending ? { renderNote: review.renderPending } : {}),
+    // A review step degraded (capture/upload failed, or the visual judge timed out).
+    ...(review.reviewNote ? { reviewNote: review.reviewNote } : {}),
+    // Queries this edit re-ran that failed or didn't finish in time — never silent success.
+    ...(queryExecution ? { queryExecution } : {}),
   };
   const augmentedDetails: AugmentedToolDetails = {
     __augmented: [{ file: entry, references: [] }],
     __jsonTag: 'Files',
     __status: status,
+    // Marks the screenshot below for the projection pass, which keeps only the LATEST screenshot
+    // per file and stubs the superseded ones (N edits of a story used to mean N full-view images
+    // in the prompt forever). Set ONLY when a screenshot exists — and note the invariant that lets
+    // the pass drop images wholesale: `imageBlocks` requires `!review.screenshotUrl`, so when this
+    // is set the screenshot IS the message's only image.
+    ...(review.screenshotUrl ? { __screenshotOf: fileId } : {}),
   };
   const screenshotBlocks = review.screenshotUrl
     ? [{ type: 'image_url', image_url: { url: review.screenshotUrl } }]
