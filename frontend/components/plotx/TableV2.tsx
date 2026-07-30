@@ -508,7 +508,9 @@ const TABLE_BASE_CSS = `
 :where(.table-v2-scroll .mx-type-icon-number) { color: #2980b9; }
 :where(.table-v2-scroll .mx-type-icon-date) { color: #9b59b6; }
 :where(.table-v2-scroll .mx-type-icon-json) { color: #1abc9c; }
-:where(.table-v2-scroll) :where(.mx-row-odd) { background: var(--muted); }
+:where(.table-v2-scroll) :where(.mx-row-odd) {
+  background: color-mix(in srgb, var(--foreground) 8%, var(--background));
+}
 :where(.table-v2-scroll .table-v2-row):hover { background: var(--accent); }
 :where(.table-v2-scroll .table-v2-cell) {
   border-right: 1px solid var(--border);
