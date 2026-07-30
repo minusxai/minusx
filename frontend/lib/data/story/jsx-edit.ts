@@ -45,6 +45,59 @@ export interface ApplyDomEditsResult {
 
 export const AST_PATH_DOM_ATTR = 'data-mx-ast';
 
+export interface JsxFormatEdit {
+  /** The target element's `data-mx-ast` path (dot-separated indexes into the node tree). */
+  astPath: string;
+  /** The element's full resolved class string; empty/whitespace removes the attribute. */
+  className?: string;
+  /** The element's full inline style STRING (CSS declaration list); empty removes the attribute. */
+  style?: string;
+}
+
+/**
+ * Set the `className` / `style` attributes of plain HTML elements at the given AST paths (the
+ * typography toolbar's commit path). Each present field is written verbatim (empty string
+ * removes the attribute); absent fields are left untouched. Components and unresolvable/stale
+ * paths are skipped — their chrome is render output, and a hostile path must never corrupt a
+ * story body. Returns `source` unchanged when nothing could be applied or the source doesn't
+ * parse. Never throws.
+ */
+export function applyFormatEditsToJsx(source: string, edits: JsxFormatEdit[]): string {
+  const parsed = parseJsx(source);
+  if (!parsed.ok) return source;
+  let applied = false;
+  for (const edit of edits) {
+    const node = resolveByPath(parsed.nodes, edit.astPath);
+    if (!node || node.type !== 'element' || node.isComponent) continue;
+    if (edit.className !== undefined) {
+      setCanonicalClassAttr(node, edit.className.trim());
+      applied = true;
+    }
+    if (edit.style !== undefined) {
+      const value = edit.style.trim();
+      setStaticJsxAttr(node, 'style', value === '' ? undefined : value);
+      applied = true;
+    }
+  }
+  return applied ? serializeJsx(parsed.nodes) : source;
+}
+
+/**
+ * Set the element's class attribute under the CANONICAL `className` spelling, replacing a
+ * legacy `class` attr (or an accidental class+className pair) in place — a format edit must
+ * never leave two spellings of the same attribute behind. Empty value removes the attribute.
+ */
+function setCanonicalClassAttr(el: JsxElement, value: string): void {
+  const isClassAttr = (a: JsxAttribute) => a.name === 'className' || a.name === 'class';
+  const first = el.attributes.findIndex(isClassAttr);
+  for (let i = el.attributes.length - 1; i >= 0; i--) {
+    if (isClassAttr(el.attributes[i])) el.attributes.splice(i, 1);
+  }
+  if (value === '') return;
+  const attr: JsxAttribute = { name: 'className', value: { static: true, json: value }, start: 0, end: 0 };
+  el.attributes.splice(first === -1 ? el.attributes.length : first, 0, attr);
+}
+
 // ---------------------------------------------------------------------------
 // Text-host predicate (which elements the editor may make contenteditable)
 // ---------------------------------------------------------------------------
@@ -268,7 +321,9 @@ function sanitizeAttrs(el: TmpElement, errors: ValidationError[]): JsxAttribute[
         continue;
       }
     }
-    out.push({ name: a.name, value: { static: true, json: a.value }, start: 0, end: 0 });
+    // Canonicalize: DOM innerHTML always serializes `class=`; the JSX source canon is className.
+    const name = lower === 'class' ? 'className' : a.name;
+    out.push({ name, value: { static: true, json: a.value }, start: 0, end: 0 });
   }
   return out;
 }

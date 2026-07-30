@@ -48,7 +48,7 @@ import { numberFromJsxAttrs } from '@/lib/data/story/story-number';
 import {
   isStorySqlParamSource, paramFromJsxAttrs, storyParamToQuestionParameter, type StoryParam,
 } from '@/lib/data/story/story-params';
-import { applyDomEditsToJsx, isEditableTextHost } from '@/lib/data/story/jsx-edit';
+import { applyDomEditsToJsx, applyFormatEditsToJsx, type JsxFormatEdit, isEditableTextHost } from '@/lib/data/story/jsx-edit';
 import { envelopeVizType } from '@/lib/viz/viz-templates';
 import type { QuestionParameter } from '@/lib/types';
 
@@ -92,11 +92,31 @@ export interface StoryJsxBodyProps {
   onEditNumber?: (req: NumberQueryEditRequest) => void;
   /** Imperative pending-edit access for AgentHtml's serialize() handle. */
   editApiRef?: RefObject<StoryJsxEditApi | null>;
+  /**
+   * Edit mode: fired when an editable text host gains/loses focus — anchors the typography
+   * toolbar. `null` on blur / session teardown.
+   */
+  onTextHostFocusChange?: (target: StoryTextHostTarget | null) => void;
 }
+
+/** The focused editable text host (typography-toolbar anchor). `el` lives in the iframe DOM. */
+export interface StoryTextHostTarget {
+  astPath: string;
+  el: HTMLElement;
+}
+
+/** A typography-toolbar edit: each present field is the attr's full new value ('' removes). */
+export type StoryFormatEdit = Omit<JsxFormatEdit, 'astPath'>;
 
 export interface StoryJsxEditApi {
   /** The current source with all pending edits applied — null when there is nothing to commit. */
   serialize: () => string | null;
+  /**
+   * Record a className/style edit for the element at `astPath` (typography toolbar commit).
+   * Staged in the edit session beside contenteditable edits — every commit composes BOTH kinds
+   * against the current source, and onChange fires immediately with the composed result.
+   */
+  applyFormatEdit: (astPath: string, edit: StoryFormatEdit) => void;
 }
 
 /**
@@ -107,12 +127,14 @@ export interface StoryJsxEditApi {
  */
 interface EditSession {
   /** Sync the latest props in (post-commit, before any user event can fire). */
-  setProps: (jsx: string, onChange?: (story: string) => void) => void;
+  setProps: (jsx: string, onChange?: (story: string) => void, onFocusChange?: (target: StoryTextHostTarget | null) => void) => void;
   /** True while `path` is the focused host — its rendered subtree must stay frozen. */
   isEditing: (path: string) => boolean;
   onFocus: (path: string, el: HTMLElement) => void;
   onInput: () => void;
   onBlur: () => void;
+  /** Stage a className/style edit for the element at `path` (typography toolbar) and fire onChange. */
+  applyFormatEdit: (path: string, edit: StoryFormatEdit) => void;
   /** Current source with all pending edits applied; null when there is nothing to commit. */
   serialize: () => string | null;
 }
@@ -120,19 +142,31 @@ interface EditSession {
 function createEditSession(): EditSession {
   let jsx = '';
   let onChange: ((story: string) => void) | undefined;
+  let onFocusChange: ((target: StoryTextHostTarget | null) => void) | undefined;
   let active: { path: string; el: HTMLElement; snapshot: string; userEdited: boolean } | null = null;
   // Committed edits (astPath → innerHTML), ALL re-applied against the CURRENT source prop on
   // every commit — sequential edits compose even though the rendered AST stays the original's.
   const edits = new Map<string, string>();
+  // Staged className/style edits (astPath → attr values, typography toolbar). Composed AFTER the
+  // innerHTML edits on EVERY commit — a text-edit blur must never re-derive the source without
+  // the format changes, and vice versa (the no-clobber invariant).
+  const formatEdits = new Map<string, Omit<JsxFormatEdit, 'astPath'>>();
   const asEdits = (m: Map<string, string>) => [...m].map(([astPath, innerHtml]) => ({ astPath, innerHtml }));
+  const composed = (inner: Map<string, string>) =>
+    applyFormatEditsToJsx(
+      applyDomEditsToJsx(jsx, asEdits(inner)).source,
+      [...formatEdits].map(([astPath, edit]) => ({ astPath, ...edit })),
+    );
   return {
-    setProps(nextJsx, nextOnChange) {
+    setProps(nextJsx, nextOnChange, nextOnFocusChange) {
       jsx = nextJsx;
       onChange = nextOnChange;
+      onFocusChange = nextOnFocusChange;
     },
     isEditing: (path) => active?.path === path,
     onFocus(path, el) {
       active = { path, el, snapshot: el.innerHTML, userEdited: false };
+      onFocusChange?.({ astPath: path, el });
     },
     onInput() {
       if (active) active.userEdited = true;
@@ -140,11 +174,16 @@ function createEditSession(): EditSession {
     onBlur() {
       const a = active;
       active = null;
+      onFocusChange?.(null);
       // Real user input only (the legacy userEdited gate): programmatic focus churn from
       // embeds mounting/unmounting must never echo a serialization into the file.
       if (!a || !a.userEdited || a.el.innerHTML === a.snapshot) return;
       edits.set(a.path, a.el.innerHTML);
-      onChange?.(applyDomEditsToJsx(jsx, asEdits(edits)).source);
+      onChange?.(composed(edits));
+    },
+    applyFormatEdit(path, edit) {
+      formatEdits.set(path, { ...formatEdits.get(path), ...edit });
+      onChange?.(composed(edits));
     },
     serialize() {
       // Committed edits + the in-progress one (Save can land before the host blurs).
@@ -152,8 +191,8 @@ function createEditSession(): EditSession {
       if (active && active.userEdited && active.el.innerHTML !== active.snapshot) {
         pending.set(active.path, active.el.innerHTML);
       }
-      if (pending.size === 0) return null;
-      return applyDomEditsToJsx(jsx, asEdits(pending)).source;
+      if (pending.size === 0 && formatEdits.size === 0) return null;
+      return composed(pending);
     },
   };
 }
@@ -367,7 +406,7 @@ const NO_NODES: JsxNode[] = [];
 
 export default function StoryJsxBody({
   doc, jsx, readOnly, paramValues, onParamValuesChange, filePath, colorMode, editable, onChange,
-  onEditQuestion, onEditNumber, onEditParamQuery, editApiRef,
+  onEditQuestion, onEditNumber, onEditParamQuery, editApiRef, onTextHostFocusChange,
 }: StoryJsxBodyProps) {
   const parsed = useMemo(() => parseJsx(jsx), [jsx]);
 
@@ -377,12 +416,15 @@ export default function StoryJsxBody({
   // against the current props.
   const session = useMemo(() => createEditSession(), []);
   useEffect(() => {
-    session.setProps(jsx, onChange);
-  }, [session, jsx, onChange]);
+    session.setProps(jsx, onChange, onTextHostFocusChange);
+  }, [session, jsx, onChange, onTextHostFocusChange]);
 
   useEffect(() => {
     if (!editApiRef) return;
-    editApiRef.current = { serialize: () => session.serialize() };
+    editApiRef.current = {
+      serialize: () => session.serialize(),
+      applyFormatEdit: (astPath, edit) => session.applyFormatEdit(astPath, edit),
+    };
     return () => { editApiRef.current = null; };
   }, [editApiRef, session]);
 

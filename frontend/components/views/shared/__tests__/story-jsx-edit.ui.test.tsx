@@ -11,7 +11,8 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { createRef } from 'react';
-import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
+import { screen, waitFor, within, fireEvent } from '@testing-library/react';
+import { renderWithProviders as render } from '@/test/helpers/render-with-providers';
 
 vi.mock('@/components/views/story/InlineNumber', async () => {
   const React = await import('react');

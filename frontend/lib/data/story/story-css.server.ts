@@ -9,6 +9,7 @@
 import 'server-only';
 import { compile } from '@tailwindcss/node';
 import { STORY_UI_RECIPE_CLASSES } from '@/lib/story-ui/recipe-classes';
+import { STORY_TYPOGRAPHY_CLASSES } from './typography';
 import { storyThemeCss } from './story-themes';
 import { COLOR_PALETTE } from '@/lib/chart/chart-theme';
 import { partitionBannedCandidates } from './banned-css';
@@ -146,6 +147,16 @@ ${storyThemeCss()}
 `;
 }
 
+/**
+ * The recipe union every story compiles against: kit/embed-chrome classes + the typography
+ * toolbar's palette (pre-baked so applying a class is an instant DOM change — no recompile).
+ * Feeds BOTH the compile candidate set and storyCssCompileVersion's hash source, so growing
+ * either list flips the version and stale stories recompile at read time.
+ */
+export const STORY_RECIPE_UNION: readonly string[] = [
+  ...new Set([...STORY_UI_RECIPE_CLASSES, ...STORY_TYPOGRAPHY_CLASSES]),
+];
+
 const TW_INPUT_JSX = `${TW_INPUT}
 ${SHADCN_THEME_MAPPING}
 :root ${withAppCharts(SHADCN_NEUTRAL_LIGHT_BODY)}
@@ -257,7 +268,7 @@ async function compileStoryCssUncached(story: string, opts?: { force?: boolean }
   // additive (host-scoped), so legacy authored css is unaffected.
   const jsx = !!opts?.force;
   const compiler = await compile(TW_INPUT_JSX, { base: process.cwd(), onDependency: () => {} });
-  let candidates = [...new Set([...extractClassCandidates(story), ...STORY_UI_RECIPE_CLASSES])].sort();
+  let candidates = [...new Set([...extractClassCandidates(story), ...STORY_RECIPE_UNION])].sort();
   if (jsx) {
     // Banned-CSS guard (Story_Design_V2 §4) — a SEPARATE, explicit step BEFORE compile, never
     // folded into buildSalvaging's error-bisect: a guard reject must be a deliberate drop, not a
@@ -307,7 +318,7 @@ export async function compileChromeCss(candidates: string[]): Promise<string> {
  * no manual version bumps.
  */
 export function storyCssCompileVersion(): string {
-  const src = `${STORY_UI_RECIPE_CLASSES.join(' ')}|${storyThemeCss()}`;
+  const src = `${STORY_RECIPE_UNION.join(' ')}|${storyThemeCss()}`;
   // djb2 — stability matters, cryptographic strength doesn't.
   let h = 5381;
   for (let i = 0; i < src.length; i++) h = ((h << 5) + h + src.charCodeAt(i)) | 0;
