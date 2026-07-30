@@ -1,9 +1,9 @@
 
 import { randomUUID } from 'crypto';
 import { EventStream, streamSimple } from '@/orchestrator/llm';
-import type { Api, AssistantMessage, AssistantMessageEvent, Context, Message, Model, TextContent, ToolCall, ToolResultMessage } from '@/orchestrator/llm';
+import type { Api, AssistantMessage, Context, Message, Model, TextContent, ToolCall, ToolResultMessage } from '@/orchestrator/llm';
 import {
-  isContentStreamEvent, shouldRetryLlmCall, abortableDelay, retryBackoffMs, MAX_LLM_CALL_RETRIES,
+  isUserVisibleStreamEvent, shouldRetryLlmCall, abortableDelay, retryBackoffMs, MAX_LLM_CALL_RETRIES,
 } from '@/orchestrator/llm/retry';
 import {
   MXAgent,
@@ -196,17 +196,19 @@ export class Orchestrator {
         let result: AssistantMessage | null = null;
         let errored = false;
         let errorReason: 'aborted' | 'error' | undefined;
-        let errorEv: Extract<AssistantMessageEvent, { type: 'error' }> | null = null;
-        let emitted = false; // did any visible/committable content reach the client this attempt?
+        let emitted = false; // did any USER-VISIBLE content reach the client this attempt?
         try {
           for await (const ev of modelStream) {
-            // The transient error is the terminal event; HOLD it instead of pushing downstream, so a
-            // re-issue can supersede it without the turn runner latching its first `runError`.
-            if (ev.type === 'error') { result = ev.error; errored = true; errorReason = ev.reason; errorEv = ev; }
+            // The terminal error event is HELD, never pushed downstream: a re-issue supersedes it,
+            // and a non-retried failure surfaces via the THROW below — run()/resume() synthesize
+            // exactly one error event at the run boundary, while a failed SUB-AGENT dispatch
+            // converts the throw into an isError toolResult (no run error at all). Forwarding the
+            // raw event here would latch the turn runner's `runError` even when the parent recovers.
+            if (ev.type === 'error') { result = ev.error; errored = true; errorReason = ev.reason; }
             else {
               this.stream?.push({ ...ev, parent_id: agentId });
               if (ev.type === 'done') result = ev.message;
-              else if (isContentStreamEvent(ev.type)) emitted = true;
+              else if (isUserVisibleStreamEvent(ev)) emitted = true;
             }
           }
         } finally {
@@ -224,23 +226,30 @@ export class Orchestrator {
           }
         }
 
-        if (errored) {
+        // A SILENT end — the iterator finished with neither a done nor an error event (e.g. an
+        // upstream SSE close that never surfaced a terminal event) — is a dropped stream too.
+        // Route it through the SAME retry policy (same attempt budget) instead of throwing
+        // straight away; its synthetic message matches the transient allowlist by construction.
+        const silentEnd = !errored && !result;
+        if (errored || silentEnd) {
           const aborted = this.controller?.signal?.aborted ?? false;
+          const errorMessage = silentEnd
+            ? `LLM stream ended without done/error event (agent=${agentId})`
+            : result?.errorMessage;
           const willRetry = shouldRetryLlmCall({
-            reason: errorReason, emitted, aborted,
-            errorMessage: result?.errorMessage, attempt, maxRetries: MAX_LLM_CALL_RETRIES,
+            reason: silentEnd ? 'error' : errorReason, emitted, aborted,
+            errorMessage, attempt, maxRetries: MAX_LLM_CALL_RETRIES,
           });
           // Measurement: log every drop with whether content had streamed + whether we retried, so
           // production reveals the pre-/post-first-token split (informs whether a delta-reset is worth it).
-          console.warn(`[callLLM] LLM stream drop (agent=${agentId}, attempt=${attempt}, emitted=${emitted}, reason=${errorReason}, willRetry=${willRetry}): ${result?.errorMessage ?? ''}`);
+          console.warn(`[callLLM] LLM stream drop (agent=${agentId}, attempt=${attempt}, emitted=${emitted}, reason=${silentEnd ? 'silent-end' : errorReason}, willRetry=${willRetry}): ${errorMessage ?? ''}`);
           if (willRetry) {
             await abortableDelay(retryBackoffMs(attempt), this.controller?.signal);
             if (!this.controller?.signal?.aborted) continue; // re-issue; the held error event is dropped
           }
         }
 
-        // Not retrying: forward the (deferred) terminal error event downstream, exactly as before.
-        if (errorEv) this.stream?.push({ ...errorEv, parent_id: agentId });
+        // Not retrying: surface via throw (see the HOLD note above — no raw error event is pushed).
         if (!result) {
           throw new Error(`callLLM: LLM stream ended without done/error event (agent=${agentId})`);
         }
@@ -473,9 +482,30 @@ export class Orchestrator {
           // pending events at the deepest level (this same code path, leaf
           // branch). The bubble-up shouldn't re-emit.
           this.onActivity?.({ phase: 'agent', status: 'start', name: tc.name });
-          const subFinal = await instance.run();
-          this.onActivity?.({ phase: 'agent', status: 'end', name: tc.name });
-          this.appendAgentResult(subFinal, instance, parent);
+          try {
+            const subFinal = await instance.run();
+            this.onActivity?.({ phase: 'agent', status: 'end', name: tc.name });
+            this.appendAgentResult(subFinal, instance, parent);
+          } catch (err) {
+            this.onActivity?.({ phase: 'agent', status: 'end', name: tc.name });
+            if (err instanceof UserInputException) throw err; // paused, not failed
+            // Sub-agent hard failure (e.g. its LLM calls exhausted the retry budget). Mirror the
+            // leaf-tool branch: complete the dispatch tool call with an `isError: true` toolResult
+            // so the PARENT agent sees the failure and can react (retry, tell the user) — instead
+            // of the whole run hard-failing. Log invariants hold: the toolCall reaches a completed
+            // state (no dangling pending), exactly like `appendAgentResult`'s error-free path.
+            const errorMsg = err instanceof Error ? err.message : String(err);
+            const errTrm: ToolResultMessage = {
+              role: 'toolResult',
+              toolCallId: tc.id,
+              toolName: tc.name,
+              content: [{ type: 'text', text: `Sub-agent execution error: ${errorMsg}` }],
+              isError: true,
+              timestamp: Date.now(),
+            };
+            this.log.push({ ...errTrm, parent_id: parent.id });
+            parent.toolThread.push(errTrm);
+          }
           return;
         }
 

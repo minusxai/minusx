@@ -6,7 +6,7 @@
  */
 import {
   isRetryableStreamError,
-  isContentStreamEvent,
+  isUserVisibleStreamEvent,
   shouldRetryLlmCall,
   MAX_LLM_CALL_RETRIES,
 } from '@/orchestrator/llm/retry';
@@ -42,15 +42,37 @@ describe('isRetryableStreamError', () => {
   });
 });
 
-describe('isContentStreamEvent', () => {
-  it.each(['text_delta', 'thinking_delta', 'toolcall_delta', 'text_end', 'thinking_end', 'toolcall_end'])(
-    'content event (would garble on retry): %s',
-    (t) => expect(isContentStreamEvent(t)).toBe(true),
-  );
-  it.each(['start', 'text_start', 'thinking_start', 'toolcall_start', 'done', 'error'])(
-    'structural / terminal event (safe): %s',
-    (t) => expect(isContentStreamEvent(t)).toBe(false),
-  );
+describe('isUserVisibleStreamEvent', () => {
+  // USER-VISIBLE: text/thinking with actual content — these reach the client live (the turn
+  // runner forwards text/thinking deltas as ephemeral typing), so a retry after them would
+  // duplicate visible output.
+  it.each([
+    { type: 'text_delta', delta: 'hello' },
+    { type: 'thinking_delta', delta: 'reasoning…' },
+    { type: 'text_end', content: 'final text' },
+    { type: 'thinking_end', content: 'final thought' },
+  ])('user-visible (would garble on retry): $type', (ev) => {
+    expect(isUserVisibleStreamEvent(ev)).toBe(true);
+  });
+
+  // NOT user-visible: tool-call arg streaming never reaches a user surface (only COMMITTED log
+  // entries render tool activity, and a failed attempt is never committed); whitespace-only text
+  // renders as nothing; structural/terminal events carry no content.
+  it.each([
+    { type: 'toolcall_delta', delta: '{"fileIds":[21' },
+    { type: 'toolcall_end' },
+    { type: 'toolcall_start' },
+    { type: 'text_delta', delta: '  \n' },
+    { type: 'thinking_delta', delta: '' },
+    { type: 'text_end', content: ' ' },
+    { type: 'start' },
+    { type: 'text_start' },
+    { type: 'thinking_start' },
+    { type: 'done' },
+    { type: 'error' },
+  ])('not user-visible (safe to re-issue): $type', (ev) => {
+    expect(isUserVisibleStreamEvent(ev)).toBe(false);
+  });
 });
 
 describe('shouldRetryLlmCall', () => {

@@ -45,6 +45,14 @@ const TERMINAL_PATTERNS: { reason: TerminalErrorReason; patterns: RegExp[] }[] =
       /maximum context/i,
       /too many tokens/i,
       /exceeds?.{0,20}(context|token)/i,
+      // stopReason 'length' truncation (orchestrator/types.ts `MXAgent.llm`). BOTH variants are
+      // deterministic — the context-clamp one is a context overflow, and the output-cap one
+      // ("hit the maximum output length") re-streams the same long response into the same cap on
+      // every identical re-run — so neither may fall through to the transient default (the "Try
+      // again just re-fails" gap). Classified under context_length: the banner copy ("grew too
+      // long or hit a limit — start a new chat") is accurate for both.
+      /stop reason 'length'/i,
+      /maximum output length/i,
     ],
   },
   {

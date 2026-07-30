@@ -62,12 +62,29 @@ export function isRetryableStreamError(errorMessage: string | null | undefined):
   return RETRYABLE_STREAM_ERROR_PATTERNS.some((re) => re.test(errorMessage));
 }
 
-/** True for a stream event that carried visible/committable content (a delta or a finalized block).
- *  Structural events (`start`, `text_start`, …) and the terminal `done`/`error` don't count — so a
- *  drop with `emitted === false` means "nothing reached the client yet", the only case safe to retry
- *  without garbling an in-progress message (there is no mid-turn delta reset). */
-export function isContentStreamEvent(type: string): boolean {
-  return /_(?:delta|end)$/.test(type);
+/**
+ * True for a stream event whose content is USER-VISIBLE mid-stream — the only emissions that make a
+ * re-issue unsafe (a retry restarts the assistant message, so anything already shown would render
+ * twice; there is no mid-turn delta reset). Concretely:
+ *  - `text_*` / `thinking_*` deltas and finalized blocks with non-whitespace content ARE visible:
+ *    the turn runner forwards text/thinking deltas to the client as live typing.
+ *  - `toolcall_*` events are NOT: tool-call argument streaming never reaches a user surface — tool
+ *    activity renders only from COMMITTED log entries, and a failed attempt's partial message is
+ *    discarded (never logged, never committed). This is the common agentic-turn drop (mid
+ *    tool-call args), so it stays retryable.
+ *  - Structural events (`start`, `*_start`) and the terminal `done`/`error` carry no content.
+ */
+export function isUserVisibleStreamEvent(ev: { type: string; delta?: string; content?: string }): boolean {
+  switch (ev.type) {
+    case 'text_delta':
+    case 'thinking_delta':
+      return (ev.delta ?? '').trim() !== '';
+    case 'text_end':
+    case 'thinking_end':
+      return (ev.content ?? '').trim() !== '';
+    default:
+      return false;
+  }
 }
 
 /**
@@ -75,7 +92,8 @@ export function isContentStreamEvent(type: string): boolean {
  *  - `reason === 'error'` only: a `'aborted'` event is a user Stop, never retried (STRUCTURAL guard —
  *    pi-ai sets reason from `signal.aborted`, so we don't string-match "aborted"/"terminated").
  *  - `!aborted`: belt-and-suspenders for a Stop that lands between the event and this check.
- *  - `!emitted`: never retry after content has streamed (would garble the in-progress message).
+ *  - `!emitted`: never retry after USER-VISIBLE content has streamed (see
+ *    `isUserVisibleStreamEvent` — tool-arg deltas don't count, so mid-tool-call drops retry).
  *  - `attempt < maxRetries`: bounded so it always converges.
  *  - `isRetryableStreamError`: the transient-transport allowlist.
  */
