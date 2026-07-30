@@ -179,7 +179,9 @@ export async function deleteConnectionFiles(
   connectionName: string,
 ): Promise<boolean> {
   if (isLocalObjectStore()) {
-    const dir = resolve(join(LOCAL_UPLOAD_PATH, `csvs/${mode}/${connectionName}`));
+    // Physical, not logical: the unprefixed directory is not where the files are, so a
+    // raw join deletes nothing and reports success — orphaning every uploaded parquet.
+    const dir = resolve(join(LOCAL_UPLOAD_PATH, await resolveObjectKey(`csvs/${mode}/${connectionName}`)));
     try {
       rmSync(dir, { recursive: true, force: true });
       return true;
@@ -190,7 +192,7 @@ export async function deleteConnectionFiles(
 
   if (!OBJECT_STORE_BUCKET) return false;
   const s3 = makeS3();
-  const prefix = `csvs/${mode}/${connectionName}/`;
+  const prefix = `${await resolveObjectKey(`csvs/${mode}/${connectionName}`)}/`;
 
   const keys: string[] = [];
   let token: string | undefined;
@@ -219,8 +221,11 @@ export async function deleteConnectionFiles(
 
 /** Delete a single stored file by key. */
 export async function deleteS3File(s3Key: string): Promise<void> {
+  // Physical key: the logical one points at a path that does not exist, so the unlink
+  // silently no-ops (ENOENT is swallowed) and the object is never actually deleted.
+  const physical = await resolveObjectKey(s3Key);
   if (isLocalObjectStore()) {
-    const filePath = resolve(join(LOCAL_UPLOAD_PATH, s3Key));
+    const filePath = resolve(join(LOCAL_UPLOAD_PATH, physical));
     try { unlinkSync(filePath); } catch (err: any) {
       if (err.code !== 'ENOENT') throw err;
     }
@@ -228,7 +233,7 @@ export async function deleteS3File(s3Key: string): Promise<void> {
   }
   if (!OBJECT_STORE_BUCKET) throw new Error('OBJECT_STORE_BUCKET is not configured');
   const s3 = makeS3();
-  await s3.send(new DeleteObjectCommand({ Bucket: OBJECT_STORE_BUCKET, Key: s3Key }));
+  await s3.send(new DeleteObjectCommand({ Bucket: OBJECT_STORE_BUCKET, Key: physical }));
 }
 
 // ─── DuckDB metadata extraction ───────────────────────────────────────────────

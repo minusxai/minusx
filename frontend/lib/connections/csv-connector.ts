@@ -12,6 +12,7 @@ import {
 import { NodeConnector, SchemaEntry, QueryResult, QueryStream } from './base';
 import { duckDbStreamFromConn } from './duckdb-stream';
 import { inlineSqlParams } from '@/lib/sql/inline-params';
+import { resolveObjectKey } from '@/lib/object-store';
 
 // ---------------------------------------------------------------------------
 // Config shape
@@ -93,9 +94,14 @@ async function initInstance(
         schemas.add(file.schema_name);
       }
 
+      // resolveObjectKey, not the raw s3_key: DuckDB reads the object itself rather than
+      // going through the store, so it has to apply the SAME prefix the store applied on
+      // write. Joining the logical key directly looks right and reads the wrong directory
+      // — the file is there, just not where this looked.
+      const physicalKey = await resolveObjectKey(file.s3_key);
       const fileUrl = isLocal
-        ? join(LOCAL_UPLOAD_PATH, file.s3_key)
-        : `s3://${OBJECT_STORE_BUCKET ?? ''}/${file.s3_key}`;
+        ? join(LOCAL_UPLOAD_PATH, physicalKey)
+        : `s3://${OBJECT_STORE_BUCKET ?? ''}/${physicalKey}`;
 
       const readExpr = file.file_format === 'parquet'
         ? `read_parquet('${fileUrl}')`
@@ -108,7 +114,11 @@ async function initInstance(
 
     // Lock down DuckDB access to the storage prefix of the uploaded files only.
     // allowed_directories must be set BEFORE disabling external access.
-    const storagePrefix = files[0]?.s3_key.split('/')[0] ?? '';
+    // Also from the PHYSICAL key: the allow-list has to name the directory the reads
+    // actually target, or every read is refused once external access is disabled.
+    const storagePrefix = files[0]
+      ? (await resolveObjectKey(files[0].s3_key)).split('/')[0]
+      : '';
     if (isLocal && storagePrefix) {
       await conn.run(`SET allowed_directories = ['${join(LOCAL_UPLOAD_PATH, storagePrefix)}/']`);
     } else if (!isLocal && OBJECT_STORE_BUCKET && storagePrefix) {
