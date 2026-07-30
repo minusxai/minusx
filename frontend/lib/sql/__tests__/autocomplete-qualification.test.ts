@@ -14,10 +14,10 @@ import type { DatabaseWithSchema } from '@/lib/types';
 const SCHEMA: DatabaseWithSchema[] = [{
   databaseName: 'mxbi',
   schemas: [{
-    schema: 'V3minusx_prod',
+    schema: 'warehouse_v3',
     tables: [
       { table: 'app_events', columns: [{ name: 'id', type: 'INTEGER' }] },
-      { table: 'companies', columns: [{ name: 'id', type: 'INTEGER' }] },
+      { table: 'accounts', columns: [{ name: 'id', type: 'INTEGER' }] },
     ],
   }],
 }] as unknown as DatabaseWithSchema[];
@@ -31,29 +31,29 @@ describe('table completion — dialects requiring dataset qualification', () => 
   test('BigQuery offers only the qualified table name in a FROM clause', async () => {
     const labels = await labelsFor('select * from ', 'bigquery');
 
-    expect(labels).toContain('V3minusx_prod.app_events');
-    expect(labels).toContain('V3minusx_prod.companies');
+    expect(labels).toContain('warehouse_v3.app_events');
+    expect(labels).toContain('warehouse_v3.accounts');
     expect(labels).not.toContain('app_events');
-    expect(labels).not.toContain('companies');
+    expect(labels).not.toContain('accounts');
   });
 
   test('BigQuery still offers the dataset itself, so `dataset.` dot-completion works', async () => {
     const labels = await labelsFor('select * from ', 'bigquery');
-    expect(labels).toContain('V3minusx_prod');
+    expect(labels).toContain('warehouse_v3');
   });
 
   test('BigQuery stays qualified-only on the unparseable fallback path', async () => {
     // No parseable AST — exercises getAllTablesUnfiltered rather than getTableCompletions.
     const labels = await labelsFor('from ', 'bigquery');
 
-    expect(labels).toContain('V3minusx_prod.app_events');
+    expect(labels).toContain('warehouse_v3.app_events');
     expect(labels).not.toContain('app_events');
   });
 
   test('BigQuery dot-completion after `dataset.` still inserts the bare table name', async () => {
     const suggestions = await getCompletionsLocal(
-      'select * from V3minusx_prod.',
-      'select * from V3minusx_prod.'.length,
+      'select * from warehouse_v3.',
+      'select * from warehouse_v3.'.length,
       SCHEMA,
       'bigquery',
     );
@@ -65,7 +65,7 @@ describe('table completion — dialects requiring dataset qualification', () => 
     const labels = await labelsFor('select * from ', 'duckdb');
 
     expect(labels).toContain('app_events');
-    expect(labels).toContain('V3minusx_prod.app_events');
+    expect(labels).toContain('warehouse_v3.app_events');
   });
 });
 
@@ -81,7 +81,7 @@ describe('connection type → parser dialect', () => {
 
     expect(csv).toEqual(duckdb);
     // The qualified form is only produced by the parsed path, never by the fallback.
-    expect(csv).toContain('V3minusx_prod.app_events');
+    expect(csv).toContain('warehouse_v3.app_events');
   });
 
   test('Google Sheets connections reach the parsed path, same as DuckDB', async () => {
@@ -91,7 +91,7 @@ describe('connection type → parser dialect', () => {
 
   test('dialects whose name differs from the connection type still parse', async () => {
     for (const type of ['postgresql', 'athena', 'sqlite', 'clickhouse', 'bigquery']) {
-      expect(await labelsFor('select * from ', type)).toContain('V3minusx_prod.app_events');
+      expect(await labelsFor('select * from ', type)).toContain('warehouse_v3.app_events');
     }
   });
 });
