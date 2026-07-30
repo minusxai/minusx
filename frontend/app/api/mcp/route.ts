@@ -191,9 +191,9 @@ export async function DELETE(request: NextRequest): Promise<Response> {
  * MCP requests carry their namespace in a bearer token, not in the host, so it has to
  * be resolved here rather than by middleware.
  *
- * `with()` scopes it to this handler. The previous `addHeaders` call established it
- * ambiently via `enterWith`, which cannot be unset and therefore persists onto whatever
- * runs next on the same async context.
+ * `with()` scopes it to this handler, deliberately rather than setting it ambiently for
+ * the async context: an ambient value cannot be unset, so it persists onto whatever runs
+ * next on the same context — which, for a pooled server, is an unrelated request.
  */
 async function withNamespace(
   request: NextRequest,
