@@ -28,7 +28,7 @@ import { selectEffectiveUser } from '@/store/authSlice';
 import { selectAppState } from '@/store/appStateSelector';
 import { selectUnrestrictedMode } from '@/store/uiSlice';
 import type { FrontendToolHandler } from './types';
-import { deterministicAgentRubric } from './file-review';
+import { compactAgentRubric, deterministicAgentRubric } from './file-review';
 import { vizWarningForQuestion } from './viz-warning';
 import { cacheSpreadsheetSource } from '@/lib/spreadsheet/result-cache';
 import { getSpreadsheetExecution } from '@/lib/spreadsheet/materialize';
@@ -258,7 +258,9 @@ export const createFileHandler: FrontendToolHandler = async (args, context) => {
     __jsonTag: 'Files',
     __status: {
       success: true,
-      ...(rubric ? { rubric } : {}),
+      // Echoed COMPACT (see compactAgentRubric): like EditFile, every create appends one of these
+      // to the conversation permanently — the full rubric stays in `result` for the chat UI only.
+      ...(rubric ? { rubric: compactAgentRubric(rubric) } : {}),
       ...(vizWarning ? { vizWarning } : {}),
       ...(createValidation.length ? { validation: createValidation } : {}),
     },

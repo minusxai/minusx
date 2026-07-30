@@ -75,6 +75,21 @@ describe('CreateFile / EditFile — rubric v2 feedback', () => {
     expect(findings.some((f: any) => f.ruleId === 'question.undeclared-param' && f.severity === 'error')).toBe(true);
   });
 
+  it('CreateFile echoes the COMPACT rubric in its projected status (no source/deduction prose)', async () => {
+    const res = await executeToolCall(tool('CreateFile', {
+      file_type: 'question', path: '/org', name: 'Broken Q2',
+      content: { query: 'SELECT * FROM t WHERE d > :start', parameters: [] },
+    }));
+    const status = (res.details as any).__status;
+    expect(status.rubric).toBeDefined();
+    const findings = status.rubric.categories.flatMap((c: any) => c.findings);
+    expect(findings.length).toBeGreaterThan(0);
+    for (const f of findings) {
+      expect(f).not.toHaveProperty('source');
+      expect(f).not.toHaveProperty('deduction');
+    }
+  });
+
   it('EditFile returns a rubric in its status (deterministic fallback when no view is mounted)', async () => {
     const create = parse(await executeToolCall(tool('CreateFile', {
       file_type: 'question', path: '/org', name: 'Clean Q',
