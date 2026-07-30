@@ -8,7 +8,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withAuth } from '@/lib/http/with-auth';
+import { withAuthSkippingDataVersionGate } from '@/lib/http/with-auth';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { ApiErrors, handleApiError } from '@/lib/http/api-responses';
 import { exportDatabase, atomicImport } from '@/lib/database/import-export';
@@ -17,7 +17,9 @@ import { getDataVersion, getSchemaVersion, setDataVersion, setSchemaVersion } fr
 import { applyMigrations, getTargetVersions, needsSchemaMigration, MIGRATIONS } from '@/lib/database/migrations';
 import { LATEST_SCHEMA_VERSION } from '@/lib/database/constants';
 
-export const POST = withAuth(async (request: NextRequest, user) => {
+// Exempt from the data-version gate on purpose: this is the route that CLEARS a failing
+// gate, so gating it would make the refusal unescapable.
+export const POST = withAuthSkippingDataVersionGate(async (request: NextRequest, user) => {
   if (!isAdmin(user.role)) {
     return ApiErrors.forbidden('Admin access required');
   }
