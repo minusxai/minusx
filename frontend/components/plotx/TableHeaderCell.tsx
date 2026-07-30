@@ -24,7 +24,7 @@ const TEAL = 'var(--mx-table-accent, #16a085)'
 
 // Small 16px icon-button used for the sort/filter/format toggles.
 const toggleBtnClass = (active: boolean) =>
-  `flex h-4 w-4 cursor-pointer items-center justify-center rounded-sm transition-all duration-150 ${
+  `h-4 w-4 cursor-pointer items-center justify-center rounded-sm transition-all duration-150 ${
     active ? 'opacity-100' : 'opacity-50 hover:opacity-100 hover:bg-muted'
   }`
 
@@ -155,7 +155,7 @@ export const TableHeaderCell = ({
             {/* Sort indicator / toggle */}
             <button
               onClick={header.column.getToggleSortingHandler()}
-              className={toggleBtnClass(!!isSorted)}
+              className={`${toggleBtnClass(!!isSorted)} mx-header-toggle mx-sort-icon`}
               style={isSorted ? { background: TEAL } : undefined}
             >
               {isSorted === 'asc' ? (
@@ -171,7 +171,7 @@ export const TableHeaderCell = ({
               <button
                 data-filter-anchor={header.id}
                 onClick={() => setActiveFilterCol(prev => prev === header.id ? null : header.id)}
-                className={toggleBtnClass(hasActiveFilter)}
+                className={`${toggleBtnClass(hasActiveFilter)} mx-header-toggle mx-filter-icon`}
                 style={hasActiveFilter ? { background: TEAL } : undefined}
               >
                 <LuFilter className={`size-2.5 ${hasActiveFilter ? 'text-white' : 'text-muted-foreground'}`} />
@@ -185,7 +185,7 @@ export const TableHeaderCell = ({
                   data-format-anchor={header.id}
                   aria-label={`Format column ${header.id}`}
                   onClick={() => setActiveFormatCol(prev => prev === header.id ? null : header.id)}
-                  className={toggleBtnClass(hasFormat)}
+                  className={`${toggleBtnClass(hasFormat)} mx-header-toggle`}
                   style={hasFormat ? { background: TEAL } : undefined}
                 >
                   <LuSettings2 className={`size-2.5 ${hasFormat ? 'text-white' : 'text-muted-foreground'}`} />

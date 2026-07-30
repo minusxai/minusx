@@ -91,8 +91,15 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
   // (custom is derived from the spec, never stored). Pure UI state: any family
   // click exits; the envelope is untouched throughout.
   const [customPreview, setCustomPreview] = useState(false);
-  // Draft for the DOM-tier css textarea — committed to the envelope on blur.
+  // Draft for the DOM-tier css textarea — committed explicitly with Update.
   const [cssDraft, setCssDraft] = useState<string | null>(null);
+  const savedCss = getVizCss(envelope) ?? '';
+  const cssDirty = cssDraft !== null && cssDraft !== savedCss;
+  const commitCss = () => {
+    if (!cssDirty || cssDraft == null) return;
+    onVizChange(setVizCss(envelope, cssDraft));
+    setCssDraft(null);
+  };
   // Draft for the histogram Max-bins input — committed on blur (empty = auto).
   const [maxBinsDraft, setMaxBinsDraft] = useState<string | null>(null);
   // Drafts for the Y-bounds inputs — committed on blur (empty = automatic).
@@ -308,7 +315,19 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
             />
           )}
           <div>
-            <p className="mb-1 text-xs text-muted-foreground">CSS overrides</p>
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">CSS overrides</p>
+              <Button
+                type="button"
+                aria-label="Update CSS overrides"
+                size="xs"
+                className="bg-[#16a085] text-white hover:bg-[#16a085]/90"
+                disabled={!cssDirty}
+                onClick={commitCss}
+              >
+                Update
+              </Button>
+            </div>
             <textarea
               aria-label="CSS overrides"
               className="w-full rounded-md border border-input bg-transparent px-2 py-1.5 font-mono text-[11px] text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring"
@@ -316,16 +335,12 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
               placeholder={isTable
                 ? '.mx-type-icon { display: none; }\n.mx-toolbar { display: none; }'
                 : '.mx-pivot th { background: #223; }'}
-              value={cssDraft ?? getVizCss(envelope) ?? ''}
+              value={cssDraft ?? savedCss}
               onChange={(e) => setCssDraft(e.target.value)}
-              onBlur={() => {
-                if (cssDraft != null) onVizChange(setVizCss(envelope, cssDraft));
-                setCssDraft(null);
-              }}
             />
             <p className="mt-1 text-[10px] leading-normal text-muted-foreground">
               {isTable
-                ? 'Scoped to this table. Classes: .mx-table, .mx-column, .mx-header-row, .mx-th, .mx-row (+ .mx-row-odd/-even zebra), .mx-cell, .mx-col-<column>, .mx-column-type-<type>, .mx-type-icon, .mx-toolbar. No @import / url().'
+                ? 'Scoped to this table. Classes: .mx-table, .mx-column, .mx-header-row, .mx-th, .mx-row (+ .mx-row-odd/-even zebra), .mx-cell, .mx-col-<column>, .mx-column-type-<type>, .mx-type-icon, .mx-sort-icon, .mx-filter-icon, .mx-toolbar. No @import / url().'
                 : 'Scoped to this pivot. Target .mx-pivot with element selectors (th, td, thead). No @import / url().'}
             </p>
           </div>

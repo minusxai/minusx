@@ -134,7 +134,7 @@ describe('VegaVizPanel — pivot envelope', () => {
     expect(screen.getAllByText('Values').length).toBeGreaterThan(0)
   })
 
-  it('Settings tab hosts the CSS override editor for pivot', async () => {
+  it('Settings tab updates pivot CSS overrides explicitly', async () => {
     const user = userEvent.setup()
     const onVizChange = renderPanel(pivotViz())
     await user.click(screen.getByLabelText('Settings tab'))
@@ -143,6 +143,9 @@ describe('VegaVizPanel — pivot envelope', () => {
     await user.click(cssEditor)
     await user.type(cssEditor, '.mx-pivot th {{ color: red; }')
     await user.tab()
+    expect(onVizChange).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: 'Update CSS overrides' }))
 
     const next = onVizChange.mock.calls.at(-1)![0] as VizEnvelope
     expect((next.source as unknown as { css: string }).css).toContain('.mx-pivot th')

@@ -206,8 +206,27 @@ describe('QuestionVisualization — table envelope routing', () => {
     expect(document.querySelector('.mx-column-type-number')).toBeTruthy()
     expect(document.querySelector('.mx-type-icon.mx-type-icon-text')).toBeTruthy()
     expect(document.querySelector('.mx-type-icon.mx-type-icon-number')).toBeTruthy()
+    expect(document.querySelector('.mx-sort-icon')?.tagName).toBe('BUTTON')
+    expect(document.querySelector('.mx-filter-icon')?.tagName).toBe('BUTTON')
     expect(document.querySelector('.mx-cell.mx-column-type-number')).toBeTruthy()
     expect(document.querySelector('.mx-toolbar')).toBeTruthy()
+  })
+
+  it('keeps hideable controls free of Tailwind display utilities', () => {
+    renderViz(tableViz())
+    const sort = document.querySelector('.mx-sort-icon') as HTMLElement
+    const filter = document.querySelector('.mx-filter-icon') as HTMLElement
+    const toolbar = document.querySelector('.mx-toolbar') as HTMLElement
+
+    // Tailwind is globally important, so a `flex` utility here would defeat a
+    // normal `.mx-… { display: none }` override. Their flex defaults instead
+    // live in TableV2's zero-specificity base stylesheet.
+    expect(sort.classList.contains('flex')).toBe(false)
+    expect(filter.classList.contains('flex')).toBe(false)
+    expect(toolbar.classList.contains('flex')).toBe(false)
+    expect(getComputedStyle(sort).display).toBe('flex')
+    expect(getComputedStyle(filter).display).toBe('flex')
+    expect(getComputedStyle(toolbar).display).toBe('flex')
   })
 
   it('uses intrinsic column sizing until an explicit size is supplied', () => {
@@ -269,7 +288,7 @@ describe('VegaVizPanel — table envelope', () => {
     expect(screen.getByLabelText('Table fields hint')).toBeInTheDocument()
   })
 
-  it('Settings tab hosts conditional formatting and the CSS override editor', async () => {
+  it('Settings tab updates CSS overrides explicitly instead of on blur', async () => {
     const user = userEvent.setup()
     const onVizChange = renderPanel(tableViz())
     await user.click(screen.getByLabelText('Settings tab'))
@@ -277,9 +296,16 @@ describe('VegaVizPanel — table envelope', () => {
     expect(screen.getByLabelText('Add conditional formatting rule')).toBeInTheDocument()
 
     const cssEditor = screen.getByLabelText('CSS overrides')
+    const updateCss = screen.getByRole('button', { name: 'Update CSS overrides' })
+    expect(updateCss).toBeDisabled()
+
     await user.click(cssEditor)
     await user.type(cssEditor, '.mx-th {{ font-size: 14px; }')
-    await user.tab() // commit on blur
+    await user.tab()
+
+    expect(onVizChange).not.toHaveBeenCalled()
+    expect(updateCss).toBeEnabled()
+    await user.click(updateCss)
 
     const next = onVizChange.mock.calls.at(-1)![0] as VizEnvelope
     expect((next.source as unknown as { css: string }).css).toContain('.mx-th')

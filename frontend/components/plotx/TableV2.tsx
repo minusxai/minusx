@@ -469,6 +469,10 @@ const TABLE_BASE_CSS = `
 .table-v2-scroll::-webkit-scrollbar-corner { background: transparent; }
 .mx-facet-list::-webkit-scrollbar { width: 4px; }
 .mx-facet-list::-webkit-scrollbar-thumb { background: var(--mx-table-accent, #16a085); border-radius: 2px; }
+:where(.table-v2-scroll .mx-header-toggle),
+:where(.mx-toolbar) {
+  display: flex;
+}
 :where(.table-v2-scroll .mx-table) {
   width: auto;
   table-layout: auto;

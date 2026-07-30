@@ -363,6 +363,7 @@ const PIVOT_BASE_CSS = `
 .mx-pivot-scroll::-webkit-scrollbar-track { background: transparent; }
 .mx-pivot-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 .mx-pivot-scroll::-webkit-scrollbar-thumb:hover { background: var(--muted-foreground); }
+:where(.mx-toolbar) { display: flex; }
 :where(.mx-pivot:not(.mx-pivot-compact)) :where(td, th) { padding: 6px 8px; border-bottom: 1px solid var(--muted-foreground); }
 :where(.mx-pivot.mx-pivot-compact) :where(td, th) { border-bottom: none; border-radius: 3px; }
 :where(.mx-pivot:not(.mx-pivot-compact) tbody) tr:where(.mx-row-odd) { background: var(--muted); }

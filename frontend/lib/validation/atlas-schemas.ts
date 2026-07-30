@@ -323,7 +323,8 @@ export const VizSourceTable = Type.Object({
     'CSS overrides for the table LOOKS (the DOM tier equivalent of a chart spec), scoped to this ' +
     "table automatically. Write rules against the stable class contract: .mx-table, .mx-column, .mx-header-row, " +
     '.mx-th, .mx-row, .mx-cell, .mx-col-<columnName> (per-column), .mx-column-type-<text|number|date|json>, ' +
-    '.mx-type-icon (+ .mx-type-icon-<text|number|date|json>), .mx-toolbar (bottom bar), ' +
+    '.mx-type-icon (+ .mx-type-icon-<text|number|date|json>), .mx-sort-icon, .mx-filter-icon, ' +
+    '.mx-toolbar (bottom bar), ' +
     '.mx-row-odd/.mx-row-even (zebra stripe parity — the default stripe is a CSS rule, restyle or ' +
     'unset it here). Table padding is customizable with --mx-cell-padding-block/inline and ' +
     '--mx-header-padding-block/inline. No @import and no external url() — both are rejected. ' +
