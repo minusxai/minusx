@@ -15,6 +15,12 @@ declare module "next-auth" {
     home_folder: string;
     tokenVersion?: number;
     createdAt?: number;  // Unix timestamp
+    /**
+     * Which namespace this session was minted in. Compared against the namespace the
+     * request resolves to, so a session issued for one workspace cannot be replayed
+     * against another.
+     */
+    namespace?: string;
   }
 
   /**
@@ -27,6 +33,7 @@ declare module "next-auth" {
       home_folder: string;
       tokenVersion?: number;
       createdAt?: number;  // Unix timestamp
+      namespace?: string;
     } & DefaultSession["user"]
   }
 }
@@ -41,5 +48,6 @@ declare module "next-auth/jwt" {
     home_folder: string;
     tokenVersion?: number;
     createdAt?: number;  // Unix timestamp
+    namespace?: string;
   }
 }

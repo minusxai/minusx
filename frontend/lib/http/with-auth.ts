@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getEffectiveUser, type EffectiveUser } from '@/lib/auth/auth-helpers';
 import { ApiErrors, isClientAbortError } from '@/lib/http/api-responses';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
+import { checkDataVersion, dataVersionMessage } from '@/lib/database/data-version-gate';
 
 type AuthHandler = (
   request: NextRequest,
@@ -40,11 +41,49 @@ export function withCronAuth(handler: CronHandler) {
 }
 
 export function withAuth(handler: AuthHandler) {
+  return withAuthOptions(handler);
+}
+
+/**
+ * `withAuth`, but exempt from the data-version gate.
+ *
+ * For the ONE route that has to work while the gate is refusing: the migration itself.
+ * Migrations no longer run at boot, so the gate's refusal is escaped by calling
+ * /api/admin/migrate-db — and if that call is gated too, the only way out is blocked by
+ * the thing it exists to clear. A deadlock the browser found immediately and no unit test
+ * would have: every request 503s, including the fix.
+ *
+ * Deliberately a separate, named export rather than a flag on `withAuth`, so exempting a
+ * route is a visible decision at its definition and cannot be set by passing an object
+ * through from somewhere else. Nothing else should use it: a route exempted from the gate
+ * is a route allowed to read data this build may misread.
+ */
+export function withAuthSkippingDataVersionGate(handler: AuthHandler) {
+  return withAuthOptions(handler, { skipDataVersionGate: true });
+}
+
+function withAuthOptions(
+  handler: AuthHandler,
+  { skipDataVersionGate = false }: { skipDataVersionGate?: boolean } = {},
+) {
   return async (request: NextRequest, context?: any) => {
     const user = await getEffectiveUser();
 
     if (!user) {
       return ApiErrors.unauthorized();
+    }
+
+    // Refuse data this build cannot correctly read or write, rather than misreading it.
+    // Checked per request because a workspace can be migrated (or a build rolled back)
+    // while the process is running.
+    if (!skipDataVersionGate) {
+      const version = await checkDataVersion();
+      if (!version.ok) {
+        return NextResponse.json(
+          { error: dataVersionMessage(version), code: version.reason },
+          { status: 503 },
+        );
+      }
     }
 
     try {

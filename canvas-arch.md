@@ -645,7 +645,7 @@ block select, shift-click extend, selectstart on drag out of viewport
 
 Because both renderers consume the same story definition, the cutover is a
 **config-stored renderer setting** (configs doc → `renderer: 'dom' |
-'canvas'`, per company / per file type, with per-story `canvasSafe` still
+'canvas'`, per workspace / per file type, with per-story `canvasSafe` still
 gating eligibility). Scope now: **stories only** — finish testing, add the
 toggle, merge, deploy; canvas becomes opt-in, then default when confident.
 Other file types come much later, but inherit everything: the embed painters

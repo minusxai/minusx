@@ -31,7 +31,7 @@ function fakeObjectStore(): ObjectStore {
 
 const POLICY: CachePolicy = { revalidateMs: 1000, expiryMs: 5000 };
 
-function makeOpts(overrides: Partial<Parameters<typeof getCachedResult>[0]> = {}) {
+async function makeOpts(overrides: Partial<Parameters<typeof getCachedResult>[0]> = {}) {
   let calls = 0;
   const exec = vi.fn(async (): Promise<QueryStream> => {
     calls += 1;
@@ -39,7 +39,7 @@ function makeOpts(overrides: Partial<Parameters<typeof getCachedResult>[0]> = {}
   });
   const opts = {
     mode: 'org', connectionName: 'duckdb', query: 'SELECT 1', params: {}, policy: POLICY,
-    execute: exec, blobStore: createQueryCacheBlobStore(fakeObjectStore()),
+    execute: exec, blobStore: await createQueryCacheBlobStore(fakeObjectStore()),
     ...overrides,
   };
   return { opts, exec };
@@ -73,7 +73,7 @@ describe('executeQueryCached (SWR orchestration)', () => {
   beforeEach(clear);
 
   it('miss → executes once, caches; second call serves from cache (no execute)', async () => {
-    const { opts, exec } = makeOpts();
+    const { opts, exec } = await makeOpts();
     const first = await getCachedResult(opts);
     expect(first.meta.fromCache).toBe(false);
     expect(first.result.rows).toEqual([{ n: 1 }]);
@@ -85,7 +85,7 @@ describe('executeQueryCached (SWR orchestration)', () => {
   });
 
   it('forceRefresh re-executes even when fresh, and refreshes the cached blob', async () => {
-    const { opts, exec } = makeOpts();
+    const { opts, exec } = await makeOpts();
     await getCachedResult(opts);                       // miss → n=1, cached
     await getCachedResult(opts);                       // fresh hit, no execute
     expect(exec).toHaveBeenCalledTimes(1);
@@ -104,7 +104,7 @@ describe('executeQueryCached (SWR orchestration)', () => {
   });
 
   it('stale → serves cached value immediately AND revalidates in the background', async () => {
-    const { opts, exec } = makeOpts();
+    const { opts, exec } = await makeOpts();
     await getCachedResult(opts);              // populate (n=1)
     const key = await onlyKey();
     await age(key, { revalidateAt: 1, expireAt: Date.now() + 60_000 }); // stale, not expired
@@ -121,7 +121,7 @@ describe('executeQueryCached (SWR orchestration)', () => {
   });
 
   it('expired → re-executes synchronously and returns the fresh value', async () => {
-    const { opts, exec } = makeOpts();
+    const { opts, exec } = await makeOpts();
     await getCachedResult(opts);            // n=1
     const key = await onlyKey();
     await age(key, { revalidateAt: 1, expireAt: 2 }); // fully expired
@@ -140,7 +140,7 @@ describe('executeQueryCached (SWR orchestration)', () => {
     });
     const opts = {
       mode: 'org', connectionName: 'duckdb', query: 'SELECT 2', params: {}, policy: POLICY,
-      execute: slowExec, blobStore: createQueryCacheBlobStore(fakeObjectStore()),
+      execute: slowExec, blobStore: await createQueryCacheBlobStore(fakeObjectStore()),
     };
     const [a, b] = await Promise.all([getCachedResult(opts), getCachedResult(opts)]);
     expect(slowExec).toHaveBeenCalledTimes(1);
@@ -152,7 +152,7 @@ describe('executeQueryCached (SWR orchestration)', () => {
     // Same value "2024-01-01" but declared date vs text binds differently at the warehouse
     // (BigQuery DATE vs STRING) → different result. They must not share a blob.
     const base = { mode: 'org', connectionName: 'bq', query: 'SELECT :d', params: { d: '2024-01-01' }, policy: POLICY };
-    const store = createQueryCacheBlobStore(fakeObjectStore());
+    const store = await createQueryCacheBlobStore(fakeObjectStore());
     const execA = vi.fn(async (): Promise<QueryStream> =>
       queryResultToStream({ columns: ['a'], types: ['date'], rows: [{ a: 'DATE' }], finalQuery: 'as-date' }));
     const execB = vi.fn(async (): Promise<QueryStream> =>
@@ -172,8 +172,8 @@ describe('executeQueryCached (SWR orchestration)', () => {
 
   it('parameterTypes key is ORDER-INDEPENDENT (same map, different key order → same cache entry)', async () => {
     const base = { mode: 'org', connectionName: 'bq', query: 'SELECT :a, :b', params: { a: '1', b: '2' }, policy: POLICY };
-    const store = createQueryCacheBlobStore(fakeObjectStore());
-    const { opts: _o, exec } = makeOpts();
+    const store = await createQueryCacheBlobStore(fakeObjectStore());
+    const { opts: _o, exec } = await makeOpts();
     const shared = { ...base, blobStore: store, execute: exec };
     await getCachedResult({ ...shared, parameterTypes: { a: 'number', b: 'date' } });
     const hit = await getCachedResult({ ...shared, parameterTypes: { b: 'date', a: 'number' } });
@@ -183,7 +183,7 @@ describe('executeQueryCached (SWR orchestration)', () => {
 
 
   it('no parameterTypes → key unchanged (back-compat, still one entry)', async () => {
-    const { opts, exec } = makeOpts();
+    const { opts, exec } = await makeOpts();
     await getCachedResult(opts);
     const second = await getCachedResult(opts);
     expect(second.meta.fromCache).toBe(true);
@@ -197,7 +197,7 @@ describe('executeQueryCached (SWR orchestration)', () => {
     }));
     const opts = {
       mode: 'org', connectionName: 'duckdb', query: 'SELECT big', params: {}, policy: POLICY,
-      execute: bigExec, blobStore: createQueryCacheBlobStore(fakeObjectStore()),
+      execute: bigExec, blobStore: await createQueryCacheBlobStore(fakeObjectStore()),
     };
     const out = await getCachedResultBounded(opts, { maxRows: 10 });
     expect(out.result.rows.length).toBe(10);   // only 10 materialized
@@ -215,7 +215,7 @@ describe('executeQueryCached (SWR orchestration)', () => {
     }));
     const opts = {
       mode: 'org', connectionName: 'duckdb', query: 'SELECT hit', params: {}, policy: POLICY,
-      execute: bigExec, blobStore: createQueryCacheBlobStore(fakeObjectStore()),
+      execute: bigExec, blobStore: await createQueryCacheBlobStore(fakeObjectStore()),
     };
     await getCachedResult(opts);                 // populate the blob (300 rows)
     const bounded = await getCachedResultBounded(opts, { maxRows: 5 });
@@ -227,15 +227,15 @@ describe('executeQueryCached (SWR orchestration)', () => {
   });
 
   it('getCachedResultBounded returns everything untruncated when under budget', async () => {
-    const { opts } = makeOpts(); // 1 row
+    const { opts } = await makeOpts(); // 1 row
     const out = await getCachedResultBounded(opts, { maxRows: 100, maxBytes: 1_000_000 });
     expect(out.result.rows).toEqual([{ n: 1 }]);
     expect(out.truncated).toBe(false);
   });
 
   it('sweepExpiredBlobs deletes expired cache rows AND their orphaned blobs', async () => {
-    const store = createQueryCacheBlobStore(fakeObjectStore());
-    const opts = { mode: 'org', connectionName: 'duckdb', query: 'SELECT sweep', params: {}, policy: POLICY, execute: makeOpts().exec, blobStore: store };
+    const store = await createQueryCacheBlobStore(fakeObjectStore());
+    const opts = { mode: 'org', connectionName: 'duckdb', query: 'SELECT sweep', params: {}, policy: POLICY, execute: (await makeOpts()).exec, blobStore: store };
     await getCachedResult(opts);            // populate a blob
     const key = await onlyKey();
     const row = (await import('../store.server')).getCacheRow;
@@ -253,7 +253,7 @@ describe('executeQueryCached (SWR orchestration)', () => {
 
   it('maybeSweepExpired runs once then is throttled until the interval passes', async () => {
     _resetSweepThrottleForTest();
-    const store = createQueryCacheBlobStore(fakeObjectStore());
+    const store = await createQueryCacheBlobStore(fakeObjectStore());
     let sweeps = 0;
     const nowRef = { t: 1_000_000 };
     const run = () => maybeSweepExpired(store, nowRef.t, () => { sweeps++; return Promise.resolve([]); });
@@ -265,7 +265,7 @@ describe('executeQueryCached (SWR orchestration)', () => {
   });
 
   it('getCachedJsonlStream returns a JSONL body that decodes to the result', async () => {
-    const { opts } = makeOpts();
+    const { opts } = await makeOpts();
     const { stream, meta } = await getCachedJsonlStream(opts);
     const chunks: Buffer[] = [];
     for await (const c of stream as Readable) chunks.push(Buffer.from(c));

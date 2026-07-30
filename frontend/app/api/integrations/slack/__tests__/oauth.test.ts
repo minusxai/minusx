@@ -2,15 +2,15 @@ import type { Mock } from 'vitest';
 /**
  * Tests for the Slack OAuth 2.0 flow.
  *
- * The flow is split across two routes so the install finishes inside tenant
+ * The flow is split across two routes so the install finishes inside the
  * context without a domain-wide cookie:
  *   - oauth-start      — admin-gated; mints the HMAC-signed state.
  *   - oauth-callback   — lands on the root domain (Slack's fixed redirect_uri);
  *                        a thin HMAC-verifying forwarder. No DB writes. Redirects
- *                        to the tenant's finish URL (from the auth module).
- *   - oauth-callback-finish — runs on the tenant's host (auth-gated), re-verifies
+ *                        to the finish URL supplied by the namespace module.
+ *   - oauth-callback-finish — runs on the workspace's host (auth-gated), re-verifies
  *                        the state + the logged-in admin, then exchanges the code
- *                        and writes the bot config in tenant context.
+ *                        and writes the bot config in that context.
  *
  * Covers:
  *  1. buildState — payload encoding and HMAC structure
@@ -49,7 +49,7 @@ vi.mock('@/lib/auth/role-helpers', () => ({
   isAdmin: (role: string) => role === 'admin',
 }));
 
-// withAuth provides the authenticated tenant user to oauth-start and the finish
+// withAuth provides the authenticated user to oauth-start and the finish
 // route. Tests override `mockUser` to exercise the initiator/admin check.
 const { mockUser } = vi.hoisted(() => ({
   mockUser: { value: { email: 'admin@acme.com', role: 'admin', mode: 'org' as const, userId: 1, home_folder: '/org' } },
@@ -59,11 +59,11 @@ vi.mock('@/lib/http/with-auth', () => ({
     handler(request, mockUser.value),
 }));
 
-// The root callback asks the auth module where to finalize the install. OSS returns
-// nothing (finish on same host); proprietary returns the tenant subdomain URL.
+// The root callback asks the namespace module where to finalize the install. OSS returns
+// nothing (finish on same host); a deployment serving several may return another host.
 const { getFinishUrlMock } = vi.hoisted(() => ({ getFinishUrlMock: vi.fn() }));
 vi.mock('@/lib/modules/registry', () => ({
-  getModules: () => ({ auth: { getSlackInstallFinishUrl: getFinishUrlMock } }),
+  getModules: () => ({ namespace: { installFinishUrl: getFinishUrlMock } }),
 }));
 
 // Must be after vi.mock calls
@@ -194,14 +194,14 @@ describe('oauth-callback — forwarding', () => {
     expect(upsertSlackBotConfig).not.toHaveBeenCalled();
   });
 
-  it('defaults the finish host to the root domain when the auth module returns nothing', async () => {
+  it('defaults the finish host to the root domain when the namespace module returns nothing', async () => {
     getFinishUrlMock.mockReturnValue(null);
     const state = makeState();
     const res = await callbackHandler(makeCallbackRequest({ code: 'c', state }));
     expect(new URL(res.headers.get('location')!).host).toBe('minusx.app');
   });
 
-  it('forwards to the tenant subdomain host supplied by the auth module', async () => {
+  it('forwards to the host supplied by the namespace module', async () => {
     getFinishUrlMock.mockReturnValue('https://acme.minusx.app/api/integrations/slack/oauth-callback-finish');
     const state = makeState();
     const res = await callbackHandler(makeCallbackRequest({ code: 'c', state }));
@@ -376,7 +376,7 @@ describe('oauth-start — host header handling', () => {
     return JSON.parse(Buffer.from(state.slice(0, lastDot), 'base64url').toString());
   }
 
-  it('sets returnUrl to the originating subdomain', async () => {
+  it('sets returnUrl to the originating host', async () => {
     const res = await oauthStartHandler(makeStartRequest('acme.minusx.app'));
     expect(decodeState(res.headers.get('location')!).returnUrl).toBe('https://acme.minusx.app/settings?tab=integrations');
   });

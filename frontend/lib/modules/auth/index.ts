@@ -10,11 +10,12 @@ import workspaceTemplate from '@/lib/database/workspace-template.json';
 import { DEFAULT_STYLES } from '@/lib/branding/whitelabel';
 import { copySeedMxfoodForMode } from '@/lib/object-store';
 import { registerCompanyWithGateway } from '@/lib/gateway/gateway-register.server';
-import { seedLlmConfigFromEnv } from '@/lib/llm/llm-env-seed.server';
 import { MXFOOD_TABLES } from '@/lib/object-store/mxfood-tables';
 import { getRawConfig, saveRawConfig } from '@/lib/data/configs.server';
 import { ConnectionsAPI } from '@/lib/data/connections.server';
 import { DEFAULT_MODE } from '@/lib/mode/mode-types';
+import { getModules } from '@/lib/modules/registry';
+import { buildNamespace } from '@/lib/namespace/types';
 
 function escapeForJson(s: string): string {
   return JSON.stringify(s).slice(1, -1);
@@ -22,18 +23,42 @@ function escapeForJson(s: string): string {
 
 /**
  * Open source Auth Module — delegates to existing NextAuth session validation.
- * addHeaders() is a no-op.
- *
- * NOTE: Middleware integration (delegating handleRequest to this module) is
- * deferred to Phase 5. The existing middleware.ts remains authoritative.
+ * Namespace resolution is not here: middleware asks the namespace module directly, so
+ * this module is only ever about who the user is.
  */
 export class AuthModule implements IAuthModule {
   async handleRequest(_req: NextRequest): Promise<{ context: RequestContext; response?: NextResponse }> {
-    throw new Error('handleRequest() — not yet wired into middleware');
+    return { context: await this.getRequestContext() };
+  }
+
+  /**
+   * Re-establishes the current namespace for work that outlives the request — a
+   * detached chat turn, an after() callback.
+   *
+   * Captured while the request is still alive (the namespace is read from the request
+   * here), then re-entered around the work. Derived from the namespace module, so a
+   * deployment that isolates workspaces needs no override.
+   */
+  async getContextRunner(): Promise<(fn: () => Promise<unknown>) => Promise<unknown>> {
+    const ns = getModules().namespace;
+    const namespace = await ns.isolation().catch(() => null);
+    return namespace == null ? (fn) => fn() : (fn) => ns.with(namespace, fn);
+  }
+
+  /** The namespace this token belongs to, embedded so it survives into later requests. */
+  async getExtraTokenPayload(): Promise<Record<string, unknown>> {
+    return { namespace: await getModules().namespace.isolation().catch(() => undefined) };
   }
 
   async getUserKey(user: { mode: string }): Promise<string> {
-    return user.mode;
+    // The identity-scoped level of the namespace. A deployment that isolates
+    // workspaces gets its coarser level folded in here without overriding anything.
+    const { mode } = buildNamespace({
+      isolation: await getModules().namespace.isolation(),
+      mode: user.mode,
+      userId: 0,
+    });
+    return mode;
   }
 
   async getRequestContext(): Promise<RequestContext> {
@@ -48,10 +73,6 @@ export class AuthModule implements IAuthModule {
       mode: user.mode as 'org' | 'tutorial' | 'internals',
       impersonating: undefined,
     };
-  }
-
-  async addHeaders(_req: NextRequest, _headers: Headers): Promise<boolean> {
-    return true;
   }
 
   async register(input: RegisterInput): Promise<RegisterResult> {
@@ -92,30 +113,25 @@ export class AuthModule implements IAuthModule {
 
     // When MX_GATEWAY_URL + MX_GATEWAY_SHARED_SECRET are set, register this
     // workspace with the MinusX gateway and wire it as the models provider, so
-    // it is usable without configuring one by hand. Runs BEFORE the two seeds
-    // below so an interview-supplied or env-seeded config still wins — an
-    // explicit choice should not be overwritten by the default. Best-effort:
-    // registration has already committed, so an outage leaves a working
-    // workspace rather than an unrepeatable half-registration.
+    // it is usable without configuring one by hand. Skipped when the installer
+    // supplied a config below: an explicit choice should not be overwritten by
+    // the default. Best-effort — registration has already committed, so an
+    // outage leaves a working workspace rather than a half-registration that
+    // cannot be repeated.
     if (!input.llm) {
-      await registerCompanyWithGateway({ email: input.adminEmail, workspaceName: input.workspaceName });
+      await registerCompanyWithGateway({
+        email: input.adminEmail,
+        workspaceName: input.workspaceName,
+        appUrl: input.appUrl,
+      });
     }
 
-    // setup.sh bootstrap: an interview-provided LLM config wins over any env
-    // seed — save it FIRST (extract-on-write moves keys into the secrets
-    // store), so seedLlmConfigFromEnv below sees `llm` present and no-ops.
+    // setup.sh bootstrap: the interview-provided LLM config, saved here so a
+    // scripted install starts configured. Extract-on-write moves keys into the
+    // secrets store.
     if (input.llm) {
       const raw = await getRawConfig(DEFAULT_MODE);
       await saveRawConfig(DEFAULT_MODE, { ...raw, llm: input.llm });
-    }
-
-    // Env → in-app LLM config: convert legacy model-config env vars (if any)
-    // into the fresh workspace's config so a pre-provisioned install starts
-    // configured (keys land in the secrets store; editable in Settings).
-    try {
-      await seedLlmConfigFromEnv();
-    } catch (err) {
-      console.warn('[AuthModule.register] LLM env seed failed (non-fatal):', err);
     }
 
     // setup.sh bootstrap: create the interview-provided first connection in

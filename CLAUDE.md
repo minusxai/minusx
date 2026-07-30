@@ -163,7 +163,7 @@ npm run update-workspace-template   # re-runs migrations on the template; review
 (`conversation` is NOT a file type anymore — conversations moved to their own storage in the v3 chat migration; a vestigial `FILE_TYPE_METADATA` entry remains and is slated for removal.)
 
 **Company Configs System**
-The configs system provides per-company configuration stored as database documents:
+The configs system provides per-workspace configuration stored as database documents:
 
 - **Storage**: Document at `/configs/config.json`
 - **File Type**: `'config'`

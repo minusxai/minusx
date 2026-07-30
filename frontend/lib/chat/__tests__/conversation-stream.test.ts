@@ -2,7 +2,8 @@
 // delta payloads ride inline, and unsubscribing stops delivery. This proves PGLite LISTEN/NOTIFY
 // works through the adapter (the v3 streaming transport).
 
-import { subscribe, notifyMessage, notifyDelta, setConversationChannelNamespace } from '@/lib/chat/conversation-stream.server';
+import { subscribe, notifyMessage, notifyDelta } from '@/lib/chat/conversation-stream.server';
+import { getModules } from '@/lib/modules/registry';
 import type { ConversationNotify } from '@/lib/data/conversations.types';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { setupTestDb } from '@/test/harness/test-db';
@@ -57,15 +58,21 @@ describe('conversation stream bus (LISTEN/NOTIFY)', () => {
   });
 
   describe('channel namespace (scoped id-spaces)', () => {
-    // When conversation ids are NOT globally unique (e.g. allocated within a narrower request
-    // scope), a namespace keeps two scopes that share a raw id from cross-delivering —
-    // including the inline `delta` text payload, which would otherwise leak across the scope.
-    afterEach(() => setConversationChannelNamespace(async () => '')); // restore default
+    // When conversation ids are NOT globally unique (e.g. allocated within a narrower
+    // request scope), the namespace keeps two scopes that share a raw id from
+    // cross-delivering — including the inline `delta` text payload, which would
+    // otherwise leak across the scope.
+    //
+    // Driven through the namespace module rather than an installable setter: the
+    // channel now reads the isolation level directly, so there is nothing to forget
+    // to wire up.
+    let ns = 'a';
+    const realIsolation = getModules().namespace.isolation;
+
+    beforeEach(() => { getModules().namespace.isolation = async () => ns; });
+    afterEach(() => { getModules().namespace.isolation = realIsolation; });
 
     it('two scopes sharing one conversation id do not cross-deliver', async () => {
-      let ns = 'a';
-      setConversationChannelNamespace(async () => ns);
-
       const a: ConversationNotify[] = [];
       const b: ConversationNotify[] = [];
       ns = 'a'; const unsubA = await subscribe(7, (n) => a.push(n));

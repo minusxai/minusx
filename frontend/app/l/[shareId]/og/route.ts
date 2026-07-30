@@ -15,7 +15,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ sha
   const resolved = await resolveShare(shareId).catch(() => null);
   const key = (resolved?.file.meta as { preview?: { key?: string } } | null | undefined)?.preview?.key;
   if (key) {
-    const buf = await createObjectStore().get(key).catch(() => null);
+    const buf = await (await createObjectStore()).get(key).catch(() => null);
     if (buf) {
       return new Response(new Uint8Array(buf), {
         headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=3600, s-maxage=86400' },

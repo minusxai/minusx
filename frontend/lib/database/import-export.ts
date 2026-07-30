@@ -78,6 +78,11 @@ export async function exportDatabase(_dbPath: string = ''): Promise<InitData> {
     updated_at: row.updated_at,
     version: row.version ?? 1,
     last_edit_id: row.last_edit_id ?? null,
+    // Both are columns on `files` and both were missing here, so an export/import
+    // round-trip silently published every draft and discarded `meta` — which carries
+    // share grants, the thing idx_files_meta_shares exists to index.
+    draft: row.draft ?? false,
+    meta: row.meta ?? null,
   }));
 
   users.sort((a, b) => a.id - b.id);
@@ -106,13 +111,20 @@ async function importToDatabase(_dbPath: string, initData: InitData): Promise<vo
 
   for (const doc of documents) {
     await db.exec(
-      'INSERT INTO files (id, name, path, type, content, file_references, version, last_edit_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
-      [doc.id, doc.name, doc.path, doc.type, doc.content, (doc as any).references || [], (doc as any).version ?? 1, (doc as any).last_edit_id ?? null, doc.created_at, doc.updated_at],
+      'INSERT INTO files (id, name, path, type, content, file_references, version, last_edit_id, draft, meta, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)',
+      // `?? false` / `?? null` keep export files written before these were carried
+      // importable, and match the column defaults.
+      [doc.id, doc.name, doc.path, doc.type, doc.content, (doc as any).references || [], (doc as any).version ?? 1, (doc as any).last_edit_id ?? null, (doc as any).draft ?? false, (doc as any).meta ?? null, doc.created_at, doc.updated_at],
     );
   }
 
   await db.exec(`DELETE FROM configs WHERE key IN ('data_version', 'schema_version')`);
-  await db.exec(`INSERT INTO configs (key, value) VALUES ('data_version', $1)`, [initData.version.toString()]);
+  // data_version lives in public_data — see getDataVersion for why.
+  await db.exec(
+    `INSERT INTO public_data (key, value) VALUES ('data_version', $1)
+     ON CONFLICT ON CONSTRAINT public_data_pkey DO UPDATE SET value = EXCLUDED.value`,
+    [initData.version.toString()],
+  );
   await db.exec(`INSERT INTO configs (key, value) VALUES ('schema_version', $1)`, [LATEST_SCHEMA_VERSION.toString()]);
 }
 

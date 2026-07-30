@@ -81,7 +81,7 @@ describe('share opengraph-image route', () => {
     const id = await makeStory('Stored', 'x');
     const key = ogCacheKey(id, 'testversion');
     const bytes = Buffer.from('PNG-PLACEHOLDER-'.repeat(100)); // >1000 bytes
-    await createObjectStore().put(key, bytes, 'image/png');
+    await (await createObjectStore()).put(key, bytes, 'image/png');
     await setStoryPreview(id, ADMIN, key);
     const { shareableId } = await addShare(id, ADMIN);
 

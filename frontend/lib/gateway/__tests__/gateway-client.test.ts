@@ -137,6 +137,43 @@ describe('createGatewayOrg', () => {
     });
   });
 
+  it('reports the workspace\'s own host when one is given, not the deployment\'s', async () => {
+    // A deployment can serve several workspaces, each on its own host. app_url is
+    // the field that says WHERE a workspace is reached, so defaulting it to
+    // AUTH_URL would make every workspace on such a deployment report the same
+    // address — leaving support with N orgs it cannot tell apart, which is the
+    // one job these props have.
+    const { createGatewayOrg } = await loadClient({
+      ...ON, AUTH_URL: 'https://root.example.com', GIT_COMMIT_SHA: 'deadbeef',
+    });
+    const fetchMock = mockFetch(200, {
+      org_id: 'o', org_secret: 's', key_id: 'k', key: 'mxk1_x',
+    });
+
+    await createGatewayOrg({
+      email: 'a@co.com', workspaceName: 'Acme', appUrl: 'https://acme.root.example.com',
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(init.body as string).props.app_url).toBe('https://acme.root.example.com');
+  });
+
+  it('falls back to AUTH_URL when no host is given', async () => {
+    // The single-workspace case, which is every open-source install: the
+    // deployment's own URL is the workspace's URL.
+    const { createGatewayOrg } = await loadClient({
+      ...ON, AUTH_URL: 'https://only.example.com',
+    });
+    const fetchMock = mockFetch(200, {
+      org_id: 'o', org_secret: 's', key_id: 'k', key: 'mxk1_x',
+    });
+
+    await createGatewayOrg({ email: 'a@co.com', workspaceName: 'Only' });
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(init.body as string).props.app_url).toBe('https://only.example.com');
+  });
+
   it('sends the shape even when the origin and build are unconfigured', async () => {
     // A fixed set of keys, always present. An install that never set AUTH_URL
     // reports the localhost default, which is itself the useful signal — a

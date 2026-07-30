@@ -28,14 +28,24 @@ export async function POST(request: NextRequest) {
   }
 
   const teamId = getTeamId(payload);
-  const contextEstablished = teamId
-    ? await getModules().auth.addHeaders(request, new Headers(), { slack_team: teamId })
-    : true;
-
-  if (!contextEstablished) {
+  // A webhook carries no session and no identifying host — only the provider's own workspace
+  // id — so the namespace comes from the hint. Unknown team means we genuinely cannot
+  // tell who this is for; ack it and drop rather than guessing.
+  const ns = teamId ? await getModules().namespace.resolve(request, { slack_team: teamId }) : null;
+  if (teamId && ns == null) {
     console.log('[Slack/events] dropping: unknown team', { teamId });
     return NextResponse.json({ ok: true });
   }
+  if (ns) return getModules().namespace.with(ns, () => handleSlackEvent(request, payload, rawBody, teamId));
+  return handleSlackEvent(request, payload, rawBody, teamId);
+}
+
+async function handleSlackEvent(
+  request: NextRequest,
+  payload: SlackEventEnvelope,
+  rawBody: string,
+  teamId: string | null,
+): Promise<NextResponse> {
 
   const runInContext = (await getModules().auth.getContextRunner?.()) ?? ((fn: () => Promise<unknown>) => fn());
   const installation = teamId ? await findSlackInstallationByTeam(teamId) : null;

@@ -1,7 +1,6 @@
 import { getAdapter, resetAdapter } from '@/lib/database/adapter/factory';
 import { IFileSystemDBModule } from '../types';
 import { QueryResult } from '@/lib/database/adapter/types';
-import { runMigrationsIfNeeded } from '@/lib/database/run-migrations';
 
 /**
  * PGLite-backed File System DB module.
@@ -24,10 +23,6 @@ export class DBModule implements IFileSystemDBModule {
 
   async init(): Promise<void> {
     await getAdapter();
-  }
-
-  async runMigrations(): Promise<void> {
-    await runMigrationsIfNeeded();
   }
 
   async close(): Promise<void> {

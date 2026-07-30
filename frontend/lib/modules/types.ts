@@ -26,8 +26,6 @@ export interface PresignedUrl {
 export interface IFileSystemDBModule {
   exec<T = unknown>(sql: string, params?: unknown[]): Promise<QueryResult<T>>;
   init(): Promise<void>;
-  /** Run data migrations if behind LATEST_DATA_VERSION. Idempotent — safe to call on every startup. */
-  runMigrations?(): Promise<void>;
   /** Release any held resources (connections, WASM handles). Optional — not all backends need it. */
   close?(): Promise<void>;
   /** Close and nullify the adapter singleton so the next exec() gets a fresh instance. Test isolation only. */
@@ -44,6 +42,13 @@ export interface RegisterInput {
   adminEmail: string;
   adminPassword: string;
   inviteCode?: string;
+  /**
+   * Where this workspace will be reached, if that is not the deployment's own
+   * `AUTH_URL`. A deployment serving several workspaces gives each its own host,
+   * and support identifiers are useless if every one of them reports the same
+   * address. Defaults to `AUTH_URL`.
+   */
+  appUrl?: string;
   /**
    * Optional bootstrap payload (setup.sh CLI interview): saved into the org
    * config at registration — with API keys secret-extracted — so the setup
@@ -78,9 +83,6 @@ export interface IAuthModule {
    * so that two users can never observe each other's cached results.
    */
   getUserKey(user: { mode: string }): Promise<string>;
-  /** Returns true if request context was established (or no auth module active), false if request should be dropped. */
-  addHeaders(req: NextRequest, headers: Headers, hints?: Record<string, string>): Promise<boolean>;
-  register(input: RegisterInput): Promise<RegisterResult>;
   /** Auth-factory hooks consulted at login/refresh time. OSS: not implemented. */
   getAuthHooks?(): Partial<AuthConfigOptions>;
   /**
@@ -90,15 +92,96 @@ export interface IAuthModule {
    * the request is still active, then used to wrap the background work.
    */
   getContextRunner?(): Promise<(fn: () => Promise<unknown>) => Promise<unknown>>;
-  /** Extra fields to embed in OAuth access token JWT. OSS: returns {}. */
-  getExtraTokenPayload?(userId: number, scope: string | null): Promise<Record<string, unknown>>;
+  /** Extra fields to embed in an OAuth access token. */
+  getExtraTokenPayload?(): Promise<Record<string, unknown>>;
+}
+
+/** Kinds of third-party identifier that can be bound to a namespace. */
+export type ExternalIdKind = 'slack_team';
+
+/**
+ * Namespace Module — binds third-party identifiers to the namespace that owns them.
+ *
+ * Some inbound requests carry no session and no host that identifies the workspace:
+ * a third-party webhook knows only its own workspace identifier. Resolving that to a
+ * namespace has to happen *before* any request context exists, so it cannot read
+ * namespace-scoped storage. Install time is the one moment both the external
+ * identifier and the namespace are known — record the binding then.
+ *
+ * Default (single-namespace): both methods are no-ops, since there is nothing to
+ * disambiguate.
+ */
+export interface INamespaceModule {
   /**
-   * Which host should finalize the Slack OAuth install. Slack's redirect_uri is fixed
-   * to the root domain, so the callback may land on a host where the user's session
-   * doesn't apply; returning a finish URL lets a deployment route the finish step to
-   * the host where their session does apply. Not implemented → finish on the same host.
+   * Request → the namespace it belongs to, or null to reject the request outright.
+   *
+   * Returns the namespace in its plain form — the same value `isolation()` yields — so
+   * it can be passed straight to `with()`. Use `seal()` when it needs to travel as a
+   * header.
+   *
+   * `hints` carries identifiers that only the caller can supply — a webhook's workspace
+   * id, for instance — for requests whose namespace is not derivable from the URL.
    */
-  getSlackInstallFinishUrl?(returnUrl: string): string | null;
+  resolve(req: NextRequest, hints?: Record<string, string>): Promise<string | null>;
+
+  /**
+   * Seal a namespace for transport as a request header.
+   *
+   * Middleware puts the result on the request and route handlers read it back, so it
+   * crosses a boundary where a plain value would be attacker-controllable. A
+   * single-namespace deployment has nothing to protect and returns it unchanged; one
+   * serving several signs it. The sealed FORM is opaque to every caller.
+   */
+  seal(namespace: string): Promise<string>;
+
+  /**
+   * Establish a namespace where there is no request to read it from: cron, webhooks,
+   * background work that outlives its request, tests.
+   *
+   * Scoped to `fn` — deliberately NOT an `enterWith`-style call that sets the ambient
+   * context and everything after it, which cannot be unset and leaks into whatever runs
+   * next on the same async context.
+   */
+  with<T>(namespace: string, fn: () => Promise<T>): Promise<T>;
+
+  /**
+   * The current request's isolation level — the coarse prefix every durable key is
+   * scoped by. Constant in a single-workspace deployment.
+   */
+  isolation(): Promise<string>;
+  /**
+   * The OLDEST data version across every namespace this deployment serves.
+   *
+   * A build declares the range it can read (MINIMUM_SUPPORTED_DATA_VERSION) and the
+   * version it writes (LATEST_DATA_VERSION). Raising the minimum is only safe once
+   * every namespace has been migrated past it — otherwise the lagging one is served by
+   * code that misreads its data. This is the number that makes that checkable before a
+   * deploy rather than after.
+   */
+  minDataVersion(): Promise<number>;
+  /**
+   * Create a new namespace and seed it, returning where the caller should land.
+   *
+   * Provisioning, not authentication: a deployment that serves one workspace creates it
+   * on first run, while one serving many creates a new namespace per signup. The
+   * seeding itself is shared — only the namespace creation differs.
+   */
+  provision(input: RegisterInput): Promise<RegisterResult>;
+
+  /**
+   * Where an external integration's install should be finalised, or null to finish it
+   * where it landed.
+   *
+   * Some providers require a fixed redirect URI, so the callback arrives at one host
+   * while the user's session belongs to another. A deployment that serves several
+   * namespaces on different hosts has to hand the install to the right one.
+   */
+  installFinishUrl(returnUrl: string): string | null;
+
+  /** Record that `externalId` belongs to the calling namespace. Idempotent. */
+  bindExternalId(kind: ExternalIdKind, externalId: string): Promise<void>;
+  /** Forget a binding, e.g. on uninstall. Idempotent. */
+  unbindExternalId(kind: ExternalIdKind, externalId: string): Promise<void>;
 }
 
 /**

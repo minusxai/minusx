@@ -10,25 +10,24 @@
  * Set, bounded by live connections). See repo-root docs/chat-architecture-v3.md §7.
  */
 import { getModules } from '@/lib/modules/registry';
+import { namespacedChannel } from '@/lib/namespace/types';
 import type { ConversationNotify, RunStatus } from '@/lib/data/conversations.types';
 
-// Optional channel namespace. By default conversation ids form one shared id-space, so the
-// channel is just `conv_<id>`. A deployment whose conversation ids are NOT globally unique
-// (e.g. allocated within a narrower request scope) can install a namespace so ids that
-// repeat across scopes never share a LISTEN/NOTIFY channel — the transport is process/DB-
-// global and not scope-aware on its own. Default: no namespace (single id-space).
-let channelNamespace: () => Promise<string> = async () => '';
-
-/** Install a channel-namespace provider (returns a safe identifier fragment, or '' for none). */
-export function setConversationChannelNamespace(fn: () => Promise<string>): void {
-  channelNamespace = fn;
-}
-
-/** Fully-qualified, safe-identifier channel for a conversation, including any namespace. */
+/**
+ * Fully-qualified channel for a conversation.
+ *
+ * LISTEN/NOTIFY is DB-global and knows nothing about namespaces, while conversation ids
+ * are allocated per namespace — so two namespaces' identical ids would share a channel
+ * and cross-deliver, including streamed token text. The namespace prefix is what keeps
+ * them apart.
+ *
+ * This used to be an installable provider that a deployment had to remember to set.
+ * Reading the namespace directly means a deployment that isolates workspaces gets
+ * separate channels without opting in.
+ */
 async function resolveChannel(conversationId: number): Promise<string> {
-  const ns = await channelNamespace();
-  const base = `conv_${conversationId}`;
-  return ns ? `${ns}_${base}` : base;
+  const isolation = await getModules().namespace.isolation();
+  return namespacedChannel(isolation, `conv_${conversationId}`);
 }
 
 type Handler = (n: ConversationNotify) => void;

@@ -10,9 +10,8 @@ import { auth } from '@/auth';
 import { OAuthCodeDB } from '@/lib/oauth/db';
 import { getModules } from '@/lib/modules/registry';
 
-export async function POST(request: NextRequest) {
+async function handleApprove(request: NextRequest) {
   const session = await auth();
-  await getModules().auth.addHeaders(request, new Headers());
 
   if (!session?.user?.userId) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
@@ -48,4 +47,14 @@ export async function POST(request: NextRequest) {
     if (state) url.searchParams.set('state', state);
     return NextResponse.redirect(url, 303);
   }
+}
+
+/**
+ * Scoped to this handler rather than established ambiently — see the note in
+ * app/api/mcp/route.ts.
+ */
+export async function POST(request: NextRequest) {
+  const ns = await getModules().namespace.resolve(request);
+  if (ns == null) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  return getModules().namespace.with(ns, () => handleApprove(request));
 }
