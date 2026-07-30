@@ -41,7 +41,19 @@ export async function registerWithModules(
   });
 
   await getModules().db.init();
-  await getModules().db.runMigrations?.();
+
+  // Schema only. Data migrations are NOT run here, in any deployment.
+  //
+  // A build declares the range of data versions it can read
+  // (MINIMUM_SUPPORTED_DATA_VERSION..LATEST_DATA_VERSION) and refuses anything outside
+  // it per request, so a workspace behind LATEST is served correctly rather than
+  // silently rewritten at boot. Migrating is an explicit act: the refusal carries an
+  // `upgrade-pending` code, and an admin triggers POST /api/admin/migrate-db.
+  //
+  // Doing it at boot also cannot be made correct for a deployment serving more than one
+  // workspace — there is no request, so no workspace to be in, and every replica races
+  // to rewrite the same rows. Keeping one triggered path means the mechanism cannot
+  // differ between deployments.
 
   await runBootTasks();
 }

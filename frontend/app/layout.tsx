@@ -18,6 +18,8 @@ import type { AnalyticsConfig } from '@/lib/analytics/types';
 import { GlobalErrorHandler } from '@/components/app-shell/ErrorHandler';
 import { Toaster } from '@/components/ui/toaster';
 import ImageLightbox from '@/components/ui/ImageLightbox';
+import { UpgradePendingGate } from '@/components/banners/UpgradePendingGate';
+import { checkDataVersion, dataVersionMessage } from '@/lib/database/data-version-gate';
 
 const getEffectiveUserCached = cache(() => getEffectiveUser().catch(() => null));
 
@@ -119,6 +121,29 @@ export default async function RootLayout({
 }>) {
   // Load user + configs + contexts (always) + connections (50ms timeout)
   const initialData = await loadInitialState();
+
+  // Refuse to render the app over data this build cannot read. `withAuth` already 503s
+  // every API route in that state, so rendering the shell would just produce a UI where
+  // nothing loads and nothing says why. Checked here, where there IS a request — so in a
+  // deployment serving several workspaces this is the asking workspace's verdict, not a
+  // deployment-wide one.
+  if (initialData.user) {
+    const version = await checkDataVersion();
+    if (!version.ok) {
+      return (
+        <html lang="en" suppressHydrationWarning>
+          <body suppressHydrationWarning>
+            <Providers initialData={initialData}>
+              <UpgradePendingGate
+                message={dataVersionMessage(version)}
+                reason={version.reason!}
+              />
+            </Providers>
+          </body>
+        </html>
+      );
+    }
+  }
 
   if (initialData.user && initialData.config.setupWizard?.status !== 'complete') {
     const reqPath = (await headers()).get('x-request-path') ?? '';

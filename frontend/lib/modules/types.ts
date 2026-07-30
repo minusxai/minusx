@@ -26,8 +26,6 @@ export interface PresignedUrl {
 export interface IFileSystemDBModule {
   exec<T = unknown>(sql: string, params?: unknown[]): Promise<QueryResult<T>>;
   init(): Promise<void>;
-  /** Run data migrations if behind LATEST_DATA_VERSION. Idempotent — safe to call on every startup. */
-  runMigrations?(): Promise<void>;
   /** Release any held resources (connections, WASM handles). Optional — not all backends need it. */
   close?(): Promise<void>;
   /** Close and nullify the adapter singleton so the next exec() gets a fresh instance. Test isolation only. */
