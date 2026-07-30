@@ -2931,7 +2931,7 @@ export const STORY_UI_RECIPE_CLASSES: readonly string[] = [
   "rowSpan,",
   "rowVirtualizer",
   "rowVirtualizer.getVirtualItems()",
-  "rowVirtualizer.measure()",
+  "rowVirtualizer.measure?.()",
   "rows",
   "rows)",
   "rows,",
