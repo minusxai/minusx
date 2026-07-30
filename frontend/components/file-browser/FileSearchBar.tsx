@@ -11,7 +11,7 @@ import {
   Spinner,
   Portal
 } from '@chakra-ui/react';
-import { LuSearch } from 'react-icons/lu';
+import { LuSearch, LuFile, LuTriangleAlert } from 'react-icons/lu';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 import { FILE_TYPE_METADATA, getFileDisplayName, isFileUntitled } from '@/lib/ui/file-metadata';
 import type { SearchResultMetadata } from '@/lib/search/file-search';
@@ -27,6 +27,7 @@ export default function FileSearchBar({ onResultClick }: FileSearchBarProps) {
   const [results, setResults] = useState<SearchResultMetadata[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [searchError, setSearchError] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -41,6 +42,7 @@ export default function FileSearchBar({ onResultClick }: FileSearchBarProps) {
     if (!query.trim()) {
       setResults([]);
       setShowDropdown(false);
+      setSearchError(false);
       return;
     }
 
@@ -51,11 +53,15 @@ export default function FileSearchBar({ onResultClick }: FileSearchBarProps) {
           limit: 10 // Show top 10 results
         }) as any;
         setResults(data.results || []);
+        setSearchError(false);
         setShowDropdown(true);
         setSelectedIndex(0);
       } catch (error) {
         console.error('Search error:', error);
         setResults([]);
+        // Surface the failure instead of leaving the widget inert
+        setSearchError(true);
+        setShowDropdown(true);
       }
     }, 300);
 
@@ -162,6 +168,7 @@ export default function FileSearchBar({ onResultClick }: FileSearchBarProps) {
               setShowDropdown(true);
             }
           }}
+          aria-label="Search files"
           placeholder="Search files..."
           bg="transparent"
           border="none"
@@ -204,6 +211,13 @@ export default function FileSearchBar({ onResultClick }: FileSearchBarProps) {
                   Searching...
                 </Text>
               </Box>
+            ) : searchError ? (
+              <HStack p={4} gap={2} aria-label="Search failed">
+                <Icon as={LuTriangleAlert} color="accent.danger" boxSize={4} flexShrink={0} />
+                <Text fontSize="sm" color="fg.muted">
+                  Search failed — try again
+                </Text>
+              </HStack>
             ) : results.length === 0 ? (
               <Box p={4}>
                 <Text fontSize="sm" color="fg.muted">
@@ -213,12 +227,15 @@ export default function FileSearchBar({ onResultClick }: FileSearchBarProps) {
             ) : (
               <VStack align="stretch" gap={0} py={1}>
                 {results.map((result, index) => {
+                  // Guard: result types missing from FILE_TYPE_METADATA must not crash the dropdown
                   const metadata = FILE_TYPE_METADATA[result.type];
-                  const IconComponent = metadata.icon;
+                  const IconComponent = metadata?.icon ?? LuFile;
+                  const iconColor = metadata?.color ?? 'fg.muted';
 
                   return (
                     <Box
                       key={result.id}
+                      aria-label={`Search result: ${getFileDisplayName(result)}`}
                       px={3}
                       py={2.5}
                       cursor="pointer"
@@ -231,7 +248,7 @@ export default function FileSearchBar({ onResultClick }: FileSearchBarProps) {
                       <HStack align="flex-start" gap={2.5}>
                         <Icon
                           as={IconComponent}
-                          color={metadata.color}
+                          color={iconColor}
                           boxSize={4}
                           mt={0.5}
                           flexShrink={0}

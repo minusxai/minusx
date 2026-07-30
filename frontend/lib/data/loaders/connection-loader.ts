@@ -65,6 +65,12 @@ const loadConnectionSchema: CustomLoader = async (file: DbFile, _user: Effective
     return file;
   }
 
+  // Raw-content mode (e.g. file search): never fetch/refresh/persist schema.
+  // Secret redaction still applies — connectionLoader redacts AFTER this step.
+  if (options?.skipEnrichment) {
+    return file;
+  }
+
   const content = file.content as ConnectionContent;
 
   // A present (even empty) schemas array counts as cached — serve it with stale-while-revalidate.

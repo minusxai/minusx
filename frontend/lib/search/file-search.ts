@@ -45,6 +45,35 @@ const SEARCH_CONFIGS: Record<string, SearchFieldConfig[]> = {
     { field: 'name', weight: 3, accessor: (f) => f.name },
     { field: 'path', weight: 2, accessor: (f) => f.path },
     { field: 'description', weight: 2, accessor: (f) => (f.content as any).description || '' }
+  ],
+  story: [
+    { field: 'name', weight: 3, accessor: (f) => f.name },
+    { field: 'path', weight: 2, accessor: (f) => f.path },
+    { field: 'description', weight: 2, accessor: (f) => (f.content as any)?.description || '' },
+    // content.story is JSX markup — raw text match is cheap and catches headlines/prose
+    { field: 'story', weight: 1, accessor: (f) => (f.content as any)?.story || '' }
+  ],
+  notebook: [
+    { field: 'name', weight: 3, accessor: (f) => f.name },
+    { field: 'path', weight: 2, accessor: (f) => f.path },
+    { field: 'description', weight: 2, accessor: (f) => (f.content as any)?.description || '' },
+    { field: 'cells', weight: 1, accessor: (f) => {
+      const cells = (f.content as any)?.cells || [];
+      return cells.map((c: any) =>
+        [c.name || '', c.type === 'sql' ? c.query || '' : c.content || ''].join(' ')
+      );
+    }}
+  ],
+  report: [
+    { field: 'name', weight: 3, accessor: (f) => f.name },
+    { field: 'path', weight: 2, accessor: (f) => f.path },
+    { field: 'description', weight: 2, accessor: (f) => (f.content as any)?.description || '' },
+    { field: 'prompt', weight: 1, accessor: (f) => (f.content as any)?.reportPrompt || '' }
+  ],
+  alert: [
+    { field: 'name', weight: 3, accessor: (f) => f.name },
+    { field: 'path', weight: 2, accessor: (f) => f.path },
+    { field: 'description', weight: 2, accessor: (f) => (f.content as any)?.description || '' }
   ]
 };
 
@@ -231,25 +260,35 @@ export async function searchFilesInFolder(
   const searchPath = folder_path || resolvedHomeFolder;
 
   // Parse file_types (default to all user-facing file types)
-  let types: FileType[] = ['question', 'dashboard', 'folder', 'connection', 'context'];
+  let types: FileType[] = ['question', 'dashboard', 'story', 'notebook', 'report', 'alert', 'folder', 'connection', 'context'];
   if (file_types) {
     types = Array.isArray(file_types) ? file_types : [file_types];
   }
 
-  // Load all files for search
+  // Load all files for search. Search only needs the RAW stored content (the
+  // SEARCH_CONFIGS accessors read plain DB fields), so pass skipEnrichment:
+  // the context loader's fullSchema computation (throws on unmigrated
+  // contexts) and the connection loader's live schema introspection (can
+  // block for minutes) must never run on the search path. Per-type try/catch
+  // on top: an unexpected failure in one type degrades that type's results
+  // instead of failing the whole request.
   const allFiles: DbFile[] = [];
   for (const type of types) {
-    const { data: typeFiles } = await FilesAPI.getFiles({
-      paths: [searchPath],
-      type,
-      depth
-    }, user);
+    try {
+      const { data: typeFiles } = await FilesAPI.getFiles({
+        paths: [searchPath],
+        type,
+        depth
+      }, user);
 
-    // Load full content for search
-    const fileIds = typeFiles.map((f: any) => f.id);
-    if (fileIds.length > 0) {
-      const { data: fullFiles } = await FilesAPI.loadFiles(fileIds, user);
-      allFiles.push(...fullFiles);
+      // Load full content for search
+      const fileIds = typeFiles.map((f: any) => f.id);
+      if (fileIds.length > 0) {
+        const { data: fullFiles } = await FilesAPI.loadFiles(fileIds, user, { skipEnrichment: true });
+        allFiles.push(...fullFiles);
+      }
+    } catch (error) {
+      console.error(`[file-search] Skipping file type "${type}" — load failed:`, error);
     }
   }
 
