@@ -21,6 +21,7 @@ import {
 // Accent token: themable via --mx-table-accent (story/table css overrides),
 // falling back to the app teal so default visuals are unchanged.
 const TEAL = 'var(--mx-table-accent, #16a085)'
+const mix = (color: string, pct: number) => `color-mix(in srgb, ${color} ${pct}%, transparent)`
 
 // Small 16px icon-button used for the sort/filter/format toggles.
 const toggleBtnClass = (active: boolean) =>
