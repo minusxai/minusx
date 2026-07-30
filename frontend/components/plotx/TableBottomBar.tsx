@@ -57,7 +57,7 @@ export const TableBottomBar = ({
   return (
     // mx-toolbar: stable class contract — surfaces/css overrides hide chrome with
     // `.mx-toolbar { display: none }` instead of a prop (no toggles by design).
-    <div className="mx-toolbar mt-2 flex shrink-0 items-center justify-between px-2">
+    <div className="mx-toolbar mt-2 shrink-0 items-center justify-between px-2">
       {/* Left: Stats, Columns, Filters */}
       <div className="flex items-center gap-3">
         {setShowStats && (

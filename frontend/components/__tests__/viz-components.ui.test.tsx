@@ -1,5 +1,5 @@
 import React from 'react'
-import { screen } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderWithProviders } from '@/test/helpers/render-with-providers'
 import { TableV2 } from '@/components/plotx/TableV2'
@@ -246,6 +246,52 @@ describe('TableV2', () => {
       <TableV2 columns={TEST_COLUMNS} types={TEST_TYPES} rows={TEST_ROWS} />
     )
     expect(screen.queryByLabelText('Format column age')).not.toBeInTheDocument()
+  })
+
+  it('exposes an explicit column size as an overrideable CSS fallback', () => {
+    renderWithProviders(
+      <TableV2
+        columns={TEST_COLUMNS}
+        types={TEST_TYPES}
+        rows={TEST_ROWS}
+        initialColumnSizing={{ age: 84 }}
+      />
+    )
+
+    const column = document.querySelector('col.mx-col-age') as HTMLElement
+    const header = screen.getByText('age').closest('th') as HTMLElement
+    const cell = document.querySelector('td.mx-col-age') as HTMLElement
+
+    expect(column.style.getPropertyValue('--mx-column-width')).toBe('84px')
+    expect(header.style.getPropertyValue('--mx-column-width')).toBe('84px')
+    expect(cell.style.getPropertyValue('--mx-column-width')).toBe('84px')
+    expect(header.style.width).toBe('')
+    expect(cell.style.width).toBe('')
+  })
+
+  it('starts the first resize from the intrinsic rendered width', () => {
+    renderWithProviders(
+      <TableV2 columns={TEST_COLUMNS} types={TEST_TYPES} rows={TEST_ROWS} />
+    )
+
+    const header = screen.getByText('age').closest('th') as HTMLElement
+    const resizeHandle = header.querySelector('.cursor-col-resize') as HTMLElement
+    vi.spyOn(header, 'getBoundingClientRect').mockReturnValue({
+      width: 92,
+      height: 40,
+      top: 0,
+      right: 92,
+      bottom: 40,
+      left: 0,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    })
+
+    fireEvent.mouseDown(resizeHandle, { clientX: 92 })
+
+    expect(header.style.getPropertyValue('--mx-column-width')).toBe('92px')
+    fireEvent.mouseUp(document, { clientX: 92 })
   })
 })
 
@@ -616,4 +662,3 @@ describe('VizConfigPanel geo type', () => {
     )
   })
 })
-

@@ -937,10 +937,10 @@ export function setRecipeParam(envelope: VizEnvelope, key: string, value: unknow
 
 // ── DOM-tier sources (RFC §10: table + pivot) ───────────────────────────────────────
 //
-// Both persist display state only — columnFormats and the css override (looks are CSS
-// against the stable .mx-* class contract; behavior/chrome are per-surface); pivot
-// additionally persists its typed STRUCTURE (PivotConfig). All setters are surgical
-// envelope edits; no-ops on sources of a different kind.
+// Both persist display state. Tables additionally persist wrapColumns because wrapping
+// changes row geometry and must be known to the virtualizer; it is not merely CSS.
+// Pivot additionally persists its typed STRUCTURE (PivotConfig). All setters are
+// surgical envelope edits; no-ops on sources of a different kind.
 
 const isDomTierSource = (envelope: VizEnvelope): boolean => {
   const kind = sourceOf(envelope).kind;
@@ -985,6 +985,19 @@ export function setTableConditionalFormats(envelope: VizEnvelope, rules: Conditi
   if (!isDomTierSource(envelope)) return envelope;
   const next = JSON.parse(JSON.stringify(envelope)) as VizEnvelope;
   (next.source as unknown as AnySource).conditionalFormats = rules.length > 0 ? rules : null;
+  return next;
+}
+
+export function getTableWrapColumns(envelope: VizEnvelope): string[] {
+  if (!isTableSource(envelope)) return [];
+  const value = (sourceOf(envelope) as unknown as AnySource).wrapColumns;
+  return Array.isArray(value) ? value.filter((column): column is string => typeof column === 'string') : [];
+}
+
+export function setTableWrapColumns(envelope: VizEnvelope, columns: string[]): VizEnvelope {
+  if (!isTableSource(envelope)) return envelope;
+  const next = JSON.parse(JSON.stringify(envelope)) as VizEnvelope;
+  (next.source as unknown as AnySource).wrapColumns = columns.length > 0 ? [...new Set(columns)] : null;
   return next;
 }
 

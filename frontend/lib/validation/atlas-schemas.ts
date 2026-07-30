@@ -312,6 +312,9 @@ export type VizSourceVega = Static<typeof VizSourceVega>;
 // state is display formatting — sorting/filtering/visibility are ephemeral UI state.
 export const VizSourceTable = Type.Object({
   kind: Type.Literal('table'),
+  wrapColumns: Type.Optional(Nullable(Type.Array(Type.String(), { description:
+    'result column names whose body cells wrap onto multiple lines. Omit/null/[] for the default ' +
+    'single-line ellipsis behavior.' }))),
   columnFormats: Nullable(Type.Record(Type.String(), ColumnFormatConfig, { description:
     'per-column display formatting keyed by RESULT column name: `alias` + `format` (d3 — the unified ' +
     'viz vocabulary, numbers and dates). Legacy decimalPoints/dateFormat/prefix/suffix also honored. ' +
@@ -321,10 +324,15 @@ export const VizSourceTable = Type.Object({
     'on a column holds. Omit for none.' })),
   css: Nullable(Type.String({ description:
     'CSS overrides for the table LOOKS (the DOM tier equivalent of a chart spec), scoped to this ' +
-    "table automatically. Write rules against the stable class contract: .mx-table, .mx-header-row, " +
-    '.mx-th, .mx-row, .mx-cell, .mx-col-<columnName> (per-column), .mx-toolbar (bottom bar), ' +
+    "table automatically. Write rules against the stable class contract: .mx-table, .mx-column, .mx-header-row, " +
+    '.mx-th, .mx-row, .mx-cell, .mx-col-<columnName> (per-column), .mx-column-type-<text|number|date|json>, ' +
+    '.mx-type-icon (+ .mx-type-icon-<text|number|date|json>), .mx-sort-icon, .mx-filter-icon, ' +
+    '.mx-toolbar (bottom bar), ' +
     '.mx-row-odd/.mx-row-even (zebra stripe parity — the default stripe is a CSS rule, restyle or ' +
-    'unset it here). No @import and no external url() — both are rejected. Omit for the default theme.' })),
+    'unset it here). Use source.wrapColumns for text wrapping so virtual row heights are measured. ' +
+    'Table padding is customizable with --mx-cell-padding-block/inline and ' +
+    '--mx-header-padding-block/inline. No @import and no external url() — both are rejected. ' +
+    'Omit for the default theme.' })),
 }, { title: 'VizSourceTable' });
 export type VizSourceTable = Static<typeof VizSourceTable>;
 

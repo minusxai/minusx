@@ -12,6 +12,7 @@ interface TableBodyProps {
   visibleColIds: string[]
   colSizes: Record<string, number>
   wrapColumns?: ReadonlySet<string>
+  measureRow?: (node: HTMLTableRowElement | null) => void
   onRowClick?: (row: Record<string, any>, index: number) => void
   getCellBg: (row: Record<string, any>, colId: string) => string | undefined
   renderCell?: (colId: string, value: any, row: Record<string, any>) => React.ReactNode | undefined
@@ -31,6 +32,7 @@ export const TableBody = ({
   visibleColIds,
   colSizes,
   wrapColumns,
+  measureRow,
   onRowClick,
   getCellBg,
   renderCell,
@@ -48,7 +50,9 @@ export const TableBody = ({
         const original = row.original
         return (
           <tr
+            ref={wrapColumns?.size ? measureRow : undefined}
             key={row.id}
+            data-index={virtualRow.index}
             data-row-idx={virtualRow.index}
             // mx-* is the STABLE class contract (css overrides); table-v2-row is internal.
             // Zebra parity rides DATA-index classes (virtualization spacers break
@@ -61,20 +65,28 @@ export const TableBody = ({
             {visibleColIds.map((colId) => {
               const shouldWrap = wrapColumns?.has(colId)
               const cellBg = getCellBg(original, colId)
+              const colType = columnTypes[colIndexMap[colId]]
               return (
                 <td
                   key={colId}
                   data-col-id={colId}
-                  // Width rides a custom property; borders/wrap are :where() rules
-                  // in TABLE_BASE_CSS. Only data-driven conditional-format colors
-                  // stay inline (genuinely dynamic per cell).
-                  className={`table-v2-cell mx-cell ${cssColumnClass(colId)}${shouldWrap ? ' mx-cell-wrap' : ''}`}
+                  // Borders/wrap are :where() rules in TABLE_BASE_CSS. Only an
+                  // explicit/dragged width and data-driven colors stay inline.
+                  className={`table-v2-cell mx-cell ${cssColumnClass(colId)} mx-column-type-${colType}${shouldWrap ? ' mx-cell-wrap' : ''}`}
                   style={{
-                    '--mx-col-w': `${colSizes[colId]}px`,
+                    '--mx-col-w': `${colSizes[colId] ?? 150}px`,
+                    ...(colSizes[colId] == null ? undefined : { '--mx-column-width': `${colSizes[colId]}px` }),
                     ...(cellBg ? { backgroundColor: cellBg, color: getContrastText(cellBg) } : undefined),
+                    ...(shouldWrap ? {
+                      whiteSpace: 'normal',
+                      overflow: 'visible',
+                      overflowWrap: 'anywhere',
+                      wordBreak: 'break-word',
+                      textOverflow: 'clip',
+                    } : undefined),
                   } as React.CSSProperties}
                 >
-                  {renderCell?.(colId, original[colId], original) ?? formatCell(colId, original[colId], columnTypes[colIndexMap[colId]])}
+                  {renderCell?.(colId, original[colId], original) ?? formatCell(colId, original[colId], colType)}
                 </td>
               )
             })}

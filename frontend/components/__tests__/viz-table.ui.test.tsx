@@ -41,6 +41,8 @@ vi.mock('@tanstack/react-virtual', () => ({
     getVirtualItems: () =>
       Array.from({ length: count }, (_, i) => ({ index: i, start: i * 41, end: (i + 1) * 41, size: 41 })),
     getTotalSize: () => count * 41,
+    measureElement: vi.fn(),
+    measure: vi.fn(),
   }),
 }))
 vi.mock('@/lib/database/duckdb', () => ({
@@ -196,12 +198,83 @@ describe('QuestionVisualization — table envelope routing', () => {
   it('exposes the stable class contract on the table DOM', () => {
     renderViz(tableViz())
     expect(document.querySelector('.mx-table')).toBeTruthy()
+    expect(document.querySelector('.mx-column')).toBeTruthy()
     expect(document.querySelector('.mx-header-row')).toBeTruthy()
     expect(document.querySelector('.mx-th')).toBeTruthy()
     expect(document.querySelector('.mx-row')).toBeTruthy()
     expect(document.querySelector('.mx-cell')).toBeTruthy()
     expect(document.querySelector('.mx-col-revenue')).toBeTruthy()
+    expect(document.querySelector('.mx-column-type-text')).toBeTruthy()
+    expect(document.querySelector('.mx-column-type-number')).toBeTruthy()
+    expect(document.querySelector('.mx-type-icon.mx-type-icon-text')).toBeTruthy()
+    expect(document.querySelector('.mx-type-icon.mx-type-icon-number')).toBeTruthy()
+    expect(document.querySelector('.mx-sort-icon')?.tagName).toBe('BUTTON')
+    expect(document.querySelector('.mx-filter-icon')?.tagName).toBe('BUTTON')
+    expect(document.querySelector('.mx-cell.mx-column-type-number')).toBeTruthy()
     expect(document.querySelector('.mx-toolbar')).toBeTruthy()
+  })
+
+  it('keeps hideable controls free of Tailwind display utilities', () => {
+    renderViz(tableViz())
+    const sort = document.querySelector('.mx-sort-icon') as HTMLElement
+    const filter = document.querySelector('.mx-filter-icon') as HTMLElement
+    const toolbar = document.querySelector('.mx-toolbar') as HTMLElement
+
+    // Tailwind is globally important, so a `flex` utility here would defeat a
+    // normal `.mx-… { display: none }` override. Their flex defaults instead
+    // live in TableV2's zero-specificity base stylesheet.
+    expect(sort.classList.contains('flex')).toBe(false)
+    expect(filter.classList.contains('flex')).toBe(false)
+    expect(toolbar.classList.contains('flex')).toBe(false)
+    expect(getComputedStyle(sort).display).toBe('flex')
+    expect(getComputedStyle(filter).display).toBe('flex')
+    expect(getComputedStyle(toolbar).display).toBe('flex')
+  })
+
+  it('uses intrinsic column sizing until an explicit size is supplied', () => {
+    renderViz(tableViz())
+    const table = document.querySelector('.mx-table') as HTMLTableElement
+    const header = document.querySelector('.mx-th') as HTMLElement
+    const column = document.querySelector('.mx-column') as HTMLElement
+
+    expect(table.classList.contains('w-full')).toBe(false)
+    expect(table.classList.contains('table-fixed')).toBe(false)
+    expect(table.style.minWidth).toBe('')
+    expect(header.style.width).toBe('')
+    expect(header.style.getPropertyValue('--mx-column-width')).toBe('')
+    expect(column.style.getPropertyValue('--mx-column-width')).toBe('')
+  })
+
+  it('wraps only the columns selected in the table envelope', () => {
+    renderViz(tableViz({ wrapColumns: ['region'] }))
+
+    const wrappedCell = document.querySelector('td.mx-col-region') as HTMLTableCellElement
+    const ellipsisCell = document.querySelector('td.mx-col-revenue') as HTMLTableCellElement
+    const row = wrappedCell.closest('tr') as HTMLTableRowElement
+
+    expect(wrappedCell.style.whiteSpace).toBe('normal')
+    expect(wrappedCell.style.overflow).toBe('visible')
+    expect(wrappedCell.style.overflowWrap).toBe('anywhere')
+    expect(wrappedCell.style.wordBreak).toBe('break-word')
+    expect(wrappedCell.style.textOverflow).toBe('clip')
+    expect(ellipsisCell.style.whiteSpace).toBe('')
+    expect(row.style.height).toBe('')
+    expect(row.dataset.index).toBe('0')
+  })
+
+  it('keeps fixed-height, single-line rows when no columns wrap', () => {
+    renderViz(tableViz())
+    const row = document.querySelector('.mx-row') as HTMLTableRowElement
+    const cell = row.querySelector('.mx-cell') as HTMLTableCellElement
+    const baseCss = Array.from(document.querySelectorAll('style'))
+      .map(style => style.textContent ?? '')
+      .find(css => css.includes('.table-v2-row')) ?? ''
+
+    expect(row.style.height).toBe('')
+    expect(row.classList.contains('mx-row-wrap')).toBe(false)
+    expect(baseCss).toContain('height: 41px')
+    expect(cell.style.whiteSpace).toBe('')
+    expect(row.dataset.index).toBe('0')
   })
 
   it('zebra striping is a CSS default on parity classes, not an inline style', () => {
@@ -249,7 +322,7 @@ describe('VegaVizPanel — table envelope', () => {
     expect(screen.getByLabelText('Table fields hint')).toBeInTheDocument()
   })
 
-  it('Settings tab hosts conditional formatting and the CSS override editor', async () => {
+  it('Settings tab updates CSS overrides explicitly instead of on blur', async () => {
     const user = userEvent.setup()
     const onVizChange = renderPanel(tableViz())
     await user.click(screen.getByLabelText('Settings tab'))
@@ -257,12 +330,43 @@ describe('VegaVizPanel — table envelope', () => {
     expect(screen.getByLabelText('Add conditional formatting rule')).toBeInTheDocument()
 
     const cssEditor = screen.getByLabelText('CSS overrides')
+    const updateCss = screen.getByRole('button', { name: 'Update CSS overrides' })
+    expect(updateCss).toBeDisabled()
+
     await user.click(cssEditor)
     await user.type(cssEditor, '.mx-th {{ font-size: 14px; }')
-    await user.tab() // commit on blur
+    await user.tab()
+
+    expect(onVizChange).not.toHaveBeenCalled()
+    expect(updateCss).toBeEnabled()
+    await user.click(updateCss)
 
     const next = onVizChange.mock.calls.at(-1)![0] as VizEnvelope
     expect((next.source as unknown as { css: string }).css).toContain('.mx-th')
+  })
+
+  it('Settings tab shows and updates wrapped table columns', async () => {
+    const user = userEvent.setup()
+    const onVizChange = renderPanel(tableViz({ wrapColumns: ['region'] }))
+    await user.click(screen.getByLabelText('Settings tab'))
+
+    expect(screen.getByText('1/2')).toBeInTheDocument()
+    expect(screen.getByLabelText('Wrap column region')).toBeChecked()
+    expect(screen.getByLabelText('Wrap column revenue')).not.toBeChecked()
+
+    await user.click(screen.getByLabelText('Wrap column revenue'))
+    const next = onVizChange.mock.calls.at(-1)![0] as VizEnvelope
+    expect((next.source as unknown as { wrapColumns: string[] }).wrapColumns).toEqual(['region', 'revenue'])
+  })
+
+  it('Settings tab clears wrapColumns when the last wrapped column is unchecked', async () => {
+    const user = userEvent.setup()
+    const onVizChange = renderPanel(tableViz({ wrapColumns: ['region'] }))
+    await user.click(screen.getByLabelText('Settings tab'))
+    await user.click(screen.getByLabelText('Wrap column region'))
+
+    const next = onVizChange.mock.calls.at(-1)![0] as VizEnvelope
+    expect((next.source as unknown as { wrapColumns: null }).wrapColumns).toBeNull()
   })
 })
 

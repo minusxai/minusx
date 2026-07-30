@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, type CSSProperties } from 'react'
 import { calculateColumnStats, ColumnStats, getColumnType, loadDataIntoTable, generateRandomTableName } from '@/lib/database/duckdb'
 import { calculateHistogram } from '@/lib/chart/histogram'
 import { formatNumber, applyPrefixSuffix, formatDateValue, formatD3Number, formatD3Date } from '@/lib/chart/chart-format'
@@ -27,6 +27,7 @@ import {
   formatValue,
   NUMBER_FORMAT,
   ROW_HEIGHT,
+  cssColumnClass,
   isFacetedFilter,
 } from './table-v2-utils'
 
@@ -219,19 +220,35 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
     count: tableRows.length,
     getScrollElement: () => tableBodyRef.current,
     estimateSize: () => ROW_HEIGHT,
+    measureElement: wrapColumns?.size
+      ? element => element.getBoundingClientRect().height
+      : undefined,
     overscan: 20,
   })
 
+  const wrappingEnabled = !!wrapColumns?.size
+  useEffect(() => {
+    // Drop cached multiline measurements when wrapping is toggled. Newly wrapped
+    // rows are then measured by their refs; unwrapped rows return to ROW_HEIGHT.
+    rowVirtualizer.measure?.()
+  }, [rowVirtualizer, wrappingEnabled])
+
   const virtualItems = rowVirtualizer.getVirtualItems()
 
-  // Pre-compute visible column IDs and sizes once per render
+  // Pre-compute visible column IDs and explicit sizes once per render. Columns
+  // without a value in columnSizing deliberately stay intrinsic-width: TanStack's
+  // internal 150px fallback is useful for its resize math, but it is not a layout
+  // default for this table.
   const visibleColIds = useMemo(() => {
     return table.getVisibleLeafColumns().map(c => c.id)
   }, [table, columnVisibility]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const colSizes = useMemo(() => {
     const sizes: Record<string, number> = {}
-    table.getVisibleLeafColumns().forEach(c => { sizes[c.id] = c.getSize() })
+    table.getVisibleLeafColumns().forEach(c => {
+      const explicitSize = columnSizing[c.id]
+      if (explicitSize != null) sizes[c.id] = explicitSize
+    })
     return sizes
   }, [table, columnSizing, columnVisibility]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -350,9 +367,27 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
           <table
             // mx-* classes are the STABLE contract for css overrides (Viz V2 table
             // source `css` field / story-level styling) — documented in atlas-schemas.
-            className="mx-table w-full border-collapse table-fixed text-sm"
-            style={{ '--mx-table-min-w': `${visibleColumnCount * 150}px` } as React.CSSProperties}
+            className="mx-table border-collapse text-sm"
           >
+            {/* Column geometry lives on <col>, where CSS can override it cleanly.
+                No size means native intrinsic sizing; a supplied/dragged size is
+                exposed as a fallback custom property rather than an inline width. */}
+            <colgroup>
+              {visibleHeaders.map((header) => {
+                const colType = columnTypes[colIndexMap[header.id]]
+                const explicitSize = colSizes[header.id]
+                const widthStyle = explicitSize == null
+                  ? undefined
+                  : ({ '--mx-column-width': `${explicitSize}px` } as CSSProperties)
+                return (
+                  <col
+                    key={header.id}
+                    className={`mx-column ${cssColumnClass(header.id)} mx-column-type-${colType}`}
+                    style={widthStyle}
+                  />
+                )
+              })}
+            </colgroup>
             {/* Header */}
             <thead className="sticky top-0 z-[2] bg-muted">
               <tr className="mx-header-row">
@@ -394,6 +429,7 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
               visibleColIds={visibleColIds}
               colSizes={colSizes}
               wrapColumns={wrapColumns}
+              measureRow={wrapColumns?.size ? rowVirtualizer.measureElement : undefined}
               onRowClick={onRowClick}
               getCellBg={getCellBg}
               renderCell={renderCell}
@@ -430,9 +466,9 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
 // envelope's scoped css field (`.mx-viz-scope-X { .mx-row-odd { … } }`, 0-2-0)
 // — and any author rule on the .mx-* contract — overrides every rule here.
 // Structural declarations (widths, borders, row height, accent) deliberately
-// live HERE rather than as inline style= (inline would defeat the contract);
-// dynamic values ride custom properties (--mx-table-min-w, --mx-col-w) set
-// inline, so an author `width:` rule still wins. The row-hover rule carries no
+// live HERE rather than as inline style= (inline would defeat the contract).
+// Explicit widths ride --mx-column-width; intrinsic columns leave it unset.
+// The row-hover rule carries no
 // !important: its bare :hover (0-1-0) already beats the zebra :where() default.
 // The teal accent is themable via --mx-table-accent (fallback keeps the exact
 // previous #16a085 default).
@@ -444,30 +480,55 @@ const TABLE_BASE_CSS = `
 .table-v2-scroll::-webkit-scrollbar-corner { background: transparent; }
 .mx-facet-list::-webkit-scrollbar { width: 4px; }
 .mx-facet-list::-webkit-scrollbar-thumb { background: var(--mx-table-accent, #16a085); border-radius: 2px; }
-:where(.mx-table) { min-width: var(--mx-table-min-w); }
-:where(.mx-table .mx-th) {
-  width: var(--mx-col-w);
+:where(.table-v2-scroll .mx-header-toggle),
+:where(.mx-toolbar) {
+  display: flex;
+}
+:where(.table-v2-scroll .mx-table) {
+  width: auto;
+  table-layout: auto;
+  --mx-cell-padding-block: 0.5rem;
+  --mx-cell-padding-inline: 0.625rem;
+  --mx-header-padding-block: 0.625rem;
+  --mx-header-padding-inline: 0.625rem;
+}
+:where(.table-v2-scroll .mx-column),
+:where(.table-v2-scroll .mx-th),
+:where(.table-v2-scroll .mx-cell) {
+  width: var(--mx-column-width, auto);
+}
+:where(.table-v2-scroll .mx-th),
+:where(.table-v2-scroll .mx-cell) {
+  max-width: var(--mx-column-width, none);
+}
+:where(.table-v2-scroll .mx-th) {
+  padding: var(--mx-header-padding-block) var(--mx-header-padding-inline);
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
 }
-:where(.mx-table .mx-th:last-child) { border-right: none; }
-:where(.mx-table .mx-th.mx-th-accented) {
+:where(.table-v2-scroll .mx-th:last-child) { border-right: none; }
+:where(.table-v2-scroll .mx-th.mx-th-accented) {
   border-bottom: 2px solid var(--mx-table-accent, #16a085);
   background: color-mix(in srgb, var(--mx-table-accent, #16a085) 5%, transparent);
 }
-:where(.mx-table .mx-resize-handle) { background: var(--mx-table-accent, #16a085); }
+:where(.table-v2-scroll .mx-resize-handle) { background: var(--mx-table-accent, #16a085); }
 :where(.table-v2-scroll .table-v2-row) { height: ${ROW_HEIGHT}px; }
 :where(.table-v2-scroll .table-v2-row.mx-row-wrap) { height: auto; }
 :where(.table-v2-scroll .table-v2-row.mx-row-clickable) { cursor: pointer; }
-:where(.table-v2-scroll) :where(.mx-row-odd) { background: var(--muted); }
+:where(.table-v2-scroll .mx-type-icon-text) { color: #f39c12; }
+:where(.table-v2-scroll .mx-type-icon-number) { color: #2980b9; }
+:where(.table-v2-scroll .mx-type-icon-date) { color: #9b59b6; }
+:where(.table-v2-scroll .mx-type-icon-json) { color: #1abc9c; }
+:where(.table-v2-scroll) :where(.mx-row-odd) {
+  background: color-mix(in srgb, var(--foreground) 8%, var(--background));
+}
 :where(.table-v2-scroll .table-v2-row):hover { background: var(--accent); }
 :where(.table-v2-scroll .table-v2-cell) {
-  width: var(--mx-col-w);
   border-right: 1px solid var(--border);
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 0.875rem;
   color: var(--foreground);
-  padding: 12px 16px;
+  padding: var(--mx-cell-padding-block) var(--mx-cell-padding-inline);
   text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -475,6 +536,12 @@ const TABLE_BASE_CSS = `
   cursor: pointer;
 }
 :where(.table-v2-scroll .table-v2-cell:last-child) { border-right: none; }
-:where(.table-v2-scroll .table-v2-cell.mx-cell-wrap) { white-space: normal; word-break: break-word; }
+:where(.table-v2-scroll .table-v2-cell.mx-cell-wrap) {
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  text-overflow: clip;
+}
 :where(.table-v2-scroll .table-v2-cell):hover { background: color-mix(in srgb, var(--muted-foreground) 12%, transparent); }
 `

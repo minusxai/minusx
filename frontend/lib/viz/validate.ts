@@ -73,6 +73,12 @@ function validateEnvelopeShape(envelope: unknown): { issues: VizIssue[]; env?: V
     if (source.css != null && typeof source.css !== 'string') {
       return { issues: [err('E_ENVELOPE', '/source/css', 'css must be a string of CSS rules against the .mx-* class contract')] };
     }
+    if (source.kind === 'table' && source.wrapColumns != null && (
+      !Array.isArray(source.wrapColumns) ||
+      source.wrapColumns.some(column => typeof column !== 'string')
+    )) {
+      return { issues: [err('E_ENVELOPE', '/source/wrapColumns', 'wrapColumns must be an array of result column names')] };
+    }
     if (source.kind === 'pivot') {
       const config = source.config as Record<string, unknown> | undefined;
       if (config == null || typeof config !== 'object' || Array.isArray(config)) {
@@ -222,6 +228,12 @@ export function validateVizEnvelope(
         issues.push(err('E_FIELD_NOT_FOUND', path, `"${name}" is not in the query result. Available fields: ${available}`));
       for (const key of Object.keys((source.columnFormats as Record<string, unknown> | null | undefined) ?? {})) {
         if (!known.has(key)) notFound(`/source/columnFormats/${key}`, key);
+      }
+      if (source.kind === 'table') {
+        const wrapColumns = (source.wrapColumns as string[] | null | undefined) ?? [];
+        wrapColumns.forEach((name, i) => {
+          if (!known.has(name)) notFound(`/source/wrapColumns/${i}`, name);
+        });
       }
       if (source.kind === 'pivot') {
         const config = source.config as { rows?: string[]; columns?: string[]; values?: Array<{ column?: string }> };
