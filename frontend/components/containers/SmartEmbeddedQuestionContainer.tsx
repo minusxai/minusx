@@ -7,6 +7,7 @@ import { selectMergedContent, selectEffectiveName } from '@/store/filesSlice';
 import { QuestionContent, QuestionParameter } from '@/lib/types';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import { applyVizOverride } from '@/lib/data/story/story-question';
+import { isInteractiveMapContent } from '@/lib/viz/interactive-map';
 import EmbeddedQuestionContainer from './EmbeddedQuestionContainer';
 import { Link } from '@/components/ui/Link';
 import { LuEllipsis, LuSparkles, LuExternalLink, LuTrash2, LuPencil } from 'react-icons/lu';
@@ -96,13 +97,10 @@ function SmartEmbeddedQuestionContainerInner({
     [rawMergedContent, vizOverride],
   );
 
-  // The viz types that respond to wheel/drag/hover (geo recipes expose pan+zoom
-  // signals — see lib/viz/viz-templates.ts). They are the only ones whose surface
-  // the edit-mode drag overlay must not cover.
-  const isInteractiveViz = useMemo(() => {
-    const t = mergedContent?.vizSettings?.type;
-    return t === 'choropleth' || t === 'point_map' || t === 'geo';
-  }, [mergedContent]);
+  // Charts that respond to wheel/drag/hover — the only ones whose surface the
+  // edit-mode drag overlay must not cover. Shared with VegaChart so the two cannot
+  // disagree; it reads `viz` first because that is authoritative when present.
+  const isInteractiveViz = useMemo(() => isInteractiveMapContent(mergedContent), [mergedContent]);
 
   // Use effective name so pending renames are reflected immediately in the dashboard card
   const effectiveName = useAppSelector(state => selectEffectiveName(state, questionId));
