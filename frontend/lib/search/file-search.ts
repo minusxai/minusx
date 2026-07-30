@@ -288,7 +288,8 @@ export async function searchFilesInFolder(
         allFiles.push(...fullFiles);
       }
     } catch (error) {
-      console.error(`[file-search] Skipping file type "${type}" — load failed:`, error);
+      // `type` is request-derived — pass it as an argument, never in the format string.
+      console.error('[file-search] Skipping file type — load failed:', type, error);
     }
   }
 
