@@ -314,7 +314,7 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
               className="w-full rounded-md border border-input bg-transparent px-2 py-1.5 font-mono text-[11px] text-foreground outline-none placeholder:text-muted-foreground focus-visible:border-ring"
               rows={5}
               placeholder={isTable
-                ? '.mx-th { background: #223; }\n.mx-toolbar { display: none; }'
+                ? '.mx-type-icon { display: none; }\n.mx-toolbar { display: none; }'
                 : '.mx-pivot th { background: #223; }'}
               value={cssDraft ?? getVizCss(envelope) ?? ''}
               onChange={(e) => setCssDraft(e.target.value)}
@@ -325,7 +325,7 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
             />
             <p className="mt-1 text-[10px] leading-normal text-muted-foreground">
               {isTable
-                ? 'Scoped to this table. Classes: .mx-table, .mx-header-row, .mx-th, .mx-row (+ .mx-row-odd/-even zebra), .mx-cell, .mx-col-<column>, .mx-toolbar. No @import / url().'
+                ? 'Scoped to this table. Classes: .mx-table, .mx-column, .mx-header-row, .mx-th, .mx-row (+ .mx-row-odd/-even zebra), .mx-cell, .mx-col-<column>, .mx-column-type-<type>, .mx-type-icon, .mx-toolbar. No @import / url().'
                 : 'Scoped to this pivot. Target .mx-pivot with element selectors (th, td, thead). No @import / url().'}
             </p>
           </div>

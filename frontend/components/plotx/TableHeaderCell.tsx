@@ -1,5 +1,5 @@
 import { createElement } from 'react'
-import { createPortal } from 'react-dom'
+import { createPortal, flushSync } from 'react-dom'
 import { LuCheck, LuArrowUp, LuArrowDown, LuFilter, LuX, LuArrowUpDown, LuSettings2 } from 'react-icons/lu'
 import type { Header } from '@tanstack/react-table'
 import type { ColumnStats } from '@/lib/database/duckdb'
@@ -21,7 +21,6 @@ import {
 // Accent token: themable via --mx-table-accent (story/table css overrides),
 // falling back to the app teal so default visuals are unchanged.
 const TEAL = 'var(--mx-table-accent, #16a085)'
-const mix = (color: string, pct: number) => `color-mix(in srgb, ${color} ${pct}%, transparent)`
 
 // Small 16px icon-button used for the sort/filter/format toggles.
 const toggleBtnClass = (active: boolean) =>
@@ -87,14 +86,39 @@ export const TableHeaderCell = ({
   const hasActiveFilter = facetedFilter.search !== '' || facetedFilter.selected.length > 0
   const isAccented = hasActiveFilter || !!isSorted
 
+  const startResize = (
+    event: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>
+  ) => {
+    const table = header.getContext().table
+    const th = event.currentTarget.closest('th')
+    const renderedWidth = th?.getBoundingClientRect().width
+
+    // Intrinsic columns have no TanStack size yet. Seed the resize interaction
+    // from the width the browser actually rendered so the first drag does not
+    // jump to TanStack's internal 150px fallback.
+    if (renderedWidth && table.getState().columnSizing[header.id] == null) {
+      flushSync(() => {
+        table.setColumnSizing((current) => ({
+          ...current,
+          [header.id]: renderedWidth,
+        }))
+      })
+    }
+
+    header.getResizeHandler(event.currentTarget.ownerDocument)(event)
+  }
+
   return (
     <th
-      // Stable class contract for css overrides (Viz V2 table / story styling).
-      // Structural looks (borders, accent bg) live in TABLE_BASE_CSS as
-      // low-specificity :where() rules so author css can override them; the
-      // dynamic width rides a custom property consumed there for the same reason.
-      className={`mx-th ${cssColumnClass(header.id)} ${isAccented ? 'mx-th-accented ' : ''}relative min-w-[100px] px-4 py-3 text-left align-top text-xs font-bold text-foreground`}
-      style={{ '--mx-col-w': `${header.getSize()}px` } as React.CSSProperties}
+      // Structural borders/accent/padding live in TABLE_BASE_CSS so author css
+      // can override them. Only an explicit/dragged width stays inline.
+      className={`mx-th ${cssColumnClass(header.id)} mx-column-type-${colType} ${isAccented ? 'mx-th-accented ' : ''}relative text-left align-top text-xs font-bold text-foreground`}
+      style={{
+        '--mx-col-w': `${header.getSize()}px`,
+        ...(header.getContext().table.getState().columnSizing[header.id] == null
+          ? undefined
+          : { '--mx-column-width': `${header.getContext().table.getState().columnSizing[header.id]}px` }),
+      } as React.CSSProperties}
     >
       {/* Resize handle. The resize handler must receive the OWNING document —
           inside a story the table renders in an iframe, and TanStack registers
@@ -108,8 +132,8 @@ export const TableHeaderCell = ({
         className={`mx-resize-handle absolute inset-y-0 right-0 z-[3] w-[4px] cursor-col-resize touch-none select-none hover:opacity-100 ${
           header.column.getIsResizing() ? 'opacity-100' : 'opacity-0'
         }`}
-        onMouseDown={(e) => header.getResizeHandler(e.currentTarget.ownerDocument)(e)}
-        onTouchStart={(e) => header.getResizeHandler(e.currentTarget.ownerDocument)(e)}
+        onMouseDown={startResize}
+        onTouchStart={startResize}
       />
       <div className="flex flex-col items-start gap-1">
         {/* Column name + sort + filter controls */}
@@ -117,8 +141,8 @@ export const TableHeaderCell = ({
           {/* Existing icon component reference (react-icons/lu) — rendered via
               createElement, matching the old `as={getTypeIcon(colType)}` shape. */}
           {createElement(getTypeIcon(colType), {
-            className: 'shrink-0 text-[11px]',
-            style: { color: getTypeColor(colType) },
+            className: `mx-type-icon mx-type-icon-${colType} shrink-0 text-[11px]`,
+            'aria-hidden': true,
           })}
           <span
             aria-label={`Column header ${getDisplayName(header.id)}`}

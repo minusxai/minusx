@@ -196,12 +196,32 @@ describe('QuestionVisualization — table envelope routing', () => {
   it('exposes the stable class contract on the table DOM', () => {
     renderViz(tableViz())
     expect(document.querySelector('.mx-table')).toBeTruthy()
+    expect(document.querySelector('.mx-column')).toBeTruthy()
     expect(document.querySelector('.mx-header-row')).toBeTruthy()
     expect(document.querySelector('.mx-th')).toBeTruthy()
     expect(document.querySelector('.mx-row')).toBeTruthy()
     expect(document.querySelector('.mx-cell')).toBeTruthy()
     expect(document.querySelector('.mx-col-revenue')).toBeTruthy()
+    expect(document.querySelector('.mx-column-type-text')).toBeTruthy()
+    expect(document.querySelector('.mx-column-type-number')).toBeTruthy()
+    expect(document.querySelector('.mx-type-icon.mx-type-icon-text')).toBeTruthy()
+    expect(document.querySelector('.mx-type-icon.mx-type-icon-number')).toBeTruthy()
+    expect(document.querySelector('.mx-cell.mx-column-type-number')).toBeTruthy()
     expect(document.querySelector('.mx-toolbar')).toBeTruthy()
+  })
+
+  it('uses intrinsic column sizing until an explicit size is supplied', () => {
+    renderViz(tableViz())
+    const table = document.querySelector('.mx-table') as HTMLTableElement
+    const header = document.querySelector('.mx-th') as HTMLElement
+    const column = document.querySelector('.mx-column') as HTMLElement
+
+    expect(table.classList.contains('w-full')).toBe(false)
+    expect(table.classList.contains('table-fixed')).toBe(false)
+    expect(table.style.minWidth).toBe('')
+    expect(header.style.width).toBe('')
+    expect(header.style.getPropertyValue('--mx-column-width')).toBe('')
+    expect(column.style.getPropertyValue('--mx-column-width')).toBe('')
   })
 
   it('zebra striping is a CSS default on parity classes, not an inline style', () => {

@@ -61,20 +61,21 @@ export const TableBody = ({
             {visibleColIds.map((colId) => {
               const shouldWrap = wrapColumns?.has(colId)
               const cellBg = getCellBg(original, colId)
+              const colType = columnTypes[colIndexMap[colId]]
               return (
                 <td
                   key={colId}
                   data-col-id={colId}
-                  // Width rides a custom property; borders/wrap are :where() rules
-                  // in TABLE_BASE_CSS. Only data-driven conditional-format colors
-                  // stay inline (genuinely dynamic per cell).
-                  className={`table-v2-cell mx-cell ${cssColumnClass(colId)}${shouldWrap ? ' mx-cell-wrap' : ''}`}
+                  // Borders/wrap are :where() rules in TABLE_BASE_CSS. Only an
+                  // explicit/dragged width and data-driven colors stay inline.
+                  className={`table-v2-cell mx-cell ${cssColumnClass(colId)} mx-column-type-${colType}${shouldWrap ? ' mx-cell-wrap' : ''}`}
                   style={{
-                    '--mx-col-w': `${colSizes[colId]}px`,
+                    '--mx-col-w': `${colSizes[colId] ?? 150}px`,
+                    ...(colSizes[colId] == null ? undefined : { '--mx-column-width': `${colSizes[colId]}px` }),
                     ...(cellBg ? { backgroundColor: cellBg, color: getContrastText(cellBg) } : undefined),
                   } as React.CSSProperties}
                 >
-                  {renderCell?.(colId, original[colId], original) ?? formatCell(colId, original[colId], columnTypes[colIndexMap[colId]])}
+                  {renderCell?.(colId, original[colId], original) ?? formatCell(colId, original[colId], colType)}
                 </td>
               )
             })}

@@ -321,10 +321,13 @@ export const VizSourceTable = Type.Object({
     'on a column holds. Omit for none.' })),
   css: Nullable(Type.String({ description:
     'CSS overrides for the table LOOKS (the DOM tier equivalent of a chart spec), scoped to this ' +
-    "table automatically. Write rules against the stable class contract: .mx-table, .mx-header-row, " +
-    '.mx-th, .mx-row, .mx-cell, .mx-col-<columnName> (per-column), .mx-toolbar (bottom bar), ' +
+    "table automatically. Write rules against the stable class contract: .mx-table, .mx-column, .mx-header-row, " +
+    '.mx-th, .mx-row, .mx-cell, .mx-col-<columnName> (per-column), .mx-column-type-<text|number|date|json>, ' +
+    '.mx-type-icon (+ .mx-type-icon-<text|number|date|json>), .mx-toolbar (bottom bar), ' +
     '.mx-row-odd/.mx-row-even (zebra stripe parity — the default stripe is a CSS rule, restyle or ' +
-    'unset it here). No @import and no external url() — both are rejected. Omit for the default theme.' })),
+    'unset it here). Table padding is customizable with --mx-cell-padding-block/inline and ' +
+    '--mx-header-padding-block/inline. No @import and no external url() — both are rejected. ' +
+    'Omit for the default theme.' })),
 }, { title: 'VizSourceTable' });
 export type VizSourceTable = Static<typeof VizSourceTable>;
 
