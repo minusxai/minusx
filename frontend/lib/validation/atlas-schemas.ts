@@ -572,6 +572,8 @@ export const StoryContent = Type.Object({
     '`<Param name="city" type="text" id={5} column="city" />` (autocomplete from question 5\'s column), or ' +
     '`<Param name="city" type="text" query={`SELECT DISTINCT city FROM customers ORDER BY city`} ' +
     'connection="<db>" />` (story-local autocomplete from the query\'s first result column). ' +
+    '`name` is the stable SQL binding (`:city`); use `label="City"` for different reader-facing text. ' +
+    'Nullable params show an `Any` choice that skips their filter. ' +
     'Inline Param SQL follows the same query rule as inline Question SQL: use a template literal with real line breaks, ' +
     'not a quoted string containing \\n escapes. ' +
     '`<Param name="limit" type="number" widget="slider" min={0} max={100} step={5} />` (range slider). ' +

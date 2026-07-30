@@ -27,11 +27,49 @@ describe('StoryParamControl', () => {
     expect(onChange).toHaveBeenCalledWith(null);
   });
 
+  it('renders Any as a shared nullable action and clears a plain text param', () => {
+    const onChange = vi.fn();
+    const view = renderWithProviders(<StoryParamControl param={city} value="NYC" onChange={onChange} />);
+    const any = view.getByRole('button', { name: 'Any City' });
+    expect(any).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(any);
+    expect(onChange).toHaveBeenCalledWith(null);
+  });
+
+  it('shows the active Any state with the teal treatment', () => {
+    const view = renderWithProviders(<StoryParamControl param={city} value={null} onChange={() => {}} />);
+    const any = view.getByRole('button', { name: 'Any City' });
+    expect(any).toHaveAttribute('aria-pressed', 'true');
+    expect(any).toHaveStyle({ borderColor: '#16a085', color: '#0f766e' });
+  });
+
   it('uses a number input for a number param', () => {
-    const { getByLabelText } = renderWithProviders(
+    const { getByLabelText, queryByRole } = renderWithProviders(
       <StoryParamControl param={{ name: 'min_rev', type: 'number', nullable: false }} value={5} onChange={() => {}} />,
     );
     expect((getByLabelText('param min_rev') as HTMLInputElement).type).toBe('number');
+    expect(queryByRole('button', { name: 'Any Min Rev' })).toBeNull();
+  });
+
+  it('humanizes the binding name by default and supports a custom styled label', () => {
+    const automatic = renderWithProviders(
+      <StoryParamControl
+        param={{ name: 'immediate_parent', type: 'text', nullable: true }}
+        value=""
+        onChange={() => {}}
+      />,
+    );
+    expect(automatic.getByText('Immediate Parent')).toBeInTheDocument();
+    automatic.unmount();
+
+    const custom = renderWithProviders(
+      <StoryParamControl
+        param={{ name: 'immediate_parent', label: 'Parent company', type: 'text', nullable: true, labelStyle: { color: 'rgb(12, 34, 56)' } }}
+        value=""
+        onChange={() => {}}
+      />,
+    );
+    expect(custom.getByText('Parent company')).toHaveStyle({ color: 'rgb(12, 34, 56)' });
   });
 });
 
@@ -53,6 +91,16 @@ describe('StoryParamControl — slider widget (<Param widget="slider">)', () => 
     const { getByLabelText } = renderWithProviders(<StoryParamControl param={slider} value={20} onChange={onChange} />);
     fireEvent.change(getByLabelText('param limit'), { target: { value: '45' } });
     expect(onChange).toHaveBeenCalledWith('45');
+  });
+
+  it('offers the shared Any action for a nullable slider', () => {
+    const onChange = vi.fn();
+    const nullableSlider = { ...slider, nullable: true };
+    const view = renderWithProviders(
+      <StoryParamControl param={nullableSlider} value={20} onChange={onChange} />,
+    );
+    fireEvent.click(view.getByRole('button', { name: 'Any Limit' }));
+    expect(onChange).toHaveBeenCalledWith(null);
   });
 
   it('falls back to a plain input when widget="slider" is set on a non-number param', () => {
@@ -83,17 +131,17 @@ describe('StoryParamControl — autocomplete (param with a question source)', ()
     expect((getByLabelText('param city') as HTMLInputElement).getAttribute('role')).not.toBe('combobox');
   });
 
-  it('applies the agent <Param style={{…}}> override to the input (source-less + sourced)', () => {
+  it('keeps authored input styling while stretching controls to the full parameter width', () => {
     const plain: StoryParam = { name: 'region', type: 'text', nullable: true, style: { width: '250px', fontStyle: 'italic' } };
     const { getByLabelText, unmount } = renderWithProviders(<StoryParamControl param={plain} value="" onChange={() => {}} />);
     const input = getByLabelText('param region') as HTMLInputElement;
-    expect(input.style.width).toBe('250px');
+    expect(input.style.width).toBe('100%');
     expect(input.style.fontStyle).toBe('italic');
     unmount();
 
     const sourced: StoryParam = { name: 'region', type: 'text', nullable: true, source: { questionId: 5, column: 'region' }, style: { width: '250px' } };
     const { getByLabelText: get2 } = renderWithProviders(<StoryParamControl param={sourced} value="" onChange={() => {}} />);
-    expect((get2('param region') as HTMLInputElement).style.width).toBe('250px');
+    expect((get2('param region') as HTMLInputElement).style.width).toBe('100%');
   });
 
   it('does NOT remount the source input when the committed value changes (focus-loss regression)', () => {
@@ -126,21 +174,42 @@ describe('StoryParamControl — autocomplete (param with an inline SQL source)',
     expect(onChange).toHaveBeenCalledWith('West');
   });
 
-  it('applies story-authored input styles', () => {
+  it('keeps story-authored input styles while stretching to the parameter width', () => {
     const styled = { ...sourced, style: { width: '260px' } } as StoryParam;
     const { getByLabelText } = renderWithProviders(<StoryParamControl param={styled} value="" onChange={() => {}} />);
-    expect((getByLabelText('param region') as HTMLInputElement).style.width).toBe('260px');
+    expect((getByLabelText('param region') as HTMLInputElement).style.width).toBe('100%');
   });
 
-  it('uses the story-safe Radix popover and constrains the options to the input width', () => {
+  it('uses the story-safe Radix popover and lets complete option labels widen or wrap', () => {
     const { getByLabelText, getByRole } = renderWithProviders(
       <StoryParamControl param={sourced} value="" onChange={() => {}} />,
     );
     fireEvent.click(getByLabelText('param region'));
     const options = getByRole('listbox');
     expect(options).toHaveAttribute('data-story-floating');
-    expect(options).toHaveClass('w-[var(--radix-popover-trigger-width)]');
+    expect(options).toHaveClass('w-max');
+    expect(options).toHaveClass('min-w-[var(--radix-popover-trigger-width)]');
+    expect(options).toHaveClass('max-w-[min(420px,calc(100vw-16px))]');
     expect(options).toHaveClass('overflow-y-auto');
+  });
+
+  it('keeps Any outside the SQL option list', () => {
+    const onChange = vi.fn();
+    const { getByLabelText, getByRole } = renderWithProviders(
+      <StoryParamControl param={sourced} value="West" onChange={onChange} />,
+    );
+    fireEvent.click(getByLabelText('param region'));
+    expect(getByRole('listbox')).not.toHaveTextContent('Don’t filter');
+    fireEvent.click(getByRole('button', { name: 'Any Region' }));
+    expect(onChange).toHaveBeenCalledWith(null);
+  });
+
+  it('does not offer the shared Any action when nullable is false', () => {
+    const required = { ...sourced, nullable: false };
+    const { queryByRole } = renderWithProviders(
+      <StoryParamControl param={required} value="West" onChange={() => {}} />,
+    );
+    expect(queryByRole('button', { name: 'Any Region' })).toBeNull();
   });
 
   it('shows the SQL edit action only when author edit mode supplies a handler', () => {

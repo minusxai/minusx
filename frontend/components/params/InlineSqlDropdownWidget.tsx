@@ -168,7 +168,7 @@ export function InlineSqlDropdownWidget({ source, paramType, currentValue, param
           sideOffset={4}
           onOpenAutoFocus={(e) => e.preventDefault()}
           onCloseAutoFocus={(e) => e.preventDefault()}
-          className="max-h-[min(240px,var(--radix-popover-content-available-height))] w-[var(--radix-popover-trigger-width)] min-w-[160px] overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
+          className="max-h-[min(240px,var(--radix-popover-content-available-height))] w-max min-w-[var(--radix-popover-trigger-width)] max-w-[min(420px,calc(100vw-16px))] overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
         >
           {loading && values === null ? (
             <div className="px-2 py-1.5 text-xs text-muted-foreground">Loading…</div>
@@ -181,7 +181,7 @@ export function InlineSqlDropdownWidget({ source, paramType, currentValue, param
                 role="option"
                 aria-selected={item === inputDisplay}
                 title={item}
-                className="cursor-pointer truncate rounded-sm px-2 py-1.5 text-xs hover:bg-accent hover:text-accent-foreground"
+                className="cursor-pointer whitespace-normal break-words rounded-sm px-2 py-1.5 text-xs hover:bg-accent hover:text-accent-foreground"
                 // preventDefault keeps focus in the input so the click lands before any blur.
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => {

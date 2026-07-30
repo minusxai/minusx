@@ -95,10 +95,15 @@ The agent never edits JSON. It reads/writes **one JSX document** (the markup pro
 <Param name="min_mrr" type="number" nullable={true} />          // a plain reader filter
 <Param name="city" type="text" id={1026} column="city" />       // imports type + autocomplete from Q1026
 <Param                                                       // story-local autocomplete SQL;
-  name="city" type="text"                                  // its first result column supplies options
+  name="city" label="Customer city" type="text"             // name binds :city; label is presentation only
   query={`SELECT DISTINCT city FROM customers ORDER BY city`}
   connection="warehouse" />
 ```
+
+`name` is always the stable SQL binding. Without a `label`, the control humanizes it
+(`immediate_parent` → “Immediate Parent”). A custom `label` changes only the reader-facing text,
+and `labelStyle={{…}}` can style that text. When `nullable` is true (the default), sourced dropdowns
+offer **Any — Don’t filter**, which stores `null` and removes matching SQL filter predicates.
 
 New-format stories store the JSX source directly. The legacy story codec round-trips each
 `<Param>` through a `<div data-param-*>` placeholder inside `content.story`, including inline-SQL

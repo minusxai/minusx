@@ -38,14 +38,20 @@ describe('story-params — jsx attrs ⇄ StoryParam', () => {
 });
 
 describe('story-params — agent style override', () => {
+  it('keeps the SQL binding name separate from the reader-facing label', () => {
+    expect(paramFromJsxAttrs({ name: 'immediate_parent', label: 'Parent company', type: 'text' }))
+      .toMatchObject({ name: 'immediate_parent', label: 'Parent company' });
+  });
+
   it('reads style + labelStyle objects from <Param> attrs', () => {
     expect(paramFromJsxAttrs({ name: 'region', type: 'text', style: { background: '#111', color: '#fff' }, labelStyle: { color: '#888' } }))
       .toMatchObject({ style: { background: '#111', color: '#fff' }, labelStyle: { color: '#888' } });
   });
 
   it('round-trips style + labelStyle through the placeholder', () => {
-    const p: StoryParam = { name: 'region', type: 'text', nullable: true, style: { background: '#111' }, labelStyle: { color: '#888' } };
+    const p: StoryParam = { name: 'region', label: 'Sales region', type: 'text', nullable: true, style: { background: '#111' }, labelStyle: { color: '#888' } };
     expect(extractStoryParams(paramToPlaceholder(p))).toEqual([p]);
+    expect(paramToJsx(p)).toContain('label="Sales region"');
   });
 
   it('paramToJsx emits the style object as a JSX object literal', () => {
@@ -238,6 +244,8 @@ describe('story-params — render helpers', () => {
       .toEqual({ name: 'city', type: 'text', label: null, source: { type: 'question', id: 5, column: 'region' } });
     expect(storyParamToQuestionParameter({ name: 'n', type: 'number', nullable: true }))
       .toEqual({ name: 'n', type: 'number', label: null, source: null });
+    expect(storyParamToQuestionParameter({ name: 'parent', label: 'Parent company', type: 'text', nullable: true }))
+      .toEqual({ name: 'parent', type: 'text', label: 'Parent company', source: null });
     expect(storyParamToQuestionParameter({
       name: 'city', type: 'text', nullable: true,
       source: { query: 'SELECT city FROM t', connection: 'warehouse' },

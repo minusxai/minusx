@@ -311,7 +311,7 @@ function NumberEmbedAdapter(props: Record<string, unknown>) {
   );
 }
 
-/** `<Param name=… type=… nullable=… id={N} column=… widget=… min/max/step style/labelStyle />`. */
+/** `<Param name=… label=… type=… nullable=… id={N} column=… widget=… min/max/step style/labelStyle />`. */
 function ParamControlAdapter(props: Record<string, unknown>) {
   const ctx = useContext(StoryJsxEmbedContext);
   const param = paramFromJsxAttrs(props);

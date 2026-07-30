@@ -38,7 +38,10 @@ export const isStorySqlParamSource = (source: StoryParamSource): source is Story
 
 /** A declared story param (derived from a `<Param>` element). */
 export interface StoryParam {
+  /** Stable SQL binding name (`:name`). */
   name: string;
+  /** Optional reader-facing text; defaults to a humanized form of `name`. */
+  label?: string;
   type: ParameterType; // 'text' | 'number' | 'date'
   nullable: boolean;
   /** `<Param id={N} column="c">` — autocomplete from / import the def of question N's column. */
@@ -71,6 +74,7 @@ export function paramFromJsxAttrs(attrs: Record<string, unknown>): StoryParam | 
   const name = typeof attrs.name === 'string' ? attrs.name : '';
   if (!name) return null;
   const param: StoryParam = { name, type: normalizeParamType(attrs.type), nullable: attrs.nullable !== false };
+  if (typeof attrs.label === 'string' && attrs.label.trim()) param.label = attrs.label;
   if (typeof attrs.id === 'number') {
     param.source = { questionId: attrs.id, column: typeof attrs.column === 'string' ? attrs.column : name };
   } else if (typeof attrs.query === 'string' && attrs.query) {
@@ -97,6 +101,7 @@ export function paramToPlaceholder(p: StoryParam): string {
     `data-param-type="${p.type}"`,
     `data-param-nullable="${p.nullable}"`,
   ];
+  if (p.label) a.push(`data-param-label="${escAttr(p.label)}"`);
   if (p.source && isStoryQuestionParamSource(p.source)) {
     a.push(`data-param-source-id="${p.source.questionId}"`, `data-param-source-col="${escAttr(p.source.column)}"`);
   } else if (p.source) {
@@ -115,6 +120,7 @@ export function paramToPlaceholder(p: StoryParam): string {
  *  String attrs are entity-escaped (escAttr) so a quote in a name/column can't break the parse. */
 export function paramToJsx(p: StoryParam): string {
   const a = [`name="${escAttr(p.name)}"`, `type="${p.type}"`, `nullable={${p.nullable}}`];
+  if (p.label) a.push(`label="${escAttr(p.label)}"`);
   if (p.source && isStoryQuestionParamSource(p.source)) {
     a.push(`id={${p.source.questionId}}`);
     if (p.source.column !== p.name) a.push(`column="${escAttr(p.source.column)}"`);
@@ -138,6 +144,7 @@ function paramFromPlaceholderInner(inner: string): StoryParam | null {
   for (const m of inner.matchAll(/data-param-([a-z-]+)="([^"]*)"/g)) a[m[1]] = unescAttr(m[2]);
   if (!a.name) return null;
   const p: StoryParam = { name: a.name, type: normalizeParamType(a.type), nullable: a.nullable !== 'false' };
+  if (a.label) p.label = a.label;
   if (a['source-id']) {
     p.source = { questionId: Number(a['source-id']), column: a['source-col'] ?? a.name };
   } else {
@@ -227,6 +234,8 @@ export function paramFromPlaceholderEl(el: { getAttribute(name: string): string 
   const name = el.getAttribute('data-param-name');
   if (!name) return null;
   const p: StoryParam = { name, type: normalizeParamType(el.getAttribute('data-param-type')), nullable: el.getAttribute('data-param-nullable') !== 'false' };
+  const label = el.getAttribute('data-param-label');
+  if (label) p.label = label;
   const sid = el.getAttribute('data-param-source-id');
   if (sid) {
     p.source = { questionId: Number(sid), column: el.getAttribute('data-param-source-col') ?? name };
@@ -254,7 +263,7 @@ export function storyParamToQuestionParameter(p: StoryParam): QuestionParameter 
   return {
     name: p.name,
     type: p.type,
-    label: null,
+    label: p.label ?? null,
     source: p.source
       ? isStoryQuestionParamSource(p.source)
         ? { type: 'question', id: p.source.questionId, column: p.source.column }
