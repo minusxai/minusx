@@ -64,21 +64,21 @@ describe('projectedAppStateChars', () => {
 
   it('excludes reference markup (references are metadata-only in app state)', () => {
     const withRefs = fileAppState(
-      caf({ markup: markup(100), references: [{ id: 2, markup: markup(300_000) }] }),
+      caf({ markup: markup(100), references: [{ id: 2, markup: markup(LARGE_APP_STATE_THRESHOLD + 100_000) }] }),
     );
     expect(rawChars(withRefs)).toBeGreaterThan(LARGE_APP_STATE_THRESHOLD);
     expect(projectedAppStateChars(withRefs)).toBeLessThan(LARGE_APP_STATE_THRESHOLD);
   });
 
-  // Calibration against the real distribution of authored story markup (21 stories in local
-  // workspaces: median 248, p95 15.6k, max 103k chars). Ordinary stories must pass; the monster
-  // must trip. These pin the threshold to observed data rather than a guess.
+  // Threshold semantics (100k tokens ≈ 400k chars, product decision 2026-07-31): the skill is
+  // reserved for contexts that threaten the window itself. Even the largest REAL authored story
+  // (~103k chars across 21 local workspaces) must NOT trip it; only enormous contexts do.
   it('does not flag a p95-sized real story (~16k chars of markup)', () => {
     expect(shouldInjectLargeFileSkill(fileAppState(caf({ markup: markup(15_600) })))).toBe(false);
   });
 
-  it('flags the largest real authored story (~103k chars of markup)', () => {
-    expect(shouldInjectLargeFileSkill(fileAppState(caf({ markup: markup(103_467) })))).toBe(true);
+  it('does not flag the largest real authored story (~103k chars — well under 100k tokens)', () => {
+    expect(shouldInjectLargeFileSkill(fileAppState(caf({ markup: markup(103_467) })))).toBe(false);
   });
 
   it('is idempotent — a fresh memo per call, so repeat measurements do not collapse to unchanged', () => {

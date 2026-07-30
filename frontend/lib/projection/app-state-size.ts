@@ -18,19 +18,21 @@ import { FacetMemo } from './facets';
 import { renderAppState } from './messages';
 
 /**
- * Characters of projected app-state text above which the `large_file` skill is injected.
+ * Projected app-state size above which the `large_file` skill is injected, expressed in TOKENS
+ * (the unit that actually matters for context budgeting) and converted to the characters that
+ * {@link projectedAppStateChars} measures.
  *
- * Calibrated against real authored files, not guessed. The old 200_000 was chosen for the RAW
- * JSON measure (rows + reference content inflate it ~1.3–40x depending on file type); carried over
- * to projected text it would be effectively dead — across 21 real stories in local workspaces the
- * markup distribution is median 248, p95 15.6k, max 103k chars, and NOTHING reaches 200k.
- *
- * 60_000 chars ≈ 15k tokens of markup for ONE file: ~4x above the p95 real story, so ordinary work
- * never trips it, while a document whose full rewrite would alone cost ~15k output tokens — the
- * regime where targeted edits actually matter — always does. Dashboards/questions/notebooks project
- * to a few KB (references are metadata-only, rows are stripped) and are correctly never flagged.
+ * Set to 100k tokens by product decision: the skill is reserved for page contexts big enough to
+ * threaten the context window itself — roughly half a modern window — not merely "a long story".
+ * For scale: across 21 real stories in local workspaces the projected markup tops out at ~103k
+ * chars (≈26k tokens), so today's authored content never trips this; only genuinely enormous
+ * contexts do. Dashboards/questions/notebooks project to a few KB (references are metadata-only,
+ * query rows are stripped) and are never flagged.
  */
-export const LARGE_APP_STATE_THRESHOLD = 60_000;
+export const LARGE_APP_STATE_TOKENS = 100_000;
+/** Rough prose/markup conversion used only for this threshold. */
+const CHARS_PER_TOKEN = 4;
+export const LARGE_APP_STATE_THRESHOLD = LARGE_APP_STATE_TOKENS * CHARS_PER_TOKEN;
 
 /** Characters of text the projection pass would render for `appState` on a first turn. */
 export function projectedAppStateChars(appState: AppState | null | undefined): number {
