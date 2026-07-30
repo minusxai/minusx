@@ -2,7 +2,8 @@
 
 /**
  * NumberQueryEditor — the FULL shared SqlEditor (syntax highlighting, format, SQL validation, and
- * schema/@reference autocomplete) for editing an inline `<Number>`'s query. It renders in a
+ * schema/@reference autocomplete) for editing story-local SQL (inline `<Number>` queries and
+ * query-backed `<Param>` option sources). It renders in a
  * light-DOM Dialog at the StoryView level, NOT in the story's footnote popover: the popover lives
  * in a shadow root, where Monaco's floating widgets (suggest/hover) mis-anchor. Apply hands the new
  * query back via the request's `apply` (which writes it onto the body placeholder + re-runs live).
@@ -39,6 +40,7 @@ function EditorBody({ request, filePath, onClose }: {
   request: NumberQueryEdit; filePath?: string; onClose: () => void;
 }) {
   const [draft, setDraft] = useState(request.query);
+  const ariaSubject = request.editorAriaSubject ?? 'number query';
   // Same schema + connection sources the question editor uses → real autocomplete.
   const { databases } = useSchemaContext(filePath || '/org');
   const { connections } = useConnections();
@@ -46,7 +48,7 @@ function EditorBody({ request, filePath, onClose }: {
   return (
     <>
       <Dialog.Header px={6} py={4} borderBottom="1px solid" borderColor="border.default">
-        <Dialog.Title fontWeight={700} fontSize="lg">Edit inline number query</Dialog.Title>
+        <Dialog.Title fontWeight={700} fontSize="lg">{request.editorTitle ?? 'Edit inline number query'}</Dialog.Title>
       </Dialog.Header>
       <Dialog.Body px={6} py={5}>
         <Box height="55vh" minH="320px">
@@ -63,8 +65,8 @@ function EditorBody({ request, filePath, onClose }: {
       </Dialog.Body>
       <Dialog.Footer px={6} py={4} borderTop="1px solid" borderColor="border.default">
         <HStack gap={2} justify="flex-end">
-          <Button variant="outline" aria-label="cancel number query edit" onClick={onClose}>Cancel</Button>
-          <Button colorPalette="teal" aria-label="apply number query edit" onClick={() => { request.apply(draft); onClose(); }}>
+          <Button variant="outline" aria-label={`cancel ${ariaSubject} edit`} onClick={onClose}>Cancel</Button>
+          <Button colorPalette="teal" aria-label={`apply ${ariaSubject} edit`} onClick={() => { request.apply(draft); onClose(); }}>
             Apply
           </Button>
         </HStack>

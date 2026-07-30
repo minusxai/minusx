@@ -15,6 +15,7 @@
 import type { FileType, QuestionContent, NotebookContent } from '@/lib/types';
 import { extractInlineQuestions } from '@/lib/data/story/story-question';
 import { extractInlineNumbers } from '@/lib/data/story/story-number';
+import { extractStoryParams, isStorySqlParamSource } from '@/lib/data/story/story-params';
 
 export interface FileQueryRef {
   query: string;
@@ -35,12 +36,18 @@ export function extractInlineFileQueries(type: FileType, content: unknown): File
     case 'story': {
       const html = (content as { story?: string | null }).story ?? null;
       const out: FileQueryRef[] = [];
-      // Inline <Question query> + <Number query> embeds carry their own SQL.
+      // Inline <Question query> + <Number query> embeds and query-backed <Param> controls carry
+      // their own SQL. extractStoryParams handles both legacy placeholders and JSX-format bodies.
       for (const e of extractInlineQuestions(html)) {
         if (e.query && e.connection) out.push({ query: e.query, connection: e.connection });
       }
       for (const e of extractInlineNumbers(html)) {
         if (e.query && e.connection) out.push({ query: e.query, connection: e.connection });
+      }
+      for (const p of extractStoryParams(html)) {
+        if (p.source && isStorySqlParamSource(p.source) && p.source.query && p.source.connection) {
+          out.push({ query: p.source.query, connection: p.source.connection });
+        }
       }
       return out;
     }

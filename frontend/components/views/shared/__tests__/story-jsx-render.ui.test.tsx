@@ -163,10 +163,10 @@ describe('AgentHtml format="jsx" — embed adapters mount the SAME embed compone
 
   it('inline <Question query>, <Number> and <Param> map their JSX attrs onto the embed components', async () => {
     const jsx =
-      '<Param name="region" type="text" />' +
+      '<Param name="region" type="text" query={`SELECT DISTINCT region FROM sales`} connection="duckdb" />' +
       '<Question query={`SELECT 1 AS x`} connection="duckdb" height="200px" />' +
       '<Number id={7} suffix="%" />';
-    render(<AgentHtml html={jsx} format="jsx" width={800} colorMode="light" paramValues={{ region: 'EU' }} />);
+    render(<AgentHtml html={jsx} format="jsx" width={800} colorMode="light" filePath="/org/story" paramValues={{ region: 'EU' }} />);
 
     await waitFor(() => {
       expect(captured.embedded.length).toBeGreaterThan(0);
@@ -189,7 +189,11 @@ describe('AgentHtml format="jsx" — embed adapters mount the SAME embed compone
     // Param: name/type resolved via the same paramFromJsxAttrs contract; seeded value flows in.
     const p = captured.params.at(-1)!;
     expect((p.param as { name: string }).name).toBe('region');
+    expect((p.param as { source: unknown }).source).toEqual({
+      query: 'SELECT DISTINCT region FROM sales', connection: 'duckdb',
+    });
     expect(p.value).toBe('EU');
+    expect(p.filePath).toBe('/org/story');
   });
 });
 

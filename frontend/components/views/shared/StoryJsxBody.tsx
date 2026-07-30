@@ -33,7 +33,8 @@ import {
   STORY_UI_COMPONENTS, TooltipProvider, renderStoryNodes, AST_PATH_ATTR,
 } from '@/lib/story-ui';
 import {
-  StoryEmbedProviders, InlineCardActionsMenu, type StoryQuestionEditRequest,
+  StoryEmbedProviders, InlineCardActionsMenu,
+  type StoryParamQueryEditRequest, type StoryQuestionEditRequest,
 } from '@/components/views/shared/StoryEmbeds';
 import type { NumberQueryEditRequest } from '@/components/views/shared/AgentHtml';
 import SmartEmbeddedQuestionContainer from '@/components/containers/SmartEmbeddedQuestionContainer';
@@ -45,7 +46,7 @@ import {
 } from '@/lib/data/story/story-question';
 import { numberFromJsxAttrs } from '@/lib/data/story/story-number';
 import {
-  paramFromJsxAttrs, storyParamToQuestionParameter, type StoryParam,
+  isStorySqlParamSource, paramFromJsxAttrs, storyParamToQuestionParameter, type StoryParam,
 } from '@/lib/data/story/story-params';
 import { applyDomEditsToJsx, isEditableTextHost } from '@/lib/data/story/jsx-edit';
 import { envelopeVizType } from '@/lib/viz/viz-templates';
@@ -85,6 +86,8 @@ export interface StoryJsxBodyProps {
   onChange?: (story: string) => void;
   /** Edit mode: opens the question-embed modal (saved / override / ephemeral) with a jsx AST-path ref. */
   onEditQuestion?: (req: StoryQuestionEditRequest) => void;
+  /** Edit mode: opens the full SQL editor for a query-backed Param source. */
+  onEditParamQuery?: (req: StoryParamQueryEditRequest) => void;
   /** Edit mode: requests an inline `<Number>` query edit, carrying the embed's AST path. */
   onEditNumber?: (req: NumberQueryEditRequest) => void;
   /** Imperative pending-edit access for AgentHtml's serialize() handle. */
@@ -192,6 +195,7 @@ interface StoryJsxEmbedContextValue {
   editable: boolean;
   onEditQuestion?: (req: StoryQuestionEditRequest) => void;
   onEditNumber?: (req: NumberQueryEditRequest) => void;
+  onEditParamQuery?: (req: StoryParamQueryEditRequest) => void;
 }
 
 const StoryJsxEmbedContext = createContext<StoryJsxEmbedContextValue>({
@@ -307,15 +311,26 @@ function NumberEmbedAdapter(props: Record<string, unknown>) {
   );
 }
 
-/** `<Param name=… type=… nullable=… id={N} column=… widget=… min/max/step style/labelStyle />`. */
+/** `<Param name=… label=… type=… nullable=… id={N} column=… widget=… min/max/step style/labelStyle />`. */
 function ParamControlAdapter(props: Record<string, unknown>) {
   const ctx = useContext(StoryJsxEmbedContext);
   const param = paramFromJsxAttrs(props);
   if (!param) return null;
+  const source = param.source && isStorySqlParamSource(param.source) ? param.source : undefined;
+  const astPath = props[AST_PATH_ATTR];
   return (
     <StoryParamControl
       param={param}
       value={ctx.values[param.name]}
+      filePath={ctx.filePath}
+      onRequestEdit={(ctx.editable && ctx.onEditParamQuery && source && typeof astPath === 'string')
+        ? () => ctx.onEditParamQuery!({
+            name: param.name,
+            query: source.query,
+            connection: source.connection,
+            ref: { format: 'jsx', astPath },
+          })
+        : undefined}
       onChange={(v) => ctx.setParamValue(param.name, v)}
     />
   );
@@ -352,7 +367,7 @@ const NO_NODES: JsxNode[] = [];
 
 export default function StoryJsxBody({
   doc, jsx, readOnly, paramValues, onParamValuesChange, filePath, colorMode, editable, onChange,
-  onEditQuestion, onEditNumber, editApiRef,
+  onEditQuestion, onEditNumber, onEditParamQuery, editApiRef,
 }: StoryJsxBodyProps) {
   const parsed = useMemo(() => parseJsx(jsx), [jsx]);
 
@@ -404,6 +419,7 @@ export default function StoryJsxBody({
     editable: !!editable && !readOnly,
     onEditQuestion,
     onEditNumber,
+    onEditParamQuery,
   };
 
   if (!parsed.ok) {

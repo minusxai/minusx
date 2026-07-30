@@ -12,6 +12,7 @@ import { selectQueryResult } from '@/store/queryResultsSlice';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { extractInlineQuestions } from '@/lib/data/story/story-question';
 import { extractInlineNumbers } from '@/lib/data/story/story-number';
+import { extractStoryParams, isStorySqlParamSource } from '@/lib/data/story/story-params';
 import { bindReferencedParams, buildQueryParamValues } from '@/lib/sql/sql-params';
 import type { DocumentContent, QuestionContent, QuestionParameter, QueryResult, NotebookContent } from '@/lib/types';
 import { getQuestionExecution } from '@/lib/spreadsheet/question-source';
@@ -100,7 +101,8 @@ export function buildEffectiveReference(refFile: FileState, inheritedParams: Rec
  *   (no cross-question pollution).
  */
 /**
- * A single query a story's body wants run: an inline `<Question query>` or an inline `<Number query>`.
+ * A single query a story's body wants run: an inline `<Question query>`, inline `<Number query>`,
+ * or query-backed `<Param>` autocomplete source.
  * Both the client (augmentWithParams) and the server (executeQueriesForFile) plus the EditFile
  * auto-execute must run/look-up the SAME set with the SAME params so their query hashes line up —
  * so the extraction lives here once. Inline questions resolve their declared params against the
@@ -127,6 +129,12 @@ export function storyEmbedRuns(
     // (`:name`) directly — this is what lets a story <Param> (e.g. a min_mrr slider) drive a live
     // <Number>. The renderer (InlineNumber) binds with the SAME helper, so the hashes line up.
     runs.push({ query: e.query, connection: e.connection, params: bindReferencedParams(e.query, inheritedParams) });
+  }
+  for (const p of extractStoryParams(html)) {
+    if (!p.source || !isStorySqlParamSource(p.source) || !p.source.query || !p.source.connection) continue;
+    // Suggestion queries are independent lookup queries: they populate the control rather than
+    // consume its current value, matching ordinary question parameters' SQL-source semantics.
+    runs.push({ query: p.source.query, connection: p.source.connection, params: {} });
   }
   return runs;
 }

@@ -570,6 +570,12 @@ export const StoryContent = Type.Object({
     'READER FILTERS — declare shared, reader-changeable filters with <Param>: ' +
     '`<Param name="city" type="text" nullable={false} />` (typed input), ' +
     '`<Param name="city" type="text" id={5} column="city" />` (autocomplete from question 5\'s column), or ' +
+    '`<Param name="city" type="text" query={`SELECT DISTINCT city FROM customers ORDER BY city`} ' +
+    'connection="<db>" />` (story-local autocomplete from the query\'s first result column). ' +
+    '`name` is the stable SQL binding (`:city`); use `label="City"` for different reader-facing text. ' +
+    'Nullable params show an `Any` choice that skips their filter. ' +
+    'Inline Param SQL follows the same query rule as inline Question SQL: use a template literal with real line breaks, ' +
+    'not a quoted string containing \\n escapes. ' +
     '`<Param name="limit" type="number" widget="slider" min={0} max={100} step={5} />` (range slider). ' +
     'Every embedded `<Question>` AND inline `<Number>` whose SQL references a matching `:param` rebinds on ' +
     'change (so a `<Number query={`… WHERE mrr >= :min_mrr`}>` is driven live by a `min_mrr` slider); the story\'s ' +

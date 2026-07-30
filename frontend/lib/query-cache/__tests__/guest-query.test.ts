@@ -9,6 +9,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { FilesAPI } from '@/lib/data/files.server';
 import { assertGuestQueryAllowed, GuestQueryDeniedError } from '../guest-query.server';
 import { inlineQuestionToPlaceholder } from '@/lib/data/story/story-question';
+import { paramToPlaceholder } from '@/lib/data/story/story-params';
 import { initTestDatabase, cleanupTestDatabase, getTestDbPath } from '@/store/__tests__/test-utils';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 
@@ -23,6 +24,7 @@ const FOLDER = '/org/share';
 
 const SAVED_Q = "SELECT answer FROM ref_t";
 const INLINE_Q = "SELECT plan, count(*) AS c FROM subs GROUP BY 1";
+const PARAM_SOURCE_Q = "SELECT DISTINCT plan FROM subs ORDER BY 1";
 const NB_CELL_Q = "SELECT 1 AS one";
 const DASH_Q = "SELECT region, sum(x) FROM sales GROUP BY 1";
 
@@ -41,9 +43,13 @@ beforeAll(async () => {
   }, ADMIN);
   questionPath = `${FOLDER}/saved-q`;
 
-  // Story: an INLINE question embed + a SAVED question reference.
+  // Story: an INLINE question embed + inline-SQL param source + a SAVED question reference.
   const storyBody = `<div class="story">` +
     inlineQuestionToPlaceholder({ query: INLINE_Q, connection: 'duck' }) +
+    paramToPlaceholder({
+      name: 'plan', type: 'text', nullable: true,
+      source: { query: PARAM_SOURCE_Q, connection: 'duck' },
+    }) +
     `<div data-question-id="${saved.data.id}"></div></div>`;
   await FilesAPI.createFile({
     name: 'story', path: `${FOLDER}/story`, type: 'story',
@@ -77,6 +83,7 @@ describe('assertGuestQueryAllowed — only embedded queries are permitted', () =
 
   it('story: allows inline + saved-referenced queries, denies arbitrary SQL', async () => {
     await expect(assertGuestQueryAllowed(storyPath, INLINE_Q, 'duck', GUEST)).resolves.toBeUndefined();
+    await expect(assertGuestQueryAllowed(storyPath, PARAM_SOURCE_Q, 'duck', GUEST)).resolves.toBeUndefined();
     await expect(assertGuestQueryAllowed(storyPath, SAVED_Q, 'duck', GUEST)).resolves.toBeUndefined();
     await expect(assertGuestQueryAllowed(storyPath, 'DROP TABLE users', 'duck', GUEST)).rejects.toBeInstanceOf(GuestQueryDeniedError);
     await expect(assertGuestQueryAllowed(storyPath, 'SELECT * FROM customers', 'duck', GUEST)).rejects.toBeInstanceOf(GuestQueryDeniedError);

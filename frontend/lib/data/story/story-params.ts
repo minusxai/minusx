@@ -10,18 +10,38 @@
  * Pure (client + server safe). The static-JSX engine validates `<Param>` (it's in the registry).
  */
 import type { ParameterType, QuestionParameter } from '@/lib/validation/atlas-schemas';
+import { parseJsx, type JsxNode } from '@/lib/jsx';
 import { syncParametersWithSQL } from '@/lib/sql/sql-params';
-import { escAttr, unescAttr, styleAttr, serializeJsonAttr } from './html-attr';
+import { normalizeInlineQuery } from './story-question';
+import { setStaticJsxAttr, updateJsxElementAtPath } from './jsx-edit';
+import { escAttr, escTemplate, unescAttr, styleAttr, serializeJsonAttr, parseJsonAttr } from './html-attr';
 
 /** Autocomplete / import source: a column of an embedded question. */
-export interface StoryParamSource {
+export interface StoryQuestionParamSource {
   questionId: number;
   column: string;
 }
 
+/** Autocomplete source backed by story-local SQL (the first result column supplies options). */
+export interface StorySqlParamSource {
+  query: string;
+  connection: string;
+}
+
+export type StoryParamSource = StoryQuestionParamSource | StorySqlParamSource;
+
+export const isStoryQuestionParamSource = (source: StoryParamSource): source is StoryQuestionParamSource =>
+  'questionId' in source;
+
+export const isStorySqlParamSource = (source: StoryParamSource): source is StorySqlParamSource =>
+  'query' in source;
+
 /** A declared story param (derived from a `<Param>` element). */
 export interface StoryParam {
+  /** Stable SQL binding name (`:name`). */
   name: string;
+  /** Optional reader-facing text; defaults to a humanized form of `name`. */
+  label?: string;
   type: ParameterType; // 'text' | 'number' | 'date'
   nullable: boolean;
   /** `<Param id={N} column="c">` — autocomplete from / import the def of question N's column. */
@@ -54,8 +74,14 @@ export function paramFromJsxAttrs(attrs: Record<string, unknown>): StoryParam | 
   const name = typeof attrs.name === 'string' ? attrs.name : '';
   if (!name) return null;
   const param: StoryParam = { name, type: normalizeParamType(attrs.type), nullable: attrs.nullable !== false };
+  if (typeof attrs.label === 'string' && attrs.label.trim()) param.label = attrs.label;
   if (typeof attrs.id === 'number') {
     param.source = { questionId: attrs.id, column: typeof attrs.column === 'string' ? attrs.column : name };
+  } else if (typeof attrs.query === 'string' && attrs.query) {
+    param.source = {
+      query: normalizeInlineQuery(attrs.query),
+      connection: typeof attrs.connection === 'string' ? attrs.connection : '',
+    };
   }
   const style = styleAttr(attrs.style);
   if (style) param.style = style;
@@ -75,7 +101,12 @@ export function paramToPlaceholder(p: StoryParam): string {
     `data-param-type="${p.type}"`,
     `data-param-nullable="${p.nullable}"`,
   ];
-  if (p.source) a.push(`data-param-source-id="${p.source.questionId}"`, `data-param-source-col="${escAttr(p.source.column)}"`);
+  if (p.label) a.push(`data-param-label="${escAttr(p.label)}"`);
+  if (p.source && isStoryQuestionParamSource(p.source)) {
+    a.push(`data-param-source-id="${p.source.questionId}"`, `data-param-source-col="${escAttr(p.source.column)}"`);
+  } else if (p.source) {
+    a.push(`data-param-source-sql="${serializeJsonAttr(p.source)}"`);
+  }
   if (p.style) a.push(`data-param-style="${serializeJsonAttr(p.style)}"`);
   if (p.labelStyle) a.push(`data-param-labelstyle="${serializeJsonAttr(p.labelStyle)}"`);
   if (p.widget) a.push(`data-param-widget="${p.widget}"`);
@@ -89,9 +120,13 @@ export function paramToPlaceholder(p: StoryParam): string {
  *  String attrs are entity-escaped (escAttr) so a quote in a name/column can't break the parse. */
 export function paramToJsx(p: StoryParam): string {
   const a = [`name="${escAttr(p.name)}"`, `type="${p.type}"`, `nullable={${p.nullable}}`];
-  if (p.source) {
+  if (p.label) a.push(`label="${escAttr(p.label)}"`);
+  if (p.source && isStoryQuestionParamSource(p.source)) {
     a.push(`id={${p.source.questionId}}`);
     if (p.source.column !== p.name) a.push(`column="${escAttr(p.source.column)}"`);
+  } else if (p.source) {
+    a.push(`query={\`${escTemplate(p.source.query)}\`}`);
+    a.push(`connection="${escAttr(p.source.connection)}"`);
   }
   if (p.style) a.push(`style={${JSON.stringify(p.style)}}`);
   if (p.labelStyle) a.push(`labelStyle={${JSON.stringify(p.labelStyle)}}`);
@@ -109,7 +144,15 @@ function paramFromPlaceholderInner(inner: string): StoryParam | null {
   for (const m of inner.matchAll(/data-param-([a-z-]+)="([^"]*)"/g)) a[m[1]] = unescAttr(m[2]);
   if (!a.name) return null;
   const p: StoryParam = { name: a.name, type: normalizeParamType(a.type), nullable: a.nullable !== 'false' };
-  if (a['source-id']) p.source = { questionId: Number(a['source-id']), column: a['source-col'] ?? a.name };
+  if (a.label) p.label = a.label;
+  if (a['source-id']) {
+    p.source = { questionId: Number(a['source-id']), column: a['source-col'] ?? a.name };
+  } else {
+    const rawSql = inner.match(/data-param-source-sql="([^"]*)"/)?.[1];
+    const sql = parseJsonAttr<StorySqlParamSource>(rawSql, (v) =>
+      !!v && typeof v.query === 'string' && typeof v.connection === 'string');
+    if (sql?.query) p.source = { query: normalizeInlineQuery(sql.query), connection: sql.connection };
+  }
   const style = parseStyleJson(a.style);
   if (style) p.style = style;
   const labelStyle = parseStyleJson(a.labelstyle);
@@ -127,12 +170,31 @@ function parseStyleJson(v: string | null | undefined): Record<string, string | n
   try { return styleAttr(JSON.parse(v)); } catch { return undefined; }
 }
 
-/** Extract all declared params from a story's HTML (the `data-param` placeholders). */
+/** Extract all declared params from legacy placeholders or a new-format JSX story body. */
 export function extractStoryParams(html: string | null | undefined): StoryParam[] {
   const out: StoryParam[] = [];
   for (const m of (html ?? '').matchAll(PARAM_DIV_RE)) {
     const p = paramFromPlaceholderInner(m[1]);
     if (p) out.push(p);
+  }
+  // New-format stories store JSX verbatim, so there are no data-param placeholders to scan.
+  // Parse their static <Param> nodes directly. Best-effort: malformed JSX contributes nothing;
+  // the save validator reports the syntax error through its normal path.
+  const parsed = parseJsx(html ?? '');
+  if (parsed.ok) {
+    const walk = (nodes: JsxNode[]): void => {
+      for (const node of nodes) {
+        if (node.type !== 'element') continue;
+        if (node.isComponent && node.tag === 'Param') {
+          const attrs: Record<string, unknown> = {};
+          for (const attr of node.attributes) if (attr.value.static) attrs[attr.name] = attr.value.json;
+          const p = paramFromJsxAttrs(attrs);
+          if (p) out.push(p);
+        }
+        walk(node.children);
+      }
+    };
+    walk(parsed.nodes);
   }
   return out;
 }
@@ -145,13 +207,43 @@ export function placeholdersToParamJsx(html: string | null | undefined): string 
   });
 }
 
+/** Replace the inline SQL source on the `occurrence`-th legacy Param placeholder. */
+export function updateParamQueryInHtml(html: string, occurrence: number, query: string): string {
+  let seen = 0;
+  return html.replace(PARAM_DIV_RE, (whole, inner) => {
+    if (seen++ !== occurrence) return whole;
+    const param = paramFromPlaceholderInner(inner);
+    if (!param?.source || !isStorySqlParamSource(param.source)) return whole;
+    return paramToPlaceholder({
+      ...param,
+      source: { ...param.source, query: normalizeInlineQuery(query) },
+    });
+  });
+}
+
+/** Replace the inline SQL source on the `<Param>` at `astPath` in a JSX-format story. */
+export function updateParamQueryInJsx(source: string, astPath: string, query: string): string {
+  return updateJsxElementAtPath(source, astPath, 'Param', (el) => {
+    if (el.attributes.some((a) => a.name === 'id') || !el.attributes.some((a) => a.name === 'query')) return false;
+    setStaticJsxAttr(el, 'query', normalizeInlineQuery(query));
+  });
+}
+
 /** Read a StoryParam from a rendered placeholder element (AgentHtml has the DOM node). */
 export function paramFromPlaceholderEl(el: { getAttribute(name: string): string | null }): StoryParam | null {
   const name = el.getAttribute('data-param-name');
   if (!name) return null;
   const p: StoryParam = { name, type: normalizeParamType(el.getAttribute('data-param-type')), nullable: el.getAttribute('data-param-nullable') !== 'false' };
+  const label = el.getAttribute('data-param-label');
+  if (label) p.label = label;
   const sid = el.getAttribute('data-param-source-id');
-  if (sid) p.source = { questionId: Number(sid), column: el.getAttribute('data-param-source-col') ?? name };
+  if (sid) {
+    p.source = { questionId: Number(sid), column: el.getAttribute('data-param-source-col') ?? name };
+  } else {
+    const sql = parseJsonAttr<StorySqlParamSource>(el.getAttribute('data-param-source-sql'), (v) =>
+      !!v && typeof v.query === 'string' && typeof v.connection === 'string');
+    if (sql?.query) p.source = { query: normalizeInlineQuery(sql.query), connection: sql.connection };
+  }
   const style = parseStyleJson(el.getAttribute('data-param-style'));
   if (style) p.style = style;
   const labelStyle = parseStyleJson(el.getAttribute('data-param-labelstyle'));
@@ -171,8 +263,12 @@ export function storyParamToQuestionParameter(p: StoryParam): QuestionParameter 
   return {
     name: p.name,
     type: p.type,
-    label: null,
-    source: p.source ? { type: 'question', id: p.source.questionId, column: p.source.column } : null,
+    label: p.label ?? null,
+    source: p.source
+      ? isStoryQuestionParamSource(p.source)
+        ? { type: 'question', id: p.source.questionId, column: p.source.column }
+        : { type: 'sql', query: p.source.query }
+      : null,
   };
 }
 
@@ -256,6 +352,12 @@ export function lintStoryParamSources(declared: StoryParam[], resolve: (id: numb
   const warnings: string[] = [];
   for (const p of declared) {
     if (!p.source) continue;
+    if (isStorySqlParamSource(p.source)) {
+      if (!p.source.connection) {
+        warnings.push(`<Param name="${p.name}"> has an inline SQL source but no connection.`);
+      }
+      continue;
+    }
     const t = resolve(p.source.questionId);
     if (t === undefined) {
       warnings.push(`<Param name="${p.name}"> imports from question #${p.source.questionId}, which doesn't exist.`);
@@ -265,4 +367,3 @@ export function lintStoryParamSources(declared: StoryParam[], resolve: (id: numb
   }
   return warnings;
 }
-

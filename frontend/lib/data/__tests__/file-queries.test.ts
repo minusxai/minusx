@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { extractInlineFileQueries } from '../file-queries';
 import { inlineQuestionToPlaceholder } from '../story/story-question';
 import { numberToPlaceholder } from '../story/story-number';
+import { paramToPlaceholder } from '../story/story-params';
 
 describe('extractInlineFileQueries — inline queries per file type', () => {
   it('question → its own (query, connection)', () => {
@@ -13,16 +14,28 @@ describe('extractInlineFileQueries — inline queries per file type', () => {
     expect(extractInlineFileQueries('question', { query: '', connection_name: 'duck' })).toEqual([]);
   });
 
-  it('story → inline <Question> and inline <Number> embeds', () => {
+  it('story → inline <Question>, inline <Number>, and inline-SQL <Param> sources', () => {
     const html =
       inlineQuestionToPlaceholder({ query: 'SELECT a FROM t', connection: 'duck' }) +
-      numberToPlaceholder({ query: 'SELECT SUM(x) AS m FROM t', connection: 'pg', col: 'm' });
+      numberToPlaceholder({ query: 'SELECT SUM(x) AS m FROM t', connection: 'pg', col: 'm' }) +
+      paramToPlaceholder({
+        name: 'region', type: 'text', nullable: true,
+        source: { query: 'SELECT DISTINCT region FROM t', connection: 'duck' },
+      });
     const out = extractInlineFileQueries('story', { story: html });
     expect(out).toEqual(expect.arrayContaining([
       { query: 'SELECT a FROM t', connection: 'duck' },
       { query: 'SELECT SUM(x) AS m FROM t', connection: 'pg' },
+      { query: 'SELECT DISTINCT region FROM t', connection: 'duck' },
     ]));
-    expect(out).toHaveLength(2);
+    expect(out).toHaveLength(3);
+  });
+
+  it('story → inline-SQL <Param> source in a JSX-format body', () => {
+    const story = '<div><Param name="region" type="text" query={`SELECT DISTINCT region FROM t`} connection="duck" /></div>';
+    expect(extractInlineFileQueries('story', { story, format: 'jsx' })).toEqual([
+      { query: 'SELECT DISTINCT region FROM t', connection: 'duck' },
+    ]);
   });
 
   it('story with no embeds → empty', () => {
