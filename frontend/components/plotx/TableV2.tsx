@@ -220,8 +220,18 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
     count: tableRows.length,
     getScrollElement: () => tableBodyRef.current,
     estimateSize: () => ROW_HEIGHT,
+    measureElement: wrapColumns?.size
+      ? element => element.getBoundingClientRect().height
+      : undefined,
     overscan: 20,
   })
+
+  const wrappingEnabled = !!wrapColumns?.size
+  useEffect(() => {
+    // Drop cached multiline measurements when wrapping is toggled. Newly wrapped
+    // rows are then measured by their refs; unwrapped rows return to ROW_HEIGHT.
+    rowVirtualizer.measure?.()
+  }, [rowVirtualizer, wrappingEnabled])
 
   const virtualItems = rowVirtualizer.getVirtualItems()
 
@@ -419,6 +429,7 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
               visibleColIds={visibleColIds}
               colSizes={colSizes}
               wrapColumns={wrapColumns}
+              measureRow={wrapColumns?.size ? rowVirtualizer.measureElement : undefined}
               onRowClick={onRowClick}
               getCellBg={getCellBg}
               renderCell={renderCell}

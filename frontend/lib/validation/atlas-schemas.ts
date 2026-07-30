@@ -312,6 +312,9 @@ export type VizSourceVega = Static<typeof VizSourceVega>;
 // state is display formatting — sorting/filtering/visibility are ephemeral UI state.
 export const VizSourceTable = Type.Object({
   kind: Type.Literal('table'),
+  wrapColumns: Type.Optional(Nullable(Type.Array(Type.String(), { description:
+    'result column names whose body cells wrap onto multiple lines. Omit/null/[] for the default ' +
+    'single-line ellipsis behavior.' }))),
   columnFormats: Nullable(Type.Record(Type.String(), ColumnFormatConfig, { description:
     'per-column display formatting keyed by RESULT column name: `alias` + `format` (d3 — the unified ' +
     'viz vocabulary, numbers and dates). Legacy decimalPoints/dateFormat/prefix/suffix also honored. ' +
@@ -326,7 +329,8 @@ export const VizSourceTable = Type.Object({
     '.mx-type-icon (+ .mx-type-icon-<text|number|date|json>), .mx-sort-icon, .mx-filter-icon, ' +
     '.mx-toolbar (bottom bar), ' +
     '.mx-row-odd/.mx-row-even (zebra stripe parity — the default stripe is a CSS rule, restyle or ' +
-    'unset it here). Table padding is customizable with --mx-cell-padding-block/inline and ' +
+    'unset it here). Use source.wrapColumns for text wrapping so virtual row heights are measured. ' +
+    'Table padding is customizable with --mx-cell-padding-block/inline and ' +
     '--mx-header-padding-block/inline. No @import and no external url() — both are rejected. ' +
     'Omit for the default theme.' })),
 }, { title: 'VizSourceTable' });

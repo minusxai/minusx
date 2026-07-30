@@ -12,10 +12,10 @@
  * VizSourceTable in atlas-schemas). Chrome has no toggles by design — surfaces
  * and overrides hide it with `.mx-toolbar { display: none }`.
  */
-import { useId } from 'react';
+import { useId, useMemo } from 'react';
 import { TableV2 } from '@/components/plotx/TableV2';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
-import { getVizColumnFormats, getTableConditionalFormats, getVizCss, setVizColumnFormats } from '@/lib/viz/encoding-edit';
+import { getVizColumnFormats, getTableConditionalFormats, getTableWrapColumns, getVizCss, setVizColumnFormats } from '@/lib/viz/encoding-edit';
 
 export interface VizTableViewProps {
   envelope: VizEnvelope;
@@ -37,6 +37,7 @@ export function VizTableView({ envelope, columns, types, rows, sql, databaseName
   const scopeClass = `mx-viz-scope-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
   const css = getVizCss(envelope);
   const columnFormats = getVizColumnFormats(envelope);
+  const wrapColumns = useMemo(() => new Set(getTableWrapColumns(envelope)), [envelope]);
 
   return (
     <div className={`${scopeClass} flex min-h-0 w-full flex-1 flex-col`}>
@@ -54,6 +55,7 @@ export function VizTableView({ envelope, columns, types, rows, sql, databaseName
         columnFormats={Object.keys(columnFormats).length > 0 ? columnFormats : undefined}
         onColumnFormatsChange={onVizChange ? (formats) => onVizChange(setVizColumnFormats(envelope, formats)) : undefined}
         conditionalFormats={getTableConditionalFormats(envelope)}
+        wrapColumns={wrapColumns}
         d3Formats
       />
     </div>

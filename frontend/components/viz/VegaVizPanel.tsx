@@ -9,6 +9,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { LuLayoutGrid, LuSettings2, LuBraces } from 'react-icons/lu';
 import { Button } from '@/components/kit/button';
+import { Checkbox } from '@/components/kit/checkbox';
 import { Input } from '@/components/kit/input';
 import { Switch } from '@/components/kit/switch';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
@@ -19,7 +20,8 @@ import {
   getSeriesColors, setSeriesColor,
   getYBounds, setYBounds, getLineInterpolate, setLineInterpolate, type LineInterpolate,
   addReferenceLine, getReferenceLines, setReferenceLineColor, removeReferenceLine,
-  getTableConditionalFormats, setTableConditionalFormats, getVizCss, setVizCss,
+  getTableConditionalFormats, setTableConditionalFormats,
+  getTableWrapColumns, setTableWrapColumns, getVizCss, setVizCss,
   getPivotConfig, setPivotConfig, getVizColumnFormats, mergeVizColumnFormat,
   getRecipeParams, setRecipeParam,
   type V2VizType,
@@ -95,6 +97,14 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
   const [cssDraft, setCssDraft] = useState<string | null>(null);
   const savedCss = getVizCss(envelope) ?? '';
   const cssDirty = cssDraft !== null && cssDraft !== savedCss;
+  const tableWrapColumns = getTableWrapColumns(envelope);
+  const tableWrapColumnSet = new Set(tableWrapColumns);
+  const setColumnWrapped = (column: string, wrapped: boolean) => {
+    const next = wrapped
+      ? [...tableWrapColumns, column]
+      : tableWrapColumns.filter(current => current !== column);
+    onVizChange(setTableWrapColumns(envelope, next));
+  };
   const commitCss = () => {
     if (!cssDirty || cssDraft == null) return;
     onVizChange(setVizCss(envelope, cssDraft));
@@ -306,6 +316,37 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
               rowDimensions={rowDimensions}
               getRowValuesAtLevel={getRowValuesAtLevel}
             />
+          )}
+          {isTable && (
+            <div className={`${CARD} flex flex-col gap-2`}>
+              <div className="flex items-center justify-between gap-2">
+                <p className={CARD_TITLE}>Wrap columns</p>
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  {tableWrapColumns.length}/{columns.length}
+                </span>
+              </div>
+              <p className="text-[11px] leading-normal text-muted-foreground">
+                Wrapped columns grow rows to show the full value. Others use a single-line ellipsis.
+              </p>
+              <div className="max-h-40 overflow-y-auto rounded-md border border-border">
+                {columns.map((column, index) => (
+                  <label
+                    key={column}
+                    className={`flex cursor-pointer items-center gap-2 px-2 py-1.5 ${index > 0 ? 'border-t border-border' : ''}`}
+                  >
+                    <Checkbox
+                      aria-label={`Wrap column ${column}`}
+                      checked={tableWrapColumnSet.has(column)}
+                      className="data-[state=checked]:border-[#16a085] data-[state=checked]:bg-[#16a085]"
+                      onCheckedChange={(checked) => setColumnWrapped(column, checked === true)}
+                    />
+                    <span className="min-w-0 truncate font-mono text-xs text-foreground">
+                      {column}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
           )}
           {(isTable || isPivot) && (
             <TableConditionalFormatPanel

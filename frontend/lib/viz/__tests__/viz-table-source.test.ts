@@ -8,6 +8,7 @@ import {
   getEnvelopeVizType, isEnvelopeEditable, getEnvelopeZones, setEnvelopeVizType,
   getVizColumnFormats, setVizColumnFormats,
   getTableConditionalFormats, setTableConditionalFormats,
+  getTableWrapColumns, setTableWrapColumns,
   getVizCss, setVizCss,
   V2_SUPPORTED_VIZ_TYPES,
 } from '@/lib/viz/encoding-edit';
@@ -120,6 +121,16 @@ describe('table format edits (surgical)', () => {
     expect((cleared.source as unknown as Record<string, unknown>).conditionalFormats).toBeNull();
   });
 
+  it('setTableWrapColumns writes unique columns; empty list clears to null', () => {
+    const wrapped = setTableWrapColumns(tableEnvelope(), ['region', 'region', 'revenue']);
+    expect(getTableWrapColumns(wrapped)).toEqual(['region', 'revenue']);
+    expect(getTableWrapColumns(tableEnvelope())).toEqual([]);
+
+    const cleared = setTableWrapColumns(wrapped, []);
+    expect(getTableWrapColumns(cleared)).toEqual([]);
+    expect((cleared.source as unknown as Record<string, unknown>).wrapColumns).toBeNull();
+  });
+
   it('format setters are no-ops on non-table sources', () => {
     expect(setVizColumnFormats(barEnvelope, { x: { alias: 'nope' } })).toBe(barEnvelope);
   });
@@ -149,6 +160,25 @@ describe('validateVizEnvelope — table source', () => {
     const result = validateVizEnvelope(
       tableEnvelope({ columnFormats: { revenue: { alias: 'Revenue' } } }), COLS);
     expect(result.ok).toBe(true);
+  });
+
+  it('accepts wrapColumns keyed by real result columns', () => {
+    const result = validateVizEnvelope(tableEnvelope({ wrapColumns: ['region'] }), COLS);
+    expect(result.ok).toBe(true);
+  });
+
+  it('flags a wrapColumns entry that is not in the query result', () => {
+    const result = validateVizEnvelope(tableEnvelope({ wrapColumns: ['missing'] }), COLS);
+    expect(result.ok).toBe(false);
+    expect(result.issues[0].code).toBe('E_FIELD_NOT_FOUND');
+    expect(result.issues[0].path).toBe('/source/wrapColumns/0');
+  });
+
+  it('rejects a non-array wrapColumns value', () => {
+    const result = validateVizEnvelope(tableEnvelope({ wrapColumns: 'region' }), COLS);
+    expect(result.ok).toBe(false);
+    expect(result.issues[0].code).toBe('E_ENVELOPE');
+    expect(result.issues[0].path).toBe('/source/wrapColumns');
   });
 
   it('flags a columnFormats key that is not in the query result', () => {

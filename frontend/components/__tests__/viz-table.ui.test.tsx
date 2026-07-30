@@ -41,6 +41,8 @@ vi.mock('@tanstack/react-virtual', () => ({
     getVirtualItems: () =>
       Array.from({ length: count }, (_, i) => ({ index: i, start: i * 41, end: (i + 1) * 41, size: 41 })),
     getTotalSize: () => count * 41,
+    measureElement: vi.fn(),
+    measure: vi.fn(),
   }),
 }))
 vi.mock('@/lib/database/duckdb', () => ({
@@ -243,6 +245,38 @@ describe('QuestionVisualization — table envelope routing', () => {
     expect(column.style.getPropertyValue('--mx-column-width')).toBe('')
   })
 
+  it('wraps only the columns selected in the table envelope', () => {
+    renderViz(tableViz({ wrapColumns: ['region'] }))
+
+    const wrappedCell = document.querySelector('td.mx-col-region') as HTMLTableCellElement
+    const ellipsisCell = document.querySelector('td.mx-col-revenue') as HTMLTableCellElement
+    const row = wrappedCell.closest('tr') as HTMLTableRowElement
+
+    expect(wrappedCell.style.whiteSpace).toBe('normal')
+    expect(wrappedCell.style.overflow).toBe('visible')
+    expect(wrappedCell.style.overflowWrap).toBe('anywhere')
+    expect(wrappedCell.style.wordBreak).toBe('break-word')
+    expect(wrappedCell.style.textOverflow).toBe('clip')
+    expect(ellipsisCell.style.whiteSpace).toBe('')
+    expect(row.style.height).toBe('')
+    expect(row.dataset.index).toBe('0')
+  })
+
+  it('keeps fixed-height, single-line rows when no columns wrap', () => {
+    renderViz(tableViz())
+    const row = document.querySelector('.mx-row') as HTMLTableRowElement
+    const cell = row.querySelector('.mx-cell') as HTMLTableCellElement
+    const baseCss = Array.from(document.querySelectorAll('style'))
+      .map(style => style.textContent ?? '')
+      .find(css => css.includes('.table-v2-row')) ?? ''
+
+    expect(row.style.height).toBe('')
+    expect(row.classList.contains('mx-row-wrap')).toBe(false)
+    expect(baseCss).toContain('height: 41px')
+    expect(cell.style.whiteSpace).toBe('')
+    expect(row.dataset.index).toBe('0')
+  })
+
   it('zebra striping is a CSS default on parity classes, not an inline style', () => {
     renderViz(tableViz())
     // Parity must be computed from the DATA index (virtualization spacers break
@@ -309,6 +343,30 @@ describe('VegaVizPanel — table envelope', () => {
 
     const next = onVizChange.mock.calls.at(-1)![0] as VizEnvelope
     expect((next.source as unknown as { css: string }).css).toContain('.mx-th')
+  })
+
+  it('Settings tab shows and updates wrapped table columns', async () => {
+    const user = userEvent.setup()
+    const onVizChange = renderPanel(tableViz({ wrapColumns: ['region'] }))
+    await user.click(screen.getByLabelText('Settings tab'))
+
+    expect(screen.getByText('1/2')).toBeInTheDocument()
+    expect(screen.getByLabelText('Wrap column region')).toBeChecked()
+    expect(screen.getByLabelText('Wrap column revenue')).not.toBeChecked()
+
+    await user.click(screen.getByLabelText('Wrap column revenue'))
+    const next = onVizChange.mock.calls.at(-1)![0] as VizEnvelope
+    expect((next.source as unknown as { wrapColumns: string[] }).wrapColumns).toEqual(['region', 'revenue'])
+  })
+
+  it('Settings tab clears wrapColumns when the last wrapped column is unchecked', async () => {
+    const user = userEvent.setup()
+    const onVizChange = renderPanel(tableViz({ wrapColumns: ['region'] }))
+    await user.click(screen.getByLabelText('Settings tab'))
+    await user.click(screen.getByLabelText('Wrap column region'))
+
+    const next = onVizChange.mock.calls.at(-1)![0] as VizEnvelope
+    expect((next.source as unknown as { wrapColumns: null }).wrapColumns).toBeNull()
   })
 })
 
