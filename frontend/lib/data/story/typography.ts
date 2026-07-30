@@ -39,8 +39,22 @@ export const TYPOGRAPHY_GROUPS = {
 
 export type TypographyGroup = keyof typeof TYPOGRAPHY_GROUPS;
 
+/** Curated Tailwind spacing steps the space-above/below steppers walk (skip-steps match skill usage). */
+export const SPACING_STEPS = ['0', '1', '2', '3', '4', '6', '8', '10', '12', '16', '20', '24'] as const;
+
+export const SPACE_ABOVE_SCALE: readonly string[] = SPACING_STEPS.map(s => `mt-${s}`);
+export const SPACE_BELOW_SCALE: readonly string[] = SPACING_STEPS.map(s => `mb-${s}`);
+
+/** What the full-width toggle re-applies when un-toggling an element that never had a max-width. */
+export const MAX_WIDTH_DEFAULT = 'max-w-prose';
+
 /** Every class the toolbar can apply — unioned into the story CSS compile (recipe union). */
-export const STORY_TYPOGRAPHY_CLASSES: readonly string[] = Object.values(TYPOGRAPHY_GROUPS).flat();
+export const STORY_WYSIWYG_CLASSES: readonly string[] = [
+  ...Object.values(TYPOGRAPHY_GROUPS).flat(),
+  ...SPACE_ABOVE_SCALE,
+  ...SPACE_BELOW_SCALE,
+  MAX_WIDTH_DEFAULT,
+];
 
 const tokens = (className: string): string[] => className.split(/\s+/).filter(Boolean);
 
@@ -92,22 +106,95 @@ export function applyTypographyChoice(
  * `text-base` (appended); arbitrary size values (`text-[15px]`) are replaced by the stepped
  * scale — stepping means the user is taking manual control.
  */
-export function stepSizeClass(className: string, direction: 1 | -1): string {
-  const scale: readonly string[] = TYPOGRAPHY_SIZE_SCALE;
-  const shift = (size: string): string =>
-    scale[Math.min(scale.length - 1, Math.max(0, scale.indexOf(size) + direction))];
+/** One steppable utility scale: ordered tokens + where a bare element sits + its arbitrary form. */
+interface ClassScaleSpec {
+  tokens: readonly string[];
+  /** Treated as the current position when the element carries no scale token. */
+  defaultToken: string;
+  /** Arbitrary-value form of this utility (`text-[15px]`, `mt-[18px]`) — replaced on step. */
+  arbitraryRe: RegExp;
+}
+
+/**
+ * Generic RELATIVE stepper over a utility scale: every matching token shifts one step IN
+ * PLACE, variant-prefixed ones included, clamping at the scale ends per token — so the skill's
+ * responsive patterns (`text-3xl @2xl:text-5xl`, `mt-4 @2xl:mt-10`) survive the click.
+ * Arbitrary values are replaced by the stepped scale (stepping = the user taking manual
+ * control). With no bare token, steps from `defaultToken`, appending the result — unless the
+ * step clamps back onto the default itself, which stays unwritten (no `mt-0` for nothing).
+ */
+function stepScaleClass(className: string, spec: ClassScaleSpec, direction: 1 | -1): string {
+  const shift = (t: string): string =>
+    spec.tokens[Math.min(spec.tokens.length - 1, Math.max(0, spec.tokens.indexOf(t) + direction))];
   let sawBase = false;
   const out: string[] = [];
   for (const token of tokens(className)) {
     const tail = variantTail(token);
-    if (scale.includes(tail)) {
+    if (spec.tokens.includes(tail)) {
       if (tail === token) sawBase = true;
       out.push(token.slice(0, token.length - tail.length) + shift(tail));
       continue;
     }
-    if (isArbitrarySize(tail)) continue; // dropped — replaced by the stepped scale below
+    if (spec.arbitraryRe.test(tail)) continue; // dropped — replaced by the stepped scale below
     out.push(token);
   }
-  if (!sawBase) out.push(shift('text-base'));
+  if (!sawBase) {
+    const stepped = shift(spec.defaultToken);
+    if (stepped !== spec.defaultToken) out.push(stepped);
+  }
   return out.join(' ');
+}
+
+const SIZE_SPEC: ClassScaleSpec = {
+  tokens: TYPOGRAPHY_SIZE_SCALE,
+  defaultToken: 'text-base',
+  arbitraryRe: /^text-\[[0-9.]/,
+};
+
+const SPACING_SPECS: Record<'above' | 'below', ClassScaleSpec> = {
+  above: { tokens: SPACE_ABOVE_SCALE, defaultToken: 'mt-0', arbitraryRe: /^mt-\[/ },
+  below: { tokens: SPACE_BELOW_SCALE, defaultToken: 'mb-0', arbitraryRe: /^mb-\[/ },
+};
+
+export function stepSizeClass(className: string, direction: 1 | -1): string {
+  return stepScaleClass(className, SIZE_SPEC, direction);
+}
+
+/**
+ * Step the spacing above/below an element along the curated {@link SPACING_STEPS} scale —
+ * same relative semantics as {@link stepSizeClass}. Stepping DOWN from no margin is a no-op.
+ */
+export function stepSpacingClass(className: string, edge: 'above' | 'below', direction: 1 | -1): string {
+  return stepScaleClass(className, SPACING_SPECS[edge], direction);
+}
+
+/**
+ * The BARE spacing step for an edge ('4' for `mt-4`), or null when the element carries none
+ * (absent, variant-only, or arbitrary) — the toolbar's readout, mirroring how the size label
+ * reads only the base token.
+ */
+export function currentSpacingStep(className: string, edge: 'above' | 'below'): string | null {
+  const spec = SPACING_SPECS[edge];
+  const token = tokens(className).find(t => (spec.tokens as readonly string[]).includes(t));
+  return token ? token.slice(token.indexOf('-') + 1) : null;
+}
+
+const isMaxWidthToken = (token: string): boolean => variantTail(token).startsWith('max-w-');
+
+/** Whether the class string constrains width (`max-w-*`, bare or variant-prefixed). */
+export function hasMaxWidth(className: string): boolean {
+  return tokens(className).some(isMaxWidthToken);
+}
+
+/**
+ * Strip every width constraint (`max-w-*` in all forms — named, arbitrary, variant-prefixed),
+ * returning the stripped class string and the removed tokens (so the full-width toggle can
+ * restore them verbatim when un-toggled).
+ */
+export function stripMaxWidth(className: string): { className: string; removed: string[] } {
+  const all = tokens(className);
+  return {
+    className: all.filter(t => !isMaxWidthToken(t)).join(' '),
+    removed: all.filter(isMaxWidthToken),
+  };
 }

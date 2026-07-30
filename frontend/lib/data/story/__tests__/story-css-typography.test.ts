@@ -2,13 +2,13 @@
  * Typography palette in the story CSS compile (story-css.server.ts recipe union).
  *
  * The typography toolbar applies classes by mutating the live DOM — instant feedback only works
- * if the class is ALREADY in the story's compiled stylesheet. So STORY_TYPOGRAPHY_CLASSES must
+ * if the class is ALREADY in the story's compiled stylesheet. So STORY_WYSIWYG_CLASSES must
  * be unioned into every jsx story's compile, whether or not the markup uses them yet.
  */
 import { describe, it, expect } from 'vitest';
 
 import { compileStoryCss, STORY_RECIPE_UNION } from '@/lib/data/story/story-css.server';
-import { STORY_TYPOGRAPHY_CLASSES } from '@/lib/data/story/typography';
+import { STORY_WYSIWYG_CLASSES } from '@/lib/data/story/typography';
 
 describe('story CSS compile — typography recipe union', () => {
   it('compiles the full typography palette into a jsx story that uses none of it', async () => {
@@ -16,7 +16,7 @@ describe('story CSS compile — typography recipe union', () => {
     expect(css).toBeTruthy();
     // Spot-check one class per group (selector present ⇒ the rule compiled).
     for (const cls of ['text-4xl', 'text-9xl', 'font-bold', 'italic', 'underline', 'text-center']) {
-      expect(STORY_TYPOGRAPHY_CLASSES).toContain(cls);
+      expect(STORY_WYSIWYG_CLASSES).toContain(cls);
       expect(css).toContain(`.${cls}`);
     }
   });
@@ -25,6 +25,6 @@ describe('story CSS compile — typography recipe union', () => {
     // STORY_RECIPE_UNION feeds BOTH the compile candidate set and storyCssCompileVersion's hash
     // source — palette membership here means new classes also flip the version, so every
     // previously-saved story recompiles at read time and picks the palette up.
-    for (const cls of STORY_TYPOGRAPHY_CLASSES) expect(STORY_RECIPE_UNION).toContain(cls);
+    for (const cls of STORY_WYSIWYG_CLASSES) expect(STORY_RECIPE_UNION).toContain(cls);
   });
 });

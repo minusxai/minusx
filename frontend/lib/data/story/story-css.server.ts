@@ -9,7 +9,7 @@
 import 'server-only';
 import { compile } from '@tailwindcss/node';
 import { STORY_UI_RECIPE_CLASSES } from '@/lib/story-ui/recipe-classes';
-import { STORY_TYPOGRAPHY_CLASSES } from './typography';
+import { STORY_WYSIWYG_CLASSES } from './typography';
 import { storyThemeCss } from './story-themes';
 import { COLOR_PALETTE } from '@/lib/chart/chart-theme';
 import { partitionBannedCandidates } from './banned-css';
@@ -154,7 +154,7 @@ ${storyThemeCss()}
  * either list flips the version and stale stories recompile at read time.
  */
 export const STORY_RECIPE_UNION: readonly string[] = [
-  ...new Set([...STORY_UI_RECIPE_CLASSES, ...STORY_TYPOGRAPHY_CLASSES]),
+  ...new Set([...STORY_UI_RECIPE_CLASSES, ...STORY_WYSIWYG_CLASSES]),
 ];
 
 const TW_INPUT_JSX = `${TW_INPUT}

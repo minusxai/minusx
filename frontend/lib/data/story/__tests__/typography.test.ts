@@ -8,19 +8,29 @@ import { describe, it, expect } from 'vitest';
 import {
   TYPOGRAPHY_GROUPS,
   TYPOGRAPHY_SIZE_SCALE,
-  STORY_TYPOGRAPHY_CLASSES,
+  SPACE_ABOVE_SCALE,
+  SPACE_BELOW_SCALE,
+  MAX_WIDTH_DEFAULT,
+  STORY_WYSIWYG_CLASSES,
   currentChoice,
   applyTypographyChoice,
   stepSizeClass,
+  stepSpacingClass,
+  currentSpacingStep,
+  hasMaxWidth,
+  stripMaxWidth,
 } from '@/lib/data/story/typography';
 
 describe('typography vocabulary', () => {
-  it('STORY_TYPOGRAPHY_CLASSES is the flat union of every group (recipe-union contract)', () => {
+  it('STORY_WYSIWYG_CLASSES is the flat union of every group (recipe-union contract)', () => {
     for (const classes of Object.values(TYPOGRAPHY_GROUPS)) {
-      for (const cls of classes) expect(STORY_TYPOGRAPHY_CLASSES).toContain(cls);
+      for (const cls of classes) expect(STORY_WYSIWYG_CLASSES).toContain(cls);
+    }
+    for (const cls of [...SPACE_ABOVE_SCALE, ...SPACE_BELOW_SCALE, MAX_WIDTH_DEFAULT]) {
+      expect(STORY_WYSIWYG_CLASSES).toContain(cls);
     }
     // No duplicates — the CSS compile unions by Set, but the contract should be clean anyway.
-    expect(new Set(STORY_TYPOGRAPHY_CLASSES).size).toBe(STORY_TYPOGRAPHY_CLASSES.length);
+    expect(new Set(STORY_WYSIWYG_CLASSES).size).toBe(STORY_WYSIWYG_CLASSES.length);
   });
 });
 
@@ -129,5 +139,67 @@ describe('stepSizeClass', () => {
     const largest = TYPOGRAPHY_SIZE_SCALE[TYPOGRAPHY_SIZE_SCALE.length - 1];
     expect(stepSizeClass(largest, 1)).toBe(largest);
     expect(stepSizeClass('text-xs', -1)).toBe('text-xs');
+  });
+});
+
+describe('stepSpacingClass', () => {
+  it('steps up from no margin (adds the first step; mt-0 is never written for nothing)', () => {
+    expect(stepSpacingClass('text-lg', 'above', 1)).toBe('text-lg mt-1');
+    expect(stepSpacingClass('text-lg', 'above', -1)).toBe('text-lg');
+  });
+
+  it('walks the curated scale in place, skip-steps included', () => {
+    expect(stepSpacingClass('mt-4 text-lg', 'above', 1)).toBe('mt-6 text-lg');
+    expect(stepSpacingClass('mt-6 text-lg', 'above', -1)).toBe('mt-4 text-lg');
+  });
+
+  it('above and below are independent edges', () => {
+    expect(stepSpacingClass('mt-4 mb-8', 'below', 1)).toBe('mt-4 mb-10');
+    expect(stepSpacingClass('mt-4 mb-8', 'above', -1)).toBe('mt-3 mb-8');
+  });
+
+  it('shifts variant-prefixed spacing and clamps per token', () => {
+    expect(stepSpacingClass('mt-4 @2xl:mt-10', 'above', 1)).toBe('mt-6 @2xl:mt-12');
+    expect(stepSpacingClass('mt-24', 'above', 1)).toBe('mt-24');
+    expect(stepSpacingClass('mt-0', 'above', -1)).toBe('mt-0');
+  });
+
+  it('replaces arbitrary margins with the stepped scale (manual control takes over)', () => {
+    expect(stepSpacingClass('mt-[18px] text-lg', 'above', 1)).toBe('text-lg mt-1');
+  });
+
+  it('does not confuse other m-prefixed utilities', () => {
+    expect(stepSpacingClass('mx-auto -mt-2 mb-4', 'above', 1)).toBe('mx-auto -mt-2 mb-4 mt-1');
+  });
+});
+
+describe('currentSpacingStep', () => {
+  it('reads the bare spacing step for an edge (variants and other edges ignored)', () => {
+    expect(currentSpacingStep('mt-4 mb-8 @2xl:mt-10', 'above')).toBe('4');
+    expect(currentSpacingStep('mt-4 mb-8 @2xl:mt-10', 'below')).toBe('8');
+    expect(currentSpacingStep('mt-0', 'above')).toBe('0');
+  });
+
+  it('returns null when the edge has no bare scale token (absent or arbitrary)', () => {
+    expect(currentSpacingStep('text-lg', 'above')).toBeNull();
+    expect(currentSpacingStep('mt-[18px]', 'above')).toBeNull();
+    expect(currentSpacingStep('@2xl:mt-10', 'above')).toBeNull();
+  });
+});
+
+describe('full-width toggle algebra', () => {
+  it('hasMaxWidth detects named, arbitrary and variant-prefixed constraints', () => {
+    expect(hasMaxWidth('max-w-sm text-lg')).toBe(true);
+    expect(hasMaxWidth('@2xl:max-w-4xl')).toBe(true);
+    expect(hasMaxWidth('max-w-[42rem]')).toBe(true);
+    expect(hasMaxWidth('w-full min-w-0 text-lg')).toBe(false);
+  });
+
+  it('stripMaxWidth removes every constraint and reports the removed tokens in order', () => {
+    expect(stripMaxWidth('max-w-sm text-lg @2xl:max-w-4xl')).toEqual({
+      className: 'text-lg',
+      removed: ['max-w-sm', '@2xl:max-w-4xl'],
+    });
+    expect(stripMaxWidth('text-lg')).toEqual({ className: 'text-lg', removed: [] });
   });
 });

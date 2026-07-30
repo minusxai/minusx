@@ -99,6 +99,61 @@ describe('StoryTypographyToolbar', () => {
     expect(onApply).toHaveBeenLastCalledWith('0.0', { className: 'text-lg', style: '' });
   });
 
+  it('advanced controls are hidden until "More formatting" is expanded; width stays basic', () => {
+    renderToolbar('mt-4');
+    expect(screen.queryByLabelText('Increase space above')).toBeNull();
+    expect(screen.getByLabelText('Toggle full width')).toBeTruthy(); // basic row
+    fireEvent.click(screen.getByLabelText('More formatting'));
+    expect(screen.getByLabelText('Increase space above')).toBeTruthy();
+    // Collapses again on a second click.
+    fireEvent.click(screen.getByLabelText('More formatting'));
+    expect(screen.queryByLabelText('Increase space above')).toBeNull();
+  });
+
+  it('steps spacing above and below independently', () => {
+    const { el, onApply } = renderToolbar('mt-4 mb-8 text-lg');
+    fireEvent.click(screen.getByLabelText('More formatting'));
+    fireEvent.click(screen.getByLabelText('Increase space above'));
+    expect(el.className).toBe('mt-6 mb-8 text-lg');
+    fireEvent.click(screen.getByLabelText('Decrease space below'));
+    expect(el.className).toBe('mt-6 mb-6 text-lg');
+    expect(onApply).toHaveBeenLastCalledWith('0.0', { className: 'mt-6 mb-6 text-lg' });
+  });
+
+  it('full-width toggle strips max-w-* and restores the exact removed tokens on untoggle', () => {
+    const { el, onApply } = renderToolbar('max-w-sm text-lg @2xl:max-w-4xl');
+    const toggle = () => fireEvent.click(screen.getByLabelText('Toggle full width'));
+    expect(screen.getByLabelText('Toggle full width').getAttribute('aria-pressed')).toBe('false');
+    toggle();
+    expect(el.className).toBe('text-lg');
+    expect(onApply).toHaveBeenLastCalledWith('0.0', { className: 'text-lg' });
+    expect(screen.getByLabelText('Toggle full width').getAttribute('aria-pressed')).toBe('true');
+    toggle();
+    expect(el.className).toBe('text-lg max-w-sm @2xl:max-w-4xl');
+  });
+
+  it('untoggling full width on an element that never had a max-width applies the default', () => {
+    const { el } = renderToolbar('text-lg');
+    expect(screen.getByLabelText('Toggle full width').getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByLabelText('Toggle full width'));
+    expect(el.className).toBe('text-lg max-w-prose');
+  });
+
+  it('the fill picker sets an inline background and clears independently of text color', () => {
+    const { el, onApply } = renderToolbar('text-lg');
+    fireEvent.change(screen.getByLabelText('Text color'), { target: { value: '#ff0000' } });
+    fireEvent.change(screen.getByLabelText('Fill color'), { target: { value: '#00ff00' } });
+    expect(el.style.backgroundColor).toBe('rgb(0, 255, 0)');
+    expect(el.style.color).toBe('rgb(255, 0, 0)');
+    expect(onApply).toHaveBeenLastCalledWith('0.0', {
+      className: 'text-lg',
+      style: el.getAttribute('style') ?? '',
+    });
+    fireEvent.click(screen.getByLabelText('Default fill color'));
+    expect(el.style.backgroundColor).toBe('');
+    expect(el.style.color).toBe('rgb(255, 0, 0)'); // text color untouched
+  });
+
   it('buttons preventDefault on mousedown so the host never loses focus', () => {
     renderToolbar();
     // fireEvent returns false when preventDefault was called.
