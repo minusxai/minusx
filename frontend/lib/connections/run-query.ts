@@ -122,7 +122,16 @@ export async function runQueryStream(
 
   // Real connectors all inherit NodeConnector.queryStream; a minimal connector
   // (or a test mock) implementing only query() is wrapped as a one-shot stream.
+  //
+  // Pass the server bound down as the connector's own timeout. `withServerTimeout`
+  // only races the materialization, which frees the caller and its semaphore slot
+  // while the warehouse query keeps running — its error says as much. The engines
+  // that can actually cancel (DuckDB/SQLite interrupt, ClickHouse max_execution_time,
+  // Mongo maxTimeMS) need to be told, and it is a no-op for the rest. `0` disables
+  // the bound, so send `undefined` rather than a zero-millisecond deadline that
+  // would fail every query instantly.
+  const connectorTimeoutMs = QUERY_SERVER_TIMEOUT_MS > 0 ? QUERY_SERVER_TIMEOUT_MS : undefined;
   return typeof connector.queryStream === 'function'
-    ? connector.queryStream(cappedQuery, params, undefined, paramTypes)
-    : queryResultToStream(await connector.query(cappedQuery, params));
+    ? connector.queryStream(cappedQuery, params, connectorTimeoutMs, paramTypes)
+    : queryResultToStream(await connector.query(cappedQuery, params, connectorTimeoutMs));
 }

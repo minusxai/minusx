@@ -142,14 +142,14 @@ wrongly — extend the function rather than accepting the default.
 
 ## Gotchas
 
-- **On the server path nothing is ever cancelled — it is only abandoned.** `NodeConnector.query` /
-  `queryStream` take a `timeoutMs` hint, and DuckDB/SQLite (`conn.interrupt()`), ClickHouse
-  (`max_execution_time`) and Mongo (`maxTimeMS`) can act on it — but `runQueryStream` passes
-  `undefined`, so `/api/query`, MCP and headless reads never supply one. The only real cancellation
-  in the repo is the benchmark agent's direct `connector.query(sql, params, timeoutMs)` calls
-  (`agents/benchmark-analyst/db-tools.ts`, `v2/execute-query.ts`). Everything else gets
-  `QUERY_SERVER_TIMEOUT_MS` (180 s) in `run-query.ts`, which races the *materialization* so callers
-  and their semaphore slots are freed while the warehouse query keeps running.
+- **Cancellation is best-effort and engine-dependent, but the bound does reach the connector.**
+  `runQueryStream` passes `QUERY_SERVER_TIMEOUT_MS` (180 s) as the connector's `timeoutMs`, so
+  DuckDB/SQLite (`conn.interrupt()`), ClickHouse (`max_execution_time`) and Mongo (`maxTimeMS`)
+  cancel for real; engines with no cancel primitive ignore it. Separately, `withServerTimeout` races
+  the *materialization* so the caller and its semaphore slot are freed either way. `0` disables both:
+  the connector then receives `undefined` rather than a zero-millisecond deadline. It used to pass
+  `undefined` unconditionally, which meant every abandoned query kept running on the warehouse —
+  pinned now by `lib/connections/__tests__/run-query-timeout.test.ts`.
 - **DuckDB is sandboxed at instance creation**: `SET allowed_paths = [<db file>]` then
   `SET enable_external_access = false`, in that order, applied once per instance and inherited by
   every later connection. `lib/connections/__tests__/duckdb-security.test.ts` pins that
