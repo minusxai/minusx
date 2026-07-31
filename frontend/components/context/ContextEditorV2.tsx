@@ -15,7 +15,7 @@ import type { ContextContent, ContextVersion, PublishedVersions, DocEntry, Skill
 import { StatusBanner } from '@/components/shared/StatusBanner';
 import type { RunOptions } from '@/components/shared/RunNowHeader';
 import type { JobRun } from '@/lib/types';
-import { serializeDatabases, parseDatabasesYaml, findDocsMissingMeta } from '@/lib/context/context-utils';
+import { serializeDatabases, findDocsMissingMeta } from '@/lib/context/context-utils';
 import type { WhitelistItem } from '../schema-browser/SchemaTreeView';
 import ContextDocsEditor from './ContextDocsEditor';
 import { isDocContentOverLimit } from '@/lib/context/context-budgets';
@@ -310,27 +310,10 @@ export default function ContextEditorV2({
     [content.docs],
   );
 
-  // Handle tab change - parse YAML/JSON when switching from code to picker
+  // CodeView stages File/Markup edits immediately. Do not replay the legacy per-section
+  // YAML/JSON buffers when leaving Code view: they may be stale and would overwrite the markup
+  // edit that was just staged.
   const handleTabChange = (tab: string) => {
-    if (activeTab === 'yaml' && tab === 'picker') {
-      try {
-        const parsedDatabases = parseDatabasesYaml(yamlText);
-        onChange({ databases: parsedDatabases });
-        setError(null);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Invalid YAML format');
-        console.error('YAML parse error:', err);
-        return;
-      }
-      try {
-        const parsedDocs = JSON.parse(docsJsonText);
-        onChange({ docs: parsedDocs });
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Invalid docs JSON');
-        console.error('Docs JSON parse error:', err);
-        return;
-      }
-    }
     setActiveTab(tab as 'picker' | 'yaml');
   };
 
@@ -342,29 +325,7 @@ export default function ContextEditorV2({
 
   // Save handler - delegate to container
   const handleSave = async () => {
-    let docsForSave: (DocEntry | string)[] = content.docs || [];
-
-    // If on code tab, validate and parse YAML/JSON first
-    if (activeTab === 'yaml') {
-      try {
-        const parsedDatabases = parseDatabasesYaml(yamlText);
-        onChange({ databases: parsedDatabases });
-        setError(null);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Invalid YAML format');
-        console.error('Cannot save - YAML parse error:', err);
-        return;
-      }
-      try {
-        const parsedDocs = JSON.parse(docsJsonText);
-        onChange({ docs: parsedDocs });
-        docsForSave = parsedDocs;
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Invalid docs JSON');
-        console.error('Cannot save - docs JSON parse error:', err);
-        return;
-      }
-    }
+    const docsForSave: (DocEntry | string)[] = content.docs || [];
 
     // Every active (non-draft) doc must carry a title + description — the agent
     // loads docs on demand by title, so both are required for new/edited docs.

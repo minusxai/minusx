@@ -60,7 +60,7 @@ vi.mock('@/lib/hooks/useConfigs', () => ({
 }));
 
 import ContextEditorV2 from '@/components/context/ContextEditorV2';
-import { setEnableCustomAgents } from '@/store/uiSlice';
+import { setDevMode, setEnableCustomAgents } from '@/store/uiSlice';
 
 const CONTENT = {
   versions: [{ version: 1, whitelist: [], docs: [], createdAt: '2026-01-01T00:00:00.000Z', createdBy: 1 }],
@@ -79,13 +79,14 @@ const CONTENT = {
 function renderEditor(
   tab: 'skills' | 'agents',
   content: ContextContent = CONTENT,
-  { enableCustomAgents = tab === 'agents' }: { enableCustomAgents?: boolean } = {},
+  { enableCustomAgents = tab === 'agents', devMode = false }: { enableCustomAgents?: boolean; devMode?: boolean } = {},
 ) {
   navigationState.tab = tab;
   const onChange = vi.fn();
   const onEditModeChange = vi.fn();
   const store = makeStore();
   if (enableCustomAgents) store.dispatch(setEnableCustomAgents(true));
+  if (devMode) store.dispatch(setDevMode(true));
   store.dispatch(setUser({
     id: 1,
     email: 'editor@minusx.ai',
@@ -126,6 +127,17 @@ function renderEditor(
 }
 
 describe('ContextEditorV2 add actions outside edit mode', () => {
+  it('does not replay stale section buffers when leaving whole-file Code view', () => {
+    const { onChange } = renderEditor('skills', CONTENT, { devMode: true });
+
+    fireEvent.click(screen.getByLabelText('Code view'));
+    expect(screen.getByLabelText('File')).toBeVisible();
+    expect(screen.getByLabelText('Markup')).toBeVisible();
+    fireEvent.click(screen.getByLabelText('Visual view'));
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it('counts user and system skills together and opens System Skills by default', () => {
     renderEditor('skills', {
       ...CONTENT,

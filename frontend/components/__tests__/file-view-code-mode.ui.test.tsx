@@ -5,7 +5,7 @@
  * The type views no longer carry their own JSON branch. All queries by aria-label.
  */
 import React from 'react';
-import { screen } from '@testing-library/react';
+import { act, fireEvent, screen } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import * as storeModule from '@/store/store';
 import { setFile } from '@/store/filesSlice';
@@ -71,8 +71,26 @@ describe('FileView code-mode centralization', () => {
 
     // CodeView's JSON tab is the default; the XML sub-toggle is present.
     expect(screen.getByLabelText('JSON editor')).toBeInTheDocument();
-    expect(screen.getByLabelText('XML')).toBeInTheDocument();
+    expect(screen.getByLabelText('Markup')).toBeInTheDocument();
+    expect(screen.getByText('File')).toBeVisible();
+    expect(screen.getByText('Markup')).toBeVisible();
     // The type-specific visual component is NOT rendered.
     expect(screen.queryByLabelText('Question visual stub')).not.toBeInTheDocument();
+  });
+
+  it('keeps a staged markup edit across Code -> visual -> Code remounts', () => {
+    const store = setup('json');
+    renderWithProviders(<FileView fileId={FILE_ID} />, { store });
+
+    fireEvent.click(screen.getByLabelText('Markup'));
+    const xml = screen.getByLabelText('XML editor') as HTMLTextAreaElement;
+    fireEvent.change(xml, { target: { value: xml.value.replace('SELECT 1', 'SELECT 2') } });
+
+    act(() => { store.dispatch(setFileViewMode({ fileId: FILE_ID, mode: 'visual' })); });
+    expect(screen.getByLabelText('Question visual stub')).toBeInTheDocument();
+    act(() => { store.dispatch(setFileViewMode({ fileId: FILE_ID, mode: 'json' })); });
+    fireEvent.click(screen.getByLabelText('Markup'));
+
+    expect((screen.getByLabelText('XML editor') as HTMLTextAreaElement).value).toContain('SELECT 2');
   });
 });

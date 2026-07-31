@@ -6,6 +6,7 @@
  * - editFileStr: string find/replace over the file's full MARKUP representation
  * - replaceFileState: replace the entire file via editFileStr (diff-line apply)
  * - applyJsonContentEdit: full-content replace from the JSON editor view
+ * - applyMarkupContentEdit: full-markup edit from the agent-facing markup view
  * - applyStoryHtmlEdit: merge new story HTML (contenteditable) into content
  */
 
@@ -161,6 +162,12 @@ export interface EditFileStrOptions {
   replaceAll?: boolean; // default false: error if oldMatch matches more than once; true: replace every occurrence (reported via `occurrences`)
 }
 
+export interface MarkupContentEditResult {
+  success: boolean;
+  error?: string;
+  validation?: string[];
+}
+
 /**
  * Build the full encoded file string for a file from Redux state.
  * Must match compressFileState exactly so oldMatch copied from ReadFiles/appState works verbatim.
@@ -216,8 +223,6 @@ export async function editFileStr(
   const built = buildCurrentFileStr(state, fileId);
   if (!built.success) return built;
   const { fullFileStr, mergedContent } = built;
-  const fileState = selectFile(state, fileId)!;
-  const currentName = selectEffectiveName(state, fileId) || '';
 
   // Normalize \n escape sequences to literal newlines (LLM sometimes outputs \\n instead of real newlines)
   const normalizedOldMatch = oldMatch.includes('\\n') ? oldMatch.replace(/\\n/g, '\n') : oldMatch;
@@ -242,52 +247,9 @@ export async function editFileStr(
     editedStr = fullFileStr.split(effectiveOldMatch).join(effectiveNewMatch);
   }
 
-  // File Architecture v2: the edited string is MARKUP — parse it back to typed content. A
-  // PARSE failure is the only hard error (there's nothing to apply); everything else applies.
-  // Pass the EXISTING content: a story's pipeline (legacy HTML vs `format:'jsx'`) derives
-  // from what's stored, never from the incoming markup.
-  const parsedContent = markupToContent(fileState.type, editedStr, mergedContent);
-  if (!parsedContent.ok) {
-    return { success: false, error: `Invalid ${fileState.type} after edit: ${parsedContent.error}` };
-  }
-  // Merge over the existing content so unedited fields (and any not surfaced in the markup
-  // projection) are preserved; the markup carries the editable surface. Context is special: the
-  // parsed markup is the FLAT agent view, so fold it back into the live version (versions[]/published
-  // preserved) rather than spreading it over the version-based content.
-  const newContent = fileState.type === 'context'
-    ? foldContextAgentView(mergedContent, parsedContent.content)
-    : { ...(mergedContent as Record<string, unknown>), ...parsedContent.content };
-  // StoryContent no longer has an `assets` field — saved-question deps derive from the body. Drop
-  // any legacy `assets` carried over from a migrated story's stored content so re-saves are clean.
-  // Set to `undefined` (not `delete`): newContent becomes persistableChanges, and the save path
-  // re-merges {...originalContent, ...persistableChanges} — a spread can't delete a key, but an
-  // explicit `undefined` overrides it and JSON.stringify drops it on persist. (Existing unedited
-  // files keep theirs harmlessly; it's inert — references come from the body.)
-  if (fileState.type === 'story') (newContent as Record<string, unknown>).assets = undefined;
-  void currentName;
-
-  const contentChanged = JSON.stringify(newContent) !== JSON.stringify(mergedContent);
-
-  // Truthful no-op guard: the find/replace altered the markup STRING but the parsed CONTENT is
-  // unchanged. This is the trap behind "1 FILE EDIT" showing on a blank story — the string diff is
-  // non-empty (so the UI renders an edit) yet nothing is staged, and the agent reads success and moves
-  // on. Report failure so it retries against the real markup instead of hallucinating a saved change.
-  if (!contentChanged && editedStr !== fullFileStr) {
-    return {
-      success: false,
-      error: 'Edit replaced text but produced NO change to the file content — the new markup was not '
-        + 'recognized as this file\'s fields (loose top-level tags are ignored; a story body must be '
-        + `wrapped in <story>…</story>). Re-read the file's current markup and edit that exact structure.`,
-    };
-  }
-
-  // Permissive edit: ALWAYS stage the change, and return validation as non-blocking feedback
-  // (schema + story param lint). The agent iterates freely; Publish is the validation gate.
-  let validation: string[] = [];
-  if (contentChanged) {
-    getStore().dispatch(setEdit({ fileId, edits: newContent }));
-    validation = collectEditValidation(getStore().getState(), fileState, newContent);
-  }
+  const staged = stageMarkupContentEdit({ fileId, editedMarkup: editedStr, originalMarkup: fullFileStr, mergedContent });
+  if (!staged.success) return staged;
+  const validation = staged.validation ?? [];
 
   // Diff against the CANONICAL post-edit markup, not the agent's replacement text. The round
   // trip (markup → content → markup) normalizes what the agent wrote (class-prop whitespace,
@@ -307,6 +269,70 @@ export async function editFileStr(
     ...(normalized ? { normalized } : {}),
     ...(validation.length ? { validation } : {}),
   };
+}
+
+/**
+ * Apply a complete agent-facing markup document from the Code view.
+ *
+ * This is the direct-editor twin of `editFileStr`: both parse and stage the exact same markup
+ * surface, including the context live-version fold and the permissive validation model. The edit
+ * remains a Redux draft until Publish; markup is canonicalized when projected again.
+ */
+export function applyMarkupContentEdit(options: { fileId: number; markupString: string }): MarkupContentEditResult {
+  const { fileId, markupString } = options;
+  const built = buildCurrentFileStr(getStore().getState(), fileId);
+  if (!built.success) return built;
+  return stageMarkupContentEdit({
+    fileId,
+    editedMarkup: markupString,
+    originalMarkup: built.fullFileStr,
+    mergedContent: built.mergedContent,
+  });
+}
+
+function stageMarkupContentEdit(options: {
+  fileId: number;
+  editedMarkup: string;
+  originalMarkup: string;
+  mergedContent: unknown;
+}): MarkupContentEditResult {
+  const { fileId, editedMarkup, originalMarkup, mergedContent } = options;
+  const state = getStore().getState();
+  const fileState = selectFile(state, fileId);
+  if (!fileState) return { success: false, error: `File ${fileId} not found` };
+
+  // A parse failure is the only hard structural error. Pass existing content so a story's legacy
+  // HTML vs JSX pipeline is derived from what is stored, not guessed from the incoming markup.
+  const parsedContent = markupToContent(fileState.type, editedMarkup, mergedContent);
+  if (!parsedContent.ok) {
+    return { success: false, error: `Invalid ${fileState.type} after edit: ${parsedContent.error}` };
+  }
+
+  // The markup is a projection, so preserve fields outside that projection. Context markup is a
+  // flattened agent view and must be folded into the live version without touching its whitelist.
+  const newContent = fileState.type === 'context'
+    ? foldContextAgentView(mergedContent, parsedContent.content)
+    : { ...(mergedContent as Record<string, unknown>), ...parsedContent.content };
+
+  // Story dependencies derive from the JSX body; explicitly override the obsolete stored field.
+  if (fileState.type === 'story') (newContent as Record<string, unknown>).assets = undefined;
+
+  const contentChanged = JSON.stringify(newContent) !== JSON.stringify(mergedContent);
+  if (!contentChanged && editedMarkup !== originalMarkup) {
+    return {
+      success: false,
+      error: 'The markup changed but produced no change to the file content. Edit the recognized '
+        + `structure for this ${fileState.type} file.`,
+    };
+  }
+
+  if (!contentChanged) return { success: true };
+
+  // Match the agent's permissive EditFile behavior: stage parseable content now and surface schema
+  // or parameter issues as feedback. Publish remains the hard validation gate.
+  getStore().dispatch(setEdit({ fileId, edits: newContent }));
+  const validation = collectEditValidation(getStore().getState(), fileState, newContent);
+  return { success: true, ...(validation.length ? { validation } : {}) };
 }
 
 /**

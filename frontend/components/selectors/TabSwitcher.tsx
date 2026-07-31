@@ -13,6 +13,8 @@ interface TabSwitcherProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
   accentColor?: string;
+  /** Render the tab name beside its icon instead of using tooltip-only labels. */
+  showLabels?: boolean;
 }
 
 // Callers pass Chakra-era semantic tokens (e.g. 'accent.teal', metadata.color);
@@ -26,7 +28,7 @@ function resolveAccent(color: string): string {
   return color;
 }
 
-export default function TabSwitcher({ tabs, activeTab, onTabChange, accentColor = 'accent.teal' }: TabSwitcherProps) {
+export default function TabSwitcher({ tabs, activeTab, onTabChange, accentColor = 'accent.teal', showLabels = false }: TabSwitcherProps) {
   const accent = resolveAccent(accentColor);
   return (
     <TooltipProvider>
@@ -38,12 +40,15 @@ export default function TabSwitcher({ tabs, activeTab, onTabChange, accentColor 
               <TooltipTrigger
                 aria-label={tab.label}
                 onClick={() => onTabChange(tab.value)}
-                className={`inline-flex size-6 shrink-0 items-center justify-center rounded-sm transition-colors ${
+                className={`inline-flex h-6 shrink-0 items-center justify-center rounded-sm transition-colors ${
+                  showLabels ? 'gap-1.5 px-2' : 'w-6'
+                } ${
                   isActive ? 'text-white' : 'text-foreground hover:bg-muted'
                 }`}
                 style={isActive ? { background: accent } : undefined}
               >
-                <tab.icon />
+                <tab.icon className="shrink-0" />
+                {showLabels && <span className="text-xs font-medium">{tab.label}</span>}
               </TooltipTrigger>
               <TooltipContent side="bottom">{tab.label}</TooltipContent>
             </Tooltip>
