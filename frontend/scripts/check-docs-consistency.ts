@@ -216,10 +216,23 @@ const unlinked: string[] = [];
 const rootText = readFileSync(rootDocPath, 'utf8');
 for (const relDoc of CLAUDE_DOCS) {
   if (relDoc === ROOT_DOC) continue;
-  // The link must name the DOC, not merely the directory. Accepting a directory
-  // mention makes this vacuous: every module directory is already listed in the
-  // module map, so nothing would ever be reported. (Verified by planting an
-  // unlinked doc under a mapped directory — the looser check passed it.)
+  // A POINTER STUB is exempt. It exists only to redirect a reader to the doc that
+  // covers its directory, and that target is itself linked from the root — so
+  // requiring 25 redirect files in the root map would bloat the one file whose
+  // whole point is being small. Recognised structurally, not by filename.
+  const body = readFileSync(join(REPO_ROOT, relDoc), 'utf8');
+  const isStub = /Documented in \*\*`[^`]+`\*\*/.test(body) && body.split('\n').length <= 15;
+  if (isStub) {
+    const target = body.match(/Documented in \*\*`([^`]+)`\*\*/)![1];
+    if (!exists(join(REPO_ROOT, target))) {
+      unlinked.push(`${relDoc} redirects to ${target}, which does not exist`);
+    }
+    continue;
+  }
+  // A real doc must name the DOC in the root, not merely the directory. Accepting a
+  // directory mention makes this vacuous: every module directory is already in the
+  // module map. (Verified by planting an unlinked doc under a mapped directory —
+  // the looser check passed it.)
   if (rootText.includes(relDoc)) continue;
   unlinked.push(`${relDoc} is not referenced from ${ROOT_DOC}`);
 }
