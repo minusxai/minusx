@@ -78,9 +78,17 @@ export interface IAuthModule {
   }>;
   getRequestContext(): Promise<RequestContext>;
   /**
-   * Identity-scoped namespace for in-process caches (e.g. the query result cache).
-   * Must include every dimension that distinguishes one user's data from another's
-   * so that two users can never observe each other's cached results.
+   * MODE-scoped namespace for in-process caches (e.g. the query result cache) —
+   * `isolation` joined to mode, e.g. `mx/org`. Despite the name it does NOT
+   * identify a user, and it cannot: the only thing it is handed is `mode`.
+   *
+   * So two users in the same mode DO share cache keys, deliberately — a result
+   * derived from the same SQL against the same connection is the same result.
+   * What stops one user replaying a query they are no longer allowed to run is
+   * whitelist validation, which runs BEFORE the cache is served (the key carries
+   * no `filePath`, so validating after a hit would be too late). Widen the
+   * namespace here if a deployment needs a coarser boundary; do not rely on this
+   * for per-user authorization.
    */
   getUserKey(user: { mode: string }): Promise<string>;
   /** Auth-factory hooks consulted at login/refresh time. OSS: not implemented. */

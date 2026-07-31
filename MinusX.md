@@ -454,6 +454,25 @@ Provider configuration lives in the DB (or arrives from the gateway); there is n
 seeding path — `ANALYST_AGENT_MODEL_CONFIG` survives only as a runner-side hint in
 `frontend/test/qa/auth.setup.ts`. This tree owns no prompt, no agent, and no usage accounting.
 
+**The `minusx` provider is checked FIRST in `planFromConfig`, ahead of any stored grade mapping.**
+Choosing the managed gateway is choosing to have model selection managed; a per-grade mapping
+alongside it produces a half-managed workspace — some grades routed by MinusX, others pinned to a
+vendor model it knows nothing about, and no single place that answers "what runs this?". Settings
+hides the per-grade pickers while a `minusx` provider is configured (omitted, not disabled: a disabled
+picker advertises a decision the admin does not get to make), but a mapping stored *before* MinusX was
+added would otherwise still be honoured at plan time, which is what the ordering prevents. The full
+ladder is: `minusx` provider → `llm.grades[grade]` → the workspace's sole bring-your-own-key provider
+run as "Auto" → a hard error naming the unmapped grade.
+
+**Two routing headers ride every managed call.** `minusxCallOptions(grade, agent, extraHeaders)` emits
+`X-MX-Use-Case` (the capability grade) and `X-MX-Agent` (the task kind, an `LlmAgentKey`). The gateway
+resolves `agent:grade` first and falls back to `grade`, so the second header is purely additive — an
+agent with no override routes exactly as it did on grade alone. It exists because grade by itself
+discards the strongest predictor of which model wins: a Slack one-liner and a long analyst tool loop
+are not the same workload at the same capability tier. `buildPlanStep` therefore takes `agent` as a
+**required** parameter, ahead of the optional `catalog`, so a new caller that omits it is a type error
+rather than a silently un-routed managed call.
+
 **`frontend/lib/projection/`** — the **LLM-facing facet projection**:
 `frontend/lib/projection/facets.ts` (`FacetMemo`, stable `facetHash`),
 `frontend/lib/projection/types.ts` (rich `AugmentedFiles` vs projected JSON),
@@ -1798,8 +1817,13 @@ renderers; `components/viz/VizTableView.tsx` and `components/viz/VizPivotView.ts
 over them, unpacking `columnFormats` / `conditionalFormats` / `wrapColumns` / `config` / `css` via
 `encoding-edit` getters. The `css` field is scoped to the instance with native CSS nesting under
 a per-mount class and is written against the stable class contract
-(`.mx-table`, `.mx-header-row`, `.mx-th`, `.mx-row`, `.mx-row-odd/-even`, `.mx-cell`,
-`.mx-col-<name>` from `components/plotx/table-v2-utils.ts`, `.mx-toolbar`, `.mx-pivot`).
+(`.mx-table`, `.mx-column`, `.mx-header-row`, `.mx-th`, `.mx-th-accented`, `.mx-row`,
+`.mx-row-odd/-even`, `.mx-row-wrap`, `.mx-cell`, `.mx-cell-wrap`, `.mx-col-<name>` from
+`components/plotx/table-v2-utils.ts`, `.mx-column-type-<text|number|date|json>`, `.mx-type-icon`,
+`.mx-sort-icon`, `.mx-filter-icon`, `.mx-resize-handle`, `.mx-toolbar`, `.mx-pivot`, plus the custom
+properties `--mx-column-width`, `--mx-table-accent` and the padding pairs). The authority is the
+`css` field description on `VizSourceTable` in `lib/validation/atlas-schemas.ts` — that string is what the agent
+reads, so a class added here without a schema edit is undiscoverable.
 
 Pivot math is split: `lib/chart/pivot-utils.ts` is the aggregation engine (`aggregatePivotData`,
 `computeFormulas`, dimension-value helpers) and `lib/chart/pivot-grid.ts` is the pure layout
@@ -2996,6 +3020,18 @@ appEventRegistry.publish(AppEvents.X, payload)          registry.ts (never await
 - **`resolveCreditConfig` and the six allowance fields in `credit-budgets.ts` are test-only.**
   Production reads `weights`, `defaultBillingCycle` and `maxBillingCycleDays`; limits come from
   the org config document.
+- **Managed-gateway calls bill from a cost the *provider* reports, not from local rates.** pi-ai
+  normally computes `local_rate × wire_tokens`, which cannot work for the gateway: it picks the model
+  server-side per request, so the client has no rate to multiply and `buildCustomModel` zeroes them.
+  Left alone, every managed call records `cost = 0` in `llm_logs`, `costToCredits` sees nothing,
+  credits never accrue, and no test goes red. The gateway therefore returns its own cost in the usage
+  object (OpenRouter's `usage.cost` convention — the OpenAI usage object has no cost field), and
+  `frontend/patches/@earendil-works+pi-ai+0.80.6.patch` makes pi-ai honour it.
+  `frontend/lib/llm/__tests__/gateway-cost.test.ts` drives a real local HTTP server speaking that exact
+  wire format through the real `streamSimple`, so the patch is what is under test rather than a
+  re-implementation of it; it pins that a malformed cost is ignored rather than corrupting the total,
+  and that a reported `0` is a real value and not a fallback trigger. **Dropping the patch on a pi-ai
+  bump silently zeroes managed-workspace billing.**
 - **`SEARCH_CONFIGS` in `lib/search/file-search.ts` covers only `question`, `dashboard`, `folder`,
   `connection`, `context`.** A file of any other type is skipped silently (`if (!config) continue`),
   so stories, notebooks, reports and alerts are unfindable via `SearchFiles`.
@@ -3631,11 +3667,57 @@ observer is bound to the top realm and goes deaf inside the surface iframe. Widt
 
 **The WYSIWYG text host freezes its subtree while focused.** `StoryJsxBody` treats a focused editable host as prop-equal so React bails out and never reconciles it — without that, any upstream re-render (an embed refetch, a param change, a Redux update elsewhere) reconciles mid-keystroke and clobbers what the user is typing. A render that must happen anyway commits the in-progress edit first. Edits commit on blur by writing back into the JSX **AST** by `data-mx-ast` path, never by scraping the rendered DOM, and only after real user input — programmatic focus churn does not commit. Because the host is rich `contentEditable`, the write-back has to preserve inline elements (`<strong>`, `<em>`, links); a plaintext-only commit silently strips them. The parsed result runs through the same `validateJsxSource` and prop deny list as agent-authored markup — pasted HTML is untrusted input, and there is no editor-trusted parse.
 
+**The format toolbar mutates the live DOM first and the source second — both, every time.**
+`components/views/story/StoryTypographyToolbar.tsx` renders in the PARENT document (the iframe's rect
+offsets the anchor) and, on every control, computes the next class string or style value from the host
+element's *live* attributes via the pure algebra in `lib/data/story/typography.ts`, writes it straight
+onto the element, and only then emits it through `applyFormatEdit` → `applyFormatEditsToJsx`. The DOM
+write is not an optimisation: the focused text host is render-frozen by the memo guard, so a React
+re-render cannot deliver the change at all. The commit path is deliberately whole-value — the full
+resolved `className` and the full inline `style` string — so a stale AST read can never merge two
+partial edits. Text colour and fill are inline styles, not classes, because a class palette cannot
+cover a colour picker's range. Clicking a plain non-text-host element in edit mode selects it as a
+format target instead (`data-mx-selected`, with `data-mx-hover` previewing what a click would take);
+embeds are never selectable, since their chrome is interactive.
+
+**Every agent edit remounts the story iframe, and two defenses keep the page still.** `AgentHtml` is
+keyed on the story hash, so an edit tears the iframe down; the fresh one measures ~0px and regrows
+asynchronously as embeds hydrate, and the browser clamps the scroll container toward the top on the
+way through. `lib/hooks/use-story-rebuild-stability.ts` owns both defenses under one `ResizeObserver`:
+the story box's `min-height` is pinned to the last stable measured height during render
+(adjust-state-during-render, so the style lands in the same commit as the child's remount), and the
+pre-rebuild `scrollTop` is snapshotted in an **insertion** effect — the only phase that still sees the
+old position, since layout effects run after the fresh iframe has already sized to zero. The pin
+releases only once the rebuilt content has regrown past it or after `MAX_PIN_MS`, never on a mere gap
+in the resize stream: embeds waiting on query results stop resizing for far longer than the settle
+debounce, and releasing there is exactly what used to clamp scroll to the top. A user scroll during
+the rebuild cancels the restore. Separately, `preloadStoryFonts` registers the theme's faces once in
+the TOP document via the FontFace API: the iframe's `@font-face` rules are `font-display: swap`, so a
+cold cache repainted fallback text on every single edit.
+
+**The agent authoring surface.** `components/context/AgentsTabContent.tsx` is the Agents tab of
+`ContextEditorV2` (a structural mirror of `SkillsTabContent`): saved agents, read-only inherited ones
+from `fullAgents`, and a raw-JSON variant. `components/context/AgentBuilder.tsx` is a four-step builder
+(Identity → Prompt → Skills → Review) that **saves only at the end**, and whose Review step renders the
+very component the saved card uses, `components/context/AgentReadView.tsx` — so what an author approves
+is byte-for-byte what is stored, with no second formatting path to drift. The feature is alpha-gated on
+`uiSlice.enableCustomAgents`: with the flag off the editor tab is not rendered *and* the chat picker
+receives an empty option list, so no `custom_agent` pointer is ever sent. The gate is on both the
+authoring and the sending side, not just the visible one.
+
+**`components/settings/GatewayBillingCard.tsx` renders `null`, not an empty card, when there is no
+gateway.** A self-hosted install is not in an error state — it simply has no billing — and an empty
+card would be noise on every one of those settings pages. Two consequences of the same rule: a fetch
+failure is treated as "unreachable" rather than thrown into the settings page, and a non-admin gets a
+403 whose body carries no `data` key, which falls through to `{enabled: false}` and renders nothing.
+The heading is "Plan & balance", never "Credits" — the credit-limits card sits directly below it, and
+two adjacent cards with the same heading showing different numbers is unreadable.
+
 **The inline `<Number>` query editor is a light-DOM dialog on purpose.** The story body renders inside the surface iframe, where Monaco's floating widgets (suggest, hover) mis-anchor, so `views/story/NumberQueryEditor.tsx` mounts the shared `query-builder/SqlEditor.tsx` in a Chakra `Dialog` at the `StoryView` level and hands the edited query back through the request's `apply` callback. Reuse rather than a hand-rolled `<textarea>` is the point: `SqlEditor` is a deep module (Monaco plus schema and `@`-reference autocomplete plus validation, behind `value`/`onChange`/`schemaData`), and the modal is the constraint the iframe imposes, not a styling choice.
 
 **A parameter's declaration and its value are stored separately, and each file type declares differently.** A question declares in `QuestionContent.parameters` (`{ name, type: 'text'|'number'|'date', label, source }`) and holds values in `parameterValues`. A dashboard *auto-derives* its declarations by merging its questions' params on name+type. A story has no `params` field at all — but it has **two** storage shapes. A legacy story derives its declarations from `<div data-param-name=…>` placeholders inside `content.story` (inline-SQL sources ride along as a JSON `data-param-source-sql` attribute); a `format:'jsx'` story stores the `<Param/>` element **verbatim** in the body and has no placeholders anywhere. `markupToContent` picks the codec from the file's *stored* content, never from the incoming markup. Anything reading a story's params must therefore go through `extractStoryParams` (`lib/data/story/story-params.ts`), which scans placeholders *and* parses `<Param>` nodes out of JSX — a placeholder-only regex silently returns zero params for every new-format story. Either way the control lives exactly where the author placed it — values again in `parameterValues`. Because values are a separate name-keyed dict, a control can be moved or re-themed without touching them.
 
-**One story `<Param>` drives every embed that uses it.** `views/shared/AgentHtml.tsx` scans the body for `[data-param-name]` into `paramTargets` (`paramFromPlaceholderEl`), holds the values in React state seeded from `content.parameterValues`, portals a `StoryParamControl` per param, and passes every embed `externalParameters` (`paramTargets.map(storyParamToQuestionParameter)`, wired in `views/shared/StoryEmbeds.tsx`) plus `externalParamValues`. Changing one control re-renders the story and re-executes each affected embed. Dashboards reach `SmartEmbeddedQuestionContainer` through the *identical* `externalParameters`/`externalParamValues` props from `DashboardView` — only the derivation of the controls differs.
+**One story `<Param>` drives every embed that uses it, by two different routes.** A LEGACY story goes through `views/shared/AgentHtml.tsx`, which scans the body for `[data-param-name]` into `paramTargets` (`paramFromPlaceholderEl`), holds the values in React state seeded from `content.parameterValues`, and portals a `StoryParamControl` per param. A `format:'jsx'` story has no placeholders to scan: `views/shared/StoryJsxBody.tsx` collects the declarations from the AST (`collectStoryParams`) and renders each `<Param>` through its own `ParamControlAdapter` → `StoryParamControl` **in place in the interpreted tree** — no DOM scan, no portal. Both then pass every embed `externalParameters` (`storyParamToQuestionParameter`, wired in `views/shared/StoryEmbeds.tsx`) plus `externalParamValues`; that contract onto the embeds is identical, and only the collection and mounting differ. Changing one control re-renders the story and re-executes each affected embed. Dashboards reach `SmartEmbeddedQuestionContainer` through the *identical* `externalParameters`/`externalParamValues` props from `DashboardView` — only the derivation of the controls differs.
 
 **A `<Param>` names its SQL binding, and everything else about it is presentation.** `name` is always
 the stable `:name` binding. Autocomplete comes from one of two sources: `<Param id={N} column="c">`
@@ -3806,7 +3888,8 @@ expiry work is the service's business, and `frontend/lib/gateway/gateway-types.t
 shape that comes back (money is integer micro-USD throughout; `microToUsd` is the only conversion).
 Self-hosted installs never use any of it.
 
-**The switch is `MX_GATEWAY_SHARED_SECRET`, not the URL.** `gatewayEnabled()` checks `baseUrl()` too,
+**The switch is `MX_GATEWAY_SHARED_SECRET`, not the URL.** `gatewayEnabled()`
+(`frontend/lib/gateway/gateway-client.server.ts`) checks `baseUrl()` too,
 but that reads `MX_GATEWAY_ORIGIN`, which carries a production default and is therefore never empty —
 so the predicate reduces to the secret alone, and
 `frontend/lib/gateway/__tests__/gateway-client.test.ts` pins exactly that. The URL cannot be the gate
@@ -4089,7 +4172,7 @@ Everything runs from `frontend/`. Names that mean what they say are omitted.
 | `update-workspace-template` | Runs migrations over `lib/database/workspace-template.json` with placeholder values substituted, restores the `{{TEMPLATE_VAR}}` markers, writes back. Never touches a database — review with `git diff`. |
 | `prompt-visualizer` | Emits a self-contained HTML token-budget view of the real prompt assembly. Needs `scripts/register-yaml.mjs`. |
 | `build:setup-cli` | esbuild-bundles `scripts/setup-cli/*.ts` into a gitignored setup-cli/ directory for the Docker image. |
-| `postinstall` | `copy-duckdb-wasm.mjs` (node_modules → `public/duckdb/`) then `patch-package --error-on-fail`. |
+| `postinstall` | `copy-duckdb-wasm.mjs` (node_modules → `public/duckdb/`) then `patch-package --error-on-fail`. Two patches live in `frontend/patches/`: the pi-ai one carries real semantics (web search, remote image URLs, and the provider-reported cost that managed billing depends on), while `next+16.1.6.patch` edits Next's *compiled, minified* app-page runtime — its intent is not recoverable from the diff, so treat it as opaque and re-derive it against upstream on a Next bump rather than hand-merging. `--error-on-fail` is what stops either from being skipped silently. |
 | `benchmark:dab` | Requires `DAB_BENCH_BASE_DIR`; throws immediately without it. |
 | `knip` | Dead-export detection. `knip.json` declares `scripts/*`, `benchmarks/dataanalystbench.ts` and the Playwright `*.setup.ts` files as entry points so they are not reported unused. |
 | `generate-og:generic` | Regenerates the committed `public/ogs/generic.png`. |
