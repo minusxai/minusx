@@ -137,7 +137,7 @@ For Mongo connections, write a JSON aggregation pipeline: {"collection": "name",
       const interpolatedQuery = availableLabels.size > 0
         ? (isMongo
           ? interpolateMongoRefs(spec.query, availableLabels)
-          : interpolateRefs(spec.query, availableLabels))
+          : interpolateRefs(spec.query, availableLabels, dialect))
         : spec.query;
 
       try {

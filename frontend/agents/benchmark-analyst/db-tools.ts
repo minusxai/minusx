@@ -890,7 +890,7 @@ export class ChainedExecuteQuery extends MXTool<
       const interpolated = availableLabels.size > 0
         ? (isMongo
           ? interpolateMongoRefs(spec.query, availableLabels)
-          : interpolateRefs(spec.query, availableLabels))
+          : interpolateRefs(spec.query, availableLabels, dialect))
         : spec.query;
 
       let finalQuery: string;

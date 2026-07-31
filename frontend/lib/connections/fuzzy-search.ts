@@ -62,8 +62,19 @@ function qualifiedTable(schema: string | undefined, table: string, quoteFn: (nam
 }
 
 /** Escape a SQL string literal (single-quoted value). */
-function escapeLiteral(value: string): string {
-  return value.replace(/'/g, "''").slice(0, 200);
+/** Longest search term accepted; applied to the RAW value, before escaping. */
+export const FUZZY_TERM_MAX = 200;
+
+/**
+ * Cap a search term and escape it for inclusion in a single-quoted literal.
+ *
+ * Truncate FIRST. Escaping first and slicing second can cut a doubled `''` in
+ * half when the pair straddles the cap — the literal is then left open and the
+ * rest of the statement is parsed as SQL. Capping the raw value means escaping
+ * always emits whole pairs.
+ */
+export function escapeFuzzyTerm(value: string): string {
+  return value.slice(0, FUZZY_TERM_MAX).replace(/'/g, "''");
 }
 
 /** Extract matches from query result rows, including searched columns and extra returnColumns. */
@@ -100,7 +111,7 @@ async function fuzzyDuckDb(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzz
   const extra = extraSelectCols(p.returnColumns);
   const searched = searchedSelectCols(p.columns);
   const fromTable = qualifiedTable(p.schema, p.table);
-  const term = escapeLiteral(p.searchTerm);
+  const term = escapeFuzzyTerm(p.searchTerm);
 
   // Per-column similarity expressions
   const simExprs = p.columns.map(col => {
@@ -138,7 +149,7 @@ async function fuzzyPostgres(queryFn: QueryFn, p: ResolvedParams): Promise<RawFu
   const extra = extraSelectCols(p.returnColumns);
   const searched = searchedSelectCols(p.columns);
   const fromTable = qualifiedTable(p.schema, p.table);
-  const term = escapeLiteral(p.searchTerm);
+  const term = escapeFuzzyTerm(p.searchTerm);
 
   const simExprs = p.columns.map(col => {
     const castCol = `CAST(${escapeIdent(col)} AS TEXT)`;
@@ -187,7 +198,7 @@ async function fuzzyAthena(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzz
   const extra = extraSelectCols(p.returnColumns);
   const searched = searchedSelectCols(p.columns);
   const fromTable = qualifiedTable(p.schema, p.table);
-  const term = escapeLiteral(p.searchTerm);
+  const term = escapeFuzzyTerm(p.searchTerm);
 
   const simExprs = p.columns.map(col =>
     `1.0 - CAST(levenshtein_distance(lower(CAST(${escapeIdent(col)} AS VARCHAR)), lower('${term}')) AS DOUBLE)
@@ -226,7 +237,7 @@ async function fuzzySubstring(queryFn: QueryFn, p: ResolvedParams, quoteStyle: Q
     ? (name: string) => `\`${name.replace(/`/g, '\\`')}\``
     : escapeIdent;
 
-  const term = escapeLiteral(p.searchTerm).toLowerCase();
+  const term = escapeFuzzyTerm(p.searchTerm).toLowerCase();
   const words = term.split(/\s+/).filter(Boolean);
   const wordPattern = words.length > 1 ? `'%${words.join('%')}%'` : null;
 
@@ -307,7 +318,7 @@ async function fuzzyMongo(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzzy
 }
 
 async function fuzzyBigQuery(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzzyMatchResult> {
-  const term = escapeLiteral(p.searchTerm);
+  const term = escapeFuzzyTerm(p.searchTerm);
   const q = (name: string) => `\`${name.replace(/`/g, '\\`')}\``;
   const extra = extraSelectCols(p.returnColumns, q);
   const searched = searchedSelectCols(p.columns, q);
