@@ -5,14 +5,15 @@
  *
  * This is the heart of the append-only-log → LLM-message conversion. It is pure and
  * memo-driven so it can be unit-tested exhaustively and reused by both the client and headless
- * projection paths. The caller walks the emitted turns IN ORDER through a single memo (and
- * `memo.reset()`s at a summarization boundary); within a turn, references are projected with
- * the same per-id keys as the primary file, so a file that appears as primary in one turn and
- * as a reference in another still dedups correctly.
+ * projection paths. The caller walks the emitted turns IN ORDER through a single memo covering
+ * exactly the window being emitted (`projectMessages` builds a fresh one per pass); within a turn,
+ * references are projected with the same per-id keys as the primary file, so a file that appears
+ * as primary in one turn and as a reference in another still dedups correctly.
  *
  * Facet → memo key scheme (stable across turns):
  *   file:<id>:data | file:<id>:content | file:<id>:image
- *   qr:<queryResultId>:summary | qr:<queryResultId>:data | qr:<queryResultId>:image
+ *   qr:<queryResultId>:summary | qr:<queryResultId>:finalQuery | qr:<queryResultId>:data
+ *   qr:<queryResultId>:image
  *
  * Heavy/opaque facets (markup, query `data`, images) never go in the JSON: when CHANGED they
  * are emitted as separate blocks and signaled `{state:'present'}`; when UNCHANGED no block is

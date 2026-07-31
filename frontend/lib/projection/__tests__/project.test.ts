@@ -1,5 +1,5 @@
 // The pure projector — rich AugmentedFiles → LLM-facing JSON + out-of-JSON blocks, diffing every
-// facet against a forward FacetMemo. These assert the contract the Phase C boundary depends on:
+// facet against a forward FacetMemo. These assert the contract the projection boundary depends on:
 // first turn emits everything in full; identical repeats collapse to {unchanged:true} with NO
 // blocks; each facet (data/markup/image/summary/qr-data/qr-image) diffs independently; heavy
 // facets live OUTSIDE the JSON; images diff on key not payload; ids dedup across primary/reference.

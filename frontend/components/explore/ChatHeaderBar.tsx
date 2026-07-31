@@ -31,7 +31,8 @@ interface ChatHeaderBarProps {
 }
 
 // Action Buttons Bar: conversation title (with inline rename), "Set as Active",
-// "New Chat", "Copy link", and (in sidebar) "Open in explore". Extracted wholesale
+// "New Chat", "Copy to agent" (when Remote Agents is enabled), "Copy link", and
+// (in sidebar) "Open in explore". Extracted wholesale
 // from ChatInterface — the rename state/handlers and the "Set as Active" dispatch
 // are local to this bar and move with it.
 export default function ChatHeaderBar({

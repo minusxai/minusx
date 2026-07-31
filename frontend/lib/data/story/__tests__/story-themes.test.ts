@@ -4,8 +4,9 @@
  * One registry (`STORY_THEMES`), four consumers: the CSS emitter, the picker UI, preview
  * generation, and the font-asset mapping. These tests pin:
  *  - completeness: one entry per schema enum name, with label/description/fonts,
- *  - the token contract: every var TW_INPUT_JSX maps (+ --radius) present in BOTH modes,
- *  - the emitter: `[data-theme="<name>"]` light block, `.dark`-scoped dark block, font rules.
+ *  - the token contract: every var TW_INPUT_JSX maps (+ --radius) present, and nothing else,
+ *  - the emitter: one `[data-theme="<name>"]` block per theme (no `.dark`-scoped overrides —
+ *    themes are self-contained), font rules, and the structural element layer.
  */
 import { describe, it, expect } from 'vitest';
 import { STORY_THEMES, STORY_THEME_NAMES, getStoryTheme, storyThemeCss, storyThemeMode } from '../story-themes';

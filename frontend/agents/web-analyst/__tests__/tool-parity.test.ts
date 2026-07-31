@@ -1,6 +1,7 @@
 // WebAnalystAgent must advertise exactly this analyst tool set:
 //   [ReadFiles, EditFile, ExecuteQuery, RunSemanticQuery, PublishAll, Navigate,
-//    Clarify, SearchDBSchema, SearchFiles, CreateFile, LoadSkill, FuzzyMatch]
+//    Clarify, SearchDBSchema, SearchFiles, CheckFileHealth, CreateFile,
+//    DetachViz, LoadSkill, LoadContext, FuzzyMatch, ReviewFile]
 // Naming exception: it uses ClarifyFrontend for Clarify. It must NOT advertise
 // extras like ListDBConnections.
 

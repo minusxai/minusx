@@ -3,7 +3,7 @@
  *
  * Reports whether a mode's mxfood sample-data copy has finished. Registration
  * kicks that copy off fire-and-forget (lib/modules/auth/index.ts), so the tutorial
- * is briefly data-less right after a company is created. The data-prep progress UI
+ * is briefly data-less right after a workspace is created. The data-prep progress UI
  * (and QA setup) poll this until `ready`.
  */
 import { NextRequest } from 'next/server';

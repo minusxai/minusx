@@ -5,8 +5,7 @@
  *
  * This component is now a pure layout container:
  * - Handles breadcrumb rendering
- * - Manages right sidebar
- * - Sets page type in Redux
+ * - Manages right sidebar, floating chat and the ViewStack overlay
  * - Delegates all file-type-specific rendering to children
  *
  * The 70-line if-else chain has been removed and replaced with
@@ -49,8 +48,8 @@ export default function FileLayout(props: FileLayoutProps) {
   const view = useAppSelector(selectView);
   const hideTopChrome = viewAtLeast(view, 'file');       // hide breadcrumb
   const hideRightSidebar = viewAtLeast(view, 'contentonly');
-  // Files with a distinct edit state (dashboard, story) get a colored breadcrumb
-  // banner while editing — see `getEditModeBanner` for the eligible types.
+  // Files with a distinct edit state (dashboard, story, context) get a colored
+  // breadcrumb banner while editing — see `getEditModeBanner` for the eligible types.
   const isEditing = useAppSelector(state =>
     fileId ? selectFileEditMode(state, fileId) : false
   );

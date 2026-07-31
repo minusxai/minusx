@@ -11,7 +11,7 @@ interface MentionChipProps {
 }
 
 /**
- * Inline mention chip (table / column / metric / file / skill).
+ * Inline mention chip (table / column / metric / question / dashboard / story / skill).
  * Shared between chat messages (`MessageWithMentions`) and rendered markdown
  * (the `Markdown` component's mention rehype plugin).
  */

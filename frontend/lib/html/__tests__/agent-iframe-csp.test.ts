@@ -1,6 +1,6 @@
 // The agent-HTML iframe (stories) carries a defense-in-depth CSP. Its font-src MUST allow 'self'
 // so the app's SELF-HOSTED fonts (JetBrains Mono / Inter at same-origin /_next/static/media/*.woff2)
-// load inside the iframe — otherwise embedded ECharts charts fall back to a system font and the chart
+// load inside the iframe — otherwise embedded charts fall back to a system font and the chart
 // text renders with the wrong typeface/size. Regression guard for that.
 import { AGENT_IFRAME_CSP } from '@/lib/html/agent-iframe-csp';
 

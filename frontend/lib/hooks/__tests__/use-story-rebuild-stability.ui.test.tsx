@@ -156,7 +156,7 @@ describe('useStoryRebuildStability', () => {
     act(() => { vi.advanceTimersByTime(REBUILD_SETTLE_MS); });
 
     scroller.scrollTop = 500;
-    rerender({ renderKey: 'b' }); // snapshot taken during render, before the remount commits
+    rerender({ renderKey: 'b' }); // insertion effect snapshots scrollTop before this commit's DOM mutations
 
     // Browser clamped scroll while the fresh iframe was short.
     scroller.scrollTop = 0;

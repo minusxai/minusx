@@ -1,6 +1,6 @@
 // CLI-safe DB tools. NO server-only imports — this module is loaded by
 // `npm run benchmark:dab` (Node CLI) as well as by the production server
-// agent path. Production variants (which need `runQuery` / `loadConnectionSchema`
+// agent path. Production variants (which need `runQueryStream` / `loadConnectionSchema`
 // → server-only chain into NextAuth) live in `db-tools.server.ts` and
 // extend the `Base*` classes here.
 
@@ -201,7 +201,7 @@ export class BaseSearchDBSchema extends MXTool<typeof SearchDBSchemaParams, Benc
 // Kept separate so the production variant (`db-tools.server.ts`) can build
 // a schema WITHOUT the benchmark-only `timeout` param — the timeout is only
 // honoured on the benchmark path today; the production `_executeFallback` →
-// `runQuery` chain does not wire it through.
+// `runQueryStream` chain does not wire it through.
 const EXECUTE_QUERY_BASE_FIELDS = {
   connectionId: Type.String(),
   query: Type.String(),
@@ -232,7 +232,7 @@ const ExecuteQueryParams = Type.Object({
 /**
  * Production ExecuteQuery params — same as `ExecuteQueryParams` minus
  * `timeout`. Consumed by `db-tools.server.ts::ExecuteQuery`, which routes
- * through `_executeFallback` → `runQuery` (a path that does not honour
+ * through `_executeFallback` → `runQueryStream` (a path that does not honour
  * the timeout). Hiding the param keeps the production tool
  * from advertising a capability it doesn't deliver.
  */
@@ -289,7 +289,7 @@ const EXECUTE_QUERY_SCHEMA: Tool<typeof ExecuteQueryParams> = {
  *
  * When the LLM asks about a name that isn't in `ctx.connections`, falls
  * through to `_executeFallback` (default: throws). Production subclasses
- * override this hook to route via the server-side `runQuery` helper.
+ * override this hook to route via the server-side `runQueryStream` helper.
  */
 export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, BenchmarkAnalystContext, ExecuteQueryDetails> {
   // Typed as the loose `Tool<TSchema>` (not the inferred specific type) so
@@ -308,8 +308,9 @@ export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, Benchmar
 
   /**
    * Hook for production subclasses (`db-tools.server.ts::ExecuteQuery`)
-   * to plug in `runQuery`. Default throws — fine for benchmark/CLI where
-   * every queryable connection should already be in `ctx.connections`.
+   * to plug in `runQueryStream` (via the shared query cache). Default throws —
+   * fine for benchmark/CLI where every queryable connection should already be
+   * in `ctx.connections`.
    */
   protected async _executeFallback(
     connectionId: string,

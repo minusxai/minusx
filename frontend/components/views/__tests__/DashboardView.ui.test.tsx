@@ -1,26 +1,26 @@
 /**
- * DashboardView — characterizes CURRENT (pre-move) Redux behavior ahead of the
- * Container/View discipline move (MinusX.md "Refactoring — Blue → Red → Blue").
- * DashboardView.tsx currently calls useAppDispatch/
- * useAppSelector directly at 8 sites (grep-verified): selectFileEditMode,
- * selectIsDirty, selectMergedContent (dashboard-level parameterValues),
- * ephemeralChanges.lastExecuted.params, questionContents (per-question
- * selectMergedContent), state.files.files[fileId] (fileState), selectDirtyFiles,
- * plus dispatch(...) for updateTextBlockContent/pushView/setEphemeral/
- * addQuestionToDashboard/addTextBlockToDashboard.
+ * DashboardView — characterization tests written for the Container/View
+ * discipline move (MinusX.md "Refactoring — Blue → Red → Blue"), which has since
+ * LANDED: DashboardView.tsx is props-only now, and the reads/dispatches it used
+ * to make — selectFileEditMode, selectIsDirty, selectMergedContent
+ * (dashboard-level parameterValues), ephemeralChanges.lastExecuted.params,
+ * questionContents (per-question selectMergedContent), state.files.files[fileId]
+ * (fileState), selectDirtyFiles, plus dispatch(...) for updateTextBlockContent/
+ * pushView/setEphemeral/addQuestionToDashboard/addTextBlockToDashboard — live in
+ * DashboardContainerV2.
  *
  * Mounted via DashboardContainerV2 (NOT DashboardView directly): the
- * container's fileId/mode contract is stable across the refactor, so these
- * same tests — unchanged — must keep passing once the hook calls move up from
- * the view into the container. Rendering DashboardView directly would break
- * across the move since its prop interface is exactly what's being extended.
+ * container's fileId/mode contract stayed stable across the refactor, so these
+ * same tests passed unchanged before and after the move. Rendering DashboardView
+ * directly would instead couple them to its (extended) prop interface.
  *
  * Heavy leaf components are mocked to small aria-labeled stand-ins (repo
  * convention — see chat-input.ui.test.tsx / notebook-view.ui.test.tsx):
  * SmartEmbeddedQuestionContainer, QuestionBrowserPanel, TextBlockCard.
  * react-grid-layout is mocked to a plain passthrough that reports mounts, so
- * the isDirty -> gridVersion remount (DashboardView.tsx:97-105) is directly
- * observable without depending on the real library's drag/resize internals.
+ * the isDirty -> gridVersion remount (DashboardView.tsx's `gridVersion` state)
+ * is directly observable without depending on the real library's drag/resize
+ * internals.
  *
  * All element queries by aria-label only (MinusX.md "Writing tests"). One
  * presentational aria-label was added to DashboardView.tsx's question-tile

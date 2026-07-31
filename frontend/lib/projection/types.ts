@@ -8,7 +8,7 @@
  *    EditFile) put into the append-only log. Nothing is pre-stripped — the log is the source
  *    of truth and stays complete so the projection can be recomputed at any time (e.g. after
  *    summarization). A file is `{ id, data, content, image, queryResults }`; a query result
- *    is `{ queryResultId, summary, data?, image? }`.
+ *    is `{ queryResultId, summary, finalQuery?, error?, data?, image? }`.
  *
  * 2. **Projected (LLM-facing).** What the single projection boundary emits. Heavy/opaque
  *    facets — JSX `markup`, query-result `data` tables, and `image`s — are NOT inlined in the

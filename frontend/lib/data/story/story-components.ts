@@ -199,9 +199,11 @@ export function emitStoryComponent(
 export function reverseStoryComponents(html: string): string {
   const OPEN_RE = /<(section|div|span|p|blockquote|h2)\b[^>]*\bdata-c="([A-Za-z]+)"[^>]*>/;
   let out = html;
-  // Innermost-first: repeatedly rewrite containers whose inner HTML holds no further data-c
-  // stamp, until none remain. Each rewrite is one depth-matched container, so same-tag nesting
-  // and sibling runs are both safe; unknown names keep their stamp and are skipped via a cursor.
+  // Left-to-right scan: for each container found, its inner HTML is reversed RECURSIVELY before
+  // the container itself is rewritten, so nested components (Card in Card) come out inside-out.
+  // Each rewrite is one depth-matched container, so same-tag nesting and sibling runs are both
+  // safe; the cursor advances past the replacement, and unknown names keep their stamp and are
+  // skipped by the same cursor.
   let searchFrom = 0;
   for (let guard = 0; guard < 10000; guard++) {
     const m = OPEN_RE.exec(out.slice(searchFrom));

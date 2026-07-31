@@ -1,5 +1,5 @@
 /**
- * Wizard step type definitions and UI constants.
+ * Wizard step type definition.
  * Onboarding completion state is stored in the org config document
  * (config.setupWizard.status: 'pending' | 'complete').
  */

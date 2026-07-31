@@ -6,7 +6,7 @@ import { LuChevronDown, LuChevronRight, LuWrench, LuCheck, LuFileText, LuCornerR
 import { DisplayProps } from '@/lib/types';
 
 const DEFAULT_TOOL_MAX_COLS = 12
-const DEFAULT_TOOL_MAX_COLS_COMPACT = 12  // Compact: 4 tools per row
+const DEFAULT_TOOL_MAX_COLS_COMPACT = 12  // Compact: still full width (one tool per row)
 
 export default function DefaultToolDisplay({ toolCallTuple, databaseName, isCompact, showThinking }: DisplayProps) {
   const [isExpanded, setIsExpanded] = useState(false);

@@ -3,8 +3,8 @@
 /**
  * SaveFileModal - "Save As" dialog for new (virtual) files.
  *
- * Shows a folder tree and name input. When saved, updates the virtual
- * file's name and path, then publishes it.
+ * Shows a folder tree and name input, then hands the chosen `(name, folder)` to the caller's
+ * `onSave` and closes. It performs no rename or publish itself — the caller owns both.
  */
 
 import { useState, useMemo, useCallback } from 'react';

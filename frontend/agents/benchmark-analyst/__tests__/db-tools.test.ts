@@ -1,6 +1,7 @@
 // Behaviour for the benchmark ExecuteQuery tool, post-V2-primitive port.
 //
-// New shape: `BaseExecuteQuery` is a chained pipeline.
+// New shape: `ChainedExecuteQuery` (the V1 benchmark's ExecuteQuery; `BaseExecuteQuery`
+// stays the single-query production class) is a chained pipeline.
 // - `queries: [{connection, query, label?}]` — N queries run sequentially.
 // - Queries 2+ MUST contain a `$label.col` reference (per-call or session).
 // - Whole-batch fail: any error aborts and returns `{error}`.
@@ -305,10 +306,8 @@ describe('ChainedExecuteQuery — _scratch built-in DuckDB', () => {
       },
       ctx,
     );
-    // Replace the handle name in the second query at run-time by reading
-    // the first query's handle. But the agent in production references
-    // $items.id, not handle_FAKE. Test the real path: $label.col only.
-    // Adjust the test: drop the bogus handle_FAKE bit and use $label.col instead.
+    // handle_FAKE is deliberately bogus — the batch is EXPECTED to fail. What
+    // this asserts is WHICH failure: a missing table, not an unknown connection.
     const res = await tool.run();
     // The first query is fine; the second one references a non-existent
     // handle, so the batch fails. We're testing that _scratch is
@@ -339,25 +338,19 @@ describe('ChainedExecuteQuery — _scratch built-in DuckDB', () => {
     const handleId = p1.handle as string;
     expect(handleId).toMatch(/^handle_/);
 
-    // Step 2: query the handle through _scratch using $label.col? Not quite —
-    // we want FROM handle_xyz directly. The current agent test uses
-    // ExploreDataset's chain style. For BaseExecuteQuery, the seed query
-    // produces a handle; subsequent queries can reference its rows via
-    // $label.col OR query the handle table by its real id via FROM
-    // handle_<id>. The latter requires the agent to know the id.
-    //
-    // Simpler check: SELECT count(*) from the handle table by literal name.
+    // Step 2: a seed query produces a handle; a later query can reference its
+    // rows via $label.col OR query the handle table by its real id via FROM
+    // handle_<id>. The latter needs the id, which isn't known inside the same
+    // tool call — so this chain takes the $label.col path through _scratch.
     const tool2 = new ChainedExecuteQuery(
       undefined as never,
       {
         queries: [
           // Seed: ignore its output, just create a handle.
           { connection: 'data', query: 'SELECT id FROM items WHERE id > 1', label: 'ids' },
-          // Chain: pull through _scratch using the LITERAL handle id from
-          // the previous query. The agent gets `handle` back in the entry;
-          // here we test that _scratch can run a query referencing one of
-          // its labels via $label.col (since the actual handle id isn't
-          // know inside the same tool call, we use $ids.id).
+          // Chain: run through _scratch referencing the previous query's
+          // label via $label.col ($ids.id) — the actual handle id isn't
+          // known inside the same tool call.
           { connection: '_scratch', query: 'SELECT 1 AS marker WHERE 2 IN ($ids.id)' },
         ],
       },

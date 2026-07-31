@@ -5,7 +5,7 @@
  * finishes copying its mxfood sample data.
  *
  * Registration seeds the tutorial data fire-and-forget (lib/modules/auth/index.ts),
- * so right after a company is created the tutorial briefly has no queryable data.
+ * so right after a workspace is created the tutorial briefly has no queryable data.
  * This polls /api/orgs/seed-status and shows "preparing sample data…" until ready,
  * then refreshes server data (so connections pick up their tables) and hides.
  * Only relevant in tutorial mode; renders nothing otherwise.

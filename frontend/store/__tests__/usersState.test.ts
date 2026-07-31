@@ -6,9 +6,10 @@ import type { Mock } from 'vitest';
  * Verifies:
  *   1. loadUsers() populates the users Redux slice
  *   2. Concurrent loadUsers() calls merge into a single HTTP request
- *   3. After a PUT, Redux is updated directly (no re-fetch)
+ *   3. setUsersInStore updates Redux without issuing a fetch
  *   4. After a POST (create), Redux reflects the new user (no re-fetch)
- *   5. After a DELETE, Redux removes the user (no re-fetch)
+ *   5. After a PUT, Redux is updated directly (no re-fetch)
+ *   6. After a DELETE, Redux removes the user (no re-fetch)
  */
 
 import { configureStore } from '@reduxjs/toolkit';
@@ -21,10 +22,10 @@ import usersReducer, { selectUsers, selectUsersStatus } from '@/store/usersSlice
 import { loadUsers, setUsersInStore, _resetForTesting } from '@/lib/hooks/useUsers';
 
 // ---------------------------------------------------------------------------
-// Jest module mocks — hoisted to top by Jest
+// Module mocks — vi.mock is hoisted to the top of the file
 // ---------------------------------------------------------------------------
 
-// Make users-state.ts use our test store
+// Make lib/hooks/useUsers.ts use our test store
 let testStore: any;
 vi.mock('@/store/store', () => ({
   get store() { return testStore; },

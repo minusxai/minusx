@@ -5,8 +5,8 @@
  * the @ / # mention typeaheads. Typing "+" (at a word boundary) opens a menu of
  * block options:
  *   - Image  → opens the file picker, uploads, inserts an inline image
- *   - Metric → inserts a metric block; its inline editor opens automatically
- *              (see MetricNode)
+ *   - Metric → inserts an inline metric chip; its editor popover opens
+ *              automatically (see MetricNode)
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';

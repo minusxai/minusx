@@ -4,8 +4,9 @@
  * surfaced dialect bugs the DuckDB-only execution tests could not see
  * (reserved aliases, subquery alias collisions), so the same fixture now
  * runs on a second real engine permanently: dedup-bridge CTE, correlated
- * EXISTS / NOT EXISTS (incl. self-bridge), and composite keys, compiled with
- * dialect 'postgres' and executed by Postgres itself.
+ * EXISTS / NOT EXISTS (incl. self-bridge) and the reserved-word alias guard,
+ * compiled with dialect 'postgres' and executed by Postgres itself. Composite
+ * keys are covered on DuckDB in m2m.test.ts.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';

@@ -1,7 +1,8 @@
 'use client';
 
 /**
- * Image annotator: shows an image on a canvas with a red brush for markup.
+ * Image annotator: shows an image on a canvas with a brush for markup (red by
+ * default, black and white also offered).
  * Per-stroke undo (button + cmd/ctrl+Z). Used by the region-capture (crop) flow
  * before attaching, and by chat attachment thumbnails to re-annotate.
  */

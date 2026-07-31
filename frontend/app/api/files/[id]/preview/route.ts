@@ -14,7 +14,8 @@ import type { StoryContent } from '@/lib/types';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-/** POST /api/files/[id]/preview — body: { screenshot: <data URL> }. Returns { url }. */
+/** POST /api/files/[id]/preview — body: { screenshot: <data URL> }. Returns { ok: true };
+ *  the card's object-store key is written onto the story via setStoryPreview. */
 export const POST = withAuth(async (
   request: NextRequest,
   user,

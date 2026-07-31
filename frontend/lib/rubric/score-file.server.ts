@@ -1,7 +1,8 @@
 /**
  * Piece 3 of the rubric architecture: the single "run both" entrypoint. Runs the deterministic
- * scorer AND the LLM judge and returns their combined report. This is what the UI panel and the
- * screenshot-tool path call; the deterministic-only path (piece 1) stays in `registry.ts`.
+ * scorer AND the LLM judge and returns their combined report. This is what the rubric API route
+ * (hit by the UI health panel and the ReviewFile/EditFile review path) and the CheckFileHealth
+ * tool call; the deterministic-only path (piece 1) stays in `registry.ts`.
  *
  * See `MinusX.md` — "Auth, Access Control, Mode Isolation, HTTP Helpers, and the File-Health
  * Rubric".

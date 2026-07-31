@@ -34,7 +34,8 @@ export interface ConnectionWizardProps {
       questionnaireAnswers?: QuestionnaireAnswers;
     }
   ) => void;
-  /** Called when the entire wizard completes (after dashboard step). */
+  /** Called when the entire wizard completes — after the 'generating' step, or after
+   *  the 'slack' step when showSlackStep is set. */
   onComplete?: () => Promise<void>;
   /** Whether to show greeting typewriter animations on each step. */
   showGreetings?: boolean;

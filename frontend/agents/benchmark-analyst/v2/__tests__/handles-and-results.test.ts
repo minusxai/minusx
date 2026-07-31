@@ -490,10 +490,11 @@ describe('FetchHandleV2', () => {
 
 describe('query-refs', () => {
 // Tests for the extracted query reference helpers from explore-dataset.ts
-// These are the migrated tests from explore-dataset.test.ts for the 3 helpers:
+// The first three are the migrated tests from explore-dataset.test.ts:
 // - interpolateRefs: SQL $label.column interpolation
 // - interpolateMongoRefs: Mongo $label.column interpolation
 // - detectLowLimit: low limit detection for SQL and Mongo
+// - findUnresolvedMongoLabelRefs: preflight check for unknown labels in $in/$nin
 
 
 

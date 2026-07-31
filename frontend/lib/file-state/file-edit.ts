@@ -41,7 +41,8 @@ export interface EditFileOptions {
  *
  * Accepts partial file changes (name, path, content) and deep merges them.
  * Stores changes in persistableChanges/metadataChanges (doesn't save to database).
- * Auto-executes query for question files.
+ * Does NOT execute the query for question files: queries run only on an explicit
+ * Run (handleExecute), never on every edit.
  *
  * @param options - File ID and changes
  */
@@ -309,11 +310,6 @@ export async function editFileStr(
 }
 
 /**
- * Collect non-blocking validation feedback for an applied edit: the content-schema check
- * (reported as feedback, not a block) plus the story `<Param>` lint (unsatisfied / mismatched
- * params for embedded questions). Best-effort — embedded questions are read from Redux.
- */
-/**
  * Resolve a story/dashboard's embedded questions to their SQL + stored params (for the param lint).
  * - Story: derived from the BODY — saved `<Question id>` embeds (resolved from Redux) plus inline
  *   `<Question query>` embeds (carried in the body). No assets field.
@@ -347,6 +343,11 @@ function collectEmbeddedQuestions(
     .filter((q): q is EmbeddedQuestion => q !== null);
 }
 
+/**
+ * Collect non-blocking validation feedback for an applied edit: the content-schema check
+ * (reported as feedback, not a block) plus the story `<Param>` lint (unsatisfied / mismatched
+ * params for embedded questions). Best-effort — embedded questions are read from Redux.
+ */
 function collectEditValidation(state: ReturnType<ReturnType<typeof getStore>['getState']>, fileState: FileState, content: Record<string, unknown>): string[] {
   const issues: string[] = [];
   const schemaError = validateFileState({ type: fileState.type, content, name: fileState.name, path: fileState.path });

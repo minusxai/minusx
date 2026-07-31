@@ -74,7 +74,7 @@ export async function composeSvgToJpeg(svg: string, options: ComposeJpegOptions 
 
   const usePadding = options.padding ?? false;
   const P = CHART_WATERMARK_PADDING_PX;     // shared with the client renderer (single source)
-  const logoSize = Math.round(P * CHART_WATERMARK_LOGO_SCALE); // 28px, fits in P×P with equal gaps
+  const logoSize = Math.round(P * CHART_WATERMARK_LOGO_SCALE); // 29px, fits in P×P with equal gaps
   const topPad    = usePadding ? P : 0;
   const bottomPad = usePadding ? P : 0;
   const totalHeight = topPad + height + bottomPad;

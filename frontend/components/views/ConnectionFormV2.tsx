@@ -46,7 +46,8 @@ import ConnectionTypePicker from '@/components/shared/ConnectionTypePicker';
 
 const TYPEWRITER_SPEED = 35;
 
-// Logo/name for types not in the type-selector (legacy connections, static)
+// Fallback logo/name for legacy/static connection types. CONNECTION_TYPES is consulted
+// first, so an entry here only applies if its type is dropped from the type-selector.
 const LEGACY_TYPE_INFO: Record<string, { logo: string; name: string }> = {
   'csv':          { logo: '/logos/csv.svg',          name: 'CSV / Sheets' },
   'google-sheets':{ logo: '/logos/google-sheets.svg', name: 'Google Sheets' },
@@ -117,7 +118,8 @@ export default function ConnectionFormV2({
   const { file: staticConnectionFile, loading: staticConnectionLoading } = useFileByPath(staticConnectionPath);
   const homePath = resolvePath(userMode, homeFolder || '/');
   const { databases: contextDatabases, hasContext } = useContextHook(homePath, undefined, true);
-  // Check whitelist status for this specific connection: 'full' | 'partial' | 'none'
+  // The context whitelist entry for this connection (undefined = no context, or not whitelisted).
+  // Its `schemas` drive the per-dataset context badges in StaticTablesBrowser.
   const whitelistedDb = hasContext ? contextDatabases.find(db => db.databaseName === fileName) : undefined;
 
   // Enriched schema viewer (dev mode only)

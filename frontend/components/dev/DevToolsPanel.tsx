@@ -26,7 +26,7 @@ interface DevToolsPanelProps {
   appState: AppState | null | undefined;
 }
 
-// OpenAI function tool schema format from describe_tool()
+// OpenAI function tool schema format served by /api/tools/schema (built from the TS registrables)
 interface ToolSchema {
   type: 'function';
   function: {

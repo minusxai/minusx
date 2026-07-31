@@ -34,7 +34,7 @@ interface PiLogEntry {
   details?: { type?: string; assistantMessage?: { usage?: { cost?: { total?: number } } } };
 }
 
-// ─── Tool colors (shared with ToolDebugBar) ──────────────────────────────
+// ─── Tool colors (duplicated in ToolDebugBar) ────────────────────────────
 
 const TOOL_COLOR_MAP: Record<string, string> = {
   ExecuteQuery: 'accent.danger',
@@ -229,7 +229,7 @@ const ZOOM_LEVELS = [
 export default function ExecutionTree({ piLog, messages }: ExecutionTreeProps) {
   const [showToolInspector, setShowToolInspector] = useState(false);
   const [inspecting, setInspecting] = useState<ToolCallTuple | null>(null);
-  const [zoomIdx, setZoomIdx] = useState(0); // default to medium
+  const [zoomIdx, setZoomIdx] = useState(0); // default to the widest span (1x)
 
   const rows = useMemo(() => buildGanttRows(piLog as PiLogEntry[]), [piLog]);
 
@@ -329,7 +329,7 @@ export default function ExecutionTree({ piLog, messages }: ExecutionTreeProps) {
   const pxPerSec = ZOOM_LEVELS[zoomIdx].pxPerSec;
   const chartMinW = (totalMs / 1000) * pxPerSec;
 
-  // Pick time marker step so labels are ~60px apart minimum
+  // Pick time marker step so labels are MIN_LABEL_GAP_PX apart minimum
   const MIN_LABEL_GAP_PX = 100;
   const minStepSec = MIN_LABEL_GAP_PX / pxPerSec;
   const NICE_STEPS = [5, 10, 15, 30, 60, 120, 300, 600];

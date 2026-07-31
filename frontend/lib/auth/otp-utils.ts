@@ -30,7 +30,9 @@ export interface OTPPayload {
   phone?: string;  // optional — not present for email OTP
   otpHash: string;
   exp: number;  // Unix timestamp (expiry)
-  nonce: string;  // Random string to prevent reuse
+  nonce: string;  // Random string so two tokens issued for the same email/OTP differ.
+                  // Verification is stateless — nothing tracks spent nonces, so a token
+                  // stays replayable until its 5-minute exp.
 }
 
 /**

@@ -68,11 +68,12 @@ function debouncePromise<T extends (...args: any[]) => Promise<any>>(
 }
 
 /**
- * Autocomplete implementation:
- * - Everything else: API-based (backend parses with sqlglot)
+ * Autocomplete implementation: entirely API-based (the backend parses with
+ * sqlglot) — including `@` references, which no longer have a frontend path.
  */
 
-// Custom styles for Monaco autocomplete dropdown and @reference highlighting
+// Custom styles for the Monaco autocomplete dropdown and the schema/table/column
+// inline highlight decorations
 const monacoSuggestStyles = `
   .monaco-editor .suggest-widget {
     border-radius: 8px !important;

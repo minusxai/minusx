@@ -317,7 +317,7 @@ export function piLogToLegacy(piLog: ConversationLog): LegacyLogEntry[] {
   return out;
 }
 
-// ─── legacyLogToPi: reverse — seed a forked v2 chat from a v1 log ────
+// ─── legacyLogToPi: reverse — seed a pi log from a v1 task log ───────
 
 const SEED_USAGE: AssistantMessage['usage'] = {
   input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
@@ -372,16 +372,17 @@ function resultToText(result: unknown): string {
 }
 
 /**
- * Reverse translation: a v1 (legacy) conversation log → a v2 (pi)
- * ConversationLog, used to SEED a forked v2 conversation so an old chat can be
- * continued without data loss (the original v1 file is untouched).
+ * Reverse translation: a v1 (legacy) conversation log → a pi ConversationLog.
+ * Used by the v3 backfill (`lib/data/migrate-conversations-v3.server.ts`, which
+ * leaves the source file intact) and by the MCP session logger
+ * (`lib/mcp/session-logger.ts`), which buffers a task log and flushes it as pi.
  *
  * Per turn: the root `AnalystAgent` task → root AgentInvocation (carries the
- * user message); `TalkToUser` → the final assistant message (stopReason 'stop'
- * — the only thing projectRootThreadHistory sends to the LLM); tool tasks →
- * assistant `tool_use` + paired `tool_result` (stopReason 'toolUse', DISPLAY
- * only, never re-sent to the model). Thinking keeps its text, drops its
- * signature. Context is empty — these turns are history, never re-run.
+ * user message); `TalkToUser` → the final assistant message (stopReason 'stop');
+ * tool tasks → assistant `tool_use` + paired `tool_result` (stopReason 'toolUse').
+ * `projectRootThreadHistory` replays ALL of these into the next turn's LLM history,
+ * so the seeded tool calls stay visible to the model. Thinking keeps its text, drops
+ * its signature. Context is empty — these turns are history, never re-run.
  */
 export function legacyLogToPi(legacyLog: LegacyLogEntry[]): ConversationLog {
   const out: ConversationLog = [];

@@ -109,7 +109,7 @@ function buildDisplayItems(files: CsvFileInfo[]): DisplayItem[] {
   return items;
 }
 
-/** @deprecated use buildDisplayItems; kept for collision detection which still needs both lists */
+/** @deprecated use buildDisplayItems; kept only for the `sheetsGroups` map (re-import, group delete, auto-sync gating) */
 function groupFiles(files: CsvFileInfo[]): {
   csvFiles: CsvFileInfo[];
   sheetsGroups: Map<string, CsvFileInfo[]>;

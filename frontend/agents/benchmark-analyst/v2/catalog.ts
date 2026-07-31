@@ -1,8 +1,9 @@
-// Catalog builder + store: creates the 6 synthetic catalog tables from
+// Catalog builder + store: creates the 8 synthetic catalog tables from
 // connection schemas and exposes them as queryable DuckDB tables (SQL over
-// metadata, as opposed to SQL over data). Used by both SearchDBSchema (the
-// LLM-facing catalog SQL tool) and Explore (which queries `columns` /
-// `column_stats` to find searchable text columns).
+// metadata, as opposed to SQL over data). Used by SearchDBSchema (the
+// LLM-facing catalog SQL tool), Explore (which queries `columns` /
+// `column_stats` to find searchable text columns), and AutoContext (which
+// projects the whole catalog into the agent's orientation pass).
 
 import 'server-only';
 import { DuckDBInstance, DuckDBConnection } from '@duckdb/node-api';
@@ -74,12 +75,6 @@ export interface CatalogConnector {
   dialect: string;
 }
 
-/**
- * Build the synthetic catalog from all connectors.
- * Each connector's schema is fetched and optionally enriched via profileDatabase
- * using that connection's real dialect (so e.g. Mongo connections pass through
- * rather than having DuckDB-style profiling SQL run against them).
- */
 // ── Annotation index ─────────────────────────────────────────────────────────
 // Context-authored table/column descriptions (the editorial layer) are matched
 // onto catalog rows by (connection, schema, table[, column]). An annotation with
@@ -130,6 +125,12 @@ export function annotationsFingerprint(annotations: TableAnnotation[] | undefine
   return (h >>> 0).toString(36);
 }
 
+/**
+ * Build the synthetic catalog from all connectors.
+ * Each connector's schema is fetched and optionally enriched via profileDatabase
+ * using that connection's real dialect (so e.g. Mongo connections pass through
+ * rather than having DuckDB-style profiling SQL run against them).
+ */
 export async function buildCatalog(
   connectors: Map<string, CatalogConnector>,
   sampleConfig?: SampleConfig,
@@ -398,8 +399,8 @@ function escapeCatalogValue(v: unknown): string {
 
 /**
  * Build (or return cached) the catalog plus a DuckDB connection over its
- * tables. Both `SearchDBSchema` and `Explore` use this — they share the same
- * `columns` / `column_stats` view of the schema. `cacheKey` selects which
+ * tables. `SearchDBSchema`, `Explore` and AutoContext all use this — they share
+ * the same `columns` / `column_stats` view of the schema. `cacheKey` selects which
  * per-slot instance to use; defaults to `'default'` for single-agent runs.
  * `sampleConfig` is forwarded to `buildCatalog` to populate
  * `sample_rows` / `sample_notes` via the lighter model; omit it to skip

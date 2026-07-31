@@ -8,10 +8,14 @@
  *
  * Security (RFC §12): specs are parsed with {ast: true} and evaluated with
  * vega-interpreter — no generated JavaScript functions, CSP-safe everywhere.
- * External data can't reach this layer (the validator rejects data.url/values,
- * and the only dataset bound is the query result under the reserved name).
- * TODO(RFC §12): tighten the Vega event config (deny window/timer/selector
- * sources) when interactions land — compiled VL output uses none of them today.
+ * External data can't reach this layer (the validator rejects data.url/values, and the
+ * only datasets bound are the query result under the reserved name plus the boundary
+ * assets a recipe — or a detached spec — declares. Every one goes through the geo
+ * registry, which throws on any id outside its allowlist, so a spec-supplied URL is
+ * never fetched however the envelope was authored).
+ * TODO(RFC §12): tighten the Vega event config (deny window/timer/selector sources).
+ * The shipped interactions — legend toggle, map pan/zoom — use only view-scoped
+ * pointer/wheel events, so nothing depends on those sources today.
  */
 import { compile } from 'vega-lite';
 import type { TopLevelSpec } from 'vega-lite';
@@ -157,11 +161,6 @@ function injectLegendToggle(prepared: Record<string, unknown>): void {
   };
 }
 
-/**
- * Compile a (raw, saved) Vega-Lite spec into a full Vega spec with the MinusX theme.
- * A responsive-by-default autosize is applied at render time only — never persisted
- * into the saved spec (the container owns sizing, RFC §15); explicit spec autosize wins.
- */
 /**
  * House heatmap cell layout: rect-mark unit specs get FLUSH bands (padding 0) on
  * their discrete x/y — the visible gap between cells is the theme's constant-pixel
@@ -437,6 +436,11 @@ export interface CompileVegaLiteOptions {
   categoryRange?: string[] | null;
 }
 
+/**
+ * Compile a (raw, saved) Vega-Lite spec into a full Vega spec with the MinusX theme.
+ * A responsive-by-default autosize is applied at render time only — never persisted
+ * into the saved spec (the container owns sizing, RFC §15); explicit spec autosize wins.
+ */
 export function compileVegaLite(
   spec: Record<string, unknown>,
   mode: 'light' | 'dark',

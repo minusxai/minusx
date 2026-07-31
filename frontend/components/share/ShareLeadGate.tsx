@@ -20,8 +20,9 @@ interface ShareLeadGateProps {
 
 /**
  * Soft lead-capture gate shown over the chat panel until the visitor identifies
- * themselves (or the link carries ?skip_lead). Not a security boundary — chat cost
- * is capped server-side by the rate limiter + kill-switch regardless.
+ * themselves (or the link carries ?skip_lead). Not a security boundary — guest chat
+ * only exists at all when the SHARE_GUEST_CHAT_ENABLED kill-switch is on, and its cost
+ * runs through the same per-user credit enforcement as any other chat.
  *
  * Mirrors the MinusX Explore empty-state (shared branding + question cards) so the
  * gate reads as one continuous experience with the chat it unlocks.

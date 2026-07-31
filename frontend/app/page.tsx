@@ -258,7 +258,7 @@ export default function Home() {
               )}
             </VStack>
 
-            {/* Right column — dashboards + conversations */}
+            {/* Right column — feed summary + conversations + suggested questions */}
             <VStack
               css={{ width: '100%', '@container (min-width: 700px)': { width: '340px' } }}
               flexShrink={0}

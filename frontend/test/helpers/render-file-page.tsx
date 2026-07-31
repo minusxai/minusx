@@ -6,7 +6,7 @@
  * render DashboardContainerV2 directly miss this layer.
  *
  * This helper replicates that structural relationship without pulling in
- * FileLayout itself (which transitively imports Markdown.tsx, an ESM-only
+ * FileLayout itself (which transitively imports components/Markdown, an ESM-only
  * package that the test runner cannot transform).
  *
  * Usage:

@@ -99,14 +99,13 @@ export interface JoinEndpoint {
 }
 
 /**
- * Probe one candidate join. The probe should run a COUNT(*) (or equivalent)
- * against the from-side joined to the to-side and report whether the result
- * was non-zero. Errors should be caught by the implementation and surfaced
- * as `ok: false` — `verifyJoinsMechanically` will treat anything other than
- * `ok: true` as a failed verification.
+ * Probe one candidate join. The probe should join the from-side to the to-side
+ * and report whether at least one row matched. Errors should be caught by the
+ * implementation and surfaced as `ok: false` — `verifyJoinsMechanically` will
+ * treat anything other than `ok: true` as a failed verification.
  *
- * Same-connection vs cross-connection routing happens inside the
- * implementation (`from.connection === to.connection` is the discriminator).
+ * Single-query vs two-step routing happens inside the implementation (in
+ * `probeJoinUsingConnectors`, whether connection AND schema match).
  */
 export type JoinProbe = (from: JoinEndpoint, to: JoinEndpoint) => Promise<{ ok: boolean }>;
 
@@ -176,10 +175,10 @@ function ql(v: unknown): string {
   return `'${String(v).replace(/'/g, "''")}'`;
 }
 
-/** Probe one candidate join against the actual data. Same-connection runs a
- *  COUNT(*) JOIN; cross-connection fetches distinct values from src then
- *  checks dst via WHERE IN (cheap chaining without `_scratch`). Returns
- *  `{ok: false}` on any SQL error. */
+/** Probe one candidate join against the actual data. Same connection AND schema
+ *  runs a `SELECT 1 … JOIN … LIMIT 1`; otherwise it fetches distinct values from
+ *  src then checks dst via WHERE IN (cheap chaining without `_scratch`). `ok` is
+ *  "at least one row matched"; any SQL error returns `{ok: false}`. */
 export async function probeJoinUsingConnectors(
   connectors: Map<string, NodeConnector>,
   from: JoinEndpoint,

@@ -51,8 +51,8 @@ const EMPTY_COMPUTED: ComputedContextSchema = {
 /**
  * Compute fullSchema and fullDocs from a Whitelist value and the context path.
  *
- * This is the new entry-point for the context loader (replaces computeSchemaFromDatabases).
- * It handles both the new Whitelist tree format ('*' | WhitelistNode[]).
+ * The entry-point for the context loader. `whitelist` is the tree format
+ * ('*' | WhitelistNode[]).
  *
  * Flow:
  *   Root context (pathSegments.length === 2, e.g. /org/context):

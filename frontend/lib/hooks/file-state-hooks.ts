@@ -1,9 +1,10 @@
 /**
  * File State Hooks - Centralized React hooks for file operations
  *
- * All hooks in this file are thin wrappers around functions from @/lib/file-state/file-state.ts
- * They handle React-specific concerns (state, effects) while delegating actual work to
- * the centralized file-state module.
+ * The loading/mutating hooks here are thin wrappers around functions from
+ * @/lib/file-state/file-state.ts — they handle React-specific concerns (state, effects) while
+ * delegating actual work to the centralized file-state module. useAppState and useDirtyFiles
+ * are pure Redux selectors and touch no loader at all.
  *
  * Hooks included:
  * - useFile - Load a single file by ID

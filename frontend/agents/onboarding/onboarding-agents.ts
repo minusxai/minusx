@@ -136,7 +136,7 @@ export class OnboardingDashboardAgent extends WebAnalystAgent {
       context: formatContextDocsSection(this.context.resolvedContextDocs ?? { docs: [] }),
       connection_id: this.context.connectionId ?? '',
       max_steps: String(ctor.maxSteps),
-      // Verbatim var insertion — see the note in OnboardingContextAgent.
+      // Skill body inserted verbatim, same as `contexts_skill` in OnboardingContextAgent.
       dashboards_skill: loadSkill('dashboards') ?? '',
     });
   }

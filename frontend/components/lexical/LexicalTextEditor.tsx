@@ -472,7 +472,8 @@ interface LexicalTextEditorProps {
   editWithAgent?: EditWithAgentSource;
   /** Hands back the editor instance so the parent can imperatively focus it (click-to-edit). */
   onEditorReady?: (editor: LexicalEditor) => void;
-  /** CSS padding for the editable content (default {@link SHARED_TEXT_PADDING}). */
+  /** CSS padding for the editable content (default '32px 32px'; pass {@link SHARED_TEXT_PADDING}
+   *  to match the viewer, as TextBlockCard does). */
   contentPadding?: string;
   /** Render the toolbar as a floating bubble over the selection (no in-flow chrome). */
   floatingToolbar?: boolean;

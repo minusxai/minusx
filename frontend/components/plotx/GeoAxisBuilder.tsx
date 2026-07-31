@@ -105,7 +105,7 @@ function PointsSizeInputs({ config, onUpdate }: { config: PointsConfig; onUpdate
 }
 
 // Module-scoped defaults so empty defaults don't re-trigger memos/effects
-// downstream (tooltipCols is in a useMemo dep at line 235).
+// downstream (tooltipCols is a dep of the tooltip drop-zone useMemo).
 const EMPTY_TOOLTIP_COLS: string[] = []
 const EMPTY_COLOR_OVERRIDES: Record<string, string> = {}
 

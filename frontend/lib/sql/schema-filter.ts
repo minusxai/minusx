@@ -206,7 +206,7 @@ export function filterSchemaByWhitelist(
  *
  * With the new whitelist schema (ContextVersion.whitelist), the context loader
  * already computes fullSchema as the final exposed schema (parent offering ×
- * own whitelist). So this function simply returns fullSchema.
+ * own whitelist). So for the published version this function just returns fullSchema.
  *
  * `fullSchema` is computed by the loader with the PUBLISHED version's whitelist
  * already applied, so the published case returns it directly. When `version`

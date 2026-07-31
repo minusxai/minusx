@@ -107,7 +107,7 @@ export function clearStaleClarifyAnswers(conversationId: number, pendingToolCall
 
 /**
  * Rebuild the choice-prompt props from a ClarifyFrontend tool call's args — mirrors the
- * UserInputException thrown by the ClarifyFrontend handler (lib/tools/tool-handlers.ts). Used on cold
+ * UserInputException thrown by the ClarifyFrontend handler (lib/tools/handlers/clarify.ts). Used on cold
  * load to seed a `userInputs[]` entry so a reopened Clarify is ANSWERABLE (without this the pending
  * tool has no userInputs and the card renders a dead "Waiting for response…" state).
  */

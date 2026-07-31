@@ -112,7 +112,8 @@ export const SELECTED_DOM_ATTR = 'data-mx-selected';
 /** Render artifact previewing what a click would select (edit-mode hover). */
 export const HOVER_DOM_ATTR = 'data-mx-hover';
 
-/** Selection + hover-preview outline rules — injected into the iframe head by AgentHtml. */
+/** Selection + hover-preview outline rules — injected INSIDE the story root by AgentHtml
+ *  (as a `data-mx-select-css` node, like every other injected sheet). */
 export const STORY_SELECTION_CSS = [
   `[${SELECTED_DOM_ATTR}] { outline: 2px dashed #14b8a6; outline-offset: 2px; }`,
   `[${HOVER_DOM_ATTR}]:not([${SELECTED_DOM_ATTR}]) { outline: 1px dashed rgba(20, 184, 166, 0.45); outline-offset: 2px; }`,

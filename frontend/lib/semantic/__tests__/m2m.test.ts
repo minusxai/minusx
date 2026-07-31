@@ -125,7 +125,7 @@ describe('m2m dimensions — dedup-bridge CTE, grain-preserving', () => {
     const naive = await run(
       'SELECT SUM(orders.amount) FROM orders JOIN order_tags ON orders.id = order_tags.order_id JOIN tags ON order_tags.tag_id = tags.id',
     );
-    expect(Number(naive[0][0])).toBeGreaterThan(250); // 275 with the duplicate bridge row — inflated either way
+    expect(Number(naive[0][0])).toBeGreaterThan(250); // 350 on the distinct bridge rows, 450 with the duplicate — inflated either way
   });
 
   it('LEFT semantics: untagged orders appear once under a NULL group', async () => {

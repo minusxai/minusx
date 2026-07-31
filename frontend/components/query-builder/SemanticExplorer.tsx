@@ -26,7 +26,8 @@
  *
  * Every edit compiles the spec to dialect SQL client-side
  * (compileSemanticQuery → irToSqlLocal) and emits `(spec, sql, viz)` — the viz
- * columns are implied by the spec (x = time else dimensions, y = metrics).
+ * columns are implied by the spec (x = the time grain, when set, followed by
+ * the dimensions; y = metrics).
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
@@ -298,7 +299,7 @@ export function SemanticExplorer({
   const visibleDimensions = model
     ? model.dimensions.filter((d) => !(d.temporal && d.source === 'primary') && matches(query, d.name))
     : [];
-  // Cross-table hits, minus the current model's own fields (already listed).
+  // Cross-model hits, minus the current model's own fields (already listed).
   const foreignHits = otherHits.filter((h) => h.model !== spec?.model).slice(0, 20);
 
   const fieldRow = (label: string, assigned: boolean, accent: string, icon: React.ReactNode, onClick: () => void, ariaLabel: string, tag?: string) => (
@@ -559,7 +560,7 @@ export function SemanticExplorer({
   );
 
   // Two columns: Dimensions with Time beneath (neither list is usually long),
-  // Measures on the right.
+  // Metrics on the right.
   const columns = model && spec && (
     <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <div className="min-h-0 min-w-0 overflow-y-auto border-r border-border">

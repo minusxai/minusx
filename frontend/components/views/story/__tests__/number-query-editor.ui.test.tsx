@@ -1,6 +1,6 @@
 /**
  * NumberQueryEditor — the light-DOM modal that hosts the FULL SqlEditor for editing an inline
- * <Number>'s query (with real autocomplete, outside the story shadow root). SqlEditor is Monaco
+ * <Number>'s query (with real autocomplete, outside the story iframe). SqlEditor is Monaco
  * (browser-only), so it's mocked here to a textarea; we assert the modal wires value/onChange to it,
  * passes the connection's schema for autocomplete, and that Apply hands the edited query to the
  * request's `apply`.

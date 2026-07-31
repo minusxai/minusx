@@ -1,4 +1,4 @@
-// In-process tests for the v3 conversation REST surface: create (POST), list (GET, unioned + tagged
+// In-process tests for the v3 conversation REST surface: create (POST), list (GET, tagged
 // version:3), get-with-messages (GET :id), delete (DELETE :id), and owner/mode authorization.
 // Auth is globally mocked to userId:1, mode:'org' (test/setup/vitest.setup.ts).
 

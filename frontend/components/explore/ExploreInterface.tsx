@@ -136,7 +136,7 @@ export default function ExploreInterface({
   // Track mobile state (default to false for SSR, update on client)
   const [isMobile, setIsMobile] = useState(false);
 
-  // Open right sidebar when explore page loads
+  // Track the mobile breakpoint on the client (the sidebar-collapse dispatches below are disabled)
   useEffect(() => {
     // dispatch(setRightSidebarCollapsed(true));
     // dispatch(setLeftSidebarCollapsed(true));  // Keep left sidebar open for conversation list

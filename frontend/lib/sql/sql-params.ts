@@ -30,7 +30,7 @@ export function extractParametersFromSQL(sql: string): string[] {
  */
 const isEmptyNumeric = (v: unknown, type: string | undefined): boolean => v === '' && type === 'number';
 
-/** name → declared type map, for the chokepoint coercion (`getQueryResult`'s `parameterTypes`). */
+/** name → declared type map, for the chokepoint coercion (`useQueryResult`'s `parameterTypes`). */
 export function paramTypeMap(params: QuestionParameter[] | undefined): Record<string, 'text' | 'number' | 'date'> {
   const m: Record<string, 'text' | 'number' | 'date'> = {};
   for (const p of params ?? []) m[p.name] = p.type;
@@ -38,8 +38,10 @@ export function paramTypeMap(params: QuestionParameter[] | undefined): Record<st
 }
 
 /**
- * The single coercion (used at the `getQueryResult` chokepoint): map an empty-string value of a
- * number-typed param to None (`null`), preserving every other value. Pure; no-ops without types.
+ * The single coercion: map an empty-string value of a number-typed param to None (`null`),
+ * preserving every other value. Pure; no-ops without types. Applied once in `useQueryResult`,
+ * deliberately NOT inside `getQueryResult` — coercing there would store under the coerced key
+ * while the selector read the raw one.
  */
 export function noneifyEmptyNumericParams(
   values: Record<string, unknown>,

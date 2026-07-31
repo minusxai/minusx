@@ -154,9 +154,11 @@ const SearchFilesSchema: Tool<TSchema> = {
 };
 
 type AgentDef = { label: string; tools: Tool<TSchema>[] };
-// Toolset membership/order mirrors agents/web-analyst/web-analyst.ts and
-// agents/analyst/analyst-agent.ts (kept in sync by hand — the agent classes
-// can't be imported here). The schema objects themselves are the real ones.
+// Hand-maintained APPROXIMATION of agents/web-analyst/web-analyst.ts and
+// agents/analyst/analyst-agent.ts (the agent classes can't be imported here).
+// It has drifted: both lists are a strict subset of the real toolsets and the
+// order differs, so the tool-schema budget below reads as a FLOOR, not the exact
+// wire cost. The schema objects themselves are the real ones.
 const AGENTS: AgentDef[] = [
   {
     label: 'WebAnalystAgent (browser — production chat)',

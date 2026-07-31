@@ -28,8 +28,9 @@ export default function FileError({
     if ((!IS_DEV || IS_TEST || SEND_ERRORS_IN_DEV) && !isHydrationError(error.message)) {
       void captureError('file-page-error', error);
       // Also report to Sentry: this nested boundary catches the error and renders
-      // a fallback, so it never reaches global-error.tsx (the only other place
-      // that calls Sentry.captureException).
+      // a fallback, so it never propagates to global-error.tsx. The other
+      // boundaries that call Sentry.captureException are global-error.tsx and
+      // app/error.tsx.
       Sentry.captureException(error);
     }
   }, [error]);

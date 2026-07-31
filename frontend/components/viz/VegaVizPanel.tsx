@@ -48,7 +48,8 @@ const V2_DISABLED_TYPES = ALL_CLASSIC_TYPES.filter(
   t => !(V2_SUPPORTED_VIZ_TYPES as readonly string[]).includes(t),
 );
 
-// Choropleth sequential color scales (matches CHOROPLETH_SCHEMES in viz-templates).
+// Choropleth sequential color scales offered in the UI — a subset of the
+// CHOROPLETH_SCHEMES keys viz-templates accepts (red/grey are agent-only).
 const CHOROPLETH_SCALE_OPTIONS = [
   { value: 'green', label: 'Green' },
   { value: 'blue', label: 'Blue' },

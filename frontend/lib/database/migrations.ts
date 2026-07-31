@@ -50,7 +50,7 @@ export interface MigrationEntry {
   description: string;
 }
 
-// Template IDs (1–999 range) — these are never renumbered.
+// Every id the workspace template ships with — these are never renumbered.
 const TEMPLATE_IDS = immutableSet(
   (workspaceTemplate.documents as { id: number }[]).map(d => d.id)
 );

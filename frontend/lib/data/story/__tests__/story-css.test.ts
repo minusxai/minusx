@@ -158,9 +158,9 @@ describe('compiledCss never crosses the agent-markup boundary', () => {
 });
 
 // Phase 0 hardening (Story_Design_V2 §3): a malformed class token must never fail the compile —
-// bad candidates are bisected out and the survivors' CSS is returned. Tailwind v4's build()
-// throws on tokens like `w-[calc(100%` (unbalanced bracket); before hardening that threw all
-// the way up and failed the whole save.
+// bad candidates are bisected out and the survivors' CSS is returned. A build() that rejects a
+// token like `w-[calc(100%` (unbalanced bracket) used to throw all the way up and fail the whole
+// save; the salvage guard itself is covered by the `buildSalvaging` block below.
 describe('compileStoryCss hardening — malformed candidates never throw', () => {
   const BROKEN_STORY =
     '<div class="mx-story" data-design="tw">' +

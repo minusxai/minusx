@@ -504,13 +504,12 @@ describe('Client-Server File State Parity', () => {
   // Agent Args Parity
   //
   // Verifies that buildServerAgentArgs() — the shared base used by all server-
-  // initiated agents (Slack, Report, TestAgent, Alerts) — produces schema and
-  // context identical to what the client-side AnalystAgent derives from the
-  // same DB state via the same pure functions (getWhitelistedSchemaForUser,
-  // getDocumentationForUser, selectDatabase).
+  // initiated agent conversations (Slack, reports, evals, alerts) — produces the
+  // schema and context that the same pure functions (getWhitelistedSchemaForUser,
+  // selectDatabase, resolveContextDocs) derive from the same DB state.
   //
   // Three invariants:
-  //   1. AnalystAgent parity — server matches client pure-function output
+  //   1. AnalystAgent parity — server matches the pure-function output
   //   2. Slack — buildSlackAgentArgs produces correct full args + app_state
   //   3. Context eval override — contextFileId loads THAT context's schema/docs
   // ============================================================================
@@ -595,11 +594,11 @@ describe('Client-Server File State Parity', () => {
 
     // ── Test 1: AnalystAgent parity ──────────────────────────────────────────
     //
-    // ChatInterface (client) builds agent_args schema/context via:
+    // The expected schema/context is derived here directly from the loaded context:
     //   databases = getWhitelistedSchemaForUser(contextContent, userId)   ← no currentPath for explore
     //   selectedDb = selectDatabase(databases, null)
     //   schema     = databases.find(selectedDb)?.schemas.map(...)
-    //   context    = getDocumentationForUser(contextContent, userId)
+    //   context    = resolveContextDocs(contextContent, userId)
     //
     // buildServerAgentArgs (server) uses the same pure functions internally.
     // For contexts without childPaths restrictions (the common case and all
@@ -649,7 +648,7 @@ describe('Client-Server File State Parity', () => {
 
       // ── schema + context must match the same pipeline as buildServerAgentArgs ──
       const effectiveHomeFolder = resolveHomeFolderSync(slackUser.mode, slackUser.home_folder || '');
-      // Nearest context for /org/sales → falls back to first available (/org/test-context)
+      // Nearest context for /org/sales → falls back to the ancestor context (/org/context)
       const { FilesAPI } = await import('@/lib/data/files.server');
       const contextFiles = (await FilesAPI.getFiles(
         { type: 'context', paths: [resolvePath(slackUser.mode, '/')], depth: -1 },
@@ -683,7 +682,7 @@ describe('Client-Server File State Parity', () => {
     // TestAgent receives schema/docs from the context file being evaluated,
     // not from the nearest ancestor of the cron user's home folder.
     it('buildServerAgentArgs with contextFileId: uses specified context file, not nearest ancestor', async () => {
-      // Without override: picks /org/test-context (nearest / first available).
+      // Without override: picks /org/context (nearest ancestor of the home folder).
       // The seed docs have no explicit title → lazy, carried in the docs list.
       const baseArgs = await buildServerAgentArgs(agentUser);
       expect(baseArgs.context_docs.docs.map(d => d.title)).toContain('Agent documentation for testing');

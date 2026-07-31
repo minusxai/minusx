@@ -1,7 +1,7 @@
 /**
  * API route for inferring output columns from a question's SQL
  * Accepts a questionId, loads the question and its connection schema,
- * then infers output columns locally via -sql/sdk (WASM).
+ * then infers output columns locally via @polyglot-sql/sdk (WASM).
  */
 
 import { withAuth } from '@/lib/http/with-auth';

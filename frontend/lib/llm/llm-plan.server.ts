@@ -25,8 +25,10 @@
  * agent's allowed grades; a selector grade (code-owned, e.g. a micro-task
  * needing a stronger class) is not.
  *
- * Test environments return `null` (agents use their faux static models) so the
- * suite stays deterministic and network-free.
+ * Test environments return `null` for an UNCONFIGURED workspace (agents use
+ * their faux static models) so the suite stays deterministic and network-free;
+ * a test that writes an `llm` section still resolves a real plan. E2E builds
+ * return `null` unconditionally.
  *
  * Provider credentials are `@SECRETS/…` refs at rest; they are resolved here,
  * at call-plan time, and injected as call options — never stored on the model.

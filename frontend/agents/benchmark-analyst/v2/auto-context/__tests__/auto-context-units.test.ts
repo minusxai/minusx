@@ -15,9 +15,10 @@ import { validateParameters } from '@/orchestrator/utils';
 
 describe('auto-context', () => {
 /**
- * Tests for the consolidated `auto-context.ts` module. Slices are added as
- * the module is built (TDD). Initial slice: ID assignment over a catalog
- * schema.
+ * Tests for the consolidated `auto-context.ts` module: catalog ID assignment,
+ * the agent-facing catalog render, the SubmitSchemaInfo tool, annotation
+ * parsing, mechanical join verification, the generated-context render, and
+ * AutoContextAgent's own wiring (tools, schema name, callOptions).
  */
 
 

@@ -1,5 +1,6 @@
 /**
- * Global Vitest setup — runs before all test files in node + ui projects.
+ * Global Vitest setup — runs before all test files in the node + ui projects
+ * (and, via vitest.setup.orchestrator.ts, the orchestrator project too).
  * Registers the global module mocks and default test modules used everywhere.
  */
 import { vi } from 'vitest';

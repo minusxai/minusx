@@ -63,7 +63,7 @@ export async function runJob(params: RunJobParams, user: EffectiveUser): Promise
     return { kind: 'not_found' };
   }
 
-  // Dedup: skip if already running (force bypasses by using a 1s window)
+  // Dedup: skip if already running (force skips the check, so a concurrent run is allowed)
   if (!force) {
     const existingRun = await JobRunsDB.getRunningByJobId(job_id, job_type);
     if (existingRun) {

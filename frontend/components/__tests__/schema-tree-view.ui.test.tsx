@@ -39,7 +39,7 @@ describe('SchemaTreeView', () => {
     );
 
     // A query that matches neither schema nor table name forces the
-    // column .some() path (line 230), which also reads table.columns.
+    // `table.columns.some(...)` filter path, which also reads table.columns.
     expect(() => {
       const search = getByLabelText('Search schema tree');
       fireEvent.change(search, { target: { value: 'zzz_no_match' } });

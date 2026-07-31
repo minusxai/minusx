@@ -63,9 +63,10 @@ class ObjectStoreBlobStore implements QueryCacheBlobStore {
 }
 
 /**
- * Decode a gunzipped-JSONL stream line-by-line, stopping once a row/byte budget is hit — so a cache
- * HIT is bounded in RAM exactly like a bounded fresh drain (no `Buffer.concat` of the whole blob).
- * The header (line 1) carries the authoritative full rowCount, so `truncated` is exact here.
+ * Decode a gunzipped-JSONL stream line-by-line, stopping COLLECTION once a row/byte budget is hit —
+ * so a cache HIT is bounded in RAM exactly like a bounded fresh drain (no `Buffer.concat` of the
+ * whole blob). Lines keep being counted past the budget, so `truncated` is exact even for a streamed
+ * blob, whose header omits `rowCount` (unknown up front); a materialized blob's header supplies it.
  */
 async function decodeGunzippedJsonlBounded(
   stream: Readable,
@@ -87,7 +88,7 @@ async function decodeGunzippedJsonlBounded(
     }
   } finally {
     rl.close();
-    stream.destroy(); // stop pulling the object-store body once we've read enough
+    stream.destroy(); // release the object-store body (also on an early throw)
   }
   if (!header) throw new Error('decodeGunzippedJsonlBounded: empty blob (no header line)');
   const total = header.rowCount ?? sourceRowLines;
@@ -107,8 +108,8 @@ export function blobRefForKey(cacheKey: string): string {
 /**
  * The blob plane used to take an injectable object-store factory, so a deployment could
  * wrap it to namespace blob keys. That is now what the shared factory itself does, for
- * every consumer rather than this one — so the injection point is gone and blobs are
- * namespaced by construction.
+ * every consumer rather than this one — so blobs are namespaced by construction and the
+ * optional `store` argument survives only as a test seam.
  */
 export async function createQueryCacheBlobStore(store?: ObjectStore): Promise<QueryCacheBlobStore> {
   return new ObjectStoreBlobStore(store ?? await createObjectStore());

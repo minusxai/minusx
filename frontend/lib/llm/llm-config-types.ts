@@ -111,9 +111,11 @@ export const DEFAULT_AGENT_POLICIES: Record<LlmAgentKey, LlmAgentPolicy> = {
 export interface LlmConfig {
   providers?: LlmProviderEntry[];
   /**
-   * Grade→model mapping. A grade with no mapping falls back to the minusx
-   * provider if one is configured (fully managed — the gateway routes the
-   * grade); otherwise resolving that grade is an error.
+   * Grade→model mapping. A configured minusx provider outranks this entirely
+   * (fully managed — the gateway routes every grade). A grade with no mapping
+   * falls back to the workspace's sole BYOK provider run as "Auto"; with 2+
+   * BYOK providers, or none carrying compatibility curation for the grade,
+   * resolving that grade is an error.
    */
   grades?: LlmGradeAssignments;
   /** Sparse per-agent policy overrides, merged over `DEFAULT_AGENT_POLICIES`. */
@@ -140,7 +142,8 @@ export function resolveAgentPolicy(config: LlmConfig | undefined, agent: LlmAgen
  *  grade resolves to is a behind-the-scenes concern end users never see. */
 export interface ChatGradeOption {
   grade: LlmGrade;
-  /** False when picking this grade would error (no mapping, no minusx provider). */
+  /** False when picking this grade would error — no mapping, no minusx
+   *  provider, and no lone BYOK provider curated for it. */
   configured: boolean;
 }
 

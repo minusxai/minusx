@@ -34,7 +34,6 @@ const WIDTHS = [390, 768, 1104, 1440];
 const RESIZE_FROM = 1440;
 const RESIZE_TO = 900;
 
-/** Appended to the capture-matrix bundle entry: the real surface modules, on `window.__story`. */
 const PROSE = [
   'Revenue grew 14% quarter over quarter, with the strongest contribution coming from mid-market accounts in the northern region, where the new pricing tiers landed in the first week of the quarter.',
   'Churn stayed flat at 1.8% despite the pricing change, which is the single most encouraging number in this report: the accounts that repriced did not leave, they expanded, and the expansion came almost entirely from seats rather than from add-on modules.',

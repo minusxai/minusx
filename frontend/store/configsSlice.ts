@@ -15,8 +15,8 @@ export interface ConfigsState {
   // Server-side runtime env (QUERY_TIMEOUT_MS), hydrated from SSR preloadedState.
   // Wall-clock cap (ms) for a single /api/query call; bounds hung queries. 0 = off.
   queryTimeoutMs: number;
-  // Server-side runtime env (CREDITS_ENABLED), hydrated from SSR preloadedState.
-  // When false, the credits usage module is hidden throughout the UI.
+  // Org config `credits.enabled` (admin-editable, not an env var), hydrated from
+  // SSR preloadedState. When false, the credits usage module is hidden throughout the UI.
   creditsEnabled: boolean;
 }
 

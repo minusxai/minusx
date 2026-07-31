@@ -4,9 +4,9 @@
  * NumberQueryEditor — the FULL shared SqlEditor (syntax highlighting, format, SQL validation, and
  * schema/@reference autocomplete) for editing story-local SQL (inline `<Number>` queries and
  * query-backed `<Param>` option sources). It renders in a
- * light-DOM Dialog at the StoryView level, NOT in the story's footnote popover: the popover lives
- * in a shadow root, where Monaco's floating widgets (suggest/hover) mis-anchor. Apply hands the new
- * query back via the request's `apply` (which writes it onto the body placeholder + re-runs live).
+ * light-DOM Dialog at the StoryView level, NOT in the story's footnote popover: that popover lives
+ * inside the story iframe, where Monaco's floating widgets (suggest/hover) mis-anchor. Apply hands
+ * the new query back via the request's `apply` (which writes it into the story body + re-runs live).
  */
 import { useState } from 'react';
 import { Dialog, Portal, Box, Button, HStack } from '@chakra-ui/react';

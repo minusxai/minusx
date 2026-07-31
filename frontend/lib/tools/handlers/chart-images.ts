@@ -1,6 +1,7 @@
 /**
  * Render chart images for question files and upload to the object store
- * (`uploadChartOrEmbed` — returns the data URL as-is under the local FS adapter).
+ * (`uploadChartOrEmbed` — embeds the image back as a base64 data URL when
+ * USE_BASE64_UPLOADS is on, otherwise PUTs it and returns the public URL).
  * Returns OpenAI-style `image_url` content blocks; `lib/chat-translator` converts
  * them to the orchestrator's `image` blocks on the way to the LLM.
  * Browser-only. Never throws — returns [] on any failure.

@@ -181,10 +181,10 @@ export default function ChatInterface({
   const allowChatQueue = useAppSelector(selectAllowChatQueue);
   const chatAttachments = useAppSelector(selectChatAttachments);
   const sidebarPendingSlashCommand = useAppSelector(state => state.ui.sidebarPendingSlashCommand);
-  // queryResultsMap / colorMode / disableAppStateImages / unrestrictedMode are
-  // ONLY needed inside handleSendMessage. Read them on demand via useAppStore
-  // instead of subscribing — otherwise this parent re-renders every time any
-  // unrelated query result lands or the user toggles colorMode.
+  // colorMode / disableAppStateImages / unrestrictedMode are only needed inside
+  // handlers (send, agent-args build, debug probe). Read them on demand via
+  // useAppStore instead of subscribing — otherwise this parent re-renders every
+  // time any unrelated store slice lands or the user toggles colorMode.
   const store = useAppStore();
   // The app-state screenshot is captured LAZILY on send (appStateWithFileScreenshot), never warmed
   // speculatively — a synchronous multi-second snapdom rasterize must not fire on every view change
@@ -445,7 +445,7 @@ export default function ChatInterface({
   const [localError, setLocalError] = useState<LoadError | null>(null);
   // Only show runtime/execution errors here (not loadError - that's shown in dedicated section above)
   const error = conversation?.error || localError;
-  // A terminal error (context-length, auth, malformed request) would deterministically re-fail on a
+  // A terminal error (context-length, auth, permission, malformed request) would deterministically re-fail on a
   // retry, so we hide "Try again" and steer to a fresh chat. Transient (and any local/load error) →
   // offer a clean replay. `errorRetryability` is only set for conversation runtime errors.
   const isTerminalError = conversation?.error != null && conversation.errorRetryability === 'terminal';
@@ -803,10 +803,10 @@ export default function ChatInterface({
       const sendState = store.getState();
       const colorMode = sendState.ui.colorMode as 'light' | 'dark';
       const disableAppStateImages = selectDisableAppStateImages(sendState);
-      // ALWAYS attach the screenshot — the agent needs to see the view. The warmer (keyed to the
-      // rendered view, not to keystrokes) has almost always pre-captured it by now, so this is an
-      // instant cache hit. On a cold cache (send right after a view change) it awaits the ~1s
-      // snapdom capture behind this same "preparing" indicator rather than dropping the image.
+      // ALWAYS attach the screenshot — the agent needs to see the view. Nothing pre-captures it;
+      // the one-slot cache in app-state-screenshot.ts makes a repeated send of an UNCHANGED view a
+      // hit, and otherwise this awaits the snapdom capture behind the "preparing" indicator rather
+      // than dropping the image.
       appStateForSend = await appStateWithFileScreenshot(appState, colorMode, disableAppStateImages);
 
       // Resolve conversation — normally pre-created on mount, but fall back to inline creation
@@ -890,8 +890,8 @@ export default function ChatInterface({
 
   return (
     <VStack gap={0} align="stretch" height="100%" overflow="hidden">
-      {/* Action Buttons Bar (only show when there are messages, hidden in readOnly) */}
-      {/* Always shown (not gated on messages): an EMPTY side chat must still offer Copy-to-Agent
+      {/* Action Buttons Bar (hidden only in readOnly; individual buttons inside do their own gating) */}
+      {/* Not gated on messages: an EMPTY side chat must still offer Copy-to-Agent
           so a user can hand a fresh session to their external agent without a filler message. */}
       {!readOnly && (
         <ChatHeaderBar
@@ -1008,7 +1008,7 @@ export default function ChatInterface({
             </GridItem></Grid>
           )}
 
-          {/* Error Display. Terminal errors (context-length, auth, malformed) can't be retried — an
+          {/* Error Display. Terminal errors (context-length, auth, permission, malformed) can't be retried — an
               identical re-run re-fails — so we steer to a fresh chat instead of "Try again". Transient
               (and local/load) errors offer a clean replay of the failed turn (no "Continue" bubble). */}
           {error && (

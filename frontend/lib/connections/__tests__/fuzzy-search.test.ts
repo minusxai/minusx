@@ -184,7 +184,7 @@ describe('fuzzyMatch — PostgreSQL', () => {
   });
 
   it('returns only substring when pg_trgm is not installed', async () => {
-    // Substring runs in parallel (call 1), trigram fails (call 0)
+    // Substring is issued first (call 0) and runs in parallel; trigram (call 1) fails
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>()
       .mockImplementation((sql: string) => {
         if (sql.includes('similarity(')) {
@@ -521,7 +521,7 @@ describe('fuzzyMatch — DuckDB dual-strategy scenarios', () => {
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
     await fuzzyMatch('duckdb', queryFn, { table: 't', columns: ['c'], searchTerm: 'Shell' });
     const substrSql = getCapturedSql(queryFn, 1);
-    // "Shell" is 5 chars → similarity = 5.0 / (CASE WHENcol), 1)
+    // "Shell" is 5 chars → similarity = 5.0 / LENGTH(col), with a CASE guard against 0
     expect(substrSql).toContain('5.0 / (CASE WHEN');
     expect(substrSql).toContain('ORDER BY similarity DESC');
   });
@@ -619,7 +619,7 @@ describe('fuzzyMatch — Athena dual-strategy scenarios', () => {
 
   it('max distance scales with search term length', async () => {
     const queryFn = vi.fn<(sql: string) => Promise<QueryResult>>().mockResolvedValue(qr([]));
-    // "a]" → 1 char → max(floor(1/3), 3) = 3
+    // "a" → 1 char → max(floor(1/3), 3) = 3
     await fuzzyMatch('athena', queryFn, { table: 't', columns: ['c'], searchTerm: 'a' });
     expect(getCapturedSql(queryFn, 0)).toContain('<= 3');
 

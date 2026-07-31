@@ -15,7 +15,7 @@ export interface FileTypeMetadata {
   color: string;  // Theme semantic token
   category: FileCategory;
   supported: boolean;  // Whether this type is currently supported
-  h: string;          // Optional: default height for file type views
+  h: string;          // Default height for file type views ('none' = full content-height page flow)
   systemCreatedOnly?: boolean;  // If true, hidden from create menu (created by system, not users)
   /**
    * Agent app-state images: bake the numbered position-marker gutter into this type's screenshot

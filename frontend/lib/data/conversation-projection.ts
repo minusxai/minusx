@@ -12,7 +12,7 @@
  *    client's `log_index` (resume/fork/interrupt) and pending frontend-tool derivation matches
  *    toolCall block ids. Entries are shrunk, never dropped.
  *  - Assistant entries keep their content blocks (reply text, thinking, toolCall blocks — tool
- *    displays read args from them); `usage` (debug-only) is dropped.
+ *    displays read args from them); `usage` and `diagnostics` (debug-only) are dropped.
  *  - Projection is idempotent: projecting an already-projected entry is a no-op.
  *
  * Pure module: no `server-only` import (unit-testable), but only server routes should use it.

@@ -1,9 +1,9 @@
 /**
  * SemanticExplorer — the single-surface semantic editor that replaces
- * SemanticCanvas. TOP: the shelves first (selected Measures / Dimensions /
+ * SemanticCanvas. TOP: the shelves first (selected Metrics / Dimensions /
  * Time / Filters chips + Limit), then a compact strip with the model chip,
  * field search and Run button. BELOW: the full field vocabulary split into
- * two click-to-toggle columns — Dimensions (with Time beneath) | Measures
+ * two click-to-toggle columns — Dimensions (with Time beneath) | Metrics
  * (every metric type in one list). No drag and drop: every field has exactly
  * one home, so a click is unambiguous. Every edit compiles REAL SQL
  * client-side and emits spec + SQL + viz columns.

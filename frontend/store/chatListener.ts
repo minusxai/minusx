@@ -832,7 +832,7 @@ chatListenerMiddleware.startListening({
 /**
  * updateConversation | queueMessage | loadConversation → Auto-send queued messages when the
  * conversation finishes. `loadConversation` is in the matcher because an idle v3 turn finishes
- * via the durable-log re-render (renderFromDurableLog → loadConversation) — without it a message
+ * via the durable-log re-render (runV3TurnInListener → loadConversation) — without it a message
  * queued mid-turn just sat in the queue with nothing left to flush it.
  */
 chatListenerMiddleware.startListening({

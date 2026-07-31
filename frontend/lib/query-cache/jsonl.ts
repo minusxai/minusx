@@ -40,16 +40,17 @@ export interface BoundedDecode {
   types: string[];
   finalQuery: string;
   rows: Record<string, unknown>[];
-  /** Total rows present in the source (from the header), regardless of the cap. */
+  /** Total rows present in the source, regardless of the cap. */
   totalRows: number;
   /** True when the source had more rows than `maxRows`. */
   truncated: boolean;
 }
 
 /**
- * Decode at most `maxRows` rows. Used by the agent's text path: it never needs
- * the full set, only enough rows to fill a char budget. `totalRows`/`truncated`
- * come from the header, so the agent can tell the LLM the result was clipped.
+ * Decode at most `maxRows` rows, for a consumer that never needs the full set —
+ * only enough rows to fill a char budget. `totalRows`/`truncated` come from the
+ * header's `rowCount` when present, else the source line count, so the caller can
+ * still report that the result was clipped.
  */
 export function decodeJsonlBounded(text: string, maxRows: number): BoundedDecode {
   const lines = splitLines(text);

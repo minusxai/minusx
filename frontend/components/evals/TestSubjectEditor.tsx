@@ -82,7 +82,7 @@ function QuestionPicker({
   );
 }
 
-/** Inline SQL subject: DatabaseSelector + GUI/SQL toggle + editor + Column + Row */
+/** Inline SQL subject: DatabaseSelector + SqlEditor + Column + Row */
 function InlineSubjectEditor({
   subject,
   onChange,

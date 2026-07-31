@@ -255,7 +255,7 @@ export default function FolderView({ path, title, type, headerRight }: FolderVie
       {/* Getting Started Section - only show in tutorial/demo mode */}
       {!isThisSystemFolder && mode === 'tutorial' && <GettingStartedSection />}
 
-      {/* File list (with optional analytics right column) */}
+      {/* File list */}
       <Flex gap={6} align="flex-start">
         {/* File list or empty state */}
         <Box flex="1" minW={0}>

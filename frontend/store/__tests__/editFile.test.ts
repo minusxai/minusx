@@ -64,7 +64,7 @@ describe('editFile - Question Editing Flow', () => {
   let questionId2: number;
   let questionId3: number;
 
-  // Import API handlers (defined below at top-level static import)
+  // API handlers come from the top-level static imports above
 
   // Set up test store
   function setupStore() {
@@ -366,7 +366,7 @@ describe('editFile - Question Editing Flow', () => {
 });
 
 describe('editFile - Question content validation', () => {
-  const dbPath = getTestDbPath('edit_file'); // same mock path as db-config module mock above
+  const dbPath = getTestDbPath('edit_file'); // db-config is mocked globally in test/setup/vitest.setup.ts
   let questionId: number;
 
   function setupStore() {
@@ -547,7 +547,7 @@ describe('editFile - Question content validation', () => {
 });
 
 describe('editFile - Dashboard content validation', () => {
-  const dbPath = getTestDbPath('edit_file'); // same db-config mock path
+  const dbPath = getTestDbPath('edit_file'); // same globally-mocked db-config path
   let dashboardId: number;
 
   // Initial dashboard content — serialises to a known JSON string for oldMatch
@@ -1139,9 +1139,10 @@ describe('EditFile - Context post-edit guard', () => {
   let contextId: number;
 
   // Context content is stored version-based, but the agent reads/edits a FLAT view of the live
-  // version (shapeContextForAgent): docs/whitelist/metrics/annotations/skills/evals at the top
-  // level. Version bookkeeping (versions/published) and the computed schema cache are NOT in the
-  // markup, so they can't be edited; edits fold back into the live version (foldContextAgentView).
+  // version (shapeContextForAgent): docs/metrics/annotations/semanticModels/skills/evals at the
+  // top level. The whitelist, version bookkeeping (versions/published) and the computed schema
+  // cache are NOT in the markup, so they can't be edited; edits fold back into the live version
+  // (foldContextAgentView).
   const contextContent = {
     versions: [{
       version: 1,

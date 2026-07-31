@@ -1,15 +1,14 @@
 /**
- * AlertView — characterizes CURRENT (pre-move) Redux behavior ahead of the
- * Container/View discipline move (MinusX.md "Refactoring — Blue → Red → Blue").
- * AlertView.tsx currently calls useAppSelector directly
- * at 2 sites (grep-verified, both read-only): selectFileEditMode (editMode),
- * selectIsDirty (isDirty).
+ * AlertView — characterization tests written for the Container/View discipline
+ * move (MinusX.md "Refactoring — Blue → Red → Blue"), which has since LANDED:
+ * AlertView.tsx is props-only now, and the two read-only selector calls it used
+ * to make — selectFileEditMode (editMode) and selectIsDirty (isDirty) — live in
+ * AlertContainerV2.
  *
  * Mounted via AlertContainerV2 (NOT AlertView directly): the container's
- * fileId contract is stable across the refactor, so these same tests —
- * unchanged — must keep passing once the two selector calls move up from the
- * view into the container. Rendering AlertView directly would break across
- * the move since its prop interface is exactly what's being extended.
+ * fileId contract stayed stable across the refactor, so these same tests passed
+ * unchanged before and after the move. Rendering AlertView directly would
+ * instead couple them to its (extended) prop interface.
  *
  * useJobRuns is mocked to a static empty-runs stub (repo convention — see
  * components/containers/__tests__/context-edit-mode.ui.test.tsx) so the

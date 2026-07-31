@@ -46,8 +46,9 @@ export function renderProjectedFiles(
 /**
  * Project + render a sequence of file payloads (in conversation order) through ONE shared memo, so
  * repeats across turns collapse to `{unchanged:true}`. Each payload is one turn's app state or one
- * file-tool output; pass the SAME memo for the whole window (and `memo.reset()` at a summarization
- * boundary). Returns the rendered content blocks per payload, aligned to the input order.
+ * file-tool output; pass the SAME memo for the whole window, covering exactly the payloads being
+ * emitted (`memo.reset()` rebases it if a window ever starts mid-log — see `./facets`).
+ * Returns the rendered content blocks per payload, aligned to the input order.
  */
 export function renderConversationFiles(
   memo: FacetMemo,

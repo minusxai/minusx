@@ -75,7 +75,7 @@ export interface VizTemplate {
 // ── minusx/funnel@1 ─────────────────────────────────────────────────────────────
 // Classic ECharts funnel: one tapered trapezoid PER STAGE (each spans its own value
 // down to the next stage's; the last tapers to a tip), single hue with ZEBRA
-// alternation (full / 0.8-ish opacity) so adjacent stages read as distinct bands.
+// alternation (the two opacities below) so adjacent stages read as distinct bands.
 // Stage order = data order. `orientation` param: 'vertical' (default, stages run
 // top→bottom) or 'horizontal' (stages run left→right, taper vertical).
 const FUNNEL_OPACITY_ODD = 0.92;
@@ -144,7 +144,7 @@ const funnel: VizTemplate = {
               : { y: seq, x: taper, x2: taper2 }),
             detail: { field: '__mx_rank' },
             color: { value: '#16a085' },
-            // Zebra: alternate band opacity on stage parity (color, 0.8·color, color…).
+            // Zebra: alternate band opacity on stage parity (odd ranks the brighter one).
             fillOpacity: {
               condition: { test: 'datum.__mx_rank % 2 === 1', value: FUNNEL_OPACITY_ODD },
               value: FUNNEL_OPACITY_EVEN,
@@ -967,10 +967,10 @@ const singleValue: VizTemplate = {
 // ── minusx/combo@1 ─────────────────────────────────────────────────────────────
 // Canonical dual-axis composition: quiet bars establish magnitude, one crisp line
 // carries the contrasting measure. An optional categorical split colors/groups both
-// layers consistently. Both layers share an ordinal X domain and color scale while
-// their Y scales resolve independently. X is intentionally ordinal:
-// combo charts compare aligned periods/categories rather than interpolate a
-// continuous time domain (matching the classic combo behavior).
+// layers consistently. Both layers share one X encoding and color scale while their
+// Y scales resolve independently. A temporal x column gets a real temporal scale;
+// everything else stays ordinal, because combo charts compare aligned
+// periods/categories rather than interpolate a continuous domain.
 const combo: VizTemplate = {
   id: 'minusx/combo@1',
   vizType: 'combo',
@@ -1100,8 +1100,9 @@ const combo: VizTemplate = {
 // (so regions with no data still show) beneath the value-colored regions.
 //
 // Bindings: region (nominal, matches the boundary's name property) + value
-// (quantitative). Params: mapName (world|us-states|india-states) picks the
-// boundary + projection; colorScale picks the sequential color scheme.
+// (quantitative). Params: mapName (any GEO_ASSETS id — us-states|us-counties|
+// world|india-states) picks the boundary + projection; colorScale picks the
+// sequential color scheme; zoom/panX/panY carry the persisted view state.
 const CHOROPLETH_SCHEMES: Record<string, string> = {
   green: 'greens',
   blue: 'blues',
@@ -1223,8 +1224,9 @@ export const POINT_MAP_DARK_TILE_URL = 'https://a.basemaps.cartocdn.com/dark_all
 // row into an origin→destination flow line (rule marks) — same recipe, no mode toggle.
 //
 // Bindings: lat, lng (required), lat2, lng2 (optional destination → flows), size,
-// color (optional). Params: mapName (basemap + projection), colorScale (quantitative
-// color scheme).
+// color (optional). Params: mapName (boundary asset), colorScale (quantitative
+// color scheme), markColor (solid marker color), zoom/center (view state),
+// basemap ('tiles' opts into the slippy-tile backdrop) and tileUrl.
 const pointMap: VizTemplate = {
   id: 'minusx/point-map@1',
   vizType: 'point_map',
@@ -1262,8 +1264,9 @@ const pointMap: VizTemplate = {
     // `center` [lat, lng] recenters GEOGRAPHICALLY, so it holds across basemaps
     // (states/counties/world); `zoom` scales in. With no center the projection frames
     // the DATA extent (where the points are). These same signals carry interactive
-    // pan/zoom later. (choropleth keeps albersUsa + its AK/HI insets — that's a static
-    // overview; a zoomable point map can't use a composite projection.)
+    // pan/zoom later. (choropleth keeps albersUsa + its AK/HI insets and rides its own
+    // zoom/pan on the projection `extent` instead — a RECENTERABLE point map can't use
+    // a composite projection.)
     // Zoom is a scale MULTIPLIER (1 = region view). Cap high enough to reach street/
     // building level with tiles (scale ≈ REGION_SCALE·zoom; the wheel/buttons cap scale
     // at ~8M ≈ slippy z18, so zoom up to ~4700 is reachable). A low cap here collapses

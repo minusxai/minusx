@@ -6,8 +6,8 @@
  * the LIVE file view, so a developer can see exactly which content falls under which section number
  * without having to send a message and inspect the captured image. Pure (no Redux) — the container
  * gates it on devMode. Never shown to end users, never captured (it's live DOM the agent path draws
- * its own gutter for; this overlay is not what snapdom serializes because it mounts outside
- * data-file-id's captured subtree at the same offset).
+ * its own gutter for; the capture serializes data-file-id's subtree and this overlay mounts OUTSIDE
+ * it at the same offset).
  *
  * Anchored to its parent (which must be `position: relative`); measured via ResizeObserver so the
  * markers track the story's height as embeds load and reflow.

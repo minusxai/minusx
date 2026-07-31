@@ -57,8 +57,10 @@ export async function truncateAllTables(): Promise<void> {
 }
 
 /**
- * Initialize a fresh test database with schema and test org.
- * Cleans up any existing database and WAL files first.
+ * Seed a fresh test database from the workspace template (admin user + /org tree).
+ * `dbPath` is accepted for call-site readability only — db-config is module-mocked
+ * in test/setup, so every path resolves to the same in-process instance, whose
+ * files/users tables this wipes and re-seeds.
  */
 export async function initTestDatabase(dbPath: string = join(process.cwd(), 'data', 'test_e2e.db')) {
   // Seed via initializeDatabase — uses workspace-template.json, same as production.
@@ -66,8 +68,8 @@ export async function initTestDatabase(dbPath: string = join(process.cwd(), 'dat
 }
 
 /**
- * Clean up test database and associated WAL files.
- * Call this in afterAll hook.
+ * Close the test database adapter (the next getAdapter() rebuilds it).
+ * Call this in an afterAll hook. `_dbPath` is unused.
  */
 export async function cleanupTestDatabase(_dbPath: string = join(process.cwd(), 'data', 'test_e2e.db')) {
   const { getModules } = await import('@/lib/modules/registry');

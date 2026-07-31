@@ -3,10 +3,10 @@
  * FILE'S path (falling back to the folder it's being created in) — NOT the
  * '/org' default QuestionViewV2 uses when no filePath is passed. Otherwise a
  * new question created in tutorial mode (or in any folder with its own
- * context) derives zero semantic stubs and the GUI tab silently disappears.
+ * context) derives zero semantic stubs and the Semantic tab silently disappears.
  *
  * The context hook is mocked path-keyed: schema exists under '/tutorial',
- * nothing anywhere else. The GUI tab showing therefore PROVES the lookup ran
+ * nothing anywhere else. The Semantic tab showing therefore PROVES the lookup ran
  * against the file's real path.
  */
 import React from 'react';
@@ -39,7 +39,7 @@ vi.mock('@/lib/hooks/useConnections', () => ({
 vi.mock('@/lib/hooks/use-semantic-compat', () => ({
   useSemanticCompat: () => ({ detected: null, canUseSemantic: true }),
 }));
-// The GUI tab is gated on AUTHORED semantic models,
+// The Semantic tab is gated on AUTHORED semantic models,
 // so this mock keys off the path the container resolves — which is the very
 // thing the test is proving. Returning a model only for the draft's real folder
 // path makes the tab's appearance a sharper signal than the old raw-table stub.

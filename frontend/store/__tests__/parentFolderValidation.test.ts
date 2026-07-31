@@ -2,8 +2,8 @@
  * Parent Folder Validation E2E Tests
  *
  * Verifies that files and folders cannot be created or moved into non-existent
- * parent folder paths. All tests in the "should reject" group are expected to
- * FAIL before the fix is applied (the API currently returns 2xx with no check).
+ * parent folder paths — FilesAPI rejects each such write with a UserFacingError
+ * ("parent folder '…' does not exist"), which the routes surface as a 400.
  *
  * Coverage:
  *   1. POST /api/files          — create file in missing parent → 400
@@ -19,10 +19,6 @@ import type { QuestionContent } from '@/lib/types';
 import { POST as filePostHandler } from '@/app/api/files/route';
 import { PATCH as filePatchHandler } from '@/app/api/files/[id]/route';
 import { POST as folderPostHandler } from '@/app/api/folders/route';
-
-// ---------------------------------------------------------------------------
-// Jest module mocks — hoisted to top by Jest
-// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // Helpers

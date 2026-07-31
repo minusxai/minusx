@@ -45,35 +45,35 @@ describe('getCreditUsage', () => {
   setupTestDb(TEST_DB_PATH);
 
   beforeEach(async () => {
-    // User 1 — two rows this month in the same (anthropic, opus) group
+    // User 1 — two in-window rows in the same (anthropic, opus) group
     await seed({ userId: 1, provider: 'anthropic', model: 'opus', promptTokens: 1000, cachedTokens: 200, completionTokens: 500, cost: 0.3, createdAtSql: 'NOW()' });
     await seed({ userId: 1, provider: 'anthropic', model: 'opus', promptTokens: 500, cachedTokens: 100, completionTokens: 200, cost: 0.1, createdAtSql: 'NOW()' });
-    // User 1 — a different group this month
+    // User 1 — a different in-window group
     await seed({ userId: 1, provider: 'openai', model: 'gpt', promptTokens: 100, cachedTokens: 0, completionTokens: 50, cost: 0.05, createdAtSql: 'NOW()' });
-    // User 1 — LAST month, must be excluded (40 days back is always before start-of-month)
+    // User 1 — 40 days back, must be excluded (well before the start of the weekly billing window)
     await seed({ userId: 1, provider: 'anthropic', model: 'opus', promptTokens: 9999, cachedTokens: 0, completionTokens: 9999, cost: 99, createdAtSql: "NOW() - INTERVAL '40 days'" });
     // User 1 — cached > prompt (non-cached input must floor at 0)
     await seed({ userId: 1, provider: 'weird', model: 'm', promptTokens: 100, cachedTokens: 300, completionTokens: 10, cost: 0.02, createdAtSql: 'NOW()' });
     // User 1 — NULL provider (must group as '')
     await seed({ userId: 1, provider: null, model: 'nulltest', promptTokens: 50, cachedTokens: 0, completionTokens: 10, cost: 0.01, createdAtSql: 'NOW()' });
-    // User 2 — this month, same (anthropic, opus) group as user 1
+    // User 2 — in-window, same (anthropic, opus) group as user 1
     await seed({ userId: 2, provider: 'anthropic', model: 'opus', promptTokens: 2000, cachedTokens: 0, completionTokens: 1000, cost: 1.0, createdAtSql: 'NOW()' });
   });
 
   it('aggregates the current-user scope for this month only', async () => {
     const { individual } = await getCreditUsage(1, 'viewer', false);
 
-    // 4 groups: (anthropic,opus), (openai,gpt), (weird,m), ('',nulltest) — last-month row excluded.
+    // 4 groups: (anthropic,opus), (openai,gpt), (weird,m), ('',nulltest) — the 40-day-old row excluded.
     expect(individual.billing.rows).toHaveLength(4);
     expect(individual.billing.allowance).toBe(5_000);
     expect(individual.reset.allowance).toBe(1_000);
 
-    // opus group merges the two this-month user-1 rows (last-month row NOT included).
+    // opus group merges the two in-window user-1 rows (the 40-day-old row NOT included).
     const opus = findRow(individual.billing.rows, 'anthropic', 'opus')!;
     expect(opus.nonCachedInputTokens).toBe(1200); // (1000-200) + (500-100)
     expect(opus.cachedTokens).toBe(300);
     expect(opus.outputTokens).toBe(700);
-    expect(opus.requests).toBe(2); // two this-month opus calls merged
+    expect(opus.requests).toBe(2); // two in-window opus calls merged
     expect(opus.credits).toBeCloseTo(42, 6); // (0.3 + 0.1)*100 + 2 requests
 
     // Billing used = opus 42 + gpt 6 + weird 3 + nulltest 2. Every seeded row is
@@ -145,7 +145,8 @@ describe('getCreditUsage', () => {
   });
 
   it('checkCreditGate allows everything when enforcement is off (default env)', async () => {
-    // Huge usage, but ENFORCE_CREDIT_LIMITS is unset in the test env → always allowed.
+    // Huge usage, but the org config has no `credits` section here, so `enabled` resolves
+    // false (no enforcement) → always allowed.
     await seed({ userId: 9, provider: 'openai', model: 'm', promptTokens: 10, cachedTokens: 0, completionTokens: 5, cost: 9999, createdAtSql: 'NOW()' });
     const gate = await checkCreditGate({ userId: 9, role: 'viewer', mode: 'org', email: 'x@x.co' } as EffectiveUser);
     expect(gate.allowed).toBe(true);

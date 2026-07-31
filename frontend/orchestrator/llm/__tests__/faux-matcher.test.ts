@@ -2,7 +2,7 @@
  * Phase 1 — pure faux matcher unit tests (Tests/QA/Evals Arch V2).
  *
  * The matcher is a pure function over a conversation `Context`. It keys faux LLM
- * responses on (user_message [, after]) and must NEVER silently mis-route:
+ * responses on (userMessage [, after]) and must NEVER silently mis-route:
  *   - duplicate keys → rejected at registration
  *   - ambiguous runtime match (>1) → throws
  *   - no match → throws UnexpectedFauxLLMError

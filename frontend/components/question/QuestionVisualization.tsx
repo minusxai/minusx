@@ -470,7 +470,7 @@ function QuestionVisualizationInner({
  *
  * If a caller later starts passing inline callbacks, those would correctly
  * trigger re-renders here — we intentionally don't ignore them, so the child
- * subtree (ChartBuilder/BaseChart/EChart) never sees a stale closure.
+ * subtree (VegaChart/VizTableView/VizPivotView/TableV2) never sees a stale closure.
  *
  * Pre-fix this was 33/33 wasted; the layer also gates the entire chart
  * pipeline below it.

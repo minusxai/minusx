@@ -51,8 +51,9 @@ describe('resolveRates', () => {
   });
 });
 
-/** 2-call conversation with exact approx-token sizes (chars/4):
- *  input bar 100 tokens → assistant 50 → toolResults 100 → assistant 10. */
+/** 2-call conversation with exact approx-token sizes (chars/4): input bar 100 tokens →
+ *  assistant (the toolCall JSON — pinned via the bar, not hand-computed) → toolResults 100 →
+ *  assistant 10. */
 function twoCallInput() {
   const a1 = assistant(
     [{ type: 'toolCall', id: 't1', name: 'ExecuteQuery', arguments: {} }],

@@ -2,8 +2,9 @@
  * Pure credit math — the single source of truth for turning LLM usage into credits.
  *
  * Kept free of `server-only` so it can run in unit tests and (potentially) the
- * client. The 4-arg signature intentionally exposes the token breakdown so the
- * formula can evolve (e.g. per-token-type rates) WITHOUT changing any caller.
+ * client. The input object intentionally exposes the full token breakdown (plus
+ * provider/model) so the formula can evolve (e.g. per-token-type or per-model
+ * rates) WITHOUT changing any caller.
  */
 import { CREDIT_BUDGETS, type CreditWeights } from './credit-budgets';
 import type { CreditScope, CreditWindow } from './credits.types';
@@ -24,8 +25,9 @@ export interface CostToCreditsInput {
 
 /**
  * Credits as a weighted sum of cost + token buckets + request count. The
- * `weights` come from the effective credit config (env-overridable); callers
- * that don't pass them use the CREDIT_BUDGETS defaults (credits = cost × 100 + 1 per request).
+ * `weights` come from the resolved credit policy (the org config's `credits`
+ * section — not env); callers that don't pass them use the CREDIT_BUDGETS
+ * defaults (credits = cost × 100 + 1 per request).
  */
 export function costToCredits(input: CostToCreditsInput, weights: CreditWeights = CREDIT_BUDGETS.weights): number {
   return (

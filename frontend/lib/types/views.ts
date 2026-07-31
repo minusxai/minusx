@@ -73,7 +73,7 @@ export interface ViewDef {
    * control raw tables have (`WhitelistNode.childPaths`), so a curated model can
    * be handed to one team without being pushed on the whole tree.
    *   undefined = all children · [] = none · ['/org/team_a'] = that subtree only
-   * A child's own opinion is separate: `ContextVersion.excludedViews`.
+   * A child's own opinion is separate: `ContextVersion.viewWhitelist`.
    */
   childPaths?: string[];
 }

@@ -18,23 +18,6 @@ import { waitFor } from '@testing-library/react';
 import { selectConversation } from '@/store/chatSlice';
 
 /**
- * Wait for a Redux state condition, resolving as soon as any dispatch
- * satisfies the predicate.
- *
- * @param store     - The Redux store to subscribe to
- * @param selector  - Extract the value to test from state
- * @param predicate - Return true when the value satisfies the condition
- * @param timeout   - Maximum ms to wait before rejecting (default: 5000)
- *
- * @example
- * // Resolves the moment the file is stored — no polling delay
- * await waitForReduxState(
- *   testStore,
- *   state => state.files.files[fileId],
- *   file => file !== undefined && !file.loading,
- * );
- */
-/**
  * Wait for a conversation to reach FINISHED state, tracking fork chains
  * (virtual conversation ID → real file ID) along the way.
  *
@@ -61,6 +44,23 @@ export async function waitForConversationFinished(
   return realConvId;
 }
 
+/**
+ * Wait for a Redux state condition, resolving as soon as any dispatch
+ * satisfies the predicate.
+ *
+ * @param store     - The Redux store to subscribe to
+ * @param selector  - Extract the value to test from state
+ * @param predicate - Return true when the value satisfies the condition
+ * @param timeout   - Maximum ms to wait before rejecting (default: 5000)
+ *
+ * @example
+ * // Resolves the moment the file is stored — no polling delay
+ * await waitForReduxState(
+ *   testStore,
+ *   state => state.files.files[fileId],
+ *   file => file !== undefined && !file.loading,
+ * );
+ */
 export function waitForReduxState<T>(
   store: Store,
   selector: (state: RootState) => T,

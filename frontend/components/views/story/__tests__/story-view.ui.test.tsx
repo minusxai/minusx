@@ -1,17 +1,14 @@
 /**
  * StoryView — a single-page scrolling story: one agent-authored HTML
- * document on a fixed 1280px-wide canvas (any height), rendered into a
- * SHADOW ROOT on the story host. Scripts/handlers are stripped, but <style>
- * blocks, classes and web fonts are ALLOWED — the shadow tree scopes them
- * natively (no leakage either way), while CSS variables (color-mode tokens)
- * and document fonts still inherit, so embedded charts render correctly.
- * <div data-question-id="N"> placeholders hydrate into live charts via
- * portals into the shadow root. @import lines (web fonts) are hoisted to
- * document.head — font-faces don't load inside shadow trees.
- * Also hosts the JSON view (header eye/code toggle), like DashboardView —
- * read-only without a fileId, editable with one (full-content edits). All
- * element queries by aria-label per repo convention (the Monaco mock labels
- * the JsonEditor textarea "JSON editor").
+ * document laid out against a 1280px logical canvas (any height), rendered
+ * into a same-origin IFRAME (AgentHtml). Scripts/handlers are stripped, but
+ * <style> blocks, classes and web fonts are ALLOWED — the iframe document
+ * scopes them natively (no leakage either way) and loads `@import` fonts
+ * itself, unlike the shadow root this used to use. <div data-question-id="N">
+ * placeholders hydrate into live charts via portals from a React root nested
+ * inside that iframe. The JSON/"Code" view is NOT here — it moved to the
+ * shared CodeView, rendered by FileView. All element queries by aria-label
+ * per repo convention.
  */
 import React from 'react';
 import { screen, within, waitFor } from '@testing-library/react';

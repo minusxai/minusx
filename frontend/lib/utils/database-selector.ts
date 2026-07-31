@@ -3,10 +3,11 @@
  *
  * Centralizes logic for selecting a database from a list of available databases.
  * Used across:
- * - Question page DB selection
- * - Sidechat context DB selection
- * - Autocomplete SQL DB
- * - Mentions tables DB
+ * - Explore chat + floating/share chat default DB (ChatInterface,
+ *   FloatingChatWrapper, ShareFloatingChat)
+ * - Notebook SQL cell connection (NotebookView)
+ * - Server-side agent args and file templates (lib/chat/agent-args.server.ts,
+ *   lib/data/files.server.ts)
  */
 
 import { DatabaseContext, DatabaseConnection } from '@/lib/types';

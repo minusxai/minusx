@@ -70,7 +70,8 @@ test('upload a CSV into the static connection and query it', async ({ page, requ
           .get(`/api/files/${conn!.id}?mode=${QA_MODE}`, { timeout: 150_000 })
           .catch(() => null);
         if (!res || !res.ok()) return false;
-        // GET /api/files/[id] double-wraps non-conversation files: { data: { data: file, metadata } }
+        // GET /api/files/[id] returns { data: file }; only `?include=references` double-wraps
+        // it as { data: { data: file, … } }. Unwrap either shape.
         const body = (await res.json())?.data;
         const data = body?.data ?? body;
         if (typeof data?.path !== 'string' || !data.path.startsWith('/tutorial')) return false;

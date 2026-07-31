@@ -101,7 +101,8 @@ function ChatInputInner({
   const inputHistory = useAppSelector(selectChatInputHistory);
 
 
-  // Use Redux for draft text (persists across unmount)
+  // Draft text is LOCAL state — it does not survive unmount. (The sidebar hand-off keeps a
+  // separate `ui.sidebarPendingMessage` in Redux; see the pending-message effect below.)
   const [input, setInput] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [chatSettingsOpen, setChatSettingsOpen] = useState(false);

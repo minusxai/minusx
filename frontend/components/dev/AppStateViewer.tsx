@@ -17,7 +17,8 @@ export default function AppStateViewer({ appState, maxHeight = '400px' }: AppSta
   const colorMode = useAppSelector((state) => state.ui.colorMode);
   const [copied, setCopied] = useState(false);
 
-  // Show what the AGENT actually sees, mirroring `buildUserContent`: `content` is stripped
+  // Show what the AGENT actually sees, mirroring the projection pass (`renderAppState` in
+  // lib/projection/messages.ts): `content` is stripped
   // (`appStateForLlm`) and each file's `markup` is pulled OUT of the JSON into separate raw
   // `<file_markup>` blocks (`takeAppStateMarkup`) — so this is not valid JSON, it's the
   // prompt-shaped text. Rendered as plaintext below.

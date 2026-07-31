@@ -20,7 +20,7 @@ export const runtime = 'nodejs';
  * DETACHED (the long-running Node process keeps it alive) and writes durable rows + NOTIFYs; the
  * client receives output via GET …/stream. Returns immediately.
  *
- * Body: { userMessage?, completedToolCalls?, autoRetry?, agent?, agentArgs?, turnKey? }
+ * Body: { userMessage?, completedToolCalls?, autoRetry?, manualRetry?, agent?, agentArgs? }
  */
 export const POST = withAuth(async (
   request: NextRequest,

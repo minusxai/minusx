@@ -2,8 +2,8 @@
  * Catalog projection helpers — pure shape transformations from the cached
  * catalog tables into the maps `auto-context.ts` consumes.
  *
- * Rendering / sample-fetching helpers used to live here; they moved into
- * `auto-context.ts` when AutoContext consolidated to a single file. What
+ * Rendering / sample-fetching helpers used to live here; rendering now lives
+ * in `catalog-render.ts` and sample-fetching in `samples.ts`. What
  * remains is the projection layer, kept here because it's the canonical
  * place to turn `CatalogTables` rows into typed maps and is potentially
  * reusable outside AutoContext.

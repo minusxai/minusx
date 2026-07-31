@@ -4,12 +4,15 @@ import { MXTool, UserInputException, type ToolResponse } from '@/orchestrator/ty
 import { loadSkill, listSystemSkillNames } from '@/agents/skill-content';
 import { loadContextDocsByKeys } from '@/lib/sql/context-docs';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
-// All tools below execute in the browser via the existing
-// `executeToolCall` registry (lib/tools/tool-handlers.ts). Server-side they
-// throw UserInputException so the orchestrator pauses; the bridge (Redux
-// listener middleware) calls `executeToolCall(...)` for real and resumes the
-// orchestrator with the resulting ToolResultMessage. The Node side is a thin
-// declaration — no logic, no reimplementation.
+// The frontend-bridged tools below (EditFile, CreateFile, DetachViz, ReadFiles,
+// Navigate, ReviewFile, ClarifyFrontend, PublishAll) execute in the browser via
+// the existing `executeToolCall` registry (lib/tools/tool-handlers.ts).
+// Server-side they throw UserInputException so the orchestrator pauses; the
+// bridge (Redux listener middleware) calls `executeToolCall(...)` for real and
+// resumes the orchestrator with the resulting ToolResultMessage. The Node side
+// is a thin declaration — no logic, no reimplementation. The last two are not
+// bridged the same way: LoadSkill resolves server-side and bridges only for an
+// unresolved user-skill name, and LoadContext is server-side only.
 
 // ─── EditFile ────────────────────────────────────────────────────────────────
 // Schema MUST match the runtime handler in `lib/tools/tool-handlers.ts`
@@ -209,8 +212,9 @@ export class Navigate extends MXTool<typeof NavigateParams, RemoteAnalystContext
 
 // ─── ReviewFile ──────────────────────────────────────────────────────────────
 // Schema matches `registerFrontendTool('ReviewFile', ...)`. Frontend-only: it
-// captures the LIVE rendered DOM (html-to-image) of the file currently open in the
-// browser, so it can't run headless (no DOM).
+// captures the LIVE rendered DOM of the file currently open in the browser by
+// serializing it to SVG (lib/screenshot/capture.ts), so it can't run headless
+// (no DOM).
 const ReviewFileParams = Type.Object({
   fileId: Type.Number({ description: 'ID of the file to review — must be the file currently open in the browser (its rendered view is captured).' }),
   fullHeight: Type.Optional(Type.Boolean({ description: 'Capture the full scrolled height including off-screen content (default true).' })),

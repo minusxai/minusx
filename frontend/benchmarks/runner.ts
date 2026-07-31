@@ -411,15 +411,10 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
       // key isolates them. `label` is the dataset's input.jsonl basename
       // — unique per dataset within a benchmark process.
       datasetKey: label,
-      // Pre-initialise the AutoContext attempts log on the row ctx so
-      // sub-agents' pushes propagate up. The orchestrator's context-
-      // override path shallow-merges `{...parentCtx, ...overrides}`,
-      // which preserves the array reference — but only if the array
-      // already exists. Without this pre-init, each sub-agent's lazy
-      // `ctx.autoContextAttempts = []` lands on its own (override) ctx
-      // object, never reaching the row-level ctx the runner reads at
-      // result-write time. (Surfaced as `"summary": "none"` on every
-      // row of GITHUB_REPOS output before this fix.)
+      // Pre-initialise the AutoContext attempts log on the row ctx: the
+      // pre-step below pushes one entry per slot into this exact array, and
+      // `summariseAutoContext` reads it back at result-write time. A ctx that
+      // reaches result-write with no entries reports `"summary": "none"`.
       autoContextAttempts: [],
     };
     rowContexts.set(i, ctx);
@@ -933,11 +928,11 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
     if (firstError) errors++;
     state.status = firstError ? 'error' : 'done';
 
-    // AutoContext's tool calls already live in the conversation log under
-    // the `AutoContextAgent` invocation — the benchmark viewer renders
-    // them as a normal sub-agent. Top-level `autoContext` summary lets
-    // post-hoc analysis distinguish "AutoContext silently failed" from
-    // "agent reasoning was wrong" without scanning the log.
+    // The AutoContext pre-step runs in its own Orchestrator, so its tool calls
+    // are NOT in this row's conversation log — they land in
+    // `<dataset>_autoctx_log.jsonl`. The top-level `autoContext` summary is what
+    // lets post-hoc analysis distinguish "AutoContext silently failed" from
+    // "agent reasoning was wrong" without going to that file.
     const result: BenchmarkResult = {
       input_index: rowIdx,
       input: state.row,

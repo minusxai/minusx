@@ -1,6 +1,8 @@
 /**
- * Client-safe Google Sheets functions.
- * deleteGoogleSheetsData (server-only) lives in google-sheets.server.ts.
+ * Client-safe Google Sheets functions — thin fetch wrappers around the
+ * /api/google-sheets/{import,reimport} routes. The server-only work (fetching
+ * the sheet, writing to S3, deleting superseded objects) lives in those routes
+ * and in lib/csv-processor.
  */
 
 import { CsvFileInfo } from '@/lib/types';

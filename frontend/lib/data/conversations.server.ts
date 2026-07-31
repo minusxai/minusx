@@ -5,7 +5,7 @@
  * (`conversations`, `messages`); `messages.content` is each pi entry verbatim and `messages.seq`
  * is the 0-based log index + stream cursor. Errors share `messages` as `kind='error'` rows with
  * seq=NULL (the parallel error stream, kept out of the pi log). This module owns:
- *   - shared-id allocation (conversation ids share the global files id-space, see allocateId)
+ *   - shared-id allocation (conversation ids share the global files id-space, see createConversation)
  *   - create / get / list / delete conversations
  *   - append (OCC via UNIQUE(conversation_id, seq)) + load of the pi log
  *   - the parallel error stream

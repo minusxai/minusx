@@ -36,7 +36,8 @@ interface StepContextProps {
   onRequestChat?: (contextFileId: number) => void;
   onContextCreated?: (contextFileId: number) => void;
   greeting?: string;
-  /** For static connections: schema names just uploaded. Auto-selects only these and skips to docs. */
+  /** For static connections: schema names just uploaded. The tables sub-step is filtered to
+   *  these schemas, so only they are auto-selected into the whitelist. */
   staticSchemas?: string[] | null;
   /** Answers from the questionnaire step — used to enrich agent messages and auto-trigger agent. */
   questionnaireAnswers?: QuestionnaireAnswers | null;

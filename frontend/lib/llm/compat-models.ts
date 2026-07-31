@@ -1,7 +1,7 @@
 /**
  * compatibility.json-backed model curation (client + server safe — static
  * JSON, no secrets, no env access). compatibility.json is the shared static
- * contract (also driving setup.sh and the docs tables); this module is the
+ * contract (also driving install.sh and the docs tables); this module is the
  * single reader for its LLM model curation: one default model per provider
  * per grade — what an "Auto" grade mapping (a registry mapping stored with no
  * `model`) resolves to, badged as `default` in the admin model picker.
@@ -27,8 +27,7 @@ export function compatDefaultModel(provider: string, grade: LlmGrade): string | 
  * The provider an UNMAPPED grade falls back to: the workspace's single
  * bring-your-own-key provider, when compatibility.json publishes a default
  * model for it at this grade. Connecting one provider therefore powers every
- * grade with no further setup — which is what the settings page implies, and
- * what the env-seed path has always guaranteed.
+ * grade with no further setup — which is what the settings page implies.
  *
  * Undefined when the pick would be a guess — 2+ BYOK providers (ambiguous), or
  * a provider with no curation for the grade (custom endpoints, niche registry

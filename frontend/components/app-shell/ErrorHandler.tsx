@@ -12,7 +12,7 @@ import { selectDevMode } from '@/store/uiSlice';
  * - Unhandled promise rejections (window.unhandledrejection)
  *
  * Toast notifications are only shown to admin users.
- * Hydration errors are suppressed when the "Show all error toasts" setting is OFF.
+ * Hydration errors are suppressed unless the "Show Debug Options" (devMode) setting is ON.
  */
 export function GlobalErrorHandler() {
   useEffect(() => {

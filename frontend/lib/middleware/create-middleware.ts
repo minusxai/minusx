@@ -19,7 +19,9 @@ export type AuthReq = NextRequest & { auth: Session | null };
  *
  * Sealed rather than passed plain: middleware writes this header and route handlers
  * trust it to say whose data to return, so its integrity has to be verifiable. Returns
- * false when no namespace applies, which means reject — there is no safe default.
+ * false when no namespace applies — there is no safe default, so the authenticated path
+ * treats that as reject (redirect to /login). The public-route path calls this for its
+ * side effect only and lets the request through header-less.
  */
 async function attachNamespace(
   req: NextRequest,

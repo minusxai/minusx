@@ -14,12 +14,6 @@ import { getPublishedVersionForUser } from '../context/context-utils';
 import { CONTEXT_BUDGETS, PER_DOC_CONTENT_CHARS } from '../context/context-budgets';
 import { budgetAnnotationNotes, backfillAnnotationConnections } from './annotation-notes';
 
-/**
- * Build an agent-facing "Schema Notes" markdown section from context-authored
- * table/column descriptions and metrics. Returns undefined when there's nothing
- * to say. (Profiled column descriptions/stats reach the agent separately via the
- * SearchDBSchema tool; this surfaces the editorial context layer + metrics.)
- */
 /** Render a semantic source compactly: `schema.table` for tables, `_views.<name>` for data models. */
 function semanticSourceLabel(source: SemanticSource): string {
   if (source.kind === 'model') return `_views.${source.view}`;
@@ -67,6 +61,12 @@ function semanticModelToNote(model: SemanticModelV2): string {
   return `- Semantic model "${model.name}" (connection ${model.connection}, primary ${semanticSourceLabel(model.primary)})${desc}${body}`;
 }
 
+/**
+ * Build an agent-facing "Schema Notes" markdown section from context-authored
+ * table/column descriptions, metrics and semantic models. Returns undefined when
+ * there's nothing to say. (Profiled column descriptions/stats reach the agent
+ * separately via the SearchDBSchema tool; this surfaces the editorial context layer.)
+ */
 function buildSchemaNotes(annotations: TableAnnotation[], metrics: MetricDef[], semanticModels: SemanticModelV2[] = []): string | undefined {
   const lines: string[] = [];
 

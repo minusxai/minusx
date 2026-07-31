@@ -2,8 +2,9 @@ import type { Mock } from 'vitest';
 /**
  * E2E Tests for /api/infer-columns
  *
- * Part A — column inference via @polyglot-sql/sdk (WASM)
- * Part B — Next.js route: loads question from DB, infers columns
+ * Next.js route only: loads a question from the DB and infers its columns.
+ * The @polyglot-sql/sdk (WASM) inference itself is covered by
+ * lib/sql/__tests__/sql.test.ts.
  */
 
 // Must be hoisted before any imports that touch the DB — path must match getTestDbPath('infer_columns_e2e')
@@ -56,7 +57,7 @@ describe('Infer Columns - E2E Tests', () => {
   });
 
   // No backend to spawn — infer-columns runs locally via WASM
-  // Part A (endpoint tests) moved to lib/sql/__tests__/infer-columns.test.ts
+  // The WASM inference tests live in lib/sql/__tests__/sql.test.ts
 
   // Override global mock to include mode:'org' and home_folder:'/org'
   beforeAll(() => {

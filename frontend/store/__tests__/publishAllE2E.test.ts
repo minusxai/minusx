@@ -22,10 +22,8 @@ import { POST as batchSaveHandler } from '@/app/api/files/batch-save/route';
 import { setupMockFetch } from '@/test/harness/mock-fetch';
 
 // ---------------------------------------------------------------------------
-// Jest module mocks — hoisted to top of file by Jest
+// Module mocks — vi.mock is hoisted to the top of the file
 // ---------------------------------------------------------------------------
-
-// Isolated test database
 
 // Make file-state.ts's getStore() return our test store
 let testStore: any;

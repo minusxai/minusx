@@ -25,7 +25,8 @@ export interface ICompletionsDataLayer {
   /**
    * Get mention completions for @ autocomplete
    *
-   * @param options - Completion options (prefix, mentionType, databaseName)
+   * @param options - Completion options (prefix, mentionType, databaseName,
+   *   whitelistedSchemas)
    * @param user - Effective user for permission checks
    * @returns Suggestions array with metadata
    */
@@ -41,10 +42,10 @@ export interface ICompletionsDataLayer {
   getSqlCompletions(options: SqlCompletionsOptions, user: EffectiveUser): Promise<SqlCompletionsResult>;
 
   /**
-   * Parse SQL to Intermediate Representation (IR) for GUI builder
+   * Parse SQL to Intermediate Representation (IR)
    * Pure parsing operation - no user context needed
    *
-   * @param options - SQL to IR options (sql, databaseName)
+   * @param options - SQL to IR options (sql, dialect)
    * @returns IR object or error details
    */
   sqlToIR(options: SqlToIROptions): Promise<SqlToIRResult>;
@@ -53,13 +54,13 @@ export interface ICompletionsDataLayer {
    * Generate SQL from Intermediate Representation (IR)
    * Pure function - no user context needed
    *
-   * @param options - IR to SQL options (ir)
+   * @param options - IR to SQL options (ir, dialect)
    * @returns Generated SQL string
    */
   irToSql(options: IRToSqlOptions): Promise<IRToSqlResult>;
 
   /**
-   * Get table suggestions for GUI builder
+   * Get table suggestions (serves POST /api/table-suggestions)
    * Returns list of available tables from schema
    *
    * @param options - Table suggestions options (databaseName, optional currentIR)
@@ -69,7 +70,8 @@ export interface ICompletionsDataLayer {
   getTableSuggestions(options: TableSuggestionsOptions, user: EffectiveUser): Promise<TableSuggestionsResult>;
 
   /**
-   * Get column suggestions for GUI builder
+   * Get column suggestions (serves POST /api/column-suggestions, behind the
+   * `useTableColumns` hook)
    * Returns list of columns for specified table
    *
    * @param options - Column suggestions options (databaseName, table, optional currentIR)

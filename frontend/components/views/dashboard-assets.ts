@@ -61,7 +61,7 @@ export const getLayoutableAssets = (assets: AssetReference[]): AssetReference[] 
 export const getLayoutSignature = (assets: AssetReference[]): string =>
   getLayoutableAssets(assets).map(a => `${getAssetLayoutKey(a)}:${a.type}`).join(',');
 
-/** Stack all layoutable assets vertically full-width (used when there are no saved layout items). */
+/** Stack all layoutable assets vertically at x=0, each at its default size (used when there are no saved layout items). */
 const generateDefaultLayout = (assets: AssetReference[]): Layout[] => {
   const layoutable = getLayoutableAssets(assets);
   let currentY = 0;

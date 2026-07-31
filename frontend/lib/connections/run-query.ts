@@ -34,8 +34,8 @@ function withServerTimeout<T>(work: Promise<T>): Promise<T> {
  *
  * Every supported connection type has a Node.js connector in
  * `getNodeConnector` (DuckDB, SQLite, Postgres, BigQuery, Athena, CSV,
- * Google Sheets, Mongo, internal_db). Unknown connection names or types
- * throw.
+ * Google Sheets, Mongo, ClickHouse, internal_db). Unknown connection names or
+ * types throw.
  *
  * @param databaseName - Connection name (matches the `name` field in connection config)
  * @param query        - SQL query string

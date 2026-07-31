@@ -57,9 +57,10 @@ const BrickWallFireIcon = ({ size = 16 }: { size?: number }) => (
 
 /**
  * Everything the selector can offer: the classic vizSettings types plus V2-only
- * types (Vega-tier charts with no ECharts equivalent — the legacy union stays
- * frozen until the ECharts pipeline is deleted). V2-only entries render solely
- * when `includeV2Only` is set (the Vega panel); classic surfaces never see them.
+ * types (Vega-tier charts with no classic V1 equivalent — the `VizSettings['type']`
+ * union is the frozen on-disk V1 format and never grows for them). V2-only entries
+ * render solely when `includeV2Only` is set (the Vega panel); classic surfaces never
+ * see them.
  */
 export type SelectableVizType = VizSettings['type'] | 'heatmap' | 'boxplot' | 'histogram' | 'choropleth' | 'point_map' | 'custom';
 
@@ -115,8 +116,8 @@ const ALL_VIZ_GROUPS: VizTypeGroup[] = [
       { type: 'single_value', icon: <LuHash size={16} />, label: 'Number' },
       // V2 analytic geo (RFC §9), authored as native-Vega recipes: choropleth (region
       // fill) + the coordinate map (points/bubbles/flows over a vector or street-tile
-      // basemap). These supersede the legacy combined ECharts `geo` type, which is no
-      // longer offered here (existing `geo` questions still render).
+      // basemap). These supersede the legacy combined `geo` type, which is no longer
+      // offered here (existing `geo` questions still render via the V1→V2 bridge).
       { type: 'choropleth', icon: <LuMap size={16} />, label: 'Choropleth', v2Only: true },
       // Coordinate map: points/bubbles, + flows when a destination is bound.
       { type: 'point_map', icon: <LuMapPinned size={16} />, label: 'Geo', v2Only: true },

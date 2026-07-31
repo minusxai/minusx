@@ -230,7 +230,8 @@ export function buildSalvaging(
 
 /**
  * Compile the story's Tailwind CSS. Returns null (no stylesheet) unless the story carries
- * the design-system marker — legacy stories must render byte-identical to before.
+ * the design-system marker or the caller passes `opts.force` (what `format:'jsx'` stories
+ * do) — unmarked legacy stories must render byte-identical to before.
  *
  * A FRESH compiler per call: Tailwind's `build()` is accumulative (watch-mode semantics), so a
  * shared instance would leak utilities from one story's build into the next.

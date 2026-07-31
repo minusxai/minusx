@@ -27,7 +27,7 @@ interface ProvidersProps {
     disableAppStateImages?: boolean;  // Server runtime env flag (DISABLE_APP_STATE_IMAGES)
     maxConcurrentQueries?: number;    // Server runtime env (MAX_CONCURRENT_QUERIES)
     queryTimeoutMs?: number;          // Server runtime env (QUERY_TIMEOUT_MS)
-    creditsEnabled?: boolean;         // Server runtime env (CREDITS_ENABLED)
+    creditsEnabled?: boolean;         // Org config (config.credits.enabled), not an env var
     e2eEnabled?: boolean;             // QA runtime E2E opt-in (?e2e=<secret>)
   };
 }

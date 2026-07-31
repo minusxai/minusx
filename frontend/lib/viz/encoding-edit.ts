@@ -250,7 +250,7 @@ const withMark = (spec: Record<string, unknown>, type: string): void => {
     : { type };
 };
 
-/** Native-spec viz types (recipes and the DOM table route through setEnvelopeVizType instead). */
+/** Native-spec viz types (recipes and the DOM-tier table/pivot route through setEnvelopeVizType instead). */
 export type SpecVizType = Exclude<V2VizType, 'table' | 'pivot' | 'combo' | 'funnel' | 'waterfall' | 'radar' | 'trend' | 'single_value' | 'choropleth' | 'point_map'>;
 
 /** Switch a unit (or annotated-unit) spec's viz type, transforming encodings where the
@@ -686,7 +686,8 @@ export function removeZoneField(envelope: VizEnvelope, channel: string, name: st
   return setZoneField(envelope, channel, null);
 }
 
-/** Assign/remove a zone's column. Recipe bindings are required — removal is a no-op there. */
+/** Assign/remove a zone's column. A REQUIRED recipe binding cannot be cleared — removal is
+ *  a no-op there; optional bindings are removable. */
 export function setZoneField(
   envelope: VizEnvelope,
   channel: string,

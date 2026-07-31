@@ -15,7 +15,7 @@
  * selector / capture contract over the real modules with no dev server, so the check is fast
  * and deterministic. The Playwright backend screenshots the element while the client path
  * serializes it — this diff is precisely the serialize-path-parity guarantee the backend's
- * `page.screenshot` fallback defers to (see playwright-backend.server.ts header).
+ * `locator.screenshot()` fallback defers to (see playwright-backend.server.ts header).
  *
  * EXPLICIT THRESHOLDS (recorded here per §11):
  *  - CHANNEL_TOLERANCE = 24 — per-channel delta below which a pixel counts as identical

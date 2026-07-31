@@ -182,7 +182,7 @@ async function calculateTextStats(tableName: string, column: string): Promise<Te
   `
   const uniqueRows = await executeQuery<{ unique_count: number }>(uniqueQuery)
 
-  // Get top 3 values by count
+  // Get top 4 values by count
   const topValuesQuery = `
     SELECT
       "${column}" as value,

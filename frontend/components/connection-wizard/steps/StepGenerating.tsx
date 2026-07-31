@@ -228,7 +228,9 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
     }
   }, [virtualDashboardId, onFinish, router]);
 
-  /** Discard draft files created during this step — note: orphan cleanup is a future task */
+  /** Delete EVERY draft file currently in the Redux store, not just the ones this step
+   *  created — the wizard is the only surface open at this point. Note: orphan cleanup
+   *  (drafts already persisted elsewhere) is a future task. */
   const discardDraftFiles = useCallback(() => {
     const allFiles = getStore().getState().files.files;
     for (const idStr of Object.keys(allFiles)) {

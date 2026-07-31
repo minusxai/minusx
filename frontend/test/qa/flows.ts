@@ -126,7 +126,7 @@ export async function openFileByClick(
     .toBe(true);
 
   const tile = page.getByLabel(file.name, { exact: true }).first();
-  // Expand ONLY sections that are collapsed by default (questions, connections) —
+  // Expand ONLY sections that are collapsed by default (questions) —
   // and only after the header has rendered, so the click isn't swallowed.
   // We must NOT click an already-open section header (e.g. Dashboards): on a
   // cold/contended listing the tile hasn't rendered yet, and clicking would

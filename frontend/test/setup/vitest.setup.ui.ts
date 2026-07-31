@@ -180,8 +180,10 @@ vi.mock('echarts', () => ({
 
 // ---------------------------------------------------------------------------
 // mirrorAppStyles → no-op
-// AgentHtml (story/slide canvas) copies the document's stylesheet rules into
-// its shadow root so portaled charts inherit Chakra styling. In jsdom that
+// AgentHtml / DashboardSurface mirror the app's base guards + @font-face rules
+// into the surface root (the story/dashboard iframe Document, or a ShadowRoot)
+// so portaled embeds get the right fonts and sizing. Producing them scans the
+// TOP document's every stylesheet rule. In jsdom that
 // read (cssRules/cssText) is a slow JS reimplementation, and the injected
 // emotion/Chakra <style> tags accumulate across a test file's shared document,
 // so re-serializing every rule on each render goes O(n²) — it turned a 9-test

@@ -23,7 +23,7 @@ export type LlmCallTrigger =
 /** Fallback trigger — used at write and read time so `trigger` is never empty. */
 export const UNKNOWN_TRIGGER = 'unknown';
 
-/** One (provider, model, trigger) usage group within the current calendar month. */
+/** One (provider, model, trigger) usage group within the current billing window. */
 export interface CreditBreakdownRow {
   /** '' when the stored provider was NULL (render as '—'). */
   provider: string;
@@ -63,10 +63,6 @@ export interface CreditScope {
   reset: CreditWindow;
 }
 
-/**
- * Usage payload returned by `GET /api/credits/usage`.
- * `org` is only populated for admins (org totals across all users).
- */
 /** A recorded credit lifecycle event (rate-limit hit or reset) for the audit feed. */
 export interface CreditEvent {
   type: 'rate_limit_hit' | 'reset';
@@ -74,6 +70,10 @@ export interface CreditEvent {
   detail: Record<string, unknown>;
 }
 
+/**
+ * Usage payload returned by `GET /api/credits/usage`.
+ * `org` is only populated for admins (org totals across all users).
+ */
 export interface CreditUsageResponse {
   individual: CreditScope;
   org: CreditScope | null;

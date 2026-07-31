@@ -1,8 +1,8 @@
 /**
  * New-question default (Viz Arch V2 §21 item 3): a fresh question scaffolds an
  * authoritative V2 `viz` envelope (kind:'table') so it renders + edits as V2 from the
- * first turn. The required `vizSettings` placeholder stays (schema-required; `viz` wins)
- * until item 5 drops the field.
+ * first turn. `vizSettings` is no longer scaffolded at all — it is an optional legacy
+ * rollback field, and a new question is born without it.
  */
 import { describe, it, expect } from 'vitest';
 import { getTemplateDefaults } from '../template-defaults';

@@ -523,7 +523,7 @@ describe('POST /api/admin/reset-tutorial', () => {
 
   it('never resets /org — preserves the company config / setup-wizard state', async () => {
     // The seed template contains /org/configs/config (setupWizard: pending). Reset
-    // must NOT touch it, or a QA/demo reset would wipe a company's real setup state.
+    // must NOT touch it, or a QA/demo reset would wipe a workspace's real setup state.
     const now = new Date().toISOString();
     const db = getModules().db;
     await db.exec(

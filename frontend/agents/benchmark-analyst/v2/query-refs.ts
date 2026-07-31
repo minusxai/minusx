@@ -10,8 +10,9 @@
 //    agent's natural mental model — "I labeled it last call, I can use it now"
 //    — and is the only way to chain SQL → Mongo across separate tool calls
 //    (handles don't apply to Mongo).
-// Both V1 ExploreDataset and V2 ExecuteQuery use the interpolation functions;
-// session labels are populated by ExecuteQuery on successful labeled queries.
+// V1 ExploreDataset, V1 ChainedExecuteQuery (db-tools.ts) and V2 ExecuteQuery
+// all use the interpolation functions; session labels are populated by the two
+// ExecuteQuery variants on successful labeled queries.
 
 // eslint-disable-next-line no-restricted-syntax -- server-only; benchmark process singleton
 const sessionLabels = new Map<string, Record<string, unknown>[]>();

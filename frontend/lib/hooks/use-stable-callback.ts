@@ -2,10 +2,10 @@ import { useEffect, useRef } from 'react'
 
 /**
  * Return a function whose identity is stable across the component's lifetime,
- * but which always invokes the latest `fn` passed in. Useful when the consumer
+ * but which invokes the latest COMMITTED `fn`. Useful when the consumer
  * uses the function inside a memoised child or an effect whose deps you can't
  * change — the wrapper's identity stays constant so the consumer doesn't
- * re-run, but the closure it points at is updated each render.
+ * re-run, but the closure it points at is refreshed after every commit.
  *
  * Don't use this when you actually want the consumer to re-react to a new
  * function (e.g. when the callback's identity is the signal for invalidation).
@@ -16,8 +16,8 @@ import { useEffect, useRef } from 'react'
 export function useStableCallback<T extends (...args: never[]) => unknown>(fn: T): T {
   const ref = useRef(fn)
   useEffect(() => { ref.current = fn })
-  // The wrapper is created once per component instance; the ref points at the
-  // latest fn each render.
+  // The wrapper is created once per component instance; the ref is repointed at
+  // the newest fn by the effect above, i.e. after each commit.
    
   const stable = useRef(((...args: Parameters<T>) => ref.current(...args)) as T)
   // eslint-disable-next-line react-hooks/refs

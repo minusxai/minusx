@@ -229,8 +229,9 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     // ── Injected styles: INSIDE the story root, as data-mx-*-tagged nodes (Story_Design_V2 §4) ──
     // The serialized <svg> subtree must be self-contained, so everything the story depends on lives
     // in-root, not in <head>. Prepend order (first → last): app-styles mirror, compiled Tailwind,
-    // floating css, platform fonts — the story's own <style> blocks come later in document order and
-    // win ties. Every save path strips these via INJECTED_STYLE_SELECTOR (lib/html/serialize-story).
+    // select-outline css, floating css, platform fonts — the story's own <style> blocks come later
+    // in document order and win ties. Every save path strips these via INJECTED_STYLE_SELECTOR
+    // (lib/html/serialize-story).
     const injectedStyles: HTMLStyleElement[] = [];
     const makeStyle = (attr: string, css: string) => {
       const el = doc.createElement('style');
@@ -494,11 +495,13 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     mirrorAppStyles(doc); // token rules switch on the html.dark/light class
   }, [colorMode]);
 
-  // Resolve the story's @import web-fonts into real @font-face rules in the TOP document.head, so the
-  // capture embeds the actual fonts. snapdom's embedCustomFonts reads the GLOBAL document for
-  // @font-face (snapdom #441), so fonts that live only in the iframe (or behind a cross-origin
-  // @import, snapdom #309) are ignored and the captured title falls back to a wider serif — which
-  // wraps an extra line and overlaps the next block. The live iframe keeps using its own @import.
+  // Resolve the story's @import web-fonts into real @font-face rules in the TOP document.head.
+  // This was originally how a capture got the real fonts: snapdom's embedCustomFonts read the
+  // GLOBAL document for @font-face, so iframe-only (or cross-origin @import) fonts were ignored
+  // and captured text fell back to a wider serif. snapdom is gone (Story_Design_V2 §4) and the
+  // serialization capture now resolves the same @imports off the IFRAME document itself
+  // (collectSurfaceCss). The live iframe uses its own @import either way; nothing reads the
+  // top-document `[data-mx-story-fonts]` tag — mirrorAppStyles explicitly skips it.
   useEffect(() => {
     const doc = docRef.current;
     if (!doc) return;

@@ -7,8 +7,10 @@
  *  2. Hand-written SQL variants that MUST detect: aliased tables, aliased
  *     joins, positional GROUP BY, reordered select lists, filter shapes.
  *  3. Hand-written SQL that MUST NOT detect (vocabulary misses, structural
- *     misses, and cases only the recompile gate catches).
- *  4. Dialect matrix: compile → irToSql(dialect) → parse(dialect) → detect
+ *     misses).
+ *  4. Reliability gate: SQL whose vocabulary matches but whose shape the
+ *     compiler would not reproduce — only the recompile-and-compare catches it.
+ *  5. Dialect matrix: compile → irToSql(dialect) → parse(dialect) → detect
  *     must return the identical spec across every runtime dialect
  *     (connectionTypeToDialect: duckdb, postgres, bigquery, presto, sqlite,
  *     clickhouse) — this pins parser/generator symmetry per dialect.

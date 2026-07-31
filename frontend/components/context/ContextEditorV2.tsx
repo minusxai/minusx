@@ -56,7 +56,7 @@ interface ContextEditorV2Props {
    * container — rendered inline per model/metric row in the Databases tab's
    * per-connection Semantic Models sections.
    * The banner keeps showing everything: the inline rows are only visible on
-   * the Semantic tab, and a save can fail while the author is on another tab.
+   * the Databases tab, and a save can fail while the author is on another tab.
    */
   semanticIssues?: string[];
   editMode: boolean;

@@ -4,13 +4,9 @@
  * DashboardContainer V2 - Phase 2 Implementation
  * Smart component using Core Patterns with useFile hook and filesSlice
  *
- * Improvements over DashboardContainer:
- * - Uses useFile hook for state management
- * - Uses edit() for tracking changes
- * - Uses save() from hook (no manual fetch calls)
- * - Uses selectIsDirty for dirty detection
- * - Uses reload() for canceling changes
- * - Simplified, consistent state management
+ * - useFile + selectMergedContent for state, editFile() for staging changes
+ * - selectIsDirty for dirty detection
+ * - Save/cancel are not handled here: FileHeader drives them via FileView
  *
  * Owns all Redux access for the dashboard visual surface (Container/View convention,
  * MinusX.md "Component patterns") — DashboardView is pure presentation and receives

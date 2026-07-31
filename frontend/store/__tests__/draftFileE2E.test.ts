@@ -4,11 +4,13 @@
  * Specification for the draft-file system replacing virtual (negative) IDs:
  *
  *   1. DocumentDB.create() stores files with draft: true by default.
- *   2. listAll() / getFiles() / getByPath() filter out draft files.
+ *   2. listAll() (and getFiles(), which builds on it) filter out draft files.
+ *      getByPath() does NOT filter — it orders published-first so a draft never
+ *      shadows the published file at the same path.
  *   3. getById() returns draft files — they are directly accessible.
  *   4. DocumentDB.update() always sets draft: false (first real save publishes the file).
  *   5. DocumentDB.batchSave(files, dryRun: true) wraps in a transaction that always
- *      rolls back — returns per-file success/error without touching the DB.
+ *      rolls back — reports the first failing file's id + error without touching the DB.
  *   6. createDraftFile() replaces createVirtualFile(): calls the server, gets a real
  *      positive ID with draft: true, stores the file in Redux with that ID.
  *   7. dryRunSave() collects all dirty Redux files and batch-saves them with dryRun:true.
@@ -35,7 +37,7 @@ import { getModules } from '@/lib/modules/registry';
 import { storyCssCompileVersion } from '@/lib/data/story/story-css.server';
 
 // ---------------------------------------------------------------------------
-// Jest module mocks — hoisted to top of file by Jest
+// Vitest module mocks — vi.mock is hoisted to the top of the file
 // ---------------------------------------------------------------------------
 
 let testStore: any;

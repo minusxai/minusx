@@ -4,8 +4,11 @@
  * every consumer is in-process TypeScript.
  *
  * Exports:
- *   - atlasSchema      — full discriminated `oneOf` schema; consumed by Ajv in
- *                        `content-validators.ts`.
+ *   - atlasSchema          — full discriminated `oneOf` schema; consumed by Ajv in
+ *                            `content-validators.ts` and for `$ref` resolution in
+ *                            `lib/data/story/file-markup.ts`.
+ *   - contentSchemaText    — one file type's viz-collapsed content schema, pretty-printed.
+ *   - SCHEMA_TEMPLATE_VARS — those schemas keyed `schema_<type>` for prompt injection.
  *
  * Built once at module load — Ajv's `compile()` results are cached separately.
  */

@@ -39,7 +39,7 @@ interface ContextContainerV2Props {
 /**
  * Smart component for context pages - With Version Management
  * Uses useFile hook for state management
- * Delegates rendering and domain logic to ContextEditor
+ * Delegates rendering and domain logic to ContextEditorV2
  */
 export default function ContextContainerV2({
   fileId,
@@ -108,7 +108,7 @@ export default function ContextContainerV2({
     // Mark this file as refreshed
     hasBackgroundRefreshed.current[fileId] = true;
 
-    // Silent background refresh (skipLoading = true)
+    // Silent background refresh (silent: true — no loading state)
     if (typeof fileId === 'number') {
       reloadFile({ fileId, silent: true });
     }

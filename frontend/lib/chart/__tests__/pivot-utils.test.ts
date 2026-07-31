@@ -4,7 +4,7 @@ import type { PivotConfig } from '@/lib/validation/atlas-schemas';
 
 // A pivot question saved with a malformed pivotConfig (missing the `columns` array)
 // crashed prod: `aggregatePivotData` did `config.columns.map(...)` on undefined
-// → "Cannot read properties of undefined (reading 'map')" (pivot-utils.ts:57).
+// → "Cannot read properties of undefined (reading 'map')" (pivot-utils.ts).
 // The schema requires rows/columns/values arrays, but legacy / LLM-generated content
 // can omit them, so the aggregator must tolerate missing array fields.
 

@@ -14,7 +14,7 @@ import type { Mock } from 'vitest';
  *                            → getNodeConnector (mocked) ← assert final SQL here
  */
 
-// ---- Jest module mocks (hoisted before imports) ----------------------------
+// ---- vi.mock module mocks (hoisted before imports) -------------------------
 
 let testStore: any;
 vi.mock('@/store/store', () => ({

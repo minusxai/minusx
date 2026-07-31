@@ -21,7 +21,7 @@ export interface User {
   phone?: string;            // optional phone number (used for Phone 2FA delivery)
   home_folder?: string;      // relative path to home folder (e.g., "sales/team-a" or "" for mode root) - admins always get "" (mode-scoped)
   password_hash?: string;    // optional bcrypt hashed password
-  role: UserRole;            // user role: admin (full access), editor (same as non-admin initially), viewer (same as non-admin initially) - NOT NULL in database
+  role: UserRole;            // user role: admin (full access), editor (create/edit most file types), viewer (read-only apart from conversations) — per-type grants live in rules.json; NOT NULL in database
 }
 
 export interface UsersContent extends BaseFileContent {

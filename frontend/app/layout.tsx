@@ -147,7 +147,8 @@ export default async function RootLayout({
 
   if (initialData.user && initialData.config.setupWizard?.status !== 'complete') {
     const reqPath = (await headers()).get('x-request-path') ?? '';
-    // Redirect to onboarding wizard unless already there (or hitting an API/asset route)
+    // Redirect to the onboarding wizard only from the app's entry paths (allow-list, so
+    // the wizard itself, API and asset routes are never redirected)
     const shouldRedirect = reqPath === '/' || reqPath === '/p' || reqPath === '/p/org' || reqPath.startsWith('/explore');
     if (shouldRedirect) {
       redirect('/hello-world');

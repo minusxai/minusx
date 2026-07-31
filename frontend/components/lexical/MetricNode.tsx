@@ -290,7 +290,7 @@ export class MetricNode extends DecoratorNode<React.ReactElement> {
   /**
    * INLINE, like a mention chip — the metric flows inside a sentence and text
    * can be written around it. Safe for persistence because the text-match
-   * METRIC_INLINE transformer serializes inline nodes (a block-form-only
+   * METRIC transformer serializes inline nodes (a block-form-only
    * transformer would drop an inline node on export — the historical
    * vanishing-metric bug).
    */

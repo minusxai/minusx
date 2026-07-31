@@ -76,7 +76,8 @@ async function handleSlackEvent(
     }
   }
 
-  // If we have no signing secret at all, silently accept remaining events (prevents blocking setup)
+  // No signing secret at all: the event is unverifiable, so drop it without processing —
+  // but ACK with 200 so an in-progress setup isn't hammered by Slack retries.
   if (!signingSecret) {
     console.log('[Slack/events] dropping: no signing secret configured');
     return NextResponse.json({ ok: true });

@@ -26,7 +26,7 @@ export interface DataVersionVerdict {
 export async function checkDataVersion(): Promise<DataVersionVerdict> {
   const version = await getDataVersion();
 
-  // 0 means "no configs row yet" — a workspace mid-provision, not a stale one.
+  // 0 means "no data_version row yet" — a workspace mid-provision, not a stale one.
   if (version === 0) return { ok: true, version };
 
   if (version < MINIMUM_SUPPORTED_DATA_VERSION) {

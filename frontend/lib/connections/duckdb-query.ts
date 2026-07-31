@@ -4,6 +4,19 @@ import type { DuckDBConnection } from '@duckdb/node-api';
 type DuckDBRunResult = Awaited<ReturnType<DuckDBConnection['run']>>;
 
 /**
+ * Normalize a DuckDB interrupt (timeout) rejection into a clear, actionable
+ * error. A non-interrupt error is returned unchanged. Shared by the materialized
+ * ({@link runDuckDbWithTimeout}) and streaming (DuckDbConnector.queryStream) paths.
+ */
+export function normalizeDuckDbTimeout(err: unknown, timeoutMs?: number): Error {
+  const e = err instanceof Error ? err : new Error(String(err));
+  if (timeoutMs && timeoutMs > 0 && /interrupt/i.test(e.message)) {
+    return new Error(`Query exceeded the ${Math.round(timeoutMs / 1000)}s timeout and was cancelled.`);
+  }
+  return e;
+}
+
+/**
  * Run a query on a DuckDB connection with a best-effort statement timeout.
  *
  * DuckDB has no `statement_timeout` GUC, so we arm a timer that calls
@@ -21,20 +34,6 @@ type DuckDBRunResult = Awaited<ReturnType<DuckDBConnection['run']>>;
  * the benchmark `BenchmarkSharedDuckdb` — one interrupt implementation,
  * three call sites.
  */
-
-/**
- * Normalize a DuckDB interrupt (timeout) rejection into a clear, actionable
- * error. A non-interrupt error is returned unchanged. Shared by the materialized
- * ({@link runDuckDbWithTimeout}) and streaming (DuckDbConnector.queryStream) paths.
- */
-export function normalizeDuckDbTimeout(err: unknown, timeoutMs?: number): Error {
-  const e = err instanceof Error ? err : new Error(String(err));
-  if (timeoutMs && timeoutMs > 0 && /interrupt/i.test(e.message)) {
-    return new Error(`Query exceeded the ${Math.round(timeoutMs / 1000)}s timeout and was cancelled.`);
-  }
-  return e;
-}
-
 export async function runDuckDbWithTimeout(
   conn: DuckDBConnection,
   sql: string,

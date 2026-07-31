@@ -1,4 +1,5 @@
-// GET /api/credits/usage — current-month credit usage. Individual scope for the
+// GET /api/credits/usage — usage over the policy's billing (weekly) and reset
+// (daily) windows. Individual scope for the
 // signed-in user; org totals additionally returned for admins. Aggregation logic
 // is covered in lib/analytics/__tests__/credit-usage.server.test.ts.
 

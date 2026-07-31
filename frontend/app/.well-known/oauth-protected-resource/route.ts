@@ -1,5 +1,5 @@
 /**
- * OAuth 2.0 Protected Resource Metadata (RFC 9470)
+ * OAuth 2.0 Protected Resource Metadata (RFC 9728)
  *
  * MCP clients fetch this first to discover which authorization server
  * protects the MCP endpoint. Points to our authorization server metadata.

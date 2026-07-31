@@ -67,7 +67,7 @@ async function putFileToS3(file: File, uploadUrl: string): Promise<void> {
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
- * Upload CSV/Parquet files to S3 and register them with the backend.
+ * Upload CSV/Parquet/XLSX files to S3 and register them with the backend.
  *
  * Each file can have its own schema name. The backend reads column + row
  * metadata from S3 at registration time and returns the full config.

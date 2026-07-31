@@ -5,7 +5,8 @@
  * (`StepContext.handleAgentDescribe`); `chatListener` has its own equivalent
  * post for stream/transport errors.
  *
- * Idempotent + best-effort: any failure is swallowed (we never recurse).
+ * Best-effort: any failure is swallowed (we never recurse). There is no dedup —
+ * each call posts, unlike capture-error.ts.
  */
 
 import { getStore } from '@/store/store';

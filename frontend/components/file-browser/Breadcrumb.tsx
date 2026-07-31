@@ -27,7 +27,8 @@ interface BreadcrumbProps {
   bannerLabel?: string;  // Optional label shown in the banner
 }
 
-// Sort order matching FilesList sections: knowledge base → dashboards → folders → questions → other
+// Sort order derived from FilesList's sections: knowledge base → dashboards → folders →
+// questions → other. Stories, which FilesList breaks out, sort into "other" here.
 const TYPE_ORDER: Record<string, number> = { context: 0, dashboard: 1, folder: 2, question: 3 };
 const TYPE_LABELS: Record<string, string> = { context: 'Knowledge Base', dashboard: 'Dashboards', folder: 'Folders', question: 'Questions' };
 

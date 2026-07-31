@@ -33,7 +33,7 @@ export const STORY_THEME_NAMES = ['modernist', 'classical', 'nocturne', 'organic
 export type StoryThemeName = (typeof STORY_THEME_NAMES)[number];
 
 /**
- * The four story templates — the document's structural GENRE (beat structure + layout grammar),
+ * The three story templates — the document's structural GENRE (beat structure + layout grammar),
  * orthogonal to the design theme. Same pattern as STORY_THEME_NAMES: the enum lives here; the
  * registry (`lib/data/story/story-templates.ts`) types its entries against it.
  */
@@ -683,8 +683,8 @@ export type NotebookContent = Static<typeof NotebookContent>;
 // ============================================================================
 // This is NOT the stored context shape (which is version-based — see ContextContent
 // in lib/types.ts, with versions[]/published). It is the KNOWLEDGE LAYER the agent
-// authors: the live (published) version's docs/metrics/annotations flattened to the top
-// level, plus the content-level evals/skills. The flatten (on read) and fold (on edit,
+// authors: the live (published) version's docs/metrics/annotations/semanticModels flattened
+// to the top level, plus the content-level evals/skills. The flatten (on read) and fold (on edit,
 // back into versions[live]) live in lib/context/context-agent-view.ts.
 //
 // Schema whitelisting (which tables/columns are exposed) is deliberately ABSENT: it's a

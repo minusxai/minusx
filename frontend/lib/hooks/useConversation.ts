@@ -33,7 +33,8 @@ export function useConversation(conversationId?: number) {
   // Conversations V2 (MinusX.md "Chat serving"): non-dev loads get the slim display view; dev mode
   // loads the verbatim log (per-turn appState for the inspector, full tool I/O). devMode is read
   // from the LIVE store at fetch time — not the render-time selector value — because DataLoader
-  // restores it from localStorage in a LAYOUT effect, which fires AFTER this page-level effect:
+  // (components/app-shell) restores it from localStorage in its own mount effect, which can fire
+  // AFTER this page-level effect:
   // a dev-mode cold load would otherwise race and fetch slim. A completion re-check upgrades a
   // load that raced anyway (the flag flipped while the slim fetch was in flight); flips after
   // completion are covered by the chatListener devMode listener.

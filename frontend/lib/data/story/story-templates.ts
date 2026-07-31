@@ -2,7 +2,7 @@
  * Story templates — the structural-genre registry next to the design themes (story-themes.ts).
  *
  * A template is the document's GENRE: its beat structure and layout grammar (editorial long-read,
- * slide deck, executive brief, scrollytelling) — orthogonal to the design theme, which is purely
+ * slide deck, scrollytelling) — orthogonal to the design theme, which is purely
  * a token set. Templates carry NO runtime CSS: `content.template` is metadata, and the `guidance`
  * mini-skill returned with the Clarify `type: 'template'` pick drives what the agent authors.
  *

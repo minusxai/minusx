@@ -52,7 +52,7 @@ export type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 
 // ============================================================================
 // Domain modules under lib/types/ — this file is a thin barrel that
-// re-exports everything so the ~385 existing `@/lib/types` imports across the
+// re-exports everything so the ~535 existing `@/lib/types` imports across the
 // codebase never need to change. Edit the domain module, not here.
 // ============================================================================
 

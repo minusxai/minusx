@@ -5,9 +5,9 @@
  *
  * This provider:
  * - Listens for click events on internal links
- * - Checks if the CURRENT page's file has unsaved changes
+ * - Checks whether ANY file has unsaved changes (not just the current page's), or an agent is running
  * - Shows a confirmation modal before allowing navigation
- * - Preserves URL parameters (as_user, mode) when navigating
+ * - Preserves URL parameters (as_user, mode, view) when navigating
  */
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode, useMemo } from 'react';
@@ -172,7 +172,7 @@ export function NavigationGuardProvider({ children }: NavigationGuardProviderPro
     setIsPublishModalOpen(false);
     // Check dirty files at close time — if all saved, proceed with navigation
     // We read dirtyFiles from the closure, but the PublishModal auto-closes when
-    // all files are saved, so we do a fresh check via a microtask
+    // all files are saved, so we do a fresh check on the next tick
     setTimeout(() => {
       const stillDirty = selectDirtyFiles(getStore().getState());
       if (stillDirty.length === 0 && pendingHref) {

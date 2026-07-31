@@ -1,5 +1,5 @@
-// Resolve a story's @import web-fonts into concrete @font-face CSS so the capture (snapdom, which
-// reads the GLOBAL document and ignores @import — issues #441/#309) can embed the real fonts.
+// Resolve a story's @import web-fonts into concrete @font-face CSS so the serialization capture
+// (which embeds fonts by scanning @font-face rules and never follows @import) uses the real fonts.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { collectStoryFontImports, resolveImportFontCss, clearStoryFontCache } from '../resolve-story-fonts';
 

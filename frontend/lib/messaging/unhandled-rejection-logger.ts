@@ -1,9 +1,10 @@
 /**
  * Logs orchestrator-tagged unhandled rejections to their conversation's
- * error stream (kind='error' rows in `messages`, v3). Wire from `instrumentation.ts`'s
- * `process.on('unhandledRejection')` handler — and tag rejections in the
- * orchestrator with `conversationId` so this function can route them to the
- * right conversation.
+ * error stream (kind='error' rows in `messages`, v3). Wired from the
+ * `process.on('unhandledRejection')` handler in
+ * `lib/instrumentation/register-modules.ts`. Routing depends on the orchestrator
+ * tagging rejections with `conversationId`; untagged ones are ignored here and
+ * left to Sentry.
  */
 import 'server-only';
 import { appendError } from '@/lib/data/conversations.server';

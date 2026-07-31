@@ -33,7 +33,6 @@
  */
 import type { BrowserContext } from '@playwright/test';
 
-/** Appended to the capture-matrix bundle entry: the real B2 driver modules, on `window.__b2`. */
 // ZERO stylesheets in the page — self-containment is the premise (see module doc).
 const b2Page = (kind: string, width = 940) => `<!doctype html>
 <html><head><meta charset="utf-8"></head>

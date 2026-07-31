@@ -23,7 +23,7 @@ export const CHAT_TOOLS: ReadonlySet<string> = immutableSet([
   ToolNames.SLACK_AGENT,
 ]);
 
-// Labels used for file-mutating tool nodes (create/edit/read) — shared between
+// Labels used for file tool nodes (create/edit/read) — shared between
 // the parent's chart-content memos and the detail-pane's chart-item extraction.
 export const FILE_LABELS: ReadonlySet<string> = new Set(['file create', 'file edit', 'file read']);
 

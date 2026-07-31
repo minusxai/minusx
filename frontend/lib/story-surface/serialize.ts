@@ -3,15 +3,21 @@
  * browser as an image, and draw it. No snapdom — nothing here re-derives styles or re-implements
  * layout, so what renders is what the browser already rendered.
  *
- * Three things must be fixed up before an `<img>` can render the serialized SVG faithfully, because
- * it renders in an ISOLATED context (no parent document, no network for subresources):
+ * Several things must be fixed up before an `<img>` can render the serialized SVG faithfully, because
+ * it renders in an ISOLATED context (no parent document, no network for subresources, no
+ * <html>/<body> around the root):
  *  1. STYLES — rules in the iframe's <head> (mirrored app styles, compiled Tailwind) aren't part of
  *     the <svg> subtree, so they're cloned INTO the serialized copy.
  *  2. FONTS — `@import` web-fonts and `@font-face` src URLs don't load in an <img>-rendered SVG, so
  *     they're inlined as data: URLs. Without this, text falls back to a system serif and rewraps.
- *  3. SCROLL — scroll position is DOM *state*, not markup: XMLSerializer drops `scrollLeft`, so a
+ *  3. IMAGES — same blocking applies to `<img src>` inside the story, so those become data: URIs too.
+ *  4. SCROLL — scroll position is DOM *state*, not markup: XMLSerializer drops `scrollLeft`, so a
  *     horizontally-scrolled table would capture reset to column 1. Offsets are translated into a
  *     transform on the clone.
+ *  5. FORM STATE — `value`/`checked`/`selected` are properties, not attributes, so they're stamped
+ *     onto the clone as markup.
+ *  6. INHERITED ENVIRONMENT — the root's computed typography and the color-mode class are baked onto
+ *     the clone root, plus an explicit intrinsic width/height so the raster size is deterministic.
  */
 import { STORY_SVG_ATTR } from '@/lib/story-surface';
 import { collectStoryFontImports, resolveImportFontCss } from '@/lib/html/resolve-story-fonts';
@@ -194,7 +200,8 @@ export function findStorySvg(element: HTMLElement): SVGSVGElement | null {
 
 /**
  * Serialize the live story SVG into a standalone, self-contained SVG string: styles cloned in,
- * fonts inlined, scroll offsets baked. The result renders identically through an `<img>`.
+ * fonts and images inlined, scroll offsets / form state / inherited typography baked. The result
+ * renders identically through an `<img>`.
  */
 export async function serializeStorySvg(svg: SVGSVGElement): Promise<string> {
   const doc = svg.ownerDocument;

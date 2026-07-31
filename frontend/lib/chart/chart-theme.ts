@@ -2,7 +2,7 @@
 /**
  * MinusX BI chart theme constants — palettes, fonts, light/dark tokens. Engine-free
  * (Renderer_v2 Phase 2 deleted ECharts): consumed by the Vega theme (lib/viz/theme.ts),
- * color pickers, and the geo color scale.
+ * the viz encoding/settings mappers, the color pickers, and the story CSS builder.
  */
 
 // Reads the CSS variable so charts honor the same font override as the rest of the app

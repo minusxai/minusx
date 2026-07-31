@@ -92,9 +92,10 @@ export interface DeterministicContext {
 export type DeterministicScorer<TContent = unknown> = (content: TContent, ctx?: DeterministicContext) => RubricFinding[];
 
 /**
- * Lean, agent-facing projection of a report (auto-injected into what the LLM reads). Drops the
- * internal `weight` / `assessed` bookkeeping and omits categories the source didn't score —
- * just the overall, grade, and each scored category's findings.
+ * Lean, agent-facing projection of a report (what EditFile/CreateFile/ReviewFile and
+ * CheckFileHealth return to the agent). Drops the internal `weight` / `assessed` bookkeeping and
+ * omits categories the source didn't score — just the overall, grade, and each scored category's
+ * findings.
  */
 interface AgentRubricCategory {
   category: RubricCategory;

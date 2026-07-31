@@ -92,7 +92,7 @@ export default function CreateFileDisplay({ toolCallTuple, showThinking }: Displ
   const { file_type, name } = args;
 
   const { success } = contentToDetails(toolMessage);
-  const id = undefined;  // CreateFile doesn't return an id in its result
+  const id = undefined;  // this compact row never links out (the id lives at content.state.fileState.id)
 
   if (!success) {
     return showThinking ? (

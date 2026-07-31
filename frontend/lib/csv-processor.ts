@@ -86,10 +86,7 @@ function makeS3(): S3Client {
 
 // ─── xlsx expansion ───────────────────────────────────────────────────────────
 
-/**
- * Download an xlsx from S3, expand each non-empty sheet to a CSV, upload back to S3.
- * Returns one IncomingFile record per sheet.
- */
+/** Read a stored object's bytes (local filesystem or S3, per the configured store). */
 async function getStoredFileBytes(key: string): Promise<Buffer> {
   const physical = await resolveObjectKey(key);
   if (isLocalObjectStore()) {
@@ -102,6 +99,10 @@ async function getStoredFileBytes(key: string): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
+/**
+ * Download an xlsx from the object store, expand each non-empty sheet to Parquet, and store
+ * the result. Returns one IncomingFile record per sheet.
+ */
 async function expandXlsxFromS3(
   s3Key: string,
   connectionName: string,
@@ -114,10 +115,11 @@ async function expandXlsxFromS3(
 }
 
 /**
- * Parse xlsx bytes, convert each non-empty sheet to CSV, upload to S3.
+ * Parse xlsx bytes; each non-empty sheet goes CSV → Parquet and only the Parquet is stored.
  * Shared by both CSV uploads (xlsx file already in S3) and Google Sheets import.
  * createdKeys is a caller-owned array; each successfully stored parquet key is pushed
- * onto it so the caller can clean up on failure.
+ * onto it so the caller can clean up on failure. It defaults to a throwaway array, so a
+ * caller that does not pass one gets no cleanup tracking.
  */
 async function xlsxBytesToS3Csvs(
   buffer: Buffer,
@@ -173,7 +175,11 @@ async function xlsxBytesToS3Csvs(
 
 // ─── S3 delete ────────────────────────────────────────────────────────────────
 
-/** Delete all stored files under a connection's prefix. Returns true if any were deleted. */
+/**
+ * Delete all stored files under a connection's prefix. On S3, returns true only if there was
+ * something to delete; on local storage, true whenever the recursive remove did not throw
+ * (an absent directory is a success there, so true does not imply files existed).
+ */
 export async function deleteConnectionFiles(
   mode: string,
   connectionName: string,
@@ -322,9 +328,11 @@ async function convertCsvToParquet(conn: DuckConn, csvKey: string): Promise<stri
  * - Reads row count + column metadata for each file via DuckDB
  * - Returns enriched file records ready to store in the connection config
  *
- * Atomic guarantee: either ALL files are fully written and DuckDB-validated and
- * the full results list is returned, OR every file created during this call is
- * deleted before throwing. No orphaned files are left on disk/S3.
+ * Rollback on failure: either ALL files are fully written and DuckDB-validated and the
+ * full results list is returned, OR every key TRACKED during this call is deleted before
+ * throwing. Caveat: the per-sheet parquets written while expanding an xlsx are not tracked
+ * (expandXlsxFromS3 does not forward the array it is handed to xlsxBytesToS3Csvs), so a
+ * failure later in the batch leaves those orphaned.
  */
 export async function processFilesFromS3(
   mode: string,
@@ -345,7 +353,7 @@ export async function processFilesFromS3(
         toCleanup.push(file.s3_key); // original xlsx uploaded by client
         const sheets = await expandXlsxFromS3(
           file.s3_key, connectionName, mode, file.schema_name ?? 'public',
-          toCleanup, // xlsxBytesToS3Csvs pushes each sheet parquet key here after a successful put
+          toCleanup, // NOT propagated: expandXlsxFromS3 drops it, so sheet parquet keys go untracked
         );
         flatFiles.push(...sheets);
       } else {

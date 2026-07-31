@@ -73,8 +73,9 @@ export class ConflictError extends Error {
  * Server-side implementation of files data layer
  * Uses direct database access with permission checks
  *
- * NOTE: Token scope validation is handled at the route level (/t/[token]/page.tsx)
- * and in getEffectiveUserFromToken()
+ * NOTE: Public-share scope is validated outside this layer — at the share route
+ * (app/l/[shareId]/page.tsx) and by verifyGuestToken/guestToEffectiveUser in
+ * lib/auth/guest-session.ts, which pin a guest to the shared file's folder.
  */
 class FilesDataLayerServer implements IFilesDataLayer {
   /**
@@ -584,7 +585,8 @@ class FilesDataLayerServer implements IFilesDataLayer {
         : connectionContentWithoutSchema) as BaseFileContent;
     }
 
-    // For contexts: strip fullSchema/fullDocs (server-computed) and normalize version format.
+    // For contexts: strip the server-computed fields (fullSchema, parentSchema, fullDocs,
+    // fullSkills, fullAgents) and normalize version format.
     // Older clients may send version.databases (legacy) instead of version.whitelist (new).
     // Normalize on every save so the DB always uses the canonical format.
     if (existingFile.type === 'context') {
@@ -792,7 +794,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
         const folderPath = options.path || resolvePath(user.mode, user.home_folder || '');
         const contextPath = `${folderPath}/context`;
 
-        // Compute fullSchema, parentSchema and fullDocs using the new whitelist loader
+        // Compute fullSchema, parentSchema, fullDocs and fullSkills via the whitelist loader
         // New contexts default to whitelist:'*' (expose all available schemas)
         const { fullSchema, parentSchema, fullDocs, fullSkills } = await computeSchemaFromWhitelist(
           { whitelist: '*' },

@@ -1,9 +1,10 @@
 /**
  * Bearer auth wrapper for the public `/s/<code>/*` remote-session endpoints (modeled on
  * `withCronAuth`): the capability code is the ONLY credential — no session, no cookie. On success
- * the handler receives the conversation and the OWNER's EffectiveUser. All auth failures are a
- * uniform 404 (a token guesser learns nothing); the skill-doc page route does its own resolution
- * to render a friendlier "session ended" page.
+ * the handler receives the conversation and the OWNER's EffectiveUser. Auth failures that could be
+ * a guess are a uniform 404 (a token guesser learns nothing); a code that PROVED ownership but is
+ * dead gets an honest 410 "session_ended". The skill-doc page route does its own resolution to
+ * render a friendlier "session ended" page.
  */
 import 'server-only';
 import { NextRequest, NextResponse } from 'next/server';

@@ -1,6 +1,7 @@
 /**
  * HTML attribute-value escaping, shared by the story-body codecs (`story-params`,
- * `story-question`). Stored story HTML keeps embeds/params as `<div data-*>` placeholders;
+ * `story-question`, `story-number`, `story-components`, `story-v2`). Stored story HTML
+ * keeps embeds/params as `<div data-*>` placeholders;
  * any `"`/`<`/`>`/`&` in an attribute value must be entity-escaped so the HTML stays
  * well-formed and the `[^"]*` placeholder regexes can't be broken out of.
  */

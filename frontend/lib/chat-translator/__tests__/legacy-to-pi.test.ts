@@ -1,10 +1,10 @@
-// legacyLogToPi: reverse translator that seeds a v2 (pi) conversation log from a
-// v1 (legacy) log, so an old chat can be forked to v2 and continued.
+// legacyLogToPi: reverse translator that seeds a pi conversation log from a
+// v1 (legacy) task log — used by the v3 backfill and the MCP session logger.
 //
 // Faithful: user turns → root invocation; TalkToUser → assistant text (+
 // citations / web_search_tool_result); tool tasks → assistant tool_use + paired
-// tool_result (DISPLAY only — projectRootThreadHistory never sends them to the
-// LLM). Thinking blocks are kept WITHOUT signatures (re-sending a v1 signature
+// tool_result (which projectRootThreadHistory replays into the next turn's LLM
+// history). Thinking blocks are kept WITHOUT signatures (re-sending a v1 signature
 // in a v2 native call would be rejected).
 
 import { describe, it, expect } from 'vitest';
@@ -49,7 +49,7 @@ describe('legacyLogToPi', () => {
     const asstTool = pi.find((e: any) => e.role === 'assistant' && e.content?.[0]?.type === 'toolCall') as any;
     expect(asstTool.content[0]).toMatchObject({ type: 'toolCall', id: 't1', name: 'ExecuteQuery', arguments: { query: 'SELECT count(*)' } });
     expect(asstTool.parent_id).toBe('r1');
-    expect(asstTool.stopReason).toBe('toolUse'); // not 'stop' → excluded from LLM history
+    expect(asstTool.stopReason).toBe('toolUse'); // an intermediate turn, not the final reply
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const toolRes = pi.find((e: any) => e.role === 'toolResult') as any;
     expect(toolRes).toMatchObject({ toolCallId: 't1', toolName: 'ExecuteQuery', isError: false, parent_id: 'r1' });

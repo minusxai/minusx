@@ -1219,6 +1219,15 @@ document keeps a self-describing `@SECRETS/…` reference. `secret-refs.ts` and 
 are deliberately **not** `server-only` (pure string/object logic so the client can render "•••• (saved)");
 `*.server.ts` files hold everything that can read a value.
 
+A `ConfigSecretSpec`'s `arrayPath` targets either an array of objects (`bots`, `llm.providers`) or a
+**single** object (`gateway`), and only ONE of the two walks handles the single case.
+`extractConfigSecrets` normalises it to a one-element list; `redactRawConfigSecrets` and
+`restoreRedactedConfigSecrets` go through `mapConfigSecrets` → `secretArrayAt`, which returns `null`
+for anything that is not an array and therefore skips single-object specs entirely. Extraction
+normally makes that moot — the value is a `@SECRETS/…` ref before anything reads it — but a *raw*
+`gateway.orgSecret` is neither masked on a client-facing read nor restored after a placeholder
+round-trip. Adding a single-object spec means fixing `secretArrayAt`, not just the spec list.
+
 ### Architecture
 
 ```

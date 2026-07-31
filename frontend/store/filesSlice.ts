@@ -326,7 +326,7 @@ const filesSlice = createSlice({
 
     /**
      * Create a loading placeholder for a file being fetched by path.
-     * Uses a deterministic namespace-2 virtual ID derived from the path.
+     * Uses a deterministic negative virtual ID derived from the path (pathToVirtualId).
      * No-ops if a real (positive-ID) file is already indexed at that path.
      */
     setFilePlaceholder(state, action: PayloadAction<string>) {

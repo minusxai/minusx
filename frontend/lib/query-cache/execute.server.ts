@@ -80,8 +80,8 @@ const HEARTBEAT_MS = Math.max(5_000, Math.floor(QUERY_CACHE_LEASE_MS / 3));
 
 function cacheKey(opts: CachedExec): string {
   const base = `${opts.mode}:${getQueryHash(opts.query, opts.params, opts.connectionName)}`;
-  // Fold in the facets getQueryHash omits but that change the executed SQL/result. Omit the suffix
-  // entirely when neither is present so existing keys are unchanged (back-compat, no needless
+  // Fold in the facet getQueryHash omits but that changes the executed SQL/result. Omit the suffix
+  // entirely when it is absent so existing keys are unchanged (back-compat, no needless
   // cold cache for the common no-types case). parameterTypes canonicalized (key-sorted)
   // so map order doesn't fork the key.
   const hasTypes = opts.parameterTypes && Object.keys(opts.parameterTypes).length > 0;

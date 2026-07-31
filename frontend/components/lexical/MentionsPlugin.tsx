@@ -285,7 +285,7 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas, availableSkil
       COMMAND_PRIORITY_CRITICAL
     );
 
-    // ArrowRight enters the table's drill-down submenu (metrics + columns).
+    // ArrowRight enters the table's column drill-down submenu.
     const removeArrowRight = editor.registerCommand(
       KEY_ARROW_RIGHT_COMMAND,
       (event) => {

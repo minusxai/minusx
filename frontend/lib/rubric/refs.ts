@@ -20,11 +20,11 @@ export function referencedQuestionIds(fileType: string, content: unknown): numbe
 
 /**
  * Assemble the `DeterministicContext` (referenced-question viz types) the SAME way for every
- * scoring path — client badge, screenshot, CheckFileHealth tool, rubric route, and the auto-inject
- * file-read/appstate path. The id set is ALWAYS `referencedQuestionIds`; only the `vizTypeOf`
- * lookup source differs (Redux `selectFile` on the client, `loadFile` on the server, the resolved
- * `refs` map for auto-inject). Keeping the derivation here is what guarantees the deterministic
- * report can't differ between paths.
+ * scoring path — the client badge, the EditFile/CreateFile/ReviewFile review path, the
+ * CheckFileHealth tool, and the rubric route. The id set is ALWAYS `referencedQuestionIds`; only
+ * the `vizTypeOf` lookup source differs (Redux `selectFile` on the client, `loadFile` on the
+ * server). Keeping the derivation here is what guarantees the deterministic report can't differ
+ * between paths.
  */
 export function buildVizTypeCtx(
   fileType: string,

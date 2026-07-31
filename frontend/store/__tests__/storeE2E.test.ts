@@ -1,11 +1,12 @@
 /**
  * Store E2E Tests — merged from testRunnerE2E and jsonAgentTests
  *
- * Suite 1 (testRunnerE2E): Test-runner comparison utilities + query/LLM test execution
- * Suite 2 (jsonAgentTests): JSON-driven agent tests against real LLM (skipped unless ANTHROPIC_API_KEY set)
+ * Suite 1: comparison utilities (compareValues / extractCellValue / resolveRowIndex).
+ * Suite 2: query + LLM test execution through runEval — runQuery is mocked, and the
+ *          in-process eval agent is driven by the faux LLM provider (no real LLM).
  */
 
-// Must be first — Jest hoists these above all imports
+// Must be first — vi.mock is hoisted above all imports
 
 const { mockRunQuery } = vi.hoisted(() => ({ mockRunQuery: vi.fn() }));
 vi.mock('@/lib/connections/run-query', () => ({

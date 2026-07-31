@@ -1,7 +1,7 @@
 // normalizeAttachments converts the client's attachment payload into
-// AgentAttachment[] for the LLM. v2 sends images inline as base64 data: URLs
-// (pi has no remote-URL image support), so only those are parsed; remote URLs
-// are ignored (never fetched — no SSRF surface). Text passes through.
+// AgentAttachment[] for the LLM. v2 sends images inline as base64 data: URLs, which are
+// split into mimeType + data; an http(s) image rides on as a URL the provider loads
+// itself (our server never fetches it — no SSRF surface). Text passes through.
 
 import { describe, it, expect } from 'vitest';
 import { normalizeAttachments } from '../attachments.server';

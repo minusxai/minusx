@@ -21,6 +21,16 @@ function isSchemaStale(updatedAt: string): boolean {
   return schemaAge > STALE_THRESHOLD_MS;
 }
 
+/** Strip secrets from a loaded connection's config before it leaves the server. */
+function redactConfig(file: DbFile): DbFile {
+  if (file.content === null) return file;
+  const content = file.content as ConnectionContent;
+  return {
+    ...file,
+    content: { ...content, config: getSafeConfig(content.type, content.config) },
+  };
+}
+
 /**
  * Connection loader - Adds schema with caching
  *
@@ -32,15 +42,6 @@ function isSchemaStale(updatedAt: string): boolean {
  * 4. refresh=true (user-initiated) → block until fresh
  * Concurrent loads of the same connection share one in-flight introspection.
  */
-function redactConfig(file: DbFile): DbFile {
-  if (file.content === null) return file;
-  const content = file.content as ConnectionContent;
-  return {
-    ...file,
-    content: { ...content, config: getSafeConfig(content.type, content.config) },
-  };
-}
-
 export const connectionLoader: CustomLoader = async (file, user, options) =>
   redactConfig(await loadConnectionSchema(file, user, options));
 

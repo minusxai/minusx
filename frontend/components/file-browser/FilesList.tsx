@@ -149,7 +149,7 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
     ? files
     : files.filter(f => selectedTypes.includes(f.type));
 
-  // Group files into sections: knowledge base, dashboards, folders, questions, other
+  // Group files into sections: knowledge base, dashboards, stories, folders, questions, other
   const SECTION_ORDER = ['context', 'dashboard', 'story', 'folder', 'question', '_other'] as const;
   type SectionKey = typeof SECTION_ORDER[number];
 
@@ -191,7 +191,8 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
       .filter(s => s.files.length > 0);
   }, [filtered]);
 
-  // Track collapsed sections — knowledge base is always open, dashboards/folders open by default
+  // Track collapsed sections — knowledge base is always open; dashboards/stories/folders
+  // open by default, questions and other start collapsed
   const [collapsedSections, setCollapsedSections] = useState<Set<SectionKey>>(new Set(['question', '_other']));
 
   // If no primary sections exist, force-open the remaining sections

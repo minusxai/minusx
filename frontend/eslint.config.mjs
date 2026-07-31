@@ -208,7 +208,8 @@ const eslintConfig = defineConfig([
       "no-restricted-syntax": ["error", ...BASE_RESTRICTED_SYNTAX],
     },
   },
-  // Allow process.env in the two centralized config files, scripts, and test bootstrap
+  // Allow process.env in the two centralized config files, scripts, the test bootstrap,
+  // and the build/test-runner configs (next.config.ts, playwright*.config.ts)
   {
     files: ["lib/config.ts", "lib/constants.ts", "scripts/**", "test/setup/**", "next.config.ts", "playwright.config.ts", "playwright.qa.config.ts"],
     rules: {
@@ -270,8 +271,8 @@ const eslintConfig = defineConfig([
       ],
     },
   },
-  // Relax import discipline rules in test files — Jest module mocking requires
-  // require() calls and dynamic imports after jest.mock()/jest.resetModules().
+  // Relax import discipline rules in test files — Vitest module mocking requires
+  // require() calls and dynamic imports after vi.mock()/vi.resetModules().
   {
     files: ["**/*.test.ts", "**/*.test.tsx", "**/__tests__/**", "**/__mocks__/**", "test/**"],
     rules: {

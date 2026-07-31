@@ -1,11 +1,11 @@
 /**
  * Views surface as ORDINARY TABLES under the `_views` schema.
  *
- * One injection point (the context loader) buys four things at once: the
- * whitelist validator accepts `_views.x`, the agent sees it in its schema, the
- * GUI table picker lists it, and the semantic layer derives a model from its
- * columns — a view with a date + numeric column gets Count/Total/Avg and a time
- * axis with zero extra configuration.
+ * One injection point (the context loader) buys three things at once: the
+ * whitelist validator accepts `_views.x`, the agent sees it in its schema, and
+ * the GUI table picker lists it. A view is then a legal primary for an AUTHORED
+ * semantic model — its curated columns are the only fields such a model may
+ * reference, enforced by the semantic save gate.
  */
 import { DocumentDB } from '@/lib/database/documents-db';
 import { FilesAPI } from '@/lib/data/files.server';

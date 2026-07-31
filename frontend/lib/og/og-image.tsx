@@ -1,8 +1,10 @@
 /**
  * Compose a story's social-share card (server-only): blur the captured story screenshot,
  * then overlay the title + brand mark via the cover card. Called once when a story is made
- * public; the composed PNG is uploaded and stored, then served directly as og:image — there
- * is no on-crawl rendering. Imports next/og + sharp, so only the preview route uses this.
+ * public; the composed PNG is uploaded and stored, and the `/l/<shareId>/og` route serves those
+ * bytes directly — there is no on-crawl rendering. (The share page does not currently emit an
+ * og:image at all — see the SHARE IMAGE DISABLED block in `app/l/[shareId]/page.tsx`.) Imports
+ * next/og + sharp, so only the preview route uses this.
  */
 import 'server-only';
 import sharp from 'sharp';

@@ -98,7 +98,8 @@ const DATASETS = discoverDatasets(BASE);
 // DAB_DOUBLE_CHECK toggles cross-check mode: the root agent becomes a
 // `DoubleCheckBenchmarkAgent` that spawns two analyst sub-agents in
 // parallel (dispatched as tool calls), judges via `CheckEquivalence`, and
-// retries on disagreement. ~4× sub-agent runs + 2 judge calls per row.
+// retries with cross-feedback on disagreement for up to MAX_ROUNDS (3)
+// rounds — worst case 6 sub-agent runs + 3 judge calls per row.
 // The sub-agent class is selected via `DoubleCheckBenchmarkAgent`'s
 // `primaryAgent`/`secondaryAgent` static fields — defaults to V1; the V2
 // subclass below overrides them. The two flags compose: `DAB_V2=1
@@ -144,10 +145,11 @@ const RootAgent = useV2
 
 // ── Run ───────────────────────────────────────────────────────────────────
 
-// AutoContextAgent is spawned by BenchmarkAnalystAgent (and its V2 /
-// DoubleCheck variants) at the start of every benchmark row, so every
-// registrables list must include both it and the `SubmitSchemaInfo`
-// finisher tool it dispatches.
+// The AutoContext pre-step runs in the RUNNER (runAutoContextForSlot), once
+// per dataset and slot, before any row is dispatched; its rendered markdown is
+// stamped onto every row's context. It runs against this same registrables
+// list, so every list must include both AutoContextAgent and the
+// `SubmitSchemaInfo` finisher tool it dispatches.
 const AUTO_CONTEXT_REGISTRABLES = [AutoContextAgent, SubmitSchemaInfo];
 
 const registrables = useV2

@@ -203,8 +203,10 @@ export class MXAgent<
 
   /**
    * Default: wraps `userMessage` as a single user-message content array.
-   * Subclasses (e.g. `AnalystAgent`) override to inject app-specific blocks
-   * like `<AppState>`/`<CurrentDate>`/`<Question>`.
+   * Subclasses (e.g. `AnalystAgent`) override to add app-specific blocks —
+   * text `<Attachment>` blocks and attachment images. (App state and the frozen
+   * `<CurrentTime>` are NOT added here: they ride as markers on the message and
+   * are rendered by the `projectMessages` pass.)
    */
   protected buildUserContent(): (TextContent | ImageContent)[] {
     const raw = this.userMessage;

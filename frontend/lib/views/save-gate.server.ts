@@ -32,7 +32,7 @@ export class ViewSaveError extends Error {
   }
 }
 
-// eslint-disable-next-line no-restricted-syntax -- keyed by (mode, connection); a dialect is immutable per connection type, and this only avoids re-reading the connection doc within a single save
+// eslint-disable-next-line no-restricted-syntax -- process-lifetime map keyed by (mode, connection); it only avoids re-reading the connection doc, and the value it caches is the dialect, which follows the connection's type
 const dialectCache = new Map<string, string>();
 async function dialectFor(connection: string, user: EffectiveUser): Promise<string> {
   const key = `${user.mode}|${connection}`;
@@ -91,7 +91,8 @@ export async function stampAndValidateViews(
     const views = version.views ?? [];
     if (views.length === 0) return version;
 
-    // Structural checks first (names, exactly-one-source, duplicates).
+    // Structural checks first (name shape, empty SQL, missing connection, duplicates,
+    // and collisions with an inherited view's name).
     const structural = validateViews(views, inherited);
     problems.push(...structural);
 

@@ -1,6 +1,8 @@
 /**
  * Deterministic rubric entrypoint: maps a file type to its pure scorer and assembles the
- * report. This is what auto-inject, the CheckFileHealth tool, and the API route all call.
+ * report. This is what the client health badge, the EditFile/CreateFile/ReviewFile review path,
+ * the CheckFileHealth tool, and the rubric API route all call (the last two via
+ * `scoreFileDeterministicResolved` in `score-file.server.ts`).
  */
 import type { DeterministicContext, DeterministicScorer, RubricCategory, RubricFileType, RubricReport } from './types';
 import { buildReport } from './scoring';

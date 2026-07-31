@@ -2,8 +2,8 @@
  * References Helper Tests
  *
  * Tests extractReferenceIds / extractAllReferenceIds for all file types.
- * These tests cover the behaviour that must survive the refactor away from
- * direct DocumentDB usage in references.ts.
+ * These tests pin the behaviour that survived the refactor away from direct
+ * DocumentDB usage in references.ts — it now takes an injected ChildIdResolver.
  *
  * Run: npm test -- references.test.ts
  */

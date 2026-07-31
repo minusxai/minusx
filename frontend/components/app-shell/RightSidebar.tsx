@@ -253,7 +253,7 @@ function TabsLayout({
 
   // Derive active tab from which section is active in Redux
   // activeSidebarSection === null means "no accordion open" — stay on whichever tab was last shown
-  // We use a ref to remember the last derived tab so collapsing an accordion doesn't switch tabs
+  // `lastTab` state remembers the last explicitly-picked tab so collapsing an accordion doesn't switch tabs
   const derivedTab = activeSidebarSection
     ? (refSectionIds.has(activeSidebarSection) ? 'context' : 'chat')
     : null;

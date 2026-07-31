@@ -64,9 +64,11 @@ export function parseAnalyticsConfig(jsonString: string | undefined): AnalyticsC
 export const SEND_ERRORS_IN_DEV = process.env.NEXT_PUBLIC_SEND_ERRORS_IN_DEV === 'true';
 
 /**
- * E2E test mode (Tests/QA/Evals Arch V2). When set, the client exposes the Redux
- * store on `window.__MX_STORE__` and charts render as SVG (DOM-assertable). Drives
- * Playwright local/CI runs; never enabled in normal production builds.
+ * E2E test mode (Tests/QA/Evals Arch V2). When set, the client exposes the Redux store on
+ * `window.__MX_STORE__` and the `/api/test/faux` routes (the faux LLM channel) exist —
+ * they 404 otherwise. Drives Playwright local/CI runs; never enabled in normal production
+ * builds. The QA suite instead uses the runtime `?e2e=<secret>` gate (lib/auth/e2e-runtime.ts),
+ * which exposes the store on a build with this flag OFF.
  */
 export const E2E_MODE = process.env.NEXT_PUBLIC_E2E === 'true';
 

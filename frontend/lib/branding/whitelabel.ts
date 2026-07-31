@@ -84,8 +84,8 @@ export interface OrgConfig {
    *  per-agent grade policies (see lib/llm/llm-config-types.ts).
    *  `apiKey` values are @SECRETS/… refs at rest. */
   llm?: LlmConfig;
-  /** Credit management: enabled/enforced flags + daily/weekly limits by
-   *  user/role/company (see lib/analytics/credit-policy.ts). Replaces the
+  /** Credit management: a single `enabled` flag (tracking + enforcement together)
+   *  + daily/weekly limits by user/role/company (see lib/analytics/credit-policy.ts). Replaces the
    *  CREDIT_* / CREDITS_ENABLED / ENFORCE_CREDIT_LIMITS env vars. */
   credits?: CreditsConfig;
   /** This workspace's identity on the MinusX gateway, written once at

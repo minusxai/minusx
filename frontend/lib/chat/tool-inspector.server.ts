@@ -10,13 +10,15 @@
  * `LoadSkill`) throw `UserInputException`; that's surfaced as "not
  * executable" rather than propagated.
  *
- * Context is intentionally minimal (`{ effectiveUser }`): every currently
- * registered leaf tool (`SearchDBSchema`, `ExecuteQuery`, `FuzzyMatch`,
- * `SearchFiles`, `LoadSkill`) only reads `context.effectiveUser` — schema
- * whitelisting (`context.whitelistedTables`) is a live-chat-only concern
- * resolved from the active context file, not something a standalone
- * inspector call carries. A tool that needed more context here would fail
- * loudly (thrown/rejected), not silently misbehave.
+ * Context is intentionally minimal (`{ effectiveUser }`): the live-chat context
+ * (schema whitelist, resolved docs, home folder, app state) is resolved per turn
+ * from the active context file, and a standalone inspector call carries none of
+ * it. `effectiveUser` is the one field every executable leaf tool needs. Tools
+ * that read more degrade rather than mirror chat exactly — a tool whose context
+ * field is optional falls back (e.g. `RunSemanticQuery` derives the home folder
+ * from the user when `context.homeFolder` is absent), and one that requires it
+ * fails loudly (thrown/rejected). Inspector output is therefore not guaranteed
+ * to match what the same tool returns inside a live turn.
  */
 import 'server-only';
 import { Orchestrator } from '@/orchestrator/orchestrator';

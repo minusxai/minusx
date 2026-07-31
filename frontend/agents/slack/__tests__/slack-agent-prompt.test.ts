@@ -1,5 +1,6 @@
-// The Slack agent hardcodes its skill slots (it does not go through the analyst
-// PAGE_SKILL_MAP), so this pins that the questions skill — home of the `<viz>`
+// The Slack agent fills its skill slots itself — it reads PAGE_SKILL_MAP['slack']
+// directly instead of going through the analyst's getPreloadedSkillNames (so no
+// nav skill is appended). This pins that the questions skill — home of the `<viz>`
 // envelope grammar (Vega-Lite specs, shipped recipes, table/pivot sources) — is
 // preloaded into its system prompt, and that the slack_addendum defers to it
 // instead of restating the grammar.

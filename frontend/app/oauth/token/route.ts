@@ -2,11 +2,13 @@
  * OAuth 2.1 Token Endpoint
  *
  * POST: Exchange authorization code (with PKCE) for an access token + refresh token,
- *       or exchange a refresh token for a new token pair (rotation).
+ *       or exchange a refresh token for a new token pair.
  *
  * Supports:
- * - grant_type=authorization_code (with PKCE code_verifier)
- * - grant_type=refresh_token (single-use with rotation, 30-day lifetime)
+ * - grant_type=authorization_code (single-use code, with PKCE code_verifier)
+ * - grant_type=refresh_token (stateless JWT, 30-day lifetime). NOT single-use: a fresh
+ *   refresh token is returned on every exchange, but the presented one keeps working
+ *   until it expires — there is no server-side store to revoke it. See OAuthRefreshDB.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -84,7 +86,8 @@ export async function POST(request: NextRequest) {
 
     const extra = await getModules().auth.getExtraTokenPayload?.() ?? {};
     const tokenPair = await OAuthTokenDB.create(result.userId, result.scope, extra);
-    // Issue a new refresh token (rotation — old one is already consumed)
+    // Hand back a fresh refresh token so clients keep a long runway; the presented one
+    // stays valid until expiry (stateless JWT — nothing to invalidate).
     const newRefreshToken = await OAuthRefreshDB.create(result.userId, result.scope);
 
     return NextResponse.json({

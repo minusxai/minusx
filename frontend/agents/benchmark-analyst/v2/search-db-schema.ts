@@ -1,5 +1,7 @@
 // SearchDBSchemaV2: SQL queries against the synthetic catalog
-// Catalog tables: connections, schemas, tables, columns, indexes, column_stats
+// Catalog tables: connections, schemas, tables, columns, indexes, column_stats,
+// sample_rows, sample_notes. All eight always exist; the two sample_* ones are
+// empty unless a sampleConfig was supplied to the build (see catalog.ts).
 
 import { Type } from 'typebox';
 import type { Tool } from '@/orchestrator/llm';
