@@ -201,8 +201,10 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
   // Render the story as a FLUID responsive document — no transform scale or artificial reading
   // cap. AgentHtml measures this canvas and reflows the story to the width supplied by its parent.
   return (
+    // pb clears the floating chat bar — it hovers over the page bottom and would cover the
+    // story's last line. OUTSIDE the capture box (data-story-capture), so captures are unpadded.
     <Box aria-label="Story page" w="100%" minH="420px">
-      <Box display="flex" justifyContent="center">
+      <Box display="flex" justifyContent="center" pb="24" mb="24">
         {/* Relative wrapper anchors the DEV marker overlay OVER the captured box without being INSIDE
             it — so the serialized capture sees the story alone, and the app-state screenshot's baked
             gutter is the only numbering in the image (no double markers). */}

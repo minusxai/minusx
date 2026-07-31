@@ -20,6 +20,7 @@ import { buildTooltipPlan, buildTooltipData, renderSharedTooltipHtml, type Toolt
 import { SharedTooltip } from '@/lib/viz/shared-tooltip';
 import { injectGuideMark, GUIDE_WIDTH, GUIDE_OPACITY, GUIDE_BAND_OPACITY } from '@/lib/viz/guide-mark';
 import { isInteractiveMapEnvelope } from '@/lib/viz/interactive-map';
+import { bridgeIframeDragEvents } from '@/lib/viz/iframe-event-bridge';
 
 // Tooltip value/x formatters. Tooltips show the FULL number ("2,574", not the axis's
 // "2.6k") and a readable date — the chart's own d3 format is for the axis, not here.
@@ -131,6 +132,15 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
   useEffect(() => {
     rowsRef.current = rows;
   });
+
+  // Iframe surfaces (stories, dashboards): forward drag move/up events from the iframe window
+  // to the parent window Vega actually listens on — see lib/viz/iframe-event-bridge. No-op in
+  // the main document (question page).
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    return bridgeIframeDragEvents(el);
+  }, []);
 
   // Build (and rebuild) the view when the spec or color mode changes.
   useEffect(() => {

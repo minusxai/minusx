@@ -48,7 +48,8 @@ import { numberFromJsxAttrs } from '@/lib/data/story/story-number';
 import {
   isStorySqlParamSource, paramFromJsxAttrs, storyParamToQuestionParameter, type StoryParam,
 } from '@/lib/data/story/story-params';
-import { applyDomEditsToJsx, isEditableTextHost } from '@/lib/data/story/jsx-edit';
+import { applyDomEditsToJsx, applyFormatEditsToJsx, resolveJsxNodeAtPath, type JsxFormatEdit, isEditableTextHost } from '@/lib/data/story/jsx-edit';
+import { crumbHint } from '@/lib/data/story/typography';
 import { envelopeVizType } from '@/lib/viz/viz-templates';
 import type { QuestionParameter } from '@/lib/types';
 
@@ -92,11 +93,73 @@ export interface StoryJsxBodyProps {
   onEditNumber?: (req: NumberQueryEditRequest) => void;
   /** Imperative pending-edit access for AgentHtml's serialize() handle. */
   editApiRef?: RefObject<StoryJsxEditApi | null>;
+  /**
+   * Edit mode: fired when an editable text host gains/loses focus — anchors the typography
+   * toolbar. `null` on blur / session teardown.
+   */
+  onTextHostFocusChange?: (target: StoryTextHostTarget | null) => void;
+  /**
+   * Edit mode: fired when a plain, non-text-host element (section, wrapper div, embed-carrying
+   * heading) is click-selected as a FORMAT target (Phase 2) — same shape as the focus anchor.
+   * `null` when the selection clears (text-host click, Escape, empty click, teardown).
+   */
+  onElementSelectChange?: (target: StoryTextHostTarget | null) => void;
 }
+
+/** Render artifact marking the click-selected format target (outline via STORY_SELECTION_CSS;
+ *  stripped by the DOM→JSX sanitizer, so it can never persist into source). */
+export const SELECTED_DOM_ATTR = 'data-mx-selected';
+/** Render artifact previewing what a click would select (edit-mode hover). */
+export const HOVER_DOM_ATTR = 'data-mx-hover';
+
+/** Selection + hover-preview outline rules — injected into the iframe head by AgentHtml. */
+export const STORY_SELECTION_CSS = [
+  `[${SELECTED_DOM_ATTR}] { outline: 2px dashed #14b8a6; outline-offset: 2px; }`,
+  `[${HOVER_DOM_ATTR}]:not([${SELECTED_DOM_ATTR}]) { outline: 1px dashed rgba(20, 184, 166, 0.45); outline-offset: 2px; }`,
+].join('\n');
+
+/** One ancestor in a selection's breadcrumb: enough to label a crumb and re-anchor to it. */
+export interface StoryAncestorCrumb {
+  astPath: string;
+  tag: string;
+  /** The most salient class (width constraint / layout role) — see crumbHint. */
+  hint: string;
+}
+
+/** The focused editable text host (typography-toolbar anchor). `el` lives in the iframe DOM. */
+export interface StoryTextHostTarget {
+  astPath: string;
+  el: HTMLElement;
+  /** Click-selected targets only: the selectable ancestor chain, OUTERMOST first (breadcrumb). */
+  ancestors?: StoryAncestorCrumb[];
+}
+
+/** A typography-toolbar edit: each present field is the attr's full new value ('' removes). */
+export type StoryFormatEdit = Omit<JsxFormatEdit, 'astPath'>;
 
 export interface StoryJsxEditApi {
   /** The current source with all pending edits applied — null when there is nothing to commit. */
   serialize: () => string | null;
+  /**
+   * Record a className/style edit for the element at `astPath` (typography toolbar commit).
+   * Staged in the edit session beside contenteditable edits — every commit composes BOTH kinds
+   * against the current source, and onChange fires immediately with the composed result.
+   */
+  applyFormatEdit: (astPath: string, edit: StoryFormatEdit) => void;
+  /**
+   * Re-anchor the click-selection to the element at `astPath` (breadcrumb navigation). Only
+   * selectable targets (plain, non-text-host, non-root) take effect; anything else is ignored.
+   */
+  selectElement: (astPath: string) => void;
+}
+
+/** Late-bound select-by-path entry point (set by the selection effect, read by the edit API). */
+function createSelectByPathSlot() {
+  let fn: (astPath: string) => void = () => {};
+  return {
+    set(next: (astPath: string) => void) { fn = next; },
+    invoke(astPath: string) { fn(astPath); },
+  };
 }
 
 /**
@@ -107,12 +170,14 @@ export interface StoryJsxEditApi {
  */
 interface EditSession {
   /** Sync the latest props in (post-commit, before any user event can fire). */
-  setProps: (jsx: string, onChange?: (story: string) => void) => void;
+  setProps: (jsx: string, onChange?: (story: string) => void, onFocusChange?: (target: StoryTextHostTarget | null) => void) => void;
   /** True while `path` is the focused host — its rendered subtree must stay frozen. */
   isEditing: (path: string) => boolean;
   onFocus: (path: string, el: HTMLElement) => void;
   onInput: () => void;
   onBlur: () => void;
+  /** Stage a className/style edit for the element at `path` (typography toolbar) and fire onChange. */
+  applyFormatEdit: (path: string, edit: StoryFormatEdit) => void;
   /** Current source with all pending edits applied; null when there is nothing to commit. */
   serialize: () => string | null;
 }
@@ -120,19 +185,31 @@ interface EditSession {
 function createEditSession(): EditSession {
   let jsx = '';
   let onChange: ((story: string) => void) | undefined;
+  let onFocusChange: ((target: StoryTextHostTarget | null) => void) | undefined;
   let active: { path: string; el: HTMLElement; snapshot: string; userEdited: boolean } | null = null;
   // Committed edits (astPath → innerHTML), ALL re-applied against the CURRENT source prop on
   // every commit — sequential edits compose even though the rendered AST stays the original's.
   const edits = new Map<string, string>();
+  // Staged className/style edits (astPath → attr values, typography toolbar). Composed AFTER the
+  // innerHTML edits on EVERY commit — a text-edit blur must never re-derive the source without
+  // the format changes, and vice versa (the no-clobber invariant).
+  const formatEdits = new Map<string, Omit<JsxFormatEdit, 'astPath'>>();
   const asEdits = (m: Map<string, string>) => [...m].map(([astPath, innerHtml]) => ({ astPath, innerHtml }));
+  const composed = (inner: Map<string, string>) =>
+    applyFormatEditsToJsx(
+      applyDomEditsToJsx(jsx, asEdits(inner)).source,
+      [...formatEdits].map(([astPath, edit]) => ({ astPath, ...edit })),
+    );
   return {
-    setProps(nextJsx, nextOnChange) {
+    setProps(nextJsx, nextOnChange, nextOnFocusChange) {
       jsx = nextJsx;
       onChange = nextOnChange;
+      onFocusChange = nextOnFocusChange;
     },
     isEditing: (path) => active?.path === path,
     onFocus(path, el) {
       active = { path, el, snapshot: el.innerHTML, userEdited: false };
+      onFocusChange?.({ astPath: path, el });
     },
     onInput() {
       if (active) active.userEdited = true;
@@ -140,11 +217,16 @@ function createEditSession(): EditSession {
     onBlur() {
       const a = active;
       active = null;
+      onFocusChange?.(null);
       // Real user input only (the legacy userEdited gate): programmatic focus churn from
       // embeds mounting/unmounting must never echo a serialization into the file.
       if (!a || !a.userEdited || a.el.innerHTML === a.snapshot) return;
       edits.set(a.path, a.el.innerHTML);
-      onChange?.(applyDomEditsToJsx(jsx, asEdits(edits)).source);
+      onChange?.(composed(edits));
+    },
+    applyFormatEdit(path, edit) {
+      formatEdits.set(path, { ...formatEdits.get(path), ...edit });
+      onChange?.(composed(edits));
     },
     serialize() {
       // Committed edits + the in-progress one (Save can land before the host blurs).
@@ -152,8 +234,8 @@ function createEditSession(): EditSession {
       if (active && active.userEdited && active.el.innerHTML !== active.snapshot) {
         pending.set(active.path, active.el.innerHTML);
       }
-      if (pending.size === 0) return null;
-      return applyDomEditsToJsx(jsx, asEdits(pending)).source;
+      if (pending.size === 0 && formatEdits.size === 0) return null;
+      return composed(pending);
     },
   };
 }
@@ -296,18 +378,22 @@ function NumberEmbedAdapter(props: Record<string, unknown>) {
   // Jsx path: the edit request carries the AST path — the story view owns the source
   // write-back (updateNumberQueryInJsx), unlike the legacy path's DOM-attribute apply.
   const canEdit = ctx.editable && !!ctx.onEditNumber && !!embed.query && typeof astPath === 'string';
+  // The stamped wrapper marks the COMPONENT BOUNDARY in the DOM (click-to-select ignores clicks
+  // inside it; the innerHTML write-back splices it from the AST). display:contents = no layout box.
   return (
-    <InlineNumber
-      embed={embed}
-      externalParamValues={extValues}
-      editable={ctx.editable}
-      filePath={ctx.filePath}
-      onRequestEdit={canEdit ? () => ctx.onEditNumber!({
-        query: embed.query!,
-        connection: embed.connection,
-        astPath: astPath as string,
-      }) : undefined}
-    />
+    <span {...{ [AST_PATH_ATTR]: astPath }} style={{ display: 'contents' }}>
+      <InlineNumber
+        embed={embed}
+        externalParamValues={extValues}
+        editable={ctx.editable}
+        filePath={ctx.filePath}
+        onRequestEdit={canEdit ? () => ctx.onEditNumber!({
+          query: embed.query!,
+          connection: embed.connection,
+          astPath: astPath as string,
+        }) : undefined}
+      />
+    </span>
   );
 }
 
@@ -318,21 +404,24 @@ function ParamControlAdapter(props: Record<string, unknown>) {
   if (!param) return null;
   const source = param.source && isStorySqlParamSource(param.source) ? param.source : undefined;
   const astPath = props[AST_PATH_ATTR];
+  // Stamped component-boundary wrapper — see NumberEmbedAdapter.
   return (
-    <StoryParamControl
-      param={param}
-      value={ctx.values[param.name]}
-      filePath={ctx.filePath}
-      onRequestEdit={(ctx.editable && ctx.onEditParamQuery && source && typeof astPath === 'string')
-        ? () => ctx.onEditParamQuery!({
-            name: param.name,
-            query: source.query,
-            connection: source.connection,
-            ref: { format: 'jsx', astPath },
-          })
-        : undefined}
-      onChange={(v) => ctx.setParamValue(param.name, v)}
-    />
+    <span {...{ [AST_PATH_ATTR]: astPath }} style={{ display: 'contents' }}>
+      <StoryParamControl
+        param={param}
+        value={ctx.values[param.name]}
+        filePath={ctx.filePath}
+        onRequestEdit={(ctx.editable && ctx.onEditParamQuery && source && typeof astPath === 'string')
+          ? () => ctx.onEditParamQuery!({
+              name: param.name,
+              query: source.query,
+              connection: source.connection,
+              ref: { format: 'jsx', astPath },
+            })
+          : undefined}
+        onChange={(v) => ctx.setParamValue(param.name, v)}
+      />
+    </span>
   );
 }
 
@@ -367,7 +456,7 @@ const NO_NODES: JsxNode[] = [];
 
 export default function StoryJsxBody({
   doc, jsx, readOnly, paramValues, onParamValuesChange, filePath, colorMode, editable, onChange,
-  onEditQuestion, onEditNumber, onEditParamQuery, editApiRef,
+  onEditQuestion, onEditNumber, onEditParamQuery, editApiRef, onTextHostFocusChange, onElementSelectChange,
 }: StoryJsxBodyProps) {
   const parsed = useMemo(() => parseJsx(jsx), [jsx]);
 
@@ -377,14 +466,115 @@ export default function StoryJsxBody({
   // against the current props.
   const session = useMemo(() => createEditSession(), []);
   useEffect(() => {
-    session.setProps(jsx, onChange);
-  }, [session, jsx, onChange]);
+    session.setProps(jsx, onChange, onTextHostFocusChange);
+  }, [session, jsx, onChange, onTextHostFocusChange]);
+
+  // Breadcrumb navigation (toolbar crumbs) needs to re-anchor the selection from OUTSIDE the
+  // effect closure — the effect publishes its select-by-path entry point into this slot
+  // (closure-state-behind-methods, the same imperative-subsystem shape as the edit session).
+  const selectByPath = useMemo(() => createSelectByPathSlot(), []);
 
   useEffect(() => {
     if (!editApiRef) return;
-    editApiRef.current = { serialize: () => session.serialize() };
+    editApiRef.current = {
+      serialize: () => session.serialize(),
+      applyFormatEdit: (astPath, edit) => session.applyFormatEdit(astPath, edit),
+      selectElement: (astPath) => selectByPath.invoke(astPath),
+    };
     return () => { editApiRef.current = null; };
-  }, [editApiRef, session]);
+  }, [editApiRef, session, selectByPath]);
+
+  // ── Click-to-select format targets (Phase 2) ─────────────────────────────────────────────
+  // ONE doc-level listener, classifying the clicked element against the SOURCE AST (never DOM
+  // heuristics): plain non-text-host elements select; text hosts clear (focus owns them);
+  // component chrome is ignored (interactive embeds must keep working); the ROOT (a top-level
+  // path with no '.') is excluded — its gutter/cap is the page-level design contract.
+  const parsedNodes = parsed.ok ? parsed.nodes : NO_NODES;
+  useEffect(() => {
+    if (!editable || readOnly || !onElementSelectChange) return;
+    let selected: HTMLElement | null = null;
+    let hovered: HTMLElement | null = null;
+    /** A format target: plain HTML, not a text host (focus owns those), never the root. */
+    const isSelectable = (path: string, node: ReturnType<typeof resolveJsxNodeAtPath>): node is JsxElement =>
+      !!node && node.type === 'element' && !node.isComponent && !isEditableTextHost(node) && path.includes('.');
+    /** The selectable ancestor chain for the breadcrumb, OUTERMOST first. */
+    const buildAncestors = (el: HTMLElement) => {
+      const out: StoryAncestorCrumb[] = [];
+      for (let p = el.parentElement; p; p = p.parentElement) {
+        const path = p.getAttribute?.(AST_PATH_ATTR);
+        if (!path) continue;
+        const node = resolveJsxNodeAtPath(parsedNodes, path);
+        if (isSelectable(path, node)) out.push({ astPath: path, tag: node.tag, hint: crumbHint(p.className) });
+      }
+      return out.reverse();
+    };
+    const clear = () => {
+      if (!selected) return;
+      selected.removeAttribute(SELECTED_DOM_ATTR);
+      selected = null;
+      onElementSelectChange(null);
+    };
+    const clearHover = () => {
+      hovered?.removeAttribute(HOVER_DOM_ATTR);
+      hovered = null;
+    };
+    const select = (path: string, el: HTMLElement) => {
+      if (selected === el) return;
+      selected?.removeAttribute(SELECTED_DOM_ATTR);
+      selected = el;
+      el.setAttribute(SELECTED_DOM_ATTR, '');
+      onElementSelectChange({ astPath: path, el, ancestors: buildAncestors(el) });
+    };
+    /** The element a click at `target` would select, or null. */
+    const resolveTarget = (target: HTMLElement | null): { path: string; el: HTMLElement } | 'embed' | null => {
+      if (!target || typeof target.closest !== 'function') return null;
+      if (target.closest('[contenteditable="true"]')) return null;
+      const stamped = target.closest(`[${AST_PATH_ATTR}]`) as HTMLElement | null;
+      if (!stamped) return null;
+      const path = stamped.getAttribute(AST_PATH_ATTR) ?? '';
+      const node = resolveJsxNodeAtPath(parsedNodes, path);
+      if (node && node.type === 'element' && node.isComponent) return 'embed';
+      return isSelectable(path, node) ? { path, el: stamped } : null;
+    };
+    const onClick = (e: Event) => {
+      const hit = resolveTarget(e.target as HTMLElement | null);
+      if (hit === 'embed') return; // interacting with an embed — leave any selection alone
+      if (!hit) { clear(); return; }
+      select(hit.path, hit.el);
+    };
+    // Hover preview: stamp exactly what a click would select, so nesting is visible BEFORE
+    // committing. Cheap (closest + one AST resolve per move) — no throttle needed.
+    const onMove = (e: Event) => {
+      const hit = resolveTarget(e.target as HTMLElement | null);
+      if (hit === 'embed' || !hit) { clearHover(); return; }
+      if (hovered === hit.el) return;
+      clearHover();
+      hovered = hit.el;
+      hovered.setAttribute(HOVER_DOM_ATTR, '');
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') clear();
+    };
+    selectByPath.set((astPath: string) => {
+      const el = doc.querySelector(`[${AST_PATH_ATTR}="${astPath}"]`);
+      const node = resolveJsxNodeAtPath(parsedNodes, astPath);
+      // NO instanceof: `el` belongs to the IFRAME realm, whose HTMLElement is a different
+      // constructor — a parent-realm instanceof is always false for it. querySelector already
+      // guarantees an Element; the AST predicate guarantees it's a plain HTML tag.
+      if (el && isSelectable(astPath, node)) select(astPath, el as HTMLElement);
+    });
+    doc.addEventListener('click', onClick);
+    doc.addEventListener('mousemove', onMove);
+    doc.addEventListener('keydown', onKeyDown);
+    return () => {
+      doc.removeEventListener('click', onClick);
+      doc.removeEventListener('mousemove', onMove);
+      doc.removeEventListener('keydown', onKeyDown);
+      selectByPath.set(() => {});
+      clearHover();
+      clear();
+    };
+  }, [editable, readOnly, onElementSelectChange, doc, parsedNodes, selectByPath]);
 
   // Text hosts get contenteditable + the render-during-edit freeze; everything else is locked
   // by default (only decorated hosts ever carry contentEditable under the interpreter).
@@ -394,7 +584,7 @@ export default function StoryJsxBody({
           ? <EditableTextHost key={path} path={path} session={session}>{element as ReactElement<Record<string, unknown>>}</EditableTextHost>
           : element
     : undefined;
-  const nodes = parsed.ok ? parsed.nodes : NO_NODES;
+  const nodes = parsedNodes;
   const storyParams = useMemo(() => collectStoryParams(nodes), [nodes]);
   const externalParameters = useMemo(
     () => storyParams.map(storyParamToQuestionParameter),

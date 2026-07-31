@@ -239,6 +239,37 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  // Cross-realm instanceof guard for the story/dashboard IFRAME surfaces. DOM objects born in
+  // the iframe (elements, events) are instances of the IFRAME realm's constructors — a
+  // parent-realm `x instanceof HTMLElement` is ALWAYS false for them, and the check fails
+  // SILENTLY (it burned us twice in one day: the Vega drag bridge dropped every real iframe
+  // event, and the selection breadcrumb dead-clicked). In these trees, test identity with
+  // realm-safe checks instead: `e.type` strings for events, `el.nodeType === 1` /
+  // `'closest' in el` for elements, or `x instanceof doc.defaultView.HTMLElement` when a real
+  // brand check is required. A parent-document-only site may suppress inline with justification.
+  {
+    files: [
+      "components/views/shared/**",
+      "components/views/story/**",
+      "components/viz/**",
+      "lib/story-ui/**",
+      "lib/story-surface/**",
+      "lib/data/story/**",
+      "lib/viz/**",
+      "lib/html/**",
+      "lib/screenshot/**",
+    ],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        ...BASE_RESTRICTED_SYNTAX,
+        {
+          selector: "BinaryExpression[operator='instanceof'][right.name=/^(HTMLElement|SVGElement|Element|Node|Document|Event|UIEvent|MouseEvent|PointerEvent|TouchEvent|KeyboardEvent|FocusEvent|InputEvent|WheelEvent|DragEvent)$/]",
+          message: "Cross-realm hazard: iframe-born DOM objects are instances of the IFRAME realm's constructors, so this instanceof is silently false for them. Use realm-safe checks (event.type strings, nodeType, duck typing) or the owning document's constructors (doc.defaultView.HTMLElement). Parent-document-only code may disable inline with a justification.",
+        },
+      ],
+    },
+  },
   // Relax import discipline rules in test files — Jest module mocking requires
   // require() calls and dynamic imports after jest.mock()/jest.resetModules().
   {

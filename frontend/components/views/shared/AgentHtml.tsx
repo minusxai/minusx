@@ -1,6 +1,6 @@
 'use client';
 
-import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { createPortal } from 'react-dom';
 
@@ -17,10 +17,11 @@ import StoryEmbeds, {
   type ChartTarget, type InlineChartTarget, type NumberTarget, type ParamTarget,
   type StoryParamQueryEditRequest, type StoryQuestionEditRequest,
 } from '@/components/views/shared/StoryEmbeds';
-import StoryJsxBody, { type StoryJsxEditApi } from '@/components/views/shared/StoryJsxBody';
+import StoryJsxBody, { STORY_SELECTION_CSS, type StoryJsxEditApi, type StoryTextHostTarget, type StoryFormatEdit } from '@/components/views/shared/StoryJsxBody';
 import { STORY_FLOATING_CSS } from '@/lib/story-ui';
 import { getStoryFontCss, STORY_FONTS_ATTR } from '@/lib/data/story/story-fonts';
 import StorySelectionPopover from '@/components/views/story/StorySelectionPopover';
+import StoryTypographyToolbar from '@/components/views/story/StoryTypographyToolbar';
 import { paramFromPlaceholderEl, type StoryParam } from '@/lib/data/story/story-params';
 import { inlineQuestionFromEl, inlineEmbedToQuestionContent, savedQuestionVizFromEl } from '@/lib/data/story/story-question';
 import { envelopeVizType } from '@/lib/viz/viz-templates';
@@ -153,6 +154,21 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
   const [paramTargets, setParamTargets] = useState<ParamTarget[]>([]);
   // Jsx WYSIWYG: pending-edit access into StoryJsxBody (AST write-back) for serialize().
   const jsxEditApiRef = useRef<StoryJsxEditApi | null>(null);
+  // Jsx WYSIWYG: the focused editable text host — anchors the typography toolbar.
+  const [textHost, setTextHost] = useState<StoryTextHostTarget | null>(null);
+  // Jsx WYSIWYG Phase 2: the click-selected format target (sections, wrappers, embed-carrying
+  // headings). The toolbar anchors to whichever anchor is live — selection wins (a click that
+  // selects also blurs any focused host).
+  const [selectedEl, setSelectedEl] = useState<StoryTextHostTarget | null>(null);
+  // Adjust-state-during-render: leaving edit mode drops both anchors in the SAME commit.
+  if (!editable && textHost !== null) setTextHost(null);
+  if (!editable && selectedEl !== null) setSelectedEl(null);
+  const onApplyTypography = useCallback((astPath: string, edit: StoryFormatEdit) => {
+    jsxEditApiRef.current?.applyFormatEdit(astPath, edit);
+  }, []);
+  const onSelectAncestor = useCallback((astPath: string) => {
+    jsxEditApiRef.current?.selectElement(astPath);
+  }, []);
 
   const isJsx = format === 'jsx';
   // Legacy path: sanitize + innerHTML-inject. Jsx path: the raw source IS the body input — it is
@@ -223,6 +239,8 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     // Design-system stylesheet (server-compiled Tailwind), via textContent (DOM insertion, not
     // doc.write, so no escaping concerns).
     if (compiledCss) makeStyle('data-mx-tw', compiledCss);
+    // Click-to-select outline (edit-mode render artifact; the attr never reaches saved source).
+    makeStyle('data-mx-select-css', STORY_SELECTION_CSS);
     // Vendored Tooltip/Popover render un-portaled, and Radix's popper wrapper must be forced to
     // absolute positioning (fixed is broken inside <svg><foreignObject>). Both JSX stories and
     // legacy stories can mount live Param controls, so both surfaces need the floating fix.
@@ -436,6 +454,8 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
             onEditQuestion={onEditQuestion}
             onEditParamQuery={onEditParamQuery}
             editApiRef={jsxEditApiRef}
+            onTextHostFocusChange={editable && !readOnly ? setTextHost : undefined}
+            onElementSelectChange={editable && !readOnly ? setSelectedEl : undefined}
           />,
           surfaceRoot,
         ),
@@ -571,6 +591,16 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       />
       {/* Select-to-chat: a floating Ask/Edit pill on any text selection while editing the story. */}
       {selectionSource && <StorySelectionPopover iframeRef={iframeRef} source={selectionSource} active={editable} />}
+      {/* Typography controls for the focused text host (jsx stories, edit mode). */}
+      {isJsx && (
+        <StoryTypographyToolbar
+          target={selectedEl ?? textHost}
+          targetKind={selectedEl ? 'element' : 'text'}
+          active={editable && !readOnly}
+          onApply={onApplyTypography}
+          onSelectAncestor={onSelectAncestor}
+        />
+      )}
     </>
   );
 });
