@@ -1,10 +1,10 @@
 'use client';
 
 /**
- * StoryTypographyToolbar — floating format controls for the focused editable text host in a
- * format:'jsx' story (edit mode only): typography, spacing, width, and color/fill. Renders in
- * the PARENT document (like StorySelectionPopover) anchored above the host, offsetting the
- * host's iframe-space rect by the iframe's bounding box.
+ * StoryTypographyToolbar — floating format controls for the focused or selected element in a
+ * format:'jsx' story (edit mode only): hierarchy, typography, spacing, width, and color/fill.
+ * Renders in the PARENT document (like StorySelectionPopover) anchored above the target,
+ * offsetting its iframe-space rect by the iframe's bounding box.
  *
  * Apply flow (see lib/data/story/typography.ts):
  *  1. compute the new class string / style value from the host's live attrs via the pure algebra,
@@ -38,11 +38,13 @@ export interface StoryTypographyToolbarProps {
   /** The focused editable text host or click-selected element, or null (renders nothing). */
   target: StoryTextHostTarget | null;
   /**
-   * What kind of target is anchored: 'text' (contenteditable focus) shows the full toolbar;
-   * 'element' (click-selected container/heading) hides the text-only controls — font size,
-   * B/I/U, text color — keeping alignment, fill, width, spacing, padding and bleed.
+   * What kind of target is anchored:
+   *  - 'text': a contenteditable text host; full typography controls.
+   *  - 'text-element': a click-selected p/heading/span with a locked nested component; full
+   *    typography controls apply to the parent and inherit into children.
+   *  - 'element': a click-selected container; hides font size, B/I/U, and text color.
    */
-  targetKind?: 'text' | 'element';
+  targetKind?: 'text' | 'text-element' | 'element';
   /** Only render while the story is in edit mode. */
   active: boolean;
   /** Commit: the target's full new attr values (already applied to the live DOM element). */
@@ -154,8 +156,9 @@ export default function StoryTypographyToolbar({ target, targetKind = 'text', ac
   // iframe is derived from the host element itself — no ref reads during render.
   const rect = target.el.getBoundingClientRect();
   const box = target.el.ownerDocument.defaultView?.frameElement?.getBoundingClientRect();
-  const crumbs = targetKind === 'element' ? (target.ancestors ?? []) : [];
-  const toolbarH = TOOLBAR_H * (1 + (showAdvanced ? 1 : 0) + (crumbs.length > 0 ? 0.7 : 0));
+  const crumbs = target.ancestors ?? [];
+  const showsTextControls = targetKind !== 'element';
+  const toolbarH = TOOLBAR_H * (1.7 + (showAdvanced ? 1 : 0));
   const maxX = measuredW > 0 ? window.innerWidth - measuredW - 8 : Number.MAX_SAFE_INTEGER;
   const pos = {
     x: Math.max(8, Math.min((box?.left ?? 0) + rect.left, maxX)),
@@ -253,32 +256,30 @@ export default function StoryTypographyToolbar({ target, targetKind = 'text', ac
         onMouseDown={(e: MouseEvent) => e.preventDefault()}
       >
         <TooltipProvider>
-        {crumbs.length > 0 && (
-          <HStack gap={1} mb={0.5} pb={0.5} px={0.5} borderBottomWidth="1px" borderColor="border.muted">
-            {crumbs.map(c => (
-              <HStack key={c.astPath} gap={1}>
-                <Box
-                  as="button"
-                  aria-label={`Select ancestor ${c.astPath}`}
-                  onClick={() => onSelectAncestor?.(c.astPath)}
-                  fontSize="2xs"
-                  fontFamily="mono"
-                  color="fg.muted"
-                  cursor="pointer"
-                  _hover={{ color: 'fg', textDecoration: 'underline' }}
-                >
-                  {c.tag}{c.hint ? `·${c.hint}` : ''}
-                </Box>
-                <Text fontSize="2xs" color="fg.muted">›</Text>
-              </HStack>
-            ))}
-            <Text fontSize="2xs" fontFamily="mono" fontWeight="semibold">
-              {hostEl.tagName.toLowerCase()}
-            </Text>
-          </HStack>
-        )}
+        <HStack gap={1} mb={0.5} pb={0.5} px={0.5} borderBottomWidth="1px" borderColor="border.muted">
+          {crumbs.map(c => (
+            <HStack key={c.astPath} gap={1}>
+              <Box
+                as="button"
+                aria-label={`Select ancestor ${c.astPath}`}
+                onClick={() => onSelectAncestor?.(c.astPath)}
+                fontSize="2xs"
+                fontFamily="mono"
+                color="fg.muted"
+                cursor="pointer"
+                _hover={{ color: 'fg', textDecoration: 'underline' }}
+              >
+                {c.tag}{c.hint ? `·${c.hint}` : ''}
+              </Box>
+              <Text fontSize="2xs" color="fg.muted">›</Text>
+            </HStack>
+          ))}
+          <Text fontSize="2xs" fontFamily="mono" fontWeight="semibold">
+            {hostEl.tagName.toLowerCase()}
+          </Text>
+        </HStack>
         <HStack gap={0.5}>
-          {targetKind === 'text' && (
+          {showsTextControls && (
             <>
               {stepButton('Decrease font size', <LuAArrowDown />, () => apply(c => stepSizeClass(c, -1)))}
               <Text fontSize="2xs" color="fg.muted" minW="24px" textAlign="center" fontFamily="mono">
@@ -297,7 +298,7 @@ export default function StoryTypographyToolbar({ target, targetKind = 'text', ac
           {toggleButton('align', 'text-right', 'Align right', <LuAlignRight />)}
           {toggleButton('align', 'text-justify', 'Align justify', <LuAlignJustify />)}
           {divider}
-          {targetKind === 'text' && (
+          {showsTextControls && (
             <>
               <ColorSwatchControl
                 label="Text color"

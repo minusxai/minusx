@@ -112,8 +112,24 @@ describe('StoryJsxBody — text-host focus reporting (toolbar anchor)', () => {
     const { host } = renderBody({ onTextHostFocusChange });
     const p = host('0.0');
     fireEvent.focus(p);
-    expect(onTextHostFocusChange).toHaveBeenLastCalledWith({ astPath: '0.0', el: p });
+    expect(onTextHostFocusChange).toHaveBeenLastCalledWith({ astPath: '0.0', el: p, ancestors: [] });
     fireEvent.blur(p);
     expect(onTextHostFocusChange).toHaveBeenLastCalledWith(null);
+  });
+
+  it('includes selectable ancestors for the universal hierarchy breadcrumb', () => {
+    const onTextHostFocusChange = vi.fn();
+    const { host } = renderBody({
+      jsx: '<div><section className="max-w-4xl"><p>Hello</p></section></div>',
+      onTextHostFocusChange,
+    });
+    const p = host('0.0.0');
+
+    fireEvent.focus(p);
+    expect(onTextHostFocusChange).toHaveBeenLastCalledWith({
+      astPath: '0.0.0',
+      el: p,
+      ancestors: [{ astPath: '0.0', tag: 'section', hint: 'max-w-4xl' }],
+    });
   });
 });
