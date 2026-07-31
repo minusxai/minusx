@@ -44,6 +44,7 @@ import { extractConfigSecrets, modeFromPhysicalPath } from '@/lib/secrets/config
 import { restoreRedactedConfigSecrets } from '@/lib/secrets/config-secret-specs';
 import { computeSchemaFromWhitelist } from './loaders/context-loader-utils';
 import { makeDefaultContextContent, resolveVersionWhitelist } from '@/lib/context/context-utils';
+import { COMPUTED_CONTEXT_FIELDS } from '@/lib/types/context';
 import { selectDatabase } from '@/lib/utils/database-selector';
 import { getFileAnalyticsSummary, getFilesAnalyticsSummary, getConversationAnalytics } from '@/lib/analytics/file-analytics.server';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
@@ -585,12 +586,17 @@ class FilesDataLayerServer implements IFilesDataLayer {
         : connectionContentWithoutSchema) as BaseFileContent;
     }
 
-    // For contexts: strip the server-computed fields (fullSchema, parentSchema, fullDocs,
-    // fullSkills, fullAgents) and normalize version format.
+    // For contexts: strip EVERY server-computed field and normalize version format.
+    // The loader decorates a context with derived state and the browser round-trips
+    // whatever it was handed, so anything left here is frozen into the row and then
+    // disagrees with the tree the moment a parent changes. Driven by the one list in
+    // `lib/types/context.ts` rather than a destructure, because a destructure silently
+    // omits any field added later — which is how seven of the twelve came to be persisted.
     // Older clients may send version.databases (legacy) instead of version.whitelist (new).
     // Normalize on every save so the DB always uses the canonical format.
     if (existingFile.type === 'context') {
-      const { fullSchema, parentSchema, fullDocs, fullSkills, fullAgents, ...ctx } = content as ContextContent;
+      const ctx = { ...(content as ContextContent) };
+      for (const key of COMPUTED_CONTEXT_FIELDS) delete (ctx as Record<string, unknown>)[key];
       if (ctx.versions) {
         ctx.versions = ctx.versions.map(v => {
           const { databases: _legacy, ...vClean } = v as any;

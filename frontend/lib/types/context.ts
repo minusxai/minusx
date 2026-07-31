@@ -198,6 +198,7 @@ export type ContextContent = PartialBy<ScheduledJobContent, 'schedule' | 'recipi
   fullSkills?: SkillEntry[];           // Computed by loader - inherited user-defined skills
   fullAgents?: AgentEntry[];           // Computed by loader - inherited user-defined agents
 
+
   // Working fields (exposed by container for editing current version)
   databases?: DatabaseContext[] | '*'; // Current version's whitelist (container only); '*' = expose all
   docs?: DocEntry[];                  // Current version's docs (container only)
@@ -216,7 +217,36 @@ export type ContextContent = PartialBy<ScheduledJobContent, 'schedule' | 'recipi
 
   // User-defined custom agents (stored at content level, independent of versions)
   agents?: AgentEntry[];
-};
+}
+
+/**
+ * Every field above that the loader COMPUTES rather than the author writing.
+ *
+ * These are a view over the context tree, rebuilt on every read. The browser
+ * round-trips whatever it was handed, so the save path strips these before
+ * writing — otherwise a stale copy of derived state is frozen into the row and
+ * silently disagrees with the tree as soon as a parent changes.
+ *
+ * Keep this in step with the `Computed by loader` annotations above. It is the
+ * single list the save path strips by, so a field added there and missed here is
+ * a field that starts getting persisted, with nothing to catch it: Ajv runs
+ * without `removeAdditional` and the context schema does not name these keys.
+ */
+export const COMPUTED_CONTEXT_FIELDS = [
+  'fullSchema',
+  'parentSchema',
+  'fullDocs',
+  'fullMetrics',
+  'fullAnnotations',
+  'fullViews',
+  'fullSemanticModels',
+  'parentViews',
+  'parentSemanticModels',
+  'viewProblems',
+  'fullSkills',
+  'fullAgents',
+] as const satisfies readonly (keyof ContextContent)[];
+;
 
 /**
  * Context information for a file path
