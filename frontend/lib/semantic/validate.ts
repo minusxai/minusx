@@ -1,5 +1,5 @@
 /**
- * Tier-1 static validation for authored semantic models (MinusX.md "Semantic
+ * Tier-1 static validation for authored semantic models (CLAUDE.md "Semantic
  * models, contexts, views, and Atlas schemas").
  *
  * Pure and synchronous: name/alias/namespace rules, source resolution against

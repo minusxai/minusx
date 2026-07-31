@@ -1,4 +1,4 @@
-// Conversations V2 — wire projection on the read routes (see MinusX.md "Chat serving").
+// Conversations V2 — wire projection on the read routes (see CLAUDE.md "Chat serving").
 // GET /api/conversations/:id defaults to the slim `display` view; `?view=full` returns the
 // verbatim log; `?since=<seq>` returns only newer rows. The stream's catch-up applies the same
 // projection. Seeds rows directly via appendMessages (no LLM involved).

@@ -1,7 +1,7 @@
 /**
  * Query Execution, Cache & Params Arch V2 — shared contracts.
  *
- * See `MinusX.md` — "Query data plane". These types are the
+ * See `CLAUDE.md` — "Query data plane". These types are the
  * single source of truth for the durable, cross-instance query cache that
  * replaces the in-process `queryCache`/`queryInflight` maps.
  *

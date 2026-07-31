@@ -1,6 +1,6 @@
 /**
  * DashboardView — characterization tests written for the Container/View
- * discipline move (MinusX.md "Refactoring — Blue → Red → Blue"), which has since
+ * discipline move (CLAUDE.md "Refactoring — Blue → Red → Blue"), which has since
  * LANDED: DashboardView.tsx is props-only now, and the reads/dispatches it used
  * to make — selectFileEditMode, selectIsDirty, selectMergedContent
  * (dashboard-level parameterValues), ephemeralChanges.lastExecuted.params,
@@ -22,7 +22,7 @@
  * is directly observable without depending on the real library's drag/resize
  * internals.
  *
- * All element queries by aria-label only (MinusX.md "Writing tests"). One
+ * All element queries by aria-label only (CLAUDE.md "Writing tests"). One
  * presentational aria-label was added to DashboardView.tsx's question-tile
  * wrapper (`Dashboard tile <id>[ (mark)]`) since the publish/edit highlight
  * state (fileState/dirtyFiles-driven) had no other observable affordance.

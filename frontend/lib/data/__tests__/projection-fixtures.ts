@@ -1,5 +1,5 @@
 /**
- * Shared fixtures for the Conversations V2 display projection tests (see MinusX.md "Chat serving").
+ * Shared fixtures for the Conversations V2 display projection tests (see CLAUDE.md "Chat serving").
  * Shapes mirror real stored pi log entries: a root agent invocation with a heavy `context`,
  * an assistant turn with usage + tool calls, and toolResults of each projection class.
  */

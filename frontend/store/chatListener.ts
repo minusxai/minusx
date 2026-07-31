@@ -863,7 +863,7 @@ chatListenerMiddleware.startListening({
 
 /**
  * Dev mode turned ON → conversation reloads switch to the full wire view (Conversations V2 — see
- * MinusX.md "Client State: Redux store, file-state, hooks, navigation"). The raw-log cache must
+ * CLAUDE.md "Client State: Redux store, file-state, hooks, navigation"). The raw-log cache must
  * never mix slim and full entries, so any toggle
  * invalidates it. Turning dev mode ON additionally re-renders the settled loaded conversations
  * from the verbatim log so the inspector (per-turn appState, full tool I/O) has data without a

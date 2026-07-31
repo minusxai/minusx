@@ -7,7 +7,7 @@
  * lost while nobody listens is harmless because correctness comes from the cursor + SELECT.
  *
  * One LISTEN per conversation channel is shared by all in-process subscribers (fan-out via a local
- * Set, bounded by live connections). See MinusX.md "Chat serving".
+ * Set, bounded by live connections). See CLAUDE.md "Chat serving".
  */
 import { getModules } from '@/lib/modules/registry';
 import { namespacedChannel } from '@/lib/namespace/types';

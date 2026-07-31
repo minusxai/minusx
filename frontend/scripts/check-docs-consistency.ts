@@ -2,9 +2,14 @@
 /**
  * Assert that documentation still points at code that exists.
  *
- * Two sweeps, both mechanical:
- *   1. Every file path referenced in MinusX.md resolves to a real file or directory.
+ * Three sweeps, all mechanical:
+ *   1. Every file path referenced in ANY `CLAUDE.md` resolves to a real file or directory.
  *   2. No source comment references a `*.md` file that no longer exists.
+ *   3. Every nested `CLAUDE.md` is reachable from the root one.
+ *
+ * Sweep 3 exists because a nested doc only auto-loads for work inside its own
+ * directory. An unlinked module doc is invisible to anyone reading top-down —
+ * present, correct, and never found.
  *
  * Neither can tell you a description is WRONG — only that a pointer is DEAD, which is
  * the drift that actually misleads a reader, and the only kind a machine can catch
@@ -23,7 +28,7 @@ import { fileURLToPath } from 'url';
 import { execFileSync } from 'child_process';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const PROJECT_DOC = 'MinusX.md';
+const ROOT_DOC = 'CLAUDE.md';
 
 // `data` is deliberately absent: the repo-root `data/` holds databases, but
 // `frontend/lib/data/` is a source directory and skipping it hides real files.
@@ -87,17 +92,43 @@ function existsSomewhereUnder(dir: string, filename: string, depth = 0): boolean
   return false;
 }
 
-// ── Sweep 1: paths claimed by the project doc ────────────────────────────────
+// ── Sweep 1: paths claimed by ANY CLAUDE.md ──────────────────────────────────
+// The project doc is no longer one file: the root carries orientation and the
+// development rules, and each deep module carries its own. All of them are
+// auto-loaded, so all of them can lie — checking only the root would leave the
+// module docs, which are the ones a developer reads while editing, unguarded.
 const failures: string[] = [];
 let pathsChecked = 0;
 
-const docPath = join(REPO_ROOT, PROJECT_DOC);
-if (!exists(docPath)) {
-  console.error(`check-docs: ${PROJECT_DOC} not found at the repo root.`);
+const rootDocPath = join(REPO_ROOT, ROOT_DOC);
+if (!exists(rootDocPath)) {
+  console.error(`check-docs: ${ROOT_DOC} not found at the repo root.`);
   process.exit(1);
 }
 
-const doc = readFileSync(docPath, 'utf8');
+/** Every CLAUDE.md in the tree, repo-relative. */
+function findClaudeDocs(dir: string, out: string[] = []): string[] {
+  let entries;
+  try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return out; }
+  for (const e of entries) {
+    const full = join(dir, e.name);
+    if (e.isDirectory()) {
+      if (SKIP_DIRS.has(e.name) || (e.name.startsWith('.') && e.name !== '.github')) continue;
+      findClaudeDocs(full, out);
+    } else if (e.name === ROOT_DOC) {
+      out.push(full.slice(REPO_ROOT.length + 1));
+    }
+  }
+  return out;
+}
+
+const CLAUDE_DOCS = findClaudeDocs(REPO_ROOT);
+
+for (const relDoc of CLAUDE_DOCS) {
+checkDoc(relDoc, readFileSync(join(REPO_ROOT, relDoc), 'utf8'));
+}
+
+function checkDoc(PROJECT_DOC: string, doc: string): void {
 let inFence = false;
 
 doc.split('\n').forEach((line, i) => {
@@ -141,6 +172,7 @@ doc.split('\n').forEach((line, i) => {
     failures.push(`${PROJECT_DOC}:${i + 1}  dead path: \`${t}\``);
   }
 });
+}
 
 // ── Sweep 2: source comments pointing at a doc that no longer exists ─────────
 // A backticked mention may contain spaces; a bare one may not, or the pattern
@@ -176,21 +208,43 @@ for (const file of sourceFiles) {
   });
 }
 
-if (failures.length || orphaned.length) {
+// ── Sweep 3: no module doc is an orphan ─────────────────────────────────────
+// A nested CLAUDE.md only auto-loads for work inside its own directory. If the
+// root does not link it, someone reading top-down never learns it exists — the
+// doc is then invisible in exactly the situation it was written for.
+const unlinked: string[] = [];
+const rootText = readFileSync(rootDocPath, 'utf8');
+for (const relDoc of CLAUDE_DOCS) {
+  if (relDoc === ROOT_DOC) continue;
+  // The link must name the DOC, not merely the directory. Accepting a directory
+  // mention makes this vacuous: every module directory is already listed in the
+  // module map, so nothing would ever be reported. (Verified by planting an
+  // unlinked doc under a mapped directory — the looser check passed it.)
+  if (rootText.includes(relDoc)) continue;
+  unlinked.push(`${relDoc} is not referenced from ${ROOT_DOC}`);
+}
+
+if (failures.length || orphaned.length || unlinked.length) {
   if (failures.length) {
-    console.error(`\ncheck-docs: ${failures.length} dead path(s) in ${PROJECT_DOC}:\n`);
+    console.error(`\ncheck-docs: ${failures.length} dead path(s) across ${CLAUDE_DOCS.length} CLAUDE.md file(s):\n`);
     for (const f of failures) console.error(`  ${f}`);
     console.error('\nFix the path, or delete the pointer. Documentation that lies is worse than none.');
   }
   if (orphaned.length) {
     console.error(`\ncheck-docs: ${orphaned.length} comment(s) reference a doc that does not exist:\n`);
     for (const o of orphaned) console.error(`  ${o}`);
-    console.error(`\nRepoint at ${PROJECT_DOC}, or drop the reference.`);
+    console.error(`\nRepoint at the nearest ${ROOT_DOC}, or drop the reference.`);
+  }
+  if (unlinked.length) {
+    console.error(`\ncheck-docs: ${unlinked.length} module doc(s) unreachable from the root:\n`);
+    for (const u of unlinked) console.error(`  ${u}`);
+    console.error(`\nAdd a pointer in ${ROOT_DOC} so a top-down reader can find it.`);
   }
   console.error('');
   process.exit(1);
 }
 
 console.log(
-  `check-docs: ${pathsChecked} path(s) in ${PROJECT_DOC} and ${mentionsChecked} doc mention(s) in source — all resolve.`,
+  `check-docs: ${pathsChecked} path(s) across ${CLAUDE_DOCS.length} CLAUDE.md file(s) and `
+  + `${mentionsChecked} doc mention(s) in source — all resolve.`,
 );

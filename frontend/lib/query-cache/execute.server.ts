@@ -1,6 +1,6 @@
 /**
  * executeQueryCached — the ONE chokepoint for cached query execution, now fully
- * STREAMING write-through (MinusX.md, "Query data plane").
+ * STREAMING write-through (CLAUDE.md, "Query data plane").
  *
  *   fresh   → serve blob (cache stream, no execution)
  *   stale   → serve blob NOW + fire-and-forget background revalidation (lease)

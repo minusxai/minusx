@@ -102,7 +102,7 @@ interface QuestionViewV2Props {
   queryEstimatedDurationMs?: number | null;
 
   // --- Formerly-internal Redux state, now supplied by the caller (Container/View
-  // convention — see MinusX.md "Component patterns"). Page-mode containers
+  // convention — see CLAUDE.md "Component patterns"). Page-mode containers
   // (QuestionContainerV2, CreateQuestionModalContainer) source these from Redux;
   // toolcall callers (InlineChart, ExecuteQueryDisplay) supply local/no-op values. ---
 

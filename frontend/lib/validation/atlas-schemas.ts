@@ -250,7 +250,7 @@ export const VizSettings = Type.Object({
 export type VizSettings = Static<typeof VizSettings>;
 
 // ============================================================================
-// Viz V2 envelope (MinusX.md "Visualization")
+// Viz V2 envelope (CLAUDE.md "Visualization")
 //
 // Only the MinusX envelope lives in TypeBox. Native Vega-Lite/Vega spec bodies are
 // deliberately opaque here (open records) — they are validated against Vega-Lite's
@@ -728,7 +728,7 @@ const CtxTableAnnotation = Type.Object({
 }, { title: 'ContextTableAnnotation' });
 
 // ============================================================================
-// Semantic Models V2 — authored semantic layer (MinusX.md "Semantic models,
+// Semantic Models V2 — authored semantic layer (CLAUDE.md "Semantic models,
 // contexts, views, and Atlas schemas").
 // TypeBox is the single source of truth for these shapes; lib/types/semantic.ts
 // re-exports the Static types. The tier-1 validator (lib/semantic/validate.ts)

@@ -632,7 +632,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
     if (existingFile.type === 'context') {
       try {
         contentToSave = await stampAndValidateViews(contentToSave as ContextContent, path, user) as BaseFileContent;
-        // The semantic-model gate (tiers 1–3 — see MinusX.md "Semantic models,
+        // The semantic-model gate (tiers 1–3 — see CLAUDE.md "Semantic models,
         // contexts, views, and Atlas schemas"): an invalid authored model blocks
         // the version save, same seam as views; the stored content drives probe
         // scoping + sticky `verified` stamps.

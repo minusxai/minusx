@@ -69,7 +69,7 @@ npm run dev                   # http://localhost:3000
 The LLM provider is configured in the app after first launch (setup wizard "AI Models" step, or
 Settings → Models) — there are no LLM environment variables.
 
-Architecture, module documentation and development guidelines live in [MinusX.md](./MinusX.md).
+Architecture, module documentation and development guidelines live in [CLAUDE.md](./CLAUDE.md).
 
 ## Why MinusX
 

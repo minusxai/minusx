@@ -6,7 +6,7 @@
  *  - deterministic: pure `content → RubricReport` (see `deterministic/*`, `scoring.ts`)
  *  - llm:           `(content + screenshot) → RubricReport` (see `llm/*`)
  *
- * See `MinusX.md` — "Auth, Access Control, Mode Isolation, HTTP Helpers, and the File-Health
+ * See `CLAUDE.md` — "Auth, Access Control, Mode Isolation, HTTP Helpers, and the File-Health
  * Rubric" — for the rubric architecture and where each threshold lives.
  */
 import type { FileType } from '@/lib/types';

@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$CLAUDE_PROJECT_DIR/frontend\" && npx tsx scripts/check-docs-consistency.ts >/dev/null 2>&1 || npx tsx scripts/check-docs-consistency.ts 2>&1 | tail -20; echo 'Docs consistency: the check above only proves that referenced paths still EXIST. It cannot tell you whether the prose is still TRUE. If this edit changed behaviour, re-read (a) the comments in the file you edited, (b) the section of MinusX.md describing this module, and (c) any docs/content/** page describing this behaviour — and update them in this change, not later.'",
+            "command": "cd \"$CLAUDE_PROJECT_DIR/frontend\" && npx tsx scripts/check-docs-consistency.ts >/dev/null 2>&1 || npx tsx scripts/check-docs-consistency.ts 2>&1 | tail -20; echo 'Docs consistency: the check above only proves that referenced paths still EXIST. It cannot tell you whether the prose is still TRUE. If this edit changed behaviour, re-read (a) the comments in the file you edited, (b) the section of CLAUDE.md describing this module, and (c) any docs/content/** page describing this behaviour — and update them in this change, not later.'",
             "timeout": 60
           }
         ]

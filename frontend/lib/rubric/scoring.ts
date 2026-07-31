@@ -4,7 +4,7 @@
  * false precision / variance). All tunable constants (deductions, per-type category weights,
  * grade bands) live here so they can be calibrated against a human gold set later.
  *
- * See `MinusX.md` — "Auth, Access Control, Mode Isolation, HTTP Helpers, and the File-Health
+ * See `CLAUDE.md` — "Auth, Access Control, Mode Isolation, HTTP Helpers, and the File-Health
  * Rubric".
  */
 import type {

@@ -362,7 +362,7 @@ function collectEditValidation(state: ReturnType<ReturnType<typeof getStore>['ge
     // splits them into separate filters. Non-blocking, same channel as the story lint.
     issues.push(...lintDashboardParams(collectEmbeddedQuestions(state, content, 'dashboard')));
   } else if (fileState.type === 'context') {
-    // Semantic models (see `MinusX.md` — "Semantic models, contexts, views, and Atlas
+    // Semantic models (see `CLAUDE.md` — "Semantic models, contexts, views, and Atlas
     // schemas"): tiers 1–2 over EVERY authored model in the edited content — `undefined`
     // for the saved side, so nothing is skipped as "unchanged".
     // This is the NON-blocking half: the EditFile handler already rejected an edit that

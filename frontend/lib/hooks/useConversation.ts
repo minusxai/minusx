@@ -30,7 +30,7 @@ export function useConversation(conversationId?: number) {
   const conversation = useSelector((state: any) =>
     selectConversation(state, conversationId)
   );
-  // Conversations V2 (MinusX.md "Chat serving"): non-dev loads get the slim display view; dev mode
+  // Conversations V2 (CLAUDE.md "Chat serving"): non-dev loads get the slim display view; dev mode
   // loads the verbatim log (per-turn appState for the inspector, full tool I/O). devMode is read
   // from the LIVE store at fetch time — not the render-time selector value — because DataLoader
   // (components/app-shell) restores it from localStorage in its own mount effect, which can fire

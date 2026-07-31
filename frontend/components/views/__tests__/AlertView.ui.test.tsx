@@ -1,6 +1,6 @@
 /**
  * AlertView — characterization tests written for the Container/View discipline
- * move (MinusX.md "Refactoring — Blue → Red → Blue"), which has since LANDED:
+ * move (CLAUDE.md "Refactoring — Blue → Red → Blue"), which has since LANDED:
  * AlertView.tsx is props-only now, and the two read-only selector calls it used
  * to make — selectFileEditMode (editMode) and selectIsDirty (isDirty) — live in
  * AlertContainerV2.
@@ -19,7 +19,7 @@
  * jsdom's undici can't resolve as a relative URL and turns into an unhandled
  * rejection that fails the run even though every assertion passes.
  *
- * All element queries by aria-label only (MinusX.md "Writing tests"):
+ * All element queries by aria-label only (CLAUDE.md "Writing tests"):
  *  - editMode is observed via TestList's "Delete test" button, which only
  *    renders when editMode is true and at least one test exists.
  *  - isDirty is observed via the AlertHistoryEmptyState hero (aria-label

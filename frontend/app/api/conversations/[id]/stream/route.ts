@@ -18,7 +18,7 @@ export const runtime = 'nodejs';
  * the conversation's NOTIFY channel and tails: each `message` wakeup triggers a catch-up SELECT,
  * `delta` wakeups stream ephemeral typing, `status` transitions are forwarded, and `pending` (paused)
  * carries the frontend-tool calls derived from the log. Closes on `done` (idle/error) or client
- * disconnect. Correctness is the cursor + SELECT — a missed NOTIFY is harmless. See MinusX.md
+ * disconnect. Correctness is the cursor + SELECT — a missed NOTIFY is harmless. See CLAUDE.md
  * → "Chat serving".
  */
 export async function GET(

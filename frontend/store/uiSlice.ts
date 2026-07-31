@@ -33,7 +33,7 @@ interface UIState {
   activeSidebarSection: string | null;
   askForConfirmation: boolean;
   showAdvanced: boolean;
-    /** Viz V2 format switch (see MinusX.md "Visualization"). Off (V1):
+    /** Viz V2 format switch (see CLAUDE.md "Visualization"). Off (V1):
    * `vizSettings` is the truth — charts are just-in-time converted for rendering,
    * saved `viz` envelopes are ignored, and editing stays on the classic panel
    * (nothing ever writes an envelope). On (V2): a saved envelope is the truth —

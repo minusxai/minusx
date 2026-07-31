@@ -1,5 +1,5 @@
 /**
- * Conversations V2 — client ConversationsAPI.get view/since plumbing (see MinusX.md "Chat serving").
+ * Conversations V2 — client ConversationsAPI.get view/since plumbing (see CLAUDE.md "Chat serving").
  * `view: 'full'` and `sinceSeq` must land on the request URL; the default adds neither.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';

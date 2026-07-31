@@ -1,5 +1,5 @@
 /**
- * AUTHORED semantic models, served scoped to a path (MinusX.md "Semantic models,
+ * AUTHORED semantic models, served scoped to a path (CLAUDE.md "Semantic models,
  * contexts, views, and Atlas schemas"). Models are authored on context versions
  * (`ContextVersion.semanticModels`) and inherited down the context tree as
  * `content.fullSemanticModels` — resolution mirrors views

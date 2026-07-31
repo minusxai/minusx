@@ -5,7 +5,7 @@
  * dialect SQL. This is the whole "engine" of the Semantic tier: no SQL is
  * generated here, only IR.
  *
- * Compilation rules (MinusX.md "Semantic models, contexts, views, and Atlas schemas"):
+ * Compilation rules (CLAUDE.md "Semantic models, contexts, views, and Atlas schemas"):
  *  - the FROM comes from `model.primary` — a table (`schema.table`) or a data
  *    model (view), addressed as `_views.<name>`
  *  - aggregation metrics resolve to aggregate select columns (alias = slug of

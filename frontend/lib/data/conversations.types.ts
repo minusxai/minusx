@@ -3,7 +3,7 @@
  *
  * Conversations are first-class rows (not files). The `messages` table holds one row per pi
  * ConversationLogEntry; `content` is the entry verbatim (source of truth) and `seq` is both the
- * 0-based pi log index and the stream cursor. See MinusX.md "Chat serving".
+ * 0-based pi log index and the stream cursor. See CLAUDE.md "Chat serving".
  */
 import type { ConversationLogEntry } from '@/orchestrator/types';
 import type { RemoteSessionRecord } from './remote-sessions.types';

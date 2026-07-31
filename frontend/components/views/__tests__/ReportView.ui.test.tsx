@@ -1,6 +1,6 @@
 /**
  * ReportView — characterization tests written for the Container/View discipline
- * move (MinusX.md "Refactoring — Blue → Red → Blue"), which has since LANDED:
+ * move (CLAUDE.md "Refactoring — Blue → Red → Blue"), which has since LANDED:
  * ReportView.tsx is props-only now, and the two read-only selector calls it used
  * to make — selectFileEditMode (editMode) and selectIsDirty (isDirty) — live in
  * ReportContainerV2.
@@ -18,7 +18,7 @@
  * ReportView) is mocked for the same reason as AlertView.ui.test.tsx: it
  * fires an unmocked /api/users fetch on mount with no .catch.
  *
- * All element queries by aria-label only (MinusX.md "Writing tests"):
+ * All element queries by aria-label only (CLAUDE.md "Writing tests"):
  *  - editMode is observed via the "Report instructions" editor container,
  *    which only renders the Lexical editor (not the read-only viewer) when
  *    editMode is true — detected via the presence of a contenteditable node.

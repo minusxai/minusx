@@ -8,7 +8,7 @@
  * isolation. That was the rendering seam that stayed stable across the
  * container/view move (the Redux reads/dispatches now live in the container and
  * reach the view as props), so this exact file passed unchanged before and
- * after it — per MinusX.md's "Refactoring — Blue → Red → Blue" discipline.
+ * after it — per CLAUDE.md's "Refactoring — Blue → Red → Blue" discipline.
  *
  * Heavy data-fetching leaf hooks used by the view (schema context, connections
  * list, available-questions autocomplete, GUI-compat check) are mocked to

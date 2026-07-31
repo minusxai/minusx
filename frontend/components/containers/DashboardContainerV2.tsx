@@ -9,7 +9,7 @@
  * - Save/cancel are not handled here: FileHeader drives them via FileView
  *
  * Owns all Redux access for the dashboard visual surface (Container/View convention,
- * MinusX.md "Component patterns") — DashboardView is pure presentation and receives
+ * CLAUDE.md "Component patterns") — DashboardView is pure presentation and receives
  * everything (values + callbacks) as props.
  */
 import { useAppSelector, useAppDispatch } from '@/store/hooks';

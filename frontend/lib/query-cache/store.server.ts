@@ -7,7 +7,7 @@
  * instance, so the same claim coordinates across the hosted fleet and, on
  * single-writer PGLite, still dedups concurrent in-process callers — there is
  * simply nothing cross-instance to coordinate there.
- * See `MinusX.md` — "Query data plane", the cache.
+ * See `CLAUDE.md` — "Query data plane", the cache.
  */
 import 'server-only';
 import { getModules } from '@/lib/modules/registry';

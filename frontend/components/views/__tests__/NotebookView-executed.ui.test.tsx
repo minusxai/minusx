@@ -1,6 +1,6 @@
 /**
  * NotebookView — characterizes the `reduxExecuted` path, written for the
- * Container/View discipline move (MinusX.md "Refactoring — Blue → Red → Blue")
+ * Container/View discipline move (CLAUDE.md "Refactoring — Blue → Red → Blue")
  * that has since LANDED: NotebookContainerV2 now owns the
  * selectNotebookCellExecuted read / setNotebookCellExecuted dispatch and feeds
  * a real file's per-cell "last run" snapshot to the view as props. That differs

@@ -7,7 +7,7 @@
  * bespoke LLM call: prompts live in `micro.rubric_llm` (prompts.yaml), model + usage tracking
  * come for free. The screenshot rides along as an image content block on the micro context.
  *
- * See `MinusX.md` — "Auth, Access Control, Mode Isolation, HTTP Helpers, and the File-Health
+ * See `CLAUDE.md` — "Auth, Access Control, Mode Isolation, HTTP Helpers, and the File-Health
  * Rubric".
  */
 import 'server-only';

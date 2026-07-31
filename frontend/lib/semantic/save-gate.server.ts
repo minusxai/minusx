@@ -1,5 +1,5 @@
 /**
- * The context-save gate for authored semantic models (MinusX.md "Semantic models,
+ * The context-save gate for authored semantic models (CLAUDE.md "Semantic models,
  * contexts, views, and Atlas schemas").
  *
  * Mirrors the views gate (lib/views/save-gate.server.ts): every context write —

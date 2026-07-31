@@ -4,7 +4,7 @@
  * (hit by the UI health panel and the ReviewFile/EditFile review path) and the CheckFileHealth
  * tool call; the deterministic-only path (piece 1) stays in `registry.ts`.
  *
- * See `MinusX.md` — "Auth, Access Control, Mode Isolation, HTTP Helpers, and the File-Health
+ * See `CLAUDE.md` — "Auth, Access Control, Mode Isolation, HTTP Helpers, and the File-Health
  * Rubric".
  */
 import 'server-only';
