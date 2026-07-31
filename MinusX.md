@@ -3685,9 +3685,19 @@ write is not an optimisation: the focused text host is render-frozen by the memo
 re-render cannot deliver the change at all. The commit path is deliberately whole-value — the full
 resolved `className` and the full inline `style` string — so a stale AST read can never merge two
 partial edits. Text colour and fill are inline styles, not classes, because a class palette cannot
-cover a colour picker's range. Clicking a plain non-text-host element in edit mode selects it as a
-format target instead (`data-mx-selected`, with `data-mx-hover` previewing what a click would take);
-embeds are never selectable, since their chrome is interactive.
+cover a colour picker's range.
+
+The toolbar anchors to one of **three** target kinds, and they do not offer the same controls.
+`'text'` is a focused contenteditable host and gets everything. `'text-element'` is a click-selected
+`div`/`p`/heading/`span` parent — also full typography, because setting it on the parent is how a
+style inherits into all its children. `'element'` is any other click-selected container, which hides
+font size, B/I/U and text colour, since those are meaningless on a container; alignment, fill, width,
+spacing, padding and bleed remain. Click-selection marks the target `data-mx-selected`, with
+`data-mx-hover` previewing what a click would take; embeds are never selectable, since their chrome is
+interactive. A breadcrumb of the selectable ancestor chain (outermost first, labelled via `crumbHint`)
+re-anchors the selection up the tree — the reason the toolbar can style a wrapper the user cannot
+easily click. Both marker attributes are render artifacts caught by the `data-mx-*` prefix strip in
+`jsx-edit.ts`, so neither can reach stored source.
 
 **Every agent edit remounts the story iframe, and two defenses keep the page still.** `AgentHtml` is
 keyed on the story hash, so an edit tears the iframe down; the fresh one measures ~0px and regrows
