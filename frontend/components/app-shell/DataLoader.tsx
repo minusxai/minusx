@@ -8,6 +8,13 @@ import { useContexts } from '@/lib/hooks/useContexts';
 import { setBulkUiFlags } from '@/store/uiSlice';
 import { selectConnectionsContentLoaded, selectContextsContentLoaded } from '@/store/filesSlice';
 
+function readStoredBoolean(key: string): boolean | undefined {
+  const value = localStorage.getItem(key);
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return undefined;
+}
+
 /**
  * DataLoader Component
  *
@@ -28,7 +35,11 @@ export function DataLoader() {
   // Restore persisted UI flags after hydration — single dispatch avoids 3 separate re-render cycles
   useEffect(() => {
     try {
-      const flags: { devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; vizV2?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; showExpandedMessages?: boolean; enableCustomAgents?: boolean; homePage?: Record<string, unknown> } = {};
+      const flags: { leftSidebarCollapsed?: boolean; rightSidebarCollapsed?: boolean; devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; vizV2?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; showExpandedMessages?: boolean; enableCustomAgents?: boolean; homePage?: Record<string, unknown> } = {};
+      const leftSidebarCollapsed = readStoredBoolean('leftSidebarCollapsed');
+      if (leftSidebarCollapsed !== undefined) flags.leftSidebarCollapsed = leftSidebarCollapsed;
+      const rightSidebarCollapsed = readStoredBoolean('rightSidebarCollapsed');
+      if (rightSidebarCollapsed !== undefined) flags.rightSidebarCollapsed = rightSidebarCollapsed;
       const dev = localStorage.getItem('devMode');
       if (dev !== null) flags.devMode = dev === 'true';
       const confirm = localStorage.getItem('askForConfirmation');
@@ -61,7 +72,7 @@ export function DataLoader() {
       if (hp !== null) { try { flags.homePage = JSON.parse(hp); } catch { /* ignore */ } }
       if (Object.keys(flags).length > 0) dispatch(setBulkUiFlags(flags));
     } catch { /* ignore */ }
-  }, []);
+  }, [dispatch]);
   const configsLoaded = useAppSelector(state => state.configs.loadedAt !== null);
 
   // Boolean selectors: return primitives so DataLoader only re-renders when the value actually flips
