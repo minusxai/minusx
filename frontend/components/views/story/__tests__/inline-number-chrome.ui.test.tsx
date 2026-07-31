@@ -2,7 +2,7 @@
  * InlineNumber footnote chrome — SELF-CONTAINED styling contract (staging regression, Jul 2026).
  *
  * The footnote popover renders INSIDE the story iframe, whose only stylesheet is the compiled
- * story CSS — Chakra/emotion recipe classes never reach it (Renderer_v2 §6a mirror shrink). So
+ * story CSS — Chakra/emotion recipe classes never reach it (the app-CSS mirror shrink). So
  * the popover surface, the source-chart frame, and the Edit-query trigger must be styled with
  * Tailwind token classes (compiled in via EMBED_CHROME_FILES), never Chakra style props:
  * a Chakra `width="420px"` / `height="260px"` resolves to NOTHING in the iframe and the

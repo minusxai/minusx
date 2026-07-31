@@ -1,5 +1,5 @@
 /**
- * Three-engine FLUID-WIDTH guard (Story_Design_V2 §4) — the permanent, real-browser regression net
+ * Three-engine FLUID-WIDTH guard — the permanent, real-browser regression net
  * for "the story lays out wider than the reader can see".
  *
  * WHY THIS EXISTS IN A BROWSER, NOT IN JSDOM
@@ -33,15 +33,6 @@ const WIDTHS = [390, 768, 1104, 1440];
 /** Resize-reactivity case: first paint wide, then the side-chat opens and narrows the pane. */
 const RESIZE_FROM = 1440;
 const RESIZE_TO = 900;
-
-/** Appended to the capture-matrix bundle entry: the real surface modules, on `window.__story`. */
-export const WIDTH_BUNDLE_ENTRY = `
-  import { mountStorySurface, autoSizeStorySurface, STORY_FLUID_SHIM_CSS } from '@/lib/story-surface';
-  import { serializeStorySvg, svgToImage as storySvgToImage } from '@/lib/story-surface/serialize';
-  (window as unknown as { __story: object }).__story = {
-    mountStorySurface, autoSizeStorySurface, STORY_FLUID_SHIM_CSS, serializeStorySvg, storySvgToImage,
-  };
-`;
 
 const PROSE = [
   'Revenue grew 14% quarter over quarter, with the strongest contribution coming from mid-market accounts in the northern region, where the new pricing tiers landed in the first week of the quarter.',

@@ -1,5 +1,5 @@
 /**
- * Banned story CSS — the ONE constant module behind every enforcement point (Story_Design_V2 §4).
+ * Banned story CSS — the ONE constant module behind every enforcement point.
  *
  * Two bans, three enforcement points (prompt line; sanitizer strip on `<style>`/inline styles at
  * story save; Tailwind candidate filter before compile):

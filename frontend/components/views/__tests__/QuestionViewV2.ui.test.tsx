@@ -1,17 +1,14 @@
 /**
- * QuestionViewV2 — characterization tests for the Redux integration that
- * CURRENTLY lives directly inside the view: useAppSelector/useAppDispatch call
- * sites for panel-collapse (setQuestionCollapsedPanel), the referenced-question
- * setFile-on-load effect, and the add/removeReferenceToQuestion dispatches.
+ * QuestionViewV2 — behavior tests for the query-source toolbar (GUI/SQL vs
+ * Spreadsheet), the panel-collapse Redux round-trip (setQuestionCollapsedPanel),
+ * and the wide layout's three-column arrangement.
  *
- * These tests deliberately mount the view through its EXISTING container,
+ * These tests deliberately mount the view through its container,
  * QuestionContainerV2 (`fileId` + `mode` props) — not QuestionViewV2 in
- * isolation. That's the only rendering seam that's stable across the planned
- * container/view move: today the Redux reads/dispatches live in the view;
- * after the move they'll live in the container and reach the view as props.
- * Testing through the container means this exact test file passes unchanged
- * both before and after the move (verifying the move preserved behavior),
- * per CLAUDE.md's "Refactoring — Blue -> Red -> Blue" discipline.
+ * isolation. That was the rendering seam that stayed stable across the
+ * container/view move (the Redux reads/dispatches now live in the container and
+ * reach the view as props), so this exact file passed unchanged before and
+ * after it — per CLAUDE.md's "Refactoring — Blue → Red → Blue" discipline.
  *
  * Heavy data-fetching leaf hooks used by the view (schema context, connections
  * list, available-questions autocomplete, GUI-compat check) are mocked to

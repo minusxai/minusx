@@ -1,7 +1,8 @@
 'use client';
 
 // ─── Source Dropdown Widget ───────────────────────────────────────────────────
-// Rendered in place of the text/number Input when parameter.source is set.
+// Rendered in place of the text/number Input when parameter.source.type === 'question'
+// (inline SQL sources go to InlineSqlDropdownWidget).
 
 import React, { useState, useMemo } from 'react';
 import { LuTriangleAlert } from 'react-icons/lu';
@@ -65,11 +66,12 @@ export function SourceDropdownWidget({ source, paramType, currentValue, paramNam
     ? (paramType === 'number' ? formatNumStr(String(currentValue)) : String(currentValue))
     : '';
 
-  // Controlled input display, owned locally so typing drives it directly. We do NOT key/remount
-  // on value changes (that lost focus mid-type) and we do NOT resync from the prop in an effect:
-  // for a story `<Param>`, the value only ever changes by the reader typing into THIS widget, so
-  // the local state is always the source of truth. A fresh mount (story reload) re-seeds it from
-  // the committed value via useState's initializer.
+  // Controlled input display, owned locally so typing drives it directly, and never resynced from
+  // the prop in an effect. Two hosts, two remount rules: StoryParamControl keys only on its clear
+  // counter, NOT on the value (keying on value lost focus mid-type) — for a story `<Param>` the
+  // value only ever changes by the reader typing into THIS widget, so the local state is the source
+  // of truth. ParameterInput does key on the value, so an externally-changed value remounts and
+  // re-seeds. Either way a fresh mount re-seeds from the committed value via useState's initializer.
   const [inputDisplay, setInputDisplay] = useState(defaultDisplayValue);
 
   const commit = (raw: string) => {

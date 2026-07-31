@@ -1,6 +1,6 @@
 /**
  * Generates `app/theme-tokens.css` — the shadcn token layer for the MAIN document
- * (Renderer_v2 Phase 3), so kit components (components/kit) render correctly on
+ *, so kit components (components/kit) render correctly on
  * dashboards/questions outside the story iframe:
  *
  *  - the `@theme inline` mapping registers the token utilities in the app's Tailwind build

@@ -241,7 +241,7 @@ function getColumnCompletions(
 
   // CTE info
   const cteColumns = extractCteInfo({ select: selectNode });
-  // Also check parent-level with block (CTE defined at top level)
+  // Lowercased CTE names, so a schema table shadowed by a same-named CTE is skipped below.
   const cteNamesLower = new Set([...cteColumns.keys()].map(n => n.toLowerCase()));
 
   // Schema table columns

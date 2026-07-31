@@ -3,8 +3,9 @@
 // Exercises the full flow without a DB or backend: ReportAgent dispatches ONE
 // analyst sub-agent driven by the report's freeform `reportPrompt`, then uses
 // the analyst's own markdown as the report (no synthesis pass). Charts are
-// `<div data-question-id>` embeds the analyst writes inline (rendered live by
-// the report viewer), so they pass through verbatim. `runQuery` /
+// saved-question embeds the analyst writes inline — `<Question id={N} />` per
+// buildGoal, or a legacy `<div data-question-id>` — rendered live by the report
+// viewer, so either passes through verbatim. `runQuery` /
 // `loadConnectionSchema` are stubbed so tools never reach ConnectionsAPI/FilesAPI.
 
 vi.mock('@/lib/connections/run-query', () => ({

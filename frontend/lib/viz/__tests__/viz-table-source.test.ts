@@ -1,5 +1,5 @@
 /**
- * The `table` source kind (RFC §10): tables stay DOM (TableV2), never vega. The
+ * The `table` source kind: tables stay DOM (TableV2), never vega. The
  * envelope persists only display formatting; everything else (sort/filter/visibility/
  * stats/CSV/drilldown) is ephemeral TableV2 state and comes free from reuse.
  */

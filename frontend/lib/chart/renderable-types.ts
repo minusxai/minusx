@@ -1,6 +1,6 @@
 /**
  * Which V1 chart types produce a rendered image, and their default aspect — engine-free
- * survivors of the deleted ECharts SSR renderer (Renderer_v2 Phase 2). The types themselves
+ * survivors of the deleted ECharts SSR renderer. The types themselves
  * now render through the Vega bridge; these constants gate image pipelines and size outputs.
  */
 

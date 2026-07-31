@@ -1,4 +1,4 @@
-// Conversations V2 — lazy screenshot endpoint (see /conversations-v2.md).
+// Conversations V2 — lazy screenshot endpoint (see CLAUDE.md "Chat serving").
 // GET /api/conversations/:id/screenshots/:callId serves the first inline image from that tool
 // call's RESPONSE content (generic — no tool names), gated by the same ownership check as the
 // conversation itself, with immutable caching. The slim GET rewrites `details.screenshotUrl`

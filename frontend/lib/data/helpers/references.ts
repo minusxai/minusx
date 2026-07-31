@@ -5,8 +5,9 @@ export type ChildIdResolver = (folderPath: string) => Promise<number[]>;
 
 /**
  * Extract reference IDs from a file (Phase 6: Reads from cached references column)
- * For dashboards, presentations, notebooks, reports, questions - return cached references from DB
+ * For dashboards, notebooks, questions and stories - return cached references from DB
  * For folders - delegates to resolveChildIds (injected by caller) to avoid circular imports
+ * Every other type has no references.
  *
  * @param resolveChildIds - Required for folder files. Provided by files.server.ts using DocumentDB.
  */

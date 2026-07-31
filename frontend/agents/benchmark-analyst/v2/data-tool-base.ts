@@ -102,8 +102,8 @@ export abstract class V2DataTool<P extends TSchema, D = unknown>
    * Build the `SampleConfig` to hand to `getCatalogStore`. Picks the slot
    * prompt off `this.context.catalogKey` — `'agent-b'` gets the edge-case
    * prompt, everything else gets the representative one. Returns
-   * `undefined` only when there are no connections to sample (catalog is
-   * empty anyway).
+   * `undefined` when sampling is switched off (`setSamplingEnabled(false)`)
+   * or when there are no connections to sample (catalog is empty anyway).
    */
   protected buildSampleConfig(): SampleConfig | undefined {
     if (!samplingEnabled) return undefined;

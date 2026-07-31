@@ -2,7 +2,7 @@
  * Story typography vocabulary + class-string algebra (user-driven typography controls).
  *
  * The WYSIWYG typography toolbar edits an element's Tailwind classes directly in the story's
- * JSX source (`className` attr write-back via jsx-edit's applyClassEditsToJsx). This module is
+ * JSX source (`className` attr write-back via jsx-edit's applyFormatEditsToJsx). This module is
  * the SINGLE source of truth for:
  *  - which classes the toolbar may apply (curated, token-based — never free-form, so stories
  *    stay theme-compatible and the banned-CSS guard never triggers), and

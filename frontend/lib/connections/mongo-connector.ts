@@ -118,13 +118,6 @@ export class MongoConnector extends NodeConnector {
     await client.db(this.database).command({ ping: 1 });
   }
 
-  /**
-   * Execute a native MongoDB aggregation pipeline.
-   *
-   * `query` is a JSON string `{"collection": "...", "pipeline": [...stages]}`.
-   * `params` is unused (Mongo has no `:name` substitution). `timeoutMs`, when
-   * set, is passed through as the aggregation's `maxTimeMS`.
-   */
   /** Parse + validate the JSON query and enforce the row cap. Shared by query()/queryStream(). */
   private parsePipeline(query: string): { collection: string; cappedPipeline: Record<string, unknown>[]; finalQuery: string } {
     let parsed: unknown;
@@ -147,6 +140,13 @@ export class MongoConnector extends NodeConnector {
     return { collection, cappedPipeline, finalQuery: JSON.stringify({ collection, pipeline: cappedPipeline }) };
   }
 
+  /**
+   * Execute a native MongoDB aggregation pipeline.
+   *
+   * `query` is a JSON string `{"collection": "...", "pipeline": [...stages]}`.
+   * `params` is unused (Mongo has no `:name` substitution). `timeoutMs`, when
+   * set, is passed through as the aggregation's `maxTimeMS`.
+   */
   async query(
     query: string,
     _params?: Record<string, string | number>,
@@ -260,7 +260,7 @@ export class MongoConnector extends NodeConnector {
  * Node process is long-lived and a stable client per Mongo URI is
  * exactly what `mongodb`'s authors recommend.
  */
-// eslint-disable-next-line no-restricted-syntax -- intentional process-wide singleton cache: connection-pool sharing across requests is the whole point. Key is the full Mongo URI (host:port/db + credentials), so collisions between different connections are impossible; entries are immutable promises (MongoClient instances live for the process lifetime by mongodb-driver design).
+// eslint-disable-next-line no-restricted-syntax -- intentional process-wide singleton cache: connection-pool sharing across requests is the whole point. Key is the full Mongo URI (host:port + credentials; the database is selected per call via client.db()), so two connections share a client exactly when they target the same server as the same user; entries are immutable promises (MongoClient instances live for the process lifetime by mongodb-driver design).
 const sharedMongoClients = new Map<string, Promise<MongoClient>>();
 
 function getSharedMongoClient(uri: string): Promise<MongoClient> {

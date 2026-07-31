@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * StoryJsxBody — the live React body of a NEW-FORMAT (format: 'jsx') story (Story_Design_V2 §2).
+ * StoryJsxBody — the live React body of a NEW-FORMAT (format: 'jsx') story.
  *
  * The story's `content.story` is STATIC JSX source; this component parses it (lib/jsx) and
  * renders it through the story interpreter (lib/story-ui) over the shadcn registry plus the
@@ -15,7 +15,7 @@
  * `data-*` placeholders resolve to (SmartEmbeddedQuestionContainer / EmbeddedQuestionContainer /
  * InlineNumber / StoryParamControl). Chart rendering is never reimplemented here.
  *
- * WYSIWYG editing (Story_Design_V2 §2): with `editable`, HTML text hosts (direct non-whitespace
+ * WYSIWYG editing: with `editable`, HTML text hosts (direct non-whitespace
  * text, no component/embed descendants — isEditableTextHost) render contenteditable; component
  * chrome stays locked. A blur after REAL user input commits by AST write-back
  * (applyDomEditsToJsx against the CURRENT `jsx` prop, with the full accumulated edit set so
@@ -112,7 +112,8 @@ export const SELECTED_DOM_ATTR = 'data-mx-selected';
 /** Render artifact previewing what a click would select (edit-mode hover). */
 export const HOVER_DOM_ATTR = 'data-mx-hover';
 
-/** Selection + hover-preview outline rules — injected into the iframe head by AgentHtml. */
+/** Selection + hover-preview outline rules — injected INSIDE the story root by AgentHtml
+ *  (as a `data-mx-select-css` node, like every other injected sheet). */
 export const STORY_SELECTION_CSS = [
   `[${SELECTED_DOM_ATTR}] { outline: 2px dashed #14b8a6; outline-offset: 2px; }`,
   `[${HOVER_DOM_ATTR}]:not([${SELECTED_DOM_ATTR}]) { outline: 1px dashed rgba(20, 184, 166, 0.45); outline-offset: 2px; }`,

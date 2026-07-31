@@ -1,11 +1,11 @@
 /**
  * VizPanel — the third column of the question surface, shown for ALL
- * questions (not just semantic ones). A slim header (title only — collapsing
- * happens on the resize handle, like the other columns) over the full viz
- * config, which the parent supplies as children. There are NO tabs here —
- * the query itself already lives in the left GUI/SQL column. The panel is a
- * SHELL: it owns no viz state; the parent keeps every VizConfigPanel handler
- * exactly where it already lives.
+ * questions (not just semantic ones). A slim header (title, plus a collapse
+ * chevron when the parent passes `onCollapse` — the column is fixed-width, not
+ * draggable) over the full viz config, which the parent supplies as children.
+ * There are NO tabs here — the query itself already lives in the left GUI/SQL
+ * column. The panel is a SHELL: it owns no viz state; the parent keeps every
+ * VizConfigPanel handler exactly where it already lives.
  */
 import React from 'react';
 import { screen } from '@testing-library/react';
@@ -24,7 +24,8 @@ describe('VizPanel', () => {
     // no tabs — the query lives in the left GUI/SQL column already
     expect(screen.queryByLabelText('Viz panel tab: SQL')).toBeNull();
     expect(screen.queryByLabelText('Viz panel tab: Chart')).toBeNull();
-    // no close button — the resize handle's chevron collapses the panel
+    // no close button — collapsing is the header chevron, which only renders
+    // when the parent passes `onCollapse` (not passed here)
     expect(screen.queryByLabelText('Close viz panel')).toBeNull();
   });
 });

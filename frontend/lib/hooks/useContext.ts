@@ -42,11 +42,11 @@ function loadSystemSkills(): Promise<SkillMention[]> {
  * useContext Hook
  *
  * Loads context information for a given path, with automatic fallback to connections.
- * Composes core useFiles hook for loading.
+ * Composes the core useFile hook for loading.
  *
  * Behavior:
  * 1. Find context file for path (using selectContextFromPath)
- * 2. Load context content if found (using useFiles)
+ * 2. Load context content if found (using useFile)
  * 3. If context exists: return whitelisted schemas + docs
  * 4. If no context: return all connection schemas + no docs
  * 5. Handle loading states throughout

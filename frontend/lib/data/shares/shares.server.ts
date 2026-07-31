@@ -17,7 +17,8 @@ import type { AccessRulesOverride } from '@/lib/branding/whitelabel';
  */
 class SharesDataLayerServer implements ISharesDataLayer {
   /**
-   * Load access rules overrides from org config (cached per-org by configs layer)
+   * Load access rules overrides from the org config. NOT cached — `getConfigs`
+   * re-reads the config document from the DB on every call.
    */
   private async _getOverrides(user: EffectiveUser): Promise<AccessRulesOverride | undefined> {
     try {
@@ -91,7 +92,7 @@ class SharesDataLayerServer implements ISharesDataLayer {
    * Resolve a public `shareableId` to its story file, acting as the share authority
    * (no user — the signed token + live nonce ARE the authorization). Returns null for
    * any invalid / tampered / revoked / non-story share. Used by the guest-session mint
-   * route and the public `/l/<id>` page.
+   * route, the public `/l/<shareId>` page, and that page's OG-image route.
    *
    * Server-only capability — deliberately not part of `ISharesDataLayer`: it's never called
    * from the browser (no route exposes a raw file lookup by share token), only from other
@@ -109,7 +110,7 @@ class SharesDataLayerServer implements ISharesDataLayer {
   /**
    * Persist the object-store KEY of a story's composed OG share card on `meta.preview`
    * (a derived artifact, like `meta.shares` — kept out of the agent-authored content). The
-   * public `/l/<id>/opengraph-image` route reads the bytes back by this key. Any user who
+   * public `/l/<shareId>/og` route reads the bytes back by this key. Any user who
    * can access the story may set it (it's a render of what they already see).
    *
    * Server-only capability — deliberately not part of `ISharesDataLayer`: the client never

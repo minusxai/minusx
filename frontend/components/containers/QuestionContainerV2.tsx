@@ -77,7 +77,7 @@ export default function QuestionContainerV2({ fileId, mode: containerMode, readO
 
   // --- Redux state that used to live directly inside QuestionViewV2 (a Container/View
   // convention violation) — now read here and passed down as props. See CLAUDE.md
-  // "Component Patterns". ---
+  // "Component patterns". ---
   const editMode = useAppSelector(state => selectFileEditMode(state, questionId ?? -1));
   const collapsedPanel = useAppSelector(selectQuestionCollapsedPanel);
   // shallowEqual avoids re-rendering when Immer rotates the bag's top-level ref on an

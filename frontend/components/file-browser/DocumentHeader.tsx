@@ -89,7 +89,7 @@ export interface DocumentHeaderProps {
   hideEditToggle?: boolean;      // If true, Edit/Cancel button is hidden (e.g. for new unsaved files)
   skipNameValidation?: boolean;  // If true, skip name check on save (e.g. save modal handles it)
 
-  // Visual / Code view toggle (optional - shown only for admins when provided).
+  // Visual / Code view toggle (optional - rendered only when devMode is on).
   // 'json' is the Code view (JSON + agent XML); value kept as 'json' for back-compat.
   viewMode?: 'visual' | 'json';  // Current view mode
   onViewModeChange?: (mode: 'visual' | 'json') => void;  // View mode change handler
@@ -106,12 +106,13 @@ export interface DocumentHeaderProps {
   onReviewChanges?: () => void;
   dirtyFileCount?: number;
 
-  // Number of files that will be saved (current + children). Shown on Save button label.
+  // Number of files that will be saved (current + children). Accepted by callers but
+  // not currently rendered — the Save button label is unconditional.
   saveCount?: number;
 
   // Optional highlight color for the header background (e.g. dashboard edit mode)
   highlightColor?: string;
-  highlightLabel?: string;  // Label shown next to title when highlighted (e.g. "Editing Dashboard")
+  highlightLabel?: string;  // Intended label for the highlight (e.g. "Editing Dashboard") — accepted but not currently rendered
 }
 
 export default function DocumentHeader({
@@ -354,7 +355,7 @@ export default function DocumentHeader({
               <ExplainButton questionId={questionId} size="xs" />
             )}
 
-            {/* Review unsaved changes — informational status chip, not an action */}
+            {/* Review unsaved changes — a status chip that opens the review on click */}
             {!isPresenting && onReviewChanges && dirtyFileCount > 0 && (
               <HStack
                 as="button"

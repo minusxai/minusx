@@ -2,7 +2,7 @@
  * SVG → JPEG composer for server-side chart images (Resvg rasterize → Sharp encode, with
  * optional padding + logo overlay). Engine-free — the input is ANY SVG string (today: Vega
  * output via lib/chart/render-viz-image). Survivor of the deleted ECharts SSR renderer
- * (Renderer_v2 Phase 2).
+ *.
  */
 import 'server-only';
 import { Resvg } from '@resvg/resvg-js';
@@ -60,8 +60,8 @@ export interface ComposeJpegOptions {
 /**
  * Composite a rendered chart SVG into the final agent JPEG: Resvg rasterizes the SVG on
  * a solid theme background, Sharp adds the optional padding strips + logo footer, then
- * JPEG-encodes at the shared quality. Grammar-agnostic — the ECharts and Vega paths both
- * feed their SVG here so the two families share one background/logo/quality contract.
+ * JPEG-encodes at the shared quality. Grammar-agnostic — any SVG string feeds in here, so
+ * every server image shares one background/logo/quality contract.
  */
 export async function composeSvgToJpeg(svg: string, options: ComposeJpegOptions = {}): Promise<Buffer> {
   const width = options.width ?? 512;
@@ -74,7 +74,7 @@ export async function composeSvgToJpeg(svg: string, options: ComposeJpegOptions 
 
   const usePadding = options.padding ?? false;
   const P = CHART_WATERMARK_PADDING_PX;     // shared with the client renderer (single source)
-  const logoSize = Math.round(P * CHART_WATERMARK_LOGO_SCALE); // 28px, fits in P×P with equal gaps
+  const logoSize = Math.round(P * CHART_WATERMARK_LOGO_SCALE); // 29px, fits in P×P with equal gaps
   const topPad    = usePadding ? P : 0;
   const bottomPad = usePadding ? P : 0;
   const totalHeight = topPad + height + bottomPad;

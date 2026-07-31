@@ -1,5 +1,5 @@
 /**
- * Story loader (Renderer_v2 Phase 6a): `compiledCss` is compiled at SAVE time, so a story saved
+ * Story loader: `compiledCss` is compiled at SAVE time, so a story saved
  * before the embed-chrome class set grew (kit + EMBED_CHROME_FILES recipe union) carries a STALE
  * sheet — and after the 6a mirror shrink there is no app-CSS mirror left to paper over it. The
  * loader recompiles stale stories AT READ TIME (no persist — the next save persists it), keyed

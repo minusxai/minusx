@@ -1,5 +1,5 @@
 /**
- * Story loader (Renderer_v2 Phase 6a): recompile STALE `compiledCss` at read time.
+ * Story loader: recompile STALE `compiledCss` at read time.
  *
  * `compiledCss` is compiled at save time from the story markup ∪ the recipe union (kit +
  * embed-chrome classes). When that union GROWS (an embed component is re-skinned), every

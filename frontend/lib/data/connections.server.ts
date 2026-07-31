@@ -94,8 +94,10 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
   }
 
   /**
-   * Get connection with raw (unfiltered) config — for trusted internal server-to-server use only.
-   * Never expose this to clients; it returns sensitive credentials like service_account_json.
+   * Get a connection with its raw (un-redacted) stored config — for trusted internal
+   * server-to-server use only; never expose it to clients. Secret fields are normally
+   * `@SECRETS/…` refs (pass the config through `resolveConnectionSecrets` before handing
+   * it to a connector), but legacy documents can still hold raw credentials inline.
    */
   async getRawByName(name: string, mode: Mode): Promise<{ type: string; config: Record<string, any> }> {
     const connectionPath = resolvePath(mode, `/database/${name}`);
@@ -194,7 +196,9 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
 
     await DocumentDB.update(conn.id, name, conn.path, content, [], hashContent({ id: conn.id, config }));  // Phase 6: Connections have no references
 
-    // Schema is refreshed lazily by the connection-loader (Node connectors) on next read.
+    // The cached schema is left as-is. The connection-loader only re-introspects on a
+    // later read if that cache is older than 24h (or the caller passes refresh /
+    // backgroundRefresh) — a fresh cache is served unchanged despite the config change.
     const updated = await DocumentDB.getById(conn.id);
     if (!updated) {
       throw new Error('Failed to update connection');

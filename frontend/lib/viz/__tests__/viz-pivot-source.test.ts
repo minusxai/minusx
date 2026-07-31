@@ -1,5 +1,5 @@
 /**
- * The `pivot` source kind (RFC §10): the second DOM-tier resident. Same css
+ * The `pivot` source kind: the second DOM-tier resident. Same css
  * contract as table (scoped overrides, no @import/url); the pivot STRUCTURE
  * (rows/columns/values) stays typed — the classic PivotConfig reused wholesale.
  */

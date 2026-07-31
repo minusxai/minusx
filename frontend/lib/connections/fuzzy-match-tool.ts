@@ -18,14 +18,14 @@ export interface FuzzyMatchToolArgs {
   limit?: number;
   return_columns?: string[];
   // semantic_expansion is accepted (schema compat) but not used —
-  // matching the v1 handler, which calls fuzzyMatch() once.
+  // this path calls fuzzyMatch() exactly once.
   semantic_expansion?: boolean;
 }
 
 /**
  * Resolve a connection, validate the target column is text/categorical, and run
- * a single fuzzy match. Shared by the v1 Next.js tool handler and the v2
- * production FuzzyMatch tool so both behave identically.
+ * a single fuzzy match. Backs the production `FuzzyMatch` tool
+ * (`agents/benchmark-analyst/db-tools.server.ts`).
  */
 export async function executeFuzzyMatch(
   args: FuzzyMatchToolArgs,

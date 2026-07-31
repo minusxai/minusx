@@ -1,5 +1,5 @@
 /**
- * Story design themes — ONE registry, four consumers (Story_Design_V2 §5):
+ * Story design themes — ONE registry, four consumers:
  *  (a) the CSS emitter (`storyThemeCss` → appended to every jsx story's compiledCss by
  *      lib/data/story/story-css.server.ts, as tiny `[data-theme="<name>"]` variable blocks —
  *      instant in-app theme switching, no recompile),

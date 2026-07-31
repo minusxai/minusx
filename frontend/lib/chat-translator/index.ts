@@ -1,8 +1,9 @@
 // Chat translator — orchestrator ↔ legacy task-log shape.
 //
 // One module, three exports:
-//   piLogToLegacy           orchestrator ConversationLog            → ConversationLogEntry[]      (forward; file reads + done frame)
-//   legacyToolResultToPi    CompletedToolCallResult      → ToolResultMessage           (reverse; orchestrator resume)
+//   piLogToLegacy           orchestrator ConversationLog → ConversationLogEntry[]  (forward; display structs)
+//   legacyLogToPi           ConversationLogEntry[]       → orchestrator ConversationLog (reverse; seed a pi log from a task log)
+//   legacyToolResultToPi    CompletedToolCallResult      → ToolResultMessage       (reverse; orchestrator resume)
 //
 // Lives at the backend boundary so the frontend never sees orchestrator log shape.
 // All three functions are pure and deterministic.
@@ -119,10 +120,10 @@ function v2ToV1ToolName(name: string): string {
 /**
  * Forward translation: orchestrator ConversationLog → legacy ConversationLogEntry[].
  *
- * Used by the backend route handlers when responding to the frontend (which
- * expects legacy task-log shape). Walks the orchestrator log once, emits one or
- * more legacy entries per orchestrator entry per the rules documented in
- * `lib/chat-translator/index.ts` plan.
+ * Walks the orchestrator log once, emitting one or more legacy entries per
+ * orchestrator entry: a root invocation becomes the user turn, an assistant
+ * message becomes a synthetic `TalkToUser` task+result (plus one task per tool
+ * call and a `task_debug` usage entry), and a toolResult back-fills its task.
  */
 export function piLogToLegacy(piLog: ConversationLog): LegacyLogEntry[] {
   const out: LegacyLogEntry[] = [];
@@ -316,7 +317,7 @@ export function piLogToLegacy(piLog: ConversationLog): LegacyLogEntry[] {
   return out;
 }
 
-// ─── legacyLogToPi: reverse — seed a forked v2 chat from a v1 log ────
+// ─── legacyLogToPi: reverse — seed a pi log from a v1 task log ───────
 
 const SEED_USAGE: AssistantMessage['usage'] = {
   input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0,
@@ -371,16 +372,17 @@ function resultToText(result: unknown): string {
 }
 
 /**
- * Reverse translation: a v1 (legacy) conversation log → a v2 (pi)
- * ConversationLog, used to SEED a forked v2 conversation so an old chat can be
- * continued without data loss (the original v1 file is untouched).
+ * Reverse translation: a v1 (legacy) conversation log → a pi ConversationLog.
+ * Used by the v3 backfill (`lib/data/migrate-conversations-v3.server.ts`, which
+ * leaves the source file intact) and by the MCP session logger
+ * (`lib/mcp/session-logger.ts`), which buffers a task log and flushes it as pi.
  *
  * Per turn: the root `AnalystAgent` task → root AgentInvocation (carries the
- * user message); `TalkToUser` → the final assistant message (stopReason 'stop'
- * — the only thing projectRootThreadHistory sends to the LLM); tool tasks →
- * assistant `tool_use` + paired `tool_result` (stopReason 'toolUse', DISPLAY
- * only, never re-sent to the model). Thinking keeps its text, drops its
- * signature. Context is empty — these turns are history, never re-run.
+ * user message); `TalkToUser` → the final assistant message (stopReason 'stop');
+ * tool tasks → assistant `tool_use` + paired `tool_result` (stopReason 'toolUse').
+ * `projectRootThreadHistory` replays ALL of these into the next turn's LLM history,
+ * so the seeded tool calls stay visible to the model. Thinking keeps its text, drops
+ * its signature. Context is empty — these turns are history, never re-run.
  */
 export function legacyLogToPi(legacyLog: LegacyLogEntry[]): ConversationLog {
   const out: ConversationLog = [];
@@ -461,11 +463,12 @@ export function legacyLogToPi(legacyLog: LegacyLogEntry[]): ConversationLog {
   return out;
 }
 
-// NOTE: the read-path down-translation (`translateConversationForFrontend`) has been retired.
-// v=2 conversation files now serve the orchestrator pi `ConversationLog` as-is; the frontend
-// parses it pi-natively via `parsePiConversation` (which reuses `piLogToLegacy` internally for the
-// render structs while additionally carrying each turn's appState/currentTime). `piLogToLegacy`
-// is kept and exported because that internal reuse — and the benchmark page — still depend on it.
+// NOTE: nothing down-translates on the read path any more — conversations serve the orchestrator
+// pi `ConversationLog` as-is and the frontend parses it pi-natively via `parsePiConversation`
+// (`lib/conversations-utils.ts`), which reuses `piLogToLegacy` internally for the render structs
+// while additionally carrying each turn's appState/currentTime. `piLogToLegacy` stays exported for
+// that reuse, for the Slack turn diff (`lib/integrations/slack/run-turn.server.ts`), and for the
+// benchmark log viewer (`app/benchmark/page.tsx`).
 
 // ─── legacyToolResultToPi: reverse for resume ────────────────────────
 

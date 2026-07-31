@@ -27,9 +27,10 @@
  *     benchmark runner (its own `Orchestrator`, no cache, no parent
  *     toolThread).
  *
- * Re-exports every symbol the phase files define so existing imports of
- * `'../auto-context'` / `'@/agents/.../auto-context/auto-context'` keep
- * working unchanged.
+ * Re-exports the phase files' public surface (not every symbol they define —
+ * catalog-render's block/group helpers and generation's `probeJoinUsingConnectors`
+ * stay module-local) so existing imports of `'../auto-context'` /
+ * `'@/agents/.../auto-context/auto-context'` keep working unchanged.
  */
 import 'server-only';
 

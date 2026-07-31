@@ -2,8 +2,9 @@
  * Contract test for useDeepStable: returns the previous reference when the
  * latest value is deeply equal, otherwise returns the new value.
  *
- * Guarding this directly (rather than only through BaseChart) means changes to
- * the helper can't silently regress the chart memoization fix downstream.
+ * Guarding the helper directly (rather than only through whatever consumer
+ * happens to use it) means a change here can't silently regress the
+ * memoization it exists to provide downstream.
  *
  * react-hooks/refs is disabled file-wide: the test harness deliberately
  * inspects ref values during render to observe identity stability — the
@@ -55,7 +56,8 @@ describe('useDeepStable', () => {
   it('returns the same reference when the new value is deeply equal', async () => {
     const user = userEvent.setup();
     // Each render produces a brand-new object that is deeply equal to the
-    // previous one — exactly the pattern BaseChart sees from upstream callers.
+    // previous one — exactly the pattern a config-object consumer sees from
+    // upstream callers that rebuild the object inline.
     render(<Harness produce={() => ({ a: 1, b: { c: [1, 2, 3] } })} />);
 
     expect(identityCount()).toBe(1); // initial render set it once

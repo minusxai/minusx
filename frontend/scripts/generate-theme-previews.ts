@@ -1,5 +1,5 @@
 /**
- * Theme preview-image generation (Story_Design_V2 §5 / §11 Phase 3).
+ * Theme preview-image generation.
  *
  * Renders ONE canonical sample story fragment per design theme through the REAL jsx compile
  * path (`compileStoryCss({ force: true })` — the same Tailwind + token-block pipeline every

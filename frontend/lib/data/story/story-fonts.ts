@@ -1,5 +1,5 @@
 /**
- * Platform-provided story fonts (Story_Design_V2 §4/§11 Phase 2).
+ * Platform-provided story fonts.
  *
  * Legacy stories bring their own fonts via authored `@import` lines (frozen behavior). For jsx
  * stories the PLATFORM provides fonts: a theme registry maps theme name → font assets (family +

@@ -59,7 +59,7 @@ export default function MobileRightSidebar({
 
   // Min/max limits for icon bar position
   const MIN_POSITION = 15; // 15% from top
-  const MAX_POSITION = 75; // 85% from top
+  const MAX_POSITION = 75; // 75% from top
 
   // Build sections array
   const sections: SidebarSectionMetadata[] = [];

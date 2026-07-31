@@ -13,7 +13,8 @@
  */
 
 // ============================================================================
-// DB mock — MUST be declared before any imports (Jest hoisting)
+// Imports — the DB is NOT mocked: `setupTestDb` below boots a real PGLite
+// instance at TEST_DB_PATH and seeds it via `addSlackTestFixtures`.
 // ============================================================================
 
 import crypto from 'crypto';

@@ -102,7 +102,7 @@ interface QuestionViewV2Props {
   queryEstimatedDurationMs?: number | null;
 
   // --- Formerly-internal Redux state, now supplied by the caller (Container/View
-  // convention — see CLAUDE.md "Component Patterns"). Page-mode containers
+  // convention — see CLAUDE.md "Component patterns"). Page-mode containers
   // (QuestionContainerV2, CreateQuestionModalContainer) source these from Redux;
   // toolcall callers (InlineChart, ExecuteQueryDisplay) supply local/no-op values. ---
 
@@ -114,8 +114,9 @@ interface QuestionViewV2Props {
   collapsedPanel: CollapsedPanel;
   onTogglePanel: (panel: CollapsedPanel) => void;
 
-  // Referenced-question lookup (mirrors state.files.files) + setter used to persist
-  // a freshly-fetched referenced question back into Redux.
+  // Referenced-question lookup (mirrors state.files.files) + a setter for persisting a
+  // fetched referenced question into Redux. Both are still part of the container
+  // contract but the view body no longer reads either.
   fileState: Record<FileId, FileState>;
   onSetFile: (file: DbFile) => void;
 
@@ -218,8 +219,9 @@ export default function QuestionViewV2({
   const resizeStartX = useRef<number>(0);
   const resizeStartWidth = useRef<number>(PANEL_LAYOUT.left.initial);
   const rafRef = useRef<number | null>(null);
-  // Live geo map view getter — populated by the map (ChartBuilder/GeoPlot) when it
-  // mounts, read by the VizConfigPanel "Pin current view" button (a sibling of the map).
+  // Live geo map view getter, read by the VizConfigPanel "Pin current view" button
+  // (via GeoAxisBuilder). Nothing calls onMapReady since the Leaflet map renderer was
+  // removed, so the ref stays null and getMapView returns null (the button no-ops).
   const getMapViewRef = useRef<(() => { center: [number, number]; zoom: number } | null) | null>(null);
   const handleMapReady = useCallback((getView: () => { center: [number, number]; zoom: number } | null) => {
     getMapViewRef.current = getView;
@@ -231,10 +233,6 @@ export default function QuestionViewV2({
   const [chartSeriesCount, setChartSeriesCount] = useState<number | undefined>(undefined);
   const toggleCollapsedPanel = onTogglePanel;
 
-  // Query mode state (Semantic, SQL, or Viz). The Semantic tab is the default
-  // whenever the current SQL reliably detects as a semantic query (or a spec
-  // was persisted); SQL otherwise. No explicit choice needed on mount — the
-  // detection effect below promotes to Semantic exactly once.
   // The envelope the Viz panel edits. V1 mode (flag off): none — the classic
   // panel edits vizSettings and the converter never feeds the editor. V2 mode:
   // the saved `viz`, or — for a vizSettings-only chart — its JIT-converted
@@ -270,8 +268,8 @@ export default function QuestionViewV2({
   }, []);
 
   // The semantic vocabulary: every AUTHORED model visible at this file's path
-  // on its connection (Semantic_Model_v2.md §2.7 M5 — models are authored, not
-  // derived from the schema, so this is a human-sized set fetched unscoped).
+  // on its connection (models are authored, not derived from the schema, so
+  // this is a human-sized set fetched unscoped).
   // It's both the explorer's picker list and the gate: no authored models, no
   // GUI tab (a raw whitelisted table is no longer a reason to offer one).
   const { models: semanticModels } = useSemanticModels(filePath || '/org', content.connection_name);

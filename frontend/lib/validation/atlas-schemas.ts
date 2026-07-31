@@ -25,7 +25,7 @@ const NullableD = <T extends TSchema>(schema: T, description: string) =>
   Type.Optional(Type.Union([schema, Type.Null()], { description }));
 
 /**
- * The six story design themes (Story_Design_V2 §5). The enum lives HERE (this module imports
+ * The six story design themes. The enum lives HERE (this module imports
  * nothing but typebox); the theme registry (`lib/data/story/story-themes.ts`) types its entries
  * against it and a registry test asserts one entry per name.
  */
@@ -33,7 +33,7 @@ export const STORY_THEME_NAMES = ['modernist', 'classical', 'nocturne', 'organic
 export type StoryThemeName = (typeof STORY_THEME_NAMES)[number];
 
 /**
- * The four story templates — the document's structural GENRE (beat structure + layout grammar),
+ * The three story templates — the document's structural GENRE (beat structure + layout grammar),
  * orthogonal to the design theme. Same pattern as STORY_THEME_NAMES: the enum lives here; the
  * registry (`lib/data/story/story-templates.ts`) types its entries against it.
  */
@@ -250,7 +250,7 @@ export const VizSettings = Type.Object({
 export type VizSettings = Static<typeof VizSettings>;
 
 // ============================================================================
-// Viz V2 envelope (docs/Visualization Arch V2.md)
+// Viz V2 envelope (CLAUDE.md "Visualization")
 //
 // Only the MinusX envelope lives in TypeBox. Native Vega-Lite/Vega spec bodies are
 // deliberately opaque here (open records) — they are validated against Vega-Lite's
@@ -289,7 +289,7 @@ export const VizSourceVegaLite = Type.Object({
 }, { title: 'VizSourceVegaLite' });
 export type VizSourceVegaLite = Static<typeof VizSourceVegaLite>;
 
-// Raw native-Vega spec — the full-control escape hatch (RFC §21.10). A recipe is
+// Raw native-Vega spec — the full-control escape hatch. A recipe is
 // "detached" into this via detachRecipe(): its materialized spec is frozen here so the
 // agent can edit ANY property (marks, signals, projections, layers) with no recipe
 // param. Native Vega expresses charts Vega-Lite can't (projections/signals/geo/tiles),
@@ -308,7 +308,7 @@ export const VizSourceVega = Type.Object({
 }, { title: 'VizSourceVega' });
 export type VizSourceVega = Static<typeof VizSourceVega>;
 
-// The DOM grid tier (RFC §10): tables never route through vega. The only persisted
+// The DOM grid tier: tables never route through vega. The only persisted
 // state is display formatting — sorting/filtering/visibility are ephemeral UI state.
 export const VizSourceTable = Type.Object({
   kind: Type.Literal('table'),
@@ -336,7 +336,7 @@ export const VizSourceTable = Type.Object({
 }, { title: 'VizSourceTable' });
 export type VizSourceTable = Static<typeof VizSourceTable>;
 
-// The pivot grid (RFC §10): same DOM tier + css contract as table; the pivot
+// The pivot grid: same DOM tier + css contract as table; the pivot
 // STRUCTURE (rows/columns/values) is real config, so it stays typed — reusing the
 // classic PivotConfig schema wholesale (subtotals, heatmap, formulas included).
 export const VizSourcePivot = Type.Object({
@@ -358,7 +358,7 @@ export const VizSourcePivot = Type.Object({
 }, { title: 'VizSourcePivot' });
 export type VizSourcePivot = Static<typeof VizSourcePivot>;
 
-// Discriminated on `kind`. `vega` and `slippy-map` join this union as they land
+// Discriminated on `kind`. `slippy-map` joins this union when it lands
 // (additive — see the RFC).
 export const VizSource = Type.Union([VizSourceVegaLite, VizSourceVega, VizSourceRecipe, VizSourceTable, VizSourcePivot], { title: 'VizSource' });
 export type VizSource = Static<typeof VizSource>;
@@ -366,7 +366,7 @@ export type VizSource = Static<typeof VizSource>;
 export const VizEnvelope = Type.Object({
   version: Type.Literal(2),
   source: VizSource,
-  // Reserved namespaces (RFC §13) — schema-present so saved envelopes never need a shape
+  // Reserved namespaces — schema-present so saved envelopes never need a shape
   // migration when these land; ignored by the probe runtime.
   dataBindings: Nullable(Type.Record(Type.String(), Type.Unknown(), { description: 'RESERVED: query param bindings (re-execute). Not yet implemented — omit.' })),
   viewParams: Nullable(Type.Record(Type.String(), Type.Unknown(), { description: 'RESERVED: presentation-only params/signals. Not yet implemented — omit.' })),
@@ -469,7 +469,7 @@ export const QuestionContent = Type.Object({
   spreadsheet: Type.Optional(NullableD(SpreadsheetSource,
     'Direct data entered in the spreadsheet editor. Mutually exclusive with query-backed sources.')),
   viz: NullableD(VizEnvelope,
-    'Viz V2 envelope (docs/Visualization Arch V2.md). When present it is AUTHORITATIVE — the chart renders ' +
+    'Viz V2 envelope. When present it is AUTHORITATIVE — the chart renders ' +
     'from viz and legacy vizSettings is ignored. Omit to keep rendering via vizSettings.'),
 }, { title: 'QuestionContent' });
 export type QuestionContent = Static<typeof QuestionContent>;
@@ -634,7 +634,7 @@ export const NotebookSqlCell = Type.Object({
     'LEGACY classic chart settings (rollback path). Optional: viz-first cells omit it; when absent the ' +
     'classic pipeline falls back at render time. When viz is present it is authoritative and this is ignored.'),
   viz: NullableD(VizEnvelope,
-    'Viz V2 envelope (docs/Visualization Arch V2.md). When present it is AUTHORITATIVE — the cell renders ' +
+    'Viz V2 envelope. When present it is AUTHORITATIVE — the cell renders ' +
     'from viz and legacy vizSettings is ignored. Omit to keep rendering via vizSettings.'),
   parameters: Nullable(Type.Array(QuestionParameter)),
   parameterValues: Nullable(Type.Record(Type.String(), Type.Unknown())),
@@ -683,8 +683,8 @@ export type NotebookContent = Static<typeof NotebookContent>;
 // ============================================================================
 // This is NOT the stored context shape (which is version-based — see ContextContent
 // in lib/types.ts, with versions[]/published). It is the KNOWLEDGE LAYER the agent
-// authors: the live (published) version's docs/metrics/annotations flattened to the top
-// level, plus the content-level evals/skills. The flatten (on read) and fold (on edit,
+// authors: the live (published) version's docs/metrics/annotations/semanticModels flattened
+// to the top level, plus the content-level evals/skills. The flatten (on read) and fold (on edit,
 // back into versions[live]) live in lib/context/context-agent-view.ts.
 //
 // Schema whitelisting (which tables/columns are exposed) is deliberately ABSENT: it's a
@@ -728,7 +728,8 @@ const CtxTableAnnotation = Type.Object({
 }, { title: 'ContextTableAnnotation' });
 
 // ============================================================================
-// Semantic Models V2 — authored semantic layer (Semantic_Model_v2.md §2.3/§5).
+// Semantic Models V2 — authored semantic layer (CLAUDE.md "Semantic models,
+// contexts, views, and Atlas schemas").
 // TypeBox is the single source of truth for these shapes; lib/types/semantic.ts
 // re-exports the Static types. The tier-1 validator (lib/semantic/validate.ts)
 // uses SemanticModelV2 as its shape gate for agent-authored JSON.

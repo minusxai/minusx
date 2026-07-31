@@ -1,9 +1,9 @@
 /**
  * Connection Loader Tests
  *
- * Tests schema caching, refresh, and error-fallback behaviour for connectionLoader.
- * These tests cover the behaviour that must survive the refactor away from
- * direct DocumentDB.update usage in connection-loader.ts.
+ * Tests schema caching, refresh, and error-fallback behaviour for connectionLoader,
+ * which persists refreshed schema through `updateCachedSchema` rather than writing
+ * the file itself.
  *
  * Run: npm test -- connection-loader.test.ts
  */

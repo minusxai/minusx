@@ -117,8 +117,9 @@ function madeWith(logo: string, color: string, w = 132): React.ReactElement {
 
 /**
  * Per-story cover: the pre-blurred story screenshot under a cinematic top→bottom gradient,
- * with the brand mark top-right (black on a brightened/light top, white otherwise) and the
- * title anchored in the deep shadow at the bottom.
+ * with the brand mark top-right (black over a LIGHT story capture — the `tone: 'dark'` case,
+ * where the blur pass darkened it — white otherwise) and the title anchored in the deep shadow
+ * at the bottom.
  */
 export function StoryCoverCard(props: { coverUrl: string; title: string; tone: CoverTone; assets: CardAssets }): React.ReactElement {
   const topIsLight = props.tone === 'dark';
@@ -182,7 +183,7 @@ export async function renderGenericOgImage(): Promise<Response> {
   return imageResponse(<GenericCard assets={await loadCardAssets()} />);
 }
 
-/** Render the DEFAULT-branded generic card to a PNG buffer (used by `npm run generate-og`). */
+/** Render the DEFAULT-branded generic card to a PNG buffer (used by `npm run generate-og:generic`). */
 export async function renderDefaultGenericCardBuffer(): Promise<Buffer> {
   const [logo, logoLight] = await Promise.all([
     resolveLogo(getBrandLogoExpandedUrl(DEFAULT_CONFIG.branding, 'light')),

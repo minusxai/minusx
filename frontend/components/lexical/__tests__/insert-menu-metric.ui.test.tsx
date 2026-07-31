@@ -94,7 +94,7 @@ describe('LexicalTextEditor insertMetric', () => {
     const option = await screen.findByLabelText('Insert Metric');
     await userEvent.click(option);
 
-    // The inserted (unnamed) metric renders as a definition block…
+    // The inserted (unnamed) metric renders as an inline chip…
     expect(await screen.findByLabelText('Metric untitled')).toBeInTheDocument();
     // …with its editor open and the Name field focused — typing must land in
     // the popover, not leak into the document (Lexical grabs focus after

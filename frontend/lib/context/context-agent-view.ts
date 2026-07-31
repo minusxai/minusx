@@ -34,7 +34,7 @@ function liveVersion(content: ContextContent): ContextVersion | undefined {
 
 /**
  * Shape a context's stored content into the agent's FLAT working view:
- *   - docs + metrics + annotations from the live version,
+ *   - docs + metrics + annotations + semanticModels from the live version,
  *   - evals + skills from the content level.
  * ALL authored fields are ALWAYS present (defaulting to `[]` when absent) so the agent always
  * sees the full surface it can author — an empty `metrics`/`annotations`/`semanticModels`/`skills`/
@@ -64,7 +64,8 @@ export function shapeContextForAgent<T>(content: T): T {
 
 /**
  * Fold an edited flat agent view back into the stored (version-based) content: the live version's
- * authored knowledge fields (docs/metrics/annotations) and the content-level evals/skills are
+ * authored knowledge fields (docs/metrics/annotations/semanticModels) and the content-level
+ * evals/skills/agents are
  * overwritten from `edited`; the version's whitelist, versions[], published, and every other stored
  * field are preserved from `existing` (the whitelist isn't in the agent's view, so it's never
  * touched). Only keys actually present in `edited` are applied, so an edit that touches one field
@@ -131,7 +132,7 @@ function contextEditInvariant(content: unknown): unknown {
 
 /**
  * True if an EditFile on a context changed ONLY the authored fields — the live version's
- * whitelist/docs/metrics/annotations and the content-level evals/skills. Version identity and the
+ * docs/metrics/annotations/semanticModels and the content-level evals/skills/agents. Version identity and the
  * published pointer must be unchanged; the server-computed menus are ignored (re-derived on load, so
  * round-trip noise never false-rejects). Safety net atop the fold, which preserves structure anyway.
  */

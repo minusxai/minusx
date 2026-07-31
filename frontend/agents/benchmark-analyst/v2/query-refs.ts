@@ -1,3 +1,4 @@
+import { escapeSqlLiteral } from '@/lib/sql/sql-literal';
 // Pure helpers for `$label.column` reference interpolation, plus a
 // process-lifetime session label store.
 //
@@ -10,8 +11,9 @@
 //    agent's natural mental model — "I labeled it last call, I can use it now"
 //    — and is the only way to chain SQL → Mongo across separate tool calls
 //    (handles don't apply to Mongo).
-// Both V1 ExploreDataset and V2 ExecuteQuery use the interpolation functions;
-// session labels are populated by ExecuteQuery on successful labeled queries.
+// V1 ExploreDataset, V1 ChainedExecuteQuery (db-tools.ts) and V2 ExecuteQuery
+// all use the interpolation functions; session labels are populated by the two
+// ExecuteQuery variants on successful labeled queries.
 
 // eslint-disable-next-line no-restricted-syntax -- server-only; benchmark process singleton
 const sessionLabels = new Map<string, Record<string, unknown>[]>();
@@ -44,13 +46,20 @@ export function clearSessionLabels(): void {
  * SQL `IN ($revenue.track_id)` produces `IN (4233, 5281, 10838)`.
  *
  * - `label` matches the query's `label` field (case-sensitive).
- * - String values are single-quote escaped; numbers are bare.
+ * - String values are escaped for `dialect` (see `escapeSqlLiteral`); numbers are bare.
  * - If the referenced label/column doesn't exist or has no rows, the
  *   replacement is `NULL` so the query still parses.
  */
 export function interpolateRefs(
   sql: string,
   labeledResults: Map<string, Record<string, unknown>[]>,
+  /**
+   * Target engine. Escaping is NOT dialect-independent: a backslash is an
+   * ordinary character on DuckDB/Postgres and an escape on ClickHouse/BigQuery,
+   * so the same value needs different treatment. Required rather than defaulted —
+   * a default would silently pick one camp for every caller.
+   */
+  dialect: string,
 ): string {
   return sql.replace(/\$([a-zA-Z_]\w*)\.(\w+)/g, (_match, label, column) => {
     const rows = labeledResults.get(label);
@@ -63,7 +72,7 @@ export function interpolateRefs(
     if (values.length === 0) return 'NULL';
 
     const formatted = values.map((v) =>
-      typeof v === 'number' ? String(v) : `'${String(v).replace(/'/g, "''")}'`,
+      typeof v === 'number' ? String(v) : escapeSqlLiteral(v, dialect),
     );
     return formatted.join(', ');
   });

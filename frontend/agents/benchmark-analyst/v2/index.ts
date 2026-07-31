@@ -16,7 +16,7 @@ export {
 };
 
 /** The four V2 data primitives, registered together. Single source of truth
- *  for both benchmark CLI runs and v=2 chat continuation. */
+ *  for both benchmark CLI runs and chat continuation. */
 export const V2_DATA_TOOLS = [SearchDBSchemaV2, ExecuteQueryV2, ExploreV2, FetchHandleV2] as const;
 
 export { interpolateRefs, interpolateMongoRefs, detectLowLimit } from './query-refs';

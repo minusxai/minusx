@@ -5,8 +5,8 @@
  *   - file-state.ts (client): reads from Redux, caches via TTL, user comes from store
  *   - file-state.server.ts (server): reads from DB directly, user passed explicitly
  *
- * Intentionally excludes write/optimistic operations (editFile, publishFile,
- * createVirtualFile, etc.) which are client-only concepts.
+ * Intentionally excludes write/staging operations (editFile, publishFile,
+ * createDraftFile, etc.) which are client-only concepts.
  */
 
 import type { FileState, FileType } from '@/lib/types';

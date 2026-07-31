@@ -1,8 +1,8 @@
 /**
  * The schema, as data.
  *
- * `postgres-schema.ts` describes the database as a block of SQL text. That works for
- * one deployment shape and nothing else: anything that needs a *variant* of the schema
+ * `postgres-schema.ts` used to describe the database as a block of SQL text. That works
+ * for one deployment shape and nothing else: anything that needs a *variant* of the schema
  * has to restate every table, and the two copies then drift — silently, because
  * `IF NOT EXISTS` matches on name rather than definition.
  *

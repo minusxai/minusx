@@ -5,7 +5,7 @@
  * Wipes ALL /tutorial and /internals documents (including user-created ones —
  * these modes are disposable demo/admin sandboxes) and re-inserts the canonical
  * seed docs for those two modes from workspace-template.json. It deliberately
- * NEVER touches /org, so real company state (e.g. /org/configs/config — branding,
+ * NEVER touches /org, so real workspace state (e.g. /org/configs/config — branding,
  * setup-wizard status) is left untouched.
  * Useful for demos, onboarding resets, and testing.
  * Requires admin role.
@@ -59,8 +59,8 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
       : (initData.documents ?? []);
 
     // Scope STRICTLY to tutorial + internals — never /org. The seed template also
-    // contains /org docs (incl. /org/configs/config, which holds the company's
-    // setup-wizard + branding); resetting those would clobber real company state.
+    // contains /org docs (incl. /org/configs/config, which holds the workspace's
+    // setup-wizard + branding); resetting those would clobber real workspace state.
     const isTutorialOrInternals = (p: string) =>
       p === '/tutorial' || p.startsWith('/tutorial/') ||
       p === '/internals' || p.startsWith('/internals/');

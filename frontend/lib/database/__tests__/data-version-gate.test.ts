@@ -40,7 +40,7 @@ describe('data version gate', () => {
   });
 
   it('lets a mid-provision workspace through', async () => {
-    // 0 means the configs row does not exist yet, not that the data is ancient —
+    // 0 means the data_version row does not exist yet, not that the data is ancient —
     // refusing here would break registration itself.
     at(0);
     expect(await checkDataVersion()).toMatchObject({ ok: true, version: 0 });

@@ -21,7 +21,8 @@ export interface DeliverMessagesOptions {
    * unchanged) — for callers that intentionally don't support a given
    * channel. Unlike `send: false`, this does not mark the message 'skipped';
    * it's invisible to this function, matching pre-existing behavior for call
-   * sites that never delivered that type in the first place.
+   * sites that never delivered that type in the first place. `send: false`
+   * takes precedence: it marks EVERY message 'skipped' before skipTypes is read.
    */
   skipTypes?: RunMessageRecord['type'][];
 }

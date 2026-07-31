@@ -1,13 +1,14 @@
 /**
  * Atlas JSON-Schema artifacts, built at runtime from the TypeBox single-source
- * in `atlas-schemas.ts`. Replaces the previous codegen (`generate-atlas-schema.ts`
- * + checked-in `*.gen.json` files), which existed back when a separate Python
- * backend needed the schemas as JSON files. Now both consumers are in-process
- * TypeScript, so there's no reason to round-trip through disk.
+ * in `atlas-schemas.ts`. No codegen step and no checked-in JSON artifacts —
+ * every consumer is in-process TypeScript.
  *
  * Exports:
- *   - atlasSchema      — full discriminated `oneOf` schema; consumed by Ajv in
- *                        `content-validators.ts`.
+ *   - atlasSchema          — full discriminated `oneOf` schema; consumed by Ajv in
+ *                            `content-validators.ts` and for `$ref` resolution in
+ *                            `lib/data/story/file-markup.ts`.
+ *   - contentSchemaText    — one file type's viz-collapsed content schema, pretty-printed.
+ *   - SCHEMA_TEMPLATE_VARS — those schemas keyed `schema_<type>` for prompt injection.
  *
  * Built once at module load — Ajv's `compile()` results are cached separately.
  */

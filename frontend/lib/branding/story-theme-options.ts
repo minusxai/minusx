@@ -1,5 +1,5 @@
 /**
- * Story design-theme options for the Clarify `type: 'design'` preset (Story_Design_V2 §6a Layer B).
+ * Story design-theme options for the Clarify `type: 'design'` preset (Layer B).
  *
  * A pure PROJECTION of the theme registry (`lib/data/story/story-themes.ts` — the single source):
  * label/description/value come from each registry entry; imageUrl follows the preview-image

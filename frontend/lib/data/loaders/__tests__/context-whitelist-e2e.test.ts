@@ -2,13 +2,12 @@
  * Comprehensive E2E — Context Resolution & Whitelist Schema
  *
  * This single file encodes every rule introduced by the "default context per folder"
- * feature and the accompanying whitelist schema redesign.  The tests are written
- * RED-first: they will fail until the implementation is complete.
+ * feature and the accompanying whitelist schema redesign.
  *
  * Coverage:
- *   1.  applyWhitelistToConnections — new top-level filter (replaces filterSchemaByWhitelist)
+ *   1.  applyWhitelistToConnections — top-level filter (replaced filterSchemaByWhitelist)
  *   2.  filterSchemaByWhitelistNode — per-connection filter
- *   3.  Context loader with ContextVersion.whitelist (new schema)
+ *   3.  Context loader with ContextVersion.whitelist
  *   4.  whitelist:'*' root context  → all connection schemas exposed
  *   5.  whitelist:'*' child context → passes ALL parent schemas through unchanged
  *   6.  Specific WhitelistNode tree filters parent schemas correctly
@@ -18,8 +17,7 @@
  *  10.  Deep chain: every folder in a path has a context and whitelist:'*' propagates
  *  11.  Context cannot be deleted standalone (rules.json blocklist)
  *  12.  Folder CAN be deleted even though it contains a context (cascade fix)
- *  13.  V33 migration: converts old databases[] format → new WhitelistNode tree
- *  14.  V33 migration: creates default context (whitelist:'*') for every folder without one
+ *  15.  Data models & semantic models inherit like tables (childPaths + child exclusions)
  *
  * Run: npx vitest run context-whitelist-e2e
  */
@@ -66,13 +64,11 @@ import type {
 } from '@/lib/types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 
-// ↓ NEW functions — RED until Phase 2 is implemented
 import {
   applyWhitelistToConnections,
   filterSchemaByWhitelistNode,
 } from '@/lib/sql/schema-filter';
 
-// ↓ NEW helper — RED until Phase 5 is implemented
 import { makeDefaultContextContent } from '@/lib/context/context-utils';
 
 const TEST_DB_PATH = getTestDbPath('context_whitelist_e2e');

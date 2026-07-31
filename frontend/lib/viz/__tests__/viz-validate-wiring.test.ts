@@ -1,5 +1,5 @@
 /**
- * Validator wiring contracts (RFC §11 — closing the agent loop):
+ * Validator wiring contracts — closing the agent loop:
  * - columns are OPTIONAL: headless/unknown-result paths still get schema/policy/css
  *   checks, but field-reference checks are skipped (no false E_FIELD_NOT_FOUND).
  * - formatVizIssues renders issues as the tool-result feedback string.

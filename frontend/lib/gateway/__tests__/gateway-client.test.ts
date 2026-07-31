@@ -1,8 +1,9 @@
 /**
  * The gateway client.
  *
- * The behaviour that matters here is the SWITCH: with `MX_GATEWAY_URL` unset,
- * none of this may run and registration must be untouched. A bug that quietly
+ * The behaviour that matters here is the SWITCH: with `MX_GATEWAY_SHARED_SECRET`
+ * unset, none of this may run and registration must be untouched (the URL has a
+ * production default, so it cannot be the gate). A bug that quietly
  * reaches out to a hosted service from an install that never asked for one is
  * the worst outcome this module has.
  */

@@ -4,7 +4,7 @@
  * of reading it from Redux via a hook. `useScreenshot` delegates here so there is a
  * single capture implementation.
  *
- * Browser-only. Every path is SERIALIZATION capture (Story_Design_V2 §4 — snapdom is gone):
+ * Browser-only. Every path is SERIALIZATION capture (snapdom is gone):
  *  - Stories AND dashboards (Phase 8: both live on the self-contained iframe svg surface)
  *    serialize their live `<svg>` (lib/story-surface/serialize) — the capture IS the renderer
  *    the user is looking at, and the iframe document is self-contained by construction.
@@ -71,9 +71,9 @@ async function rasterToBlob(
 }
 
 /**
- * Full-element capture from an SVG-rendered story: serialize the live `<svg>` surface (styles cloned
- * in, fonts inlined, scroll baked) and let the browser rasterize it. Returns null when `element`
- * doesn't host one — dashboards/questions/notebooks fall through to the generic element serializer.
+ * Full-element capture from an SVG surface (story or dashboard): serialize the live `<svg>` surface
+ * (styles cloned in, fonts inlined, scroll baked) and let the browser rasterize it. Returns null when
+ * `element` doesn't host one — questions/notebooks/reports fall through to the generic serializer.
  */
 async function captureFromSvgStory(element: HTMLElement, opts: CaptureOptions): Promise<Blob | null> {
   const svg = findStorySvg(element);
@@ -318,8 +318,8 @@ export async function captureRegionBlob(
   // finer than the cap needs, so a large selection lands ~at maxOutputPx instead of device DPR.
   const deviceCap = opts.pixelRatio ?? Math.min(AGENT_IMAGE_PIXEL_RATIO, (typeof window !== 'undefined' && window.devicePixelRatio) || 1);
   const pixelRatio = regionPixelRatio(selection, maxOutputPx, deviceCap);
-  // SVG story renderer: crop straight from the serialized live surface when the selection lies
-  // fully inside it. Null (not an SVG story, e.g. a dashboard) → generic serialization capture.
+  // SVG surface renderer: crop straight from the serialized live surface when the selection lies
+  // inside it. Null (no surface svg under the target, e.g. a question) → generic serialization capture.
   const fromSvg = await cropFromSvgStory(selection, opts, maxOutputPx);
   if (fromSvg) return fromSvg;
   // Generic path: the serialized SVG rasterizes at its intrinsic CSS size (ratio 1), so the crop

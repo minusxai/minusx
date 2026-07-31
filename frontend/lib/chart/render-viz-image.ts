@@ -1,8 +1,8 @@
 /**
- * Server-side V2 (Vega/Vega-Lite envelope) chart → JPEG (Viz Arch V2 §21 item 2, the
- * headless path). Envelope → SVG (`renderEnvelopeToSvg`) → PNG (Resvg) → JPEG (Sharp),
- * reusing the exact compositor the ECharts path uses (`composeSvgToJpeg`) so the two
- * families produce byte-compatible output (size, background, logo footer).
+ * Server-side V2 (Vega/Vega-Lite envelope) chart → JPEG (the
+ * headless path). Envelope → SVG (`renderEnvelopeToSvg`) → PNG (Resvg) → JPEG (Sharp)
+ * through the shared compositor (`composeSvgToJpeg`), which owns size, background and
+ * the logo footer.
  *
  * Node.js only. For the browser path (real street tiles via `view.toCanvas()`), use
  * `VizImageRenderer.client.ts`. Slack/cron/server previews use this.
@@ -15,7 +15,7 @@ import { installFsGeoAssetFetcher } from '@/lib/viz/geo-assets.server';
 import { isEnvelopeImageViz } from '@/lib/viz/encoding-edit';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 
-// Headless context: boundary files resolve from public/ on disk (Renderer_v2 Phase 2) — without
+// Headless context: boundary files resolve from public/ on disk — without
 // this, geo charts silently drop from server-rendered images.
 installFsGeoAssetFetcher();
 

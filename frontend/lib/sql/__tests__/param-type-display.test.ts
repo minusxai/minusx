@@ -1,5 +1,5 @@
 /**
- * getTypeColor must return CONCRETE CSS colors (Renderer_v2 Phase 5): its consumers interpolate
+ * getTypeColor must return CONCRETE CSS colors: its consumers interpolate
  * the value into raw CSS (`border-left: 3px solid ${...}`, `color-mix(in srgb, ${...} 20%, ...)`)
  * — a Chakra token string like 'accent.primary' is invalid there and silently drops the style.
  */

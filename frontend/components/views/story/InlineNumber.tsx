@@ -28,7 +28,7 @@ function formatCell(v: unknown): string {
 /**
  * The footnote's query panel: shows the SQL the figure runs (read-only, for tracing). Editing the
  * inline query opens the FULL SqlEditor (with autocomplete) in a light-DOM drawer at the StoryView
- * level — Monaco's floating widgets (suggest/hover) mis-anchor inside the story shadow root, so the
+ * level — Monaco's floating widgets (suggest/hover) mis-anchor inside the story iframe, so the
  * editor must live outside it. In edit mode this panel just offers the "Edit query" trigger.
  */
 function QueryPanel({ query, editable, onEdit }: { query: string; editable?: boolean; onEdit?: () => void }) {

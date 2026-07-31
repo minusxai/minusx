@@ -1,5 +1,5 @@
 /**
- * Phase 4 Layer A (Story_Design_V2 §6a): UserInputComponent card-grid branch.
+ * Phase 4 Layer A: UserInputComponent card-grid branch.
  *
  * When any Clarify option carries an `imageUrl`, the choice UI renders image cards (preview on
  * top, label + check below) instead of the compact stacked rows. Selection semantics are

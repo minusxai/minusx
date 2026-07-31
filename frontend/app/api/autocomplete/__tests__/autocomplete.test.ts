@@ -4,8 +4,9 @@
  * All tests call CompletionsAPI.getSqlCompletions() which routes:
  *   browser → Next.js /api/autocomplete (local WASM)
  *
- * Schema is loaded from the seeded tutorial database (atlas_documents.db)
- * rather than hardcoded, so it stays in sync automatically.
+ * Schema is loaded from the committed mxfood connection fixture
+ * (test/fixtures/mxfood-connection.json) rather than hardcoded, so it stays in
+ * sync with the seeded demo database it was exported from.
  */
 
 import { setupMockFetch } from '@/test/harness/mock-fetch';

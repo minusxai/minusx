@@ -1,11 +1,11 @@
 /**
  * Server-side chart image renderer.
  *
- * Renders charts using ECharts SSR (SVG → Resvg → Sharp JPEG). Works for
+ * Renders charts through the Vega pipeline (SVG → Resvg → Sharp JPEG). Works for
  * the same chart types as the client renderer, but runs in Node.js only.
  *
  * Node.js only — not safe for browser bundles.
- * For browser-side rendering, use ChartImageRenderer.client.ts.
+ * For browser-side rendering, use VizImageRenderer.client.ts.
  */
 import 'server-only'
 
@@ -32,7 +32,7 @@ export const serverChartImageRenderer: IChartImageRenderer = {
     for (const { queryResult, vizSettings, viz, titleOverride } of inputs) {
       // Vega-only rendering: a V2 `viz` renders directly; legacy `vizSettings` converts
       // through the SAME bridge as the on-screen chart, so images match what users see.
-      // (Renderer_v2 Phase 2: the ECharts crash-fallback is deleted.)
+      // (the ECharts crash-fallback is deleted.)
       let buf: Buffer | null = null
       let label = titleOverride
       const envelope = resolveImageEnvelope({
@@ -46,7 +46,7 @@ export const serverChartImageRenderer: IChartImageRenderer = {
           label = label ?? getEnvelopeVizType(envelope) ?? 'chart'
         } catch (e) {
           // Render-only path: a failed chart is SKIPPED, never a crash (the ECharts
-          // fallback is deleted — Renderer_v2 Phase 2; the bridge is the only renderer).
+          // fallback is deleted —; the bridge is the only renderer).
           console.error('[ChartImageRenderer] vega render failed, skipping chart:', e)
         }
       }

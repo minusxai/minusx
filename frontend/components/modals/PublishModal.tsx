@@ -1,16 +1,17 @@
 'use client';
 
 /**
- * PublishModal - Multi-file draft review and publish workflow (Phase 1)
+ * PublishModal - Multi-file draft review and publish workflow
  *
  * Shows a two-pane modal:
- * - Left pane: scrollable list of dirty non-system files
- * - Right pane: full FileView for the selected file (using its own DocumentHeader Save button)
+ * - Left pane: scrollable list of dirty non-system files (selectDirtyFiles)
+ * - Right pane: SelectedFilePane — a header-less FileView (preview) or a JSON/dashboard diff,
+ *   with its own Save/Discard icon buttons
  *
  * Files are removed from the left list automatically as they are saved.
  * Modal auto-closes when all dirty files have been saved.
  *
- * "Publish All" button is visible but disabled in Phase 1 (enabled in Phase 2).
+ * "Save All" batch-publishes the already-named files, then walks a SaveFileModal per draft.
  */
 
 import { useState, useEffect, useCallback } from 'react';

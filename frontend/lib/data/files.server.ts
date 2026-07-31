@@ -44,6 +44,7 @@ import { extractConfigSecrets, modeFromPhysicalPath } from '@/lib/secrets/config
 import { restoreRedactedConfigSecrets } from '@/lib/secrets/config-secret-specs';
 import { computeSchemaFromWhitelist } from './loaders/context-loader-utils';
 import { makeDefaultContextContent, resolveVersionWhitelist } from '@/lib/context/context-utils';
+import { COMPUTED_CONTEXT_FIELDS } from '@/lib/types/context';
 import { selectDatabase } from '@/lib/utils/database-selector';
 import { getFileAnalyticsSummary, getFilesAnalyticsSummary, getConversationAnalytics } from '@/lib/analytics/file-analytics.server';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
@@ -73,12 +74,15 @@ export class ConflictError extends Error {
  * Server-side implementation of files data layer
  * Uses direct database access with permission checks
  *
- * NOTE: Token scope validation is handled at the route level (/t/[token]/page.tsx)
- * and in getEffectiveUserFromToken()
+ * NOTE: Public-share scope is validated outside this layer — at the share route
+ * (app/l/[shareId]/page.tsx) and by verifyGuestToken/guestToEffectiveUser in
+ * lib/auth/guest-session.ts, which pin a guest to the shared file's folder.
  */
 class FilesDataLayerServer implements IFilesDataLayer {
   /**
-   * Load access rules overrides from org config (cached per-org by configs layer)
+   * Load access rules overrides from the org config. NOT cached — `getConfigs`
+   * re-reads the config document from the DB, so this is one extra lookup per
+   * FilesAPI call. Failures fall back to `undefined` (built-in rules only).
    */
   private async _getOverrides(user: EffectiveUser): Promise<AccessRulesOverride | undefined> {
     try {
@@ -582,11 +586,17 @@ class FilesDataLayerServer implements IFilesDataLayer {
         : connectionContentWithoutSchema) as BaseFileContent;
     }
 
-    // For contexts: strip fullSchema/fullDocs (server-computed) and normalize version format.
+    // For contexts: strip EVERY server-computed field and normalize version format.
+    // The loader decorates a context with derived state and the browser round-trips
+    // whatever it was handed, so anything left here is frozen into the row and then
+    // disagrees with the tree the moment a parent changes. Driven by the one list in
+    // `lib/types/context.ts` rather than a destructure, because a destructure silently
+    // omits any field added later — which is how seven of the twelve came to be persisted.
     // Older clients may send version.databases (legacy) instead of version.whitelist (new).
     // Normalize on every save so the DB always uses the canonical format.
     if (existingFile.type === 'context') {
-      const { fullSchema, parentSchema, fullDocs, fullSkills, fullAgents, ...ctx } = content as ContextContent;
+      const ctx = { ...(content as ContextContent) };
+      for (const key of COMPUTED_CONTEXT_FIELDS) delete (ctx as Record<string, unknown>)[key];
       if (ctx.versions) {
         ctx.versions = ctx.versions.map(v => {
           const { databases: _legacy, ...vClean } = v as any;
@@ -628,9 +638,10 @@ class FilesDataLayerServer implements IFilesDataLayer {
     if (existingFile.type === 'context') {
       try {
         contentToSave = await stampAndValidateViews(contentToSave as ContextContent, path, user) as BaseFileContent;
-        // The semantic-model gate (tiers 1–3 — Semantic_Model_v2.md §2.5): an
-        // invalid authored model blocks the version save, same seam as views;
-        // the stored content drives probe scoping + sticky `verified` stamps.
+        // The semantic-model gate (tiers 1–3 — see CLAUDE.md "Semantic models,
+        // contexts, views, and Atlas schemas"): an invalid authored model blocks
+        // the version save, same seam as views; the stored content drives probe
+        // scoping + sticky `verified` stamps.
         contentToSave = await validateSemanticModelsGate(
           contentToSave as ContextContent, existingFile.content as ContextContent | undefined, path, user,
         ) as BaseFileContent;
@@ -789,7 +800,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
         const folderPath = options.path || resolvePath(user.mode, user.home_folder || '');
         const contextPath = `${folderPath}/context`;
 
-        // Compute fullSchema, parentSchema and fullDocs using the new whitelist loader
+        // Compute fullSchema, parentSchema, fullDocs and fullSkills via the whitelist loader
         // New contexts default to whitelist:'*' (expose all available schemas)
         const { fullSchema, parentSchema, fullDocs, fullSkills } = await computeSchemaFromWhitelist(
           { whitelist: '*' },

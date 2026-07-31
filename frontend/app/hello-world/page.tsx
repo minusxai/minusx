@@ -8,7 +8,7 @@ import dynamic from 'next/dynamic';
 // can't render — causing Sentry MINUSX-BI-8 ("Hydration failed because the
 // server rendered HTML didn't match the client"). The wizard has no SEO
 // benefit from SSR and ships rapidly on first paint either way. Same pattern
-// used in components/SqlEditor.tsx and components/plotx/ChartBuilder.tsx.
+// used in components/query-builder/SqlEditor.tsx.
 // eslint-disable-next-line no-restricted-syntax
 const HelloWorldContent = dynamic(() => import('./HelloWorldContent').then(m => ({ default: m.HelloWorldContent })), { ssr: false });
 

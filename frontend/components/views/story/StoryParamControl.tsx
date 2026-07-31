@@ -53,7 +53,7 @@ export default function StoryParamControl({ param, value, onChange, filePath, on
     <div className="inline-flex w-max min-w-[160px] flex-col gap-1">
       {/* Inherit the story's own text color (with slight muting) so the label stays legible on
           any story surface — an app `fg.muted` token would resolve to the host app's color mode
-          across the shadow boundary and can vanish on a contrasting story background. */}
+          across the story-iframe boundary and can vanish on a contrasting story background. */}
       {/* The agent can override the label's look via <Param labelStyle={{…}}> — literal CSS wins
           over the inherited default. */}
       <div className="flex items-center justify-between gap-3">
@@ -97,9 +97,9 @@ export default function StoryParamControl({ param, value, onChange, filePath, on
         </div>
       </div>
       {useSlider ? (
-        // A native range input — shadow-boundary-safe (Chakra's Slider resolves theme tokens
-        // against the host app's color mode across the shadow root, same hazard the source
-        // dropdown's native <datalist> avoids). Themeable via <Param style={{accentColor:…}}>.
+        // A native range input — iframe-boundary-safe (Chakra's Slider resolves theme tokens
+        // against the host app's color mode across the story-iframe boundary, same hazard the
+        // source dropdown's native <datalist> avoids). Themeable via <Param style={{accentColor:…}}>.
         <div className="inline-flex w-full items-center gap-2">
           <input
             type="range"

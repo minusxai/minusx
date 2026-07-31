@@ -2,7 +2,7 @@
  * Single source of truth for agent-facing image output (sizing, quality, branding).
  *
  * Dependency-free on purpose: this is the one module that the browser capture path
- * (serialization), the ECharts client renderer, AND the server Sharp/Resvg renderer can all
+ * (serialization), the client chart renderer, AND the server Sharp/Resvg renderer can all
  * import without pulling in each other's heavy deps. Every agent-image magic number lives here —
  * do not re-declare these literals at call sites.
  */

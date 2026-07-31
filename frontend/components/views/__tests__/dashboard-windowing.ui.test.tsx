@@ -1,5 +1,5 @@
 /**
- * Tile windowing × capture (Renderer_v2 Phase 7 — the WINDOWING × CAPTURE gate).
+ * Tile windowing × capture (the WINDOWING × CAPTURE gate).
  *
  * Question tiles render as layout GHOSTS until near the viewport (scroll/resize +
  * getBoundingClientRect with overscan — NOT IntersectionObserver, whose callbacks never fire
@@ -124,7 +124,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** Wait for the ghost to commit inside the surface iframe (Renderer_v2 Phase 8: the dashboard
+/** Wait for the ghost to commit inside the surface iframe (the dashboard
  *  renders in DashboardSurface's iframe via a nested React root that commits ASYNCHRONOUSLY —
  *  waiting for the ghost first makes the tile-content absence checks non-vacuous). */
 async function findGhost(): Promise<Element> {

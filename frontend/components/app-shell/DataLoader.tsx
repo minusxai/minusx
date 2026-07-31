@@ -32,7 +32,7 @@ export function DataLoader() {
   const dispatch = useAppDispatch();
   const user = useAppSelector(state => state.auth.user);
 
-  // Restore persisted UI flags after hydration — single dispatch avoids 3 separate re-render cycles
+  // Restore persisted UI flags after hydration — one dispatch instead of a re-render cycle per flag
   useEffect(() => {
     try {
       const flags: { leftSidebarCollapsed?: boolean; rightSidebarCollapsed?: boolean; devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; vizV2?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; showExpandedMessages?: boolean; enableCustomAgents?: boolean; homePage?: Record<string, unknown> } = {};
@@ -52,7 +52,7 @@ export function DataLoader() {
       if (vizV2 !== null) flags.vizV2 = vizV2 === 'true';
       localStorage.removeItem('vizV2');
       localStorage.removeItem('vizRenderer');
-      // Renderer_v2 Phase 2: the vizRenderer toggle is deleted — vega is the only engine.
+      // The vizRenderer toggle is deleted — vega is the only engine.
       localStorage.removeItem('vizRenderer_v2');
       const suggestedQuestions = localStorage.getItem('showSuggestedQuestions');
       if (suggestedQuestions !== null) flags.showSuggestedQuestions = suggestedQuestions === 'true';

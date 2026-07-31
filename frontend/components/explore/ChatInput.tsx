@@ -101,7 +101,8 @@ function ChatInputInner({
   const inputHistory = useAppSelector(selectChatInputHistory);
 
 
-  // Use Redux for draft text (persists across unmount)
+  // Draft text is LOCAL state — it does not survive unmount. (The sidebar hand-off keeps a
+  // separate `ui.sidebarPendingMessage` in Redux; see the pending-message effect below.)
   const [input, setInput] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [chatSettingsOpen, setChatSettingsOpen] = useState(false);
@@ -226,7 +227,7 @@ function ChatInputInner({
   }, [pendingMessage, container, dispatch, onSend, connectionsLoading, contextsLoading, attachments]);
 
   // Remote sessions HARD-lock (queueing deliberately ignored — the external agent is the only
-  // decider until the user stops the session). See REMOTE_AGENT_SESSIONS.md §9.2.
+  // decider until the user stops the session).
   const chatLocked = remoteSessionActive || (isAgentRunning && !allowChatQueue);
 
   // useStableCallback: LexicalMentionEditor is React.memo'd with a comparator

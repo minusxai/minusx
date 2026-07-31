@@ -202,7 +202,8 @@ const ALLOWED: CreditGate = { allowed: true, exceeded: null, message: null };
 /**
  * Preflight credit check for one user before a turn runs. Returns `allowed`
  * unless the policy ENFORCES limits and the user has hit their daily or weekly
- * allowance. Cheap (a single 2-SUM query); call at orchestration entry points.
+ * allowance. Cheap (ONE query that aggregates both windows via a FILTER); call at
+ * orchestration entry points.
  */
 export async function checkCreditGate(user: EffectiveUser): Promise<CreditGate> {
   if (typeof user.userId !== 'number') return ALLOWED;

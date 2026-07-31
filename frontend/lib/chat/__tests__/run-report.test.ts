@@ -1,5 +1,5 @@
 // runReportV2 — exercises the real headless report runner end-to-end with the
-// production registrables (REGISTRABLES + ReportAgent + RemoteAnalystAgent),
+// production registrables (HEADLESS_REGISTRABLES + ReportAgent + RemoteAnalystAgent),
 // proving the wiring resolves. No DB or backend: faux LLMs + stubbed runQuery.
 
 vi.mock('@/lib/connections/run-query', () => ({

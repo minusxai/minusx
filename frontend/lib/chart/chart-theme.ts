@@ -1,11 +1,11 @@
 
 /**
  * MinusX BI chart theme constants — palettes, fonts, light/dark tokens. Engine-free
- * (Renderer_v2 Phase 2 deleted ECharts): consumed by the Vega theme (lib/viz/theme.ts),
- * color pickers, and the geo color scale.
+ * (deleted ECharts): consumed by the Vega theme (lib/viz/theme.ts),
+ * the viz encoding/settings mappers, the color pickers, and the story CSS builder.
  */
 
-// Reads the CSS variable so ECharts honors the same font override as the rest of the app
+// Reads the CSS variable so charts honor the same font override as the rest of the app
 export function getChartFontFamily(): string {
   const fallback = 'JetBrains Mono, Consolas, Monaco, Courier New, monospace'
   if (typeof document === 'undefined') return fallback
@@ -133,7 +133,3 @@ const getThemeColors = (colorMode: 'light' | 'dark') => {
   return colorMode === 'light' ? LIGHT_THEME : DARK_THEME
 }
 
-/**
- * Base ECharts theme configuration for MinusX BI
- * Apply this to all charts for consistent styling
- */

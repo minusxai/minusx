@@ -65,13 +65,6 @@ export interface DerivedPendingToolCall {
 }
 
 /**
- * Derive the pending tool calls from the committed log: any `toolCall` block inside an assistant
- * message that has no matching `toolResult` is awaiting execution. The orchestrator answers every
- * SERVER tool before it pauses, so what's left unanswered is exactly the frontend-bridged calls the
- * client must run (then POST back as completedToolCalls to resume). Pure — works off rows alone, so
- * the stream can deliver "pending" on reconnect without any live orchestrator state.
- */
-/**
  * Frontend tools that, when a `paused` conversation is REOPENED (cold load), should keep it presented
  * as live/resumable rather than interrupted. This is deliberately ONLY `ClarifyFrontend`:
  *
@@ -93,6 +86,13 @@ export function isColdReopenResumable(pending: ReadonlyArray<DerivedPendingToolC
   return pending.some((p) => COLD_REOPEN_RESUMABLE_TOOLS.has(p.name));
 }
 
+/**
+ * Derive the pending tool calls from the committed log: any `toolCall` block inside an assistant
+ * message that has no matching `toolResult` is awaiting execution. The orchestrator answers every
+ * SERVER tool before it pauses, so what's left unanswered is exactly the frontend-bridged calls the
+ * client must run (then POST back as completedToolCalls to resume). Pure — works off rows alone, so
+ * the stream can deliver "pending" on reconnect without any live orchestrator state.
+ */
 export function derivePendingToolCalls(log: ConversationLog): DerivedPendingToolCall[] {
   const answered = new Set<string>();
   for (const entry of log) {

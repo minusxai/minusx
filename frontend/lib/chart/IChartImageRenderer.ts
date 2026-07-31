@@ -14,8 +14,8 @@ export interface ChartRenderOptions {
   width: number
   colorMode: 'light' | 'dark'
   addWatermark: boolean
-  /** When true, adds a bottom strip equal to the watermark height so the logo
-   *  sits inside the strip rather than overlapping chart content. */
+  /** When true, adds equal top and bottom strips (CHART_WATERMARK_PADDING_PX) so the
+   *  logo sits inside the bottom strip rather than overlapping chart content. */
   padding?: boolean
   /** Watermark logo URL (already resolved for the given colorMode). Falls back to the
    *  default brand mark when omitted. */

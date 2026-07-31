@@ -1,5 +1,6 @@
 /**
- * The context-save gate for authored semantic models (Semantic_Model_v2.md §2.5).
+ * The context-save gate for authored semantic models (CLAUDE.md "Semantic models,
+ * contexts, views, and Atlas schemas").
  *
  * Mirrors the views gate (lib/views/save-gate.server.ts): every context write —
  * editor UI, raw JSON, agent EditFile — passes through FilesAPI.saveFile, so

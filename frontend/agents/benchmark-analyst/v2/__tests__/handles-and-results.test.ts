@@ -490,10 +490,11 @@ describe('FetchHandleV2', () => {
 
 describe('query-refs', () => {
 // Tests for the extracted query reference helpers from explore-dataset.ts
-// These are the migrated tests from explore-dataset.test.ts for the 3 helpers:
+// The first three are the migrated tests from explore-dataset.test.ts:
 // - interpolateRefs: SQL $label.column interpolation
 // - interpolateMongoRefs: Mongo $label.column interpolation
 // - detectLowLimit: low limit detection for SQL and Mongo
+// - findUnresolvedMongoLabelRefs: preflight check for unknown labels in $in/$nin
 
 
 
@@ -502,7 +503,7 @@ describe('interpolateRefs (SQL)', () => {
   it('replaces $label.column with comma-separated values from labeled results', () => {
     const labeled = new Map([['revenue', [{ id: 10 }, { id: 20 }, { id: 30 }]]]);
     const sql = 'SELECT * FROM products WHERE id IN ($revenue.id)';
-    expect(interpolateRefs(sql, labeled)).toBe(
+    expect(interpolateRefs(sql, labeled, 'duckdb')).toBe(
       'SELECT * FROM products WHERE id IN (10, 20, 30)',
     );
   });
@@ -510,28 +511,28 @@ describe('interpolateRefs (SQL)', () => {
   it('single-quote escapes string values', () => {
     const labeled = new Map([['cities', [{ name: 'NYC' }, { name: "LA's best" }]]]);
     const sql = 'SELECT * FROM places WHERE name IN ($cities.name)';
-    expect(interpolateRefs(sql, labeled)).toBe(
+    expect(interpolateRefs(sql, labeled, 'duckdb')).toBe(
       "SELECT * FROM places WHERE name IN ('NYC', 'LA''s best')",
     );
   });
 
   it('returns NULL for unknown label', () => {
     const labeled = new Map([['revenue', [{ id: 1 }]]]);
-    expect(interpolateRefs('WHERE id IN ($unknown.id)', labeled)).toBe(
+    expect(interpolateRefs('WHERE id IN ($unknown.id)', labeled, 'duckdb')).toBe(
       'WHERE id IN (NULL)',
     );
   });
 
   it('returns NULL for empty result set', () => {
     const labeled = new Map([['revenue', []]]);
-    expect(interpolateRefs('WHERE id IN ($revenue.id)', labeled)).toBe(
+    expect(interpolateRefs('WHERE id IN ($revenue.id)', labeled, 'duckdb')).toBe(
       'WHERE id IN (NULL)',
     );
   });
 
   it('returns NULL for missing column', () => {
     const labeled = new Map([['revenue', [{ id: 1 }]]]);
-    expect(interpolateRefs('WHERE id IN ($revenue.missing)', labeled)).toBe(
+    expect(interpolateRefs('WHERE id IN ($revenue.missing)', labeled, 'duckdb')).toBe(
       'WHERE id IN (NULL)',
     );
   });
@@ -540,7 +541,7 @@ describe('interpolateRefs (SQL)', () => {
     const labeled = new Map([
       ['data', [{ id: 1 }, { id: null }, { id: 2 }, { id: undefined }]],
     ]);
-    expect(interpolateRefs('WHERE id IN ($data.id)', labeled)).toBe(
+    expect(interpolateRefs('WHERE id IN ($data.id)', labeled, 'duckdb')).toBe(
       'WHERE id IN (1, 2)',
     );
   });
@@ -550,7 +551,7 @@ describe('interpolateRefs (SQL)', () => {
       ['a', [{ x: 1 }]],
       ['b', [{ y: 'q' }]],
     ]);
-    expect(interpolateRefs('WHERE x IN ($a.x) AND y IN ($b.y)', labeled)).toBe(
+    expect(interpolateRefs('WHERE x IN ($a.x) AND y IN ($b.y)', labeled, 'duckdb')).toBe(
       "WHERE x IN (1) AND y IN ('q')",
     );
   });

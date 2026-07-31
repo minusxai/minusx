@@ -11,9 +11,9 @@ vi.mock('@/lib/screenshot/capture', () => ({
     readiness: { settled: true, busyCount: 0 },
   })),
 }));
-// The render→capture handshake polls the live DOM for the FileView to settle (12s
-// bound). No FileView exists here and readiness isn't under test — without this
-// mock each test burns the full 12s timeout.
+// The render→capture handshake polls the live DOM for the FileView to settle (the agent
+// path passes a 20s bound). No FileView exists here and readiness isn't under test —
+// without this mock each test burns the full timeout.
 vi.mock('@/lib/screenshot/readiness', () => ({
   waitForFileViewReady: vi.fn(async () => {}),
 }));

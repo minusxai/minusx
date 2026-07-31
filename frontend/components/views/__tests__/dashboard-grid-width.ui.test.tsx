@@ -1,5 +1,5 @@
 /**
- * Dashboard grid width contract (Renderer_v2 Phase 8): the grid lays out at the SURFACE's
+ * Dashboard grid width contract: the grid lays out at the SURFACE's
  * provided width (SurfaceWidthContext), not at a WidthProvider self-measurement — the
  * resize-observer-polyfill behind WidthProvider never fires inside the surface iframe, which
  * left grids laid out at a stale mount width, clipped at the pane edge (user-reported).

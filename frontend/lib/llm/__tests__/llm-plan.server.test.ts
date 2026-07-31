@@ -1,8 +1,9 @@
 // DB-backed plan resolution: reads the org config's `llm` section, resolves
 // @SECRETS refs to raw keys, and maps agent → grade → (provider, model,
 // options) onto an executable plan step (registry / bedrock / custom /
-// minusx). One model per grade; an unmapped grade with no minusx provider is
-// a hard, clearly-worded error.
+// minusx). One model per grade; an unmapped grade falls through to the sole
+// BYOK provider's compatibility default, and only an ambiguous or uncurated
+// pick is a hard, clearly-worded error.
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from '@/store/__tests__/test-utils';
 import { saveRawConfig, getRawConfig } from '@/lib/data/configs.server';
@@ -149,8 +150,8 @@ describe('resolveLlmPlan', () => {
   });
 
   // Connecting ONE provider must power every grade — the settings page implies
-  // it, and the env-seed path has always guaranteed it. Without this, saving a
-  // provider and nothing else bricks every chat with an unmapped-grade error.
+  // it. Without this, saving a provider and nothing else bricks every chat with
+  // an unmapped-grade error.
   it('auto-resolves an unmapped grade to the workspace\'s sole BYOK provider (compat default for that grade)', async () => {
     const anthropicDefaults = (compatibility.llm.providers as { id: string; defaults?: Record<string, string> }[])
       .find(p => p.id === 'anthropic')!.defaults!;

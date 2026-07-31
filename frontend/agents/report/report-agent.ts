@@ -3,8 +3,8 @@
 // A parent-orchestrating agent: it dispatches a single read-only analyst
 // sub-agent (`RemoteAnalystAgent`, schema name `AnalystAgent`) driven by the
 // report's freeform `reportPrompt`, then uses that analyst's own markdown as the
-// final report. Any `ExecuteQuery` results the analyst runs are collected so the
-// analyst can embed `{{query:id}}` charts inline.
+// final report. Charts come from SAVED questions the analyst embeds inline as
+// `<Question id={N} />` (see `buildGoal`), rendered live when the report is viewed.
 //
 // Modeled on `DoubleCheckBenchmarkAgent`: `run()` is hand-rolled (no LLM drives
 // the controller), the analyst is dispatched via the orchestrator's normal
@@ -93,7 +93,7 @@ export class ReportAgent extends MXAgent<typeof ReportAgentParams, ReportAgentCo
       await this._dispatchAnalyst(analystName, buildGoal(ctx.reportPrompt));
 
       // ── Phase 2: read the analyst's markdown (charts are embedded as
-      //    `<div data-question-id>` and rendered live by the report viewer) ────
+      //    `<Question id={N} />` and rendered live by the report viewer) ────
       const analysis = this._readAgentText(ANALYST_SLOT);
 
       // ── Phase 3: the analyst's output IS the report (title header + footer) ───

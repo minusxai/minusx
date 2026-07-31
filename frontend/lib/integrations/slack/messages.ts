@@ -300,11 +300,13 @@ export interface QueryChart {
  * Extract renderable charts from an orchestration logDiff.
  *
  * Scans for ExecuteQuery tool calls that have:
- * - A non-table/pivot vizSettings
+ * - Either a V2 `viz` envelope that renders as an image chart (authoritative when present —
+ *   a table envelope is skipped, never falling back to vizSettings), or a legacy `vizSettings`
+ *   whose type is in RENDERABLE_CHART_TYPES
  * - A successful query result with rows
  *
- * Returns the last `maxCharts` renderable charts (most recent first).
- * Returns empty array if none found.
+ * Takes the LAST `maxCharts` such charts in the log and returns them in chronological order
+ * (oldest first). Returns an empty array if none found.
  */
 export function extractQueryCharts(log: ConversationLogEntry[], maxCharts: number = 2): QueryChart[] {
   // Build a map of task unique_id → viz args for ExecuteQuery tasks (V2 `viz` envelope

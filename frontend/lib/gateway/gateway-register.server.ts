@@ -3,9 +3,10 @@ import 'server-only';
 /**
  * Registering a new workspace with the MinusX gateway.
  *
- * Runs at the tail of `AuthModule.register`, and only when `MX_GATEWAY_URL` and
- * `MX_GATEWAY_SHARED_SECRET` are both set. Otherwise nothing here touches the
- * network at all.
+ * Runs from `AuthModule.register`, and only when `MX_GATEWAY_SHARED_SECRET` is
+ * set and the installer supplied no explicit LLM config. Otherwise nothing here
+ * touches the network at all. `MX_GATEWAY_URL` is NOT part of the gate — it
+ * carries a production default, so the secret alone is the switch.
  *
  * BEST EFFORT BY DESIGN. Registration has already committed by the time this
  * runs, so nothing in here may throw: an outage must leave a working workspace

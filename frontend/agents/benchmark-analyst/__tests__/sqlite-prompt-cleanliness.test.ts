@@ -111,12 +111,13 @@ describe('benchmark sqlite — prompt cleanliness (no DuckDB leakage)', () => {
     const allDesc = BenchmarkAnalystAgent.tools
       .map((t) => t.description ?? '')
       .join('\n');
-    // The current ExecuteQuery description says:
+    // The ExecuteQuery description used to say:
     //   "FROM handle_xyz works whenever the query's connection is DuckDB or sqlite"
     // and "_scratch ... is a DuckDB connection routing to the in-memory
     // catalog where handle tables live. Use _scratch when your dataset
     // has no other DuckDB/sqlite connection..."
-    // Both must go — handles do not work on the new sqlite connector.
+    // Both are gone — handles do not work on the new sqlite connector — and
+    // these assertions keep them from coming back.
     expect(allDesc).not.toMatch(/DuckDB or sqlite/i);
     expect(allDesc).not.toMatch(/duckdb\/sqlite/i);
     expect(allDesc).not.toMatch(/sqlite\/duckdb/i);

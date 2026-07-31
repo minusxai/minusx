@@ -100,8 +100,6 @@ export async function getQueryResult(
 
   const state = getStore().getState();
 
-  // Import query utilities
-
   const queryId = getQueryHash(query, queryParams, database);
 
   // Step 1: Check Redux cache first (with TTL check)
@@ -116,8 +114,6 @@ export async function getQueryResult(
 
   // Step 2: Execute with deduplication via PromiseManager
   return queryPromiseManager.execute(queryId, async () => {
-    // Import Redux actions
-
     // Set loading state immediately — before acquiring a semaphore slot — so
     // cards queued behind the in-flight cap still show "loading", not stale.
     getStore().dispatch(setQueryLoading({ query, params: queryParams, database, loading: true }));

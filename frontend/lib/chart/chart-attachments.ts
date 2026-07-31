@@ -37,8 +37,8 @@ type ChartEntry = {
 
 /**
  * Extract renderable chart entries (question → one, dashboard → one per chart) from app state.
- * Production app-state images are now a single file screenshot (see ChatInterface); this helper
- * is retained only for the DevTools "Agent Image" per-chart preview.
+ * NOT WIRED UP: app-state images are a single file screenshot (see ChatInterface), and nothing
+ * in the app imports this — only a test mock references it.
  */
 export function extractChartEntries(
   appState: AppState | null | undefined,

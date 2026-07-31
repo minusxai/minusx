@@ -101,7 +101,7 @@ export default function CreateQuestionModalContainer({
 
   // --- Redux state that used to live directly inside QuestionViewV2 (a Container/View
   // convention violation) — now read here and passed down as props. See CLAUDE.md
-  // "Component Patterns". This modal always dispatches setFileEditMode(true) below, but
+  // "Component patterns". This modal always dispatches setFileEditMode(true) below, but
   // reads the selector back (rather than hardcoding true) to stay faithful to the exact
   // prior behavior — false for the render before that effect fires, true afterward. ---
   const editMode = useAppSelector(state => selectFileEditMode(state, effectiveId ?? -1));
@@ -249,7 +249,7 @@ export default function CreateQuestionModalContainer({
   // isNewQuestion overrides the ID-based check when the caller knows the context:
   //   true  → show "Add" button, clean up virtual file on cancel
   //   false → show "Update" button, do NOT remove on cancel (file is already referenced)
-  //   undefined → infer from whether the ID is virtual
+  //   undefined → infer from the file's `draft` flag
   const isCreateMode = isNewQuestion ?? (typeof effectiveId === 'number' && (file?.draft === true));
 
   // Create mode: "Add" — stages the virtual question in Redux, notifies parent, closes.
@@ -397,7 +397,7 @@ export default function CreateQuestionModalContainer({
           content={isOverrideMode ? applyVizOverride(mergedContent, localOverride ?? vizOverride) : mergedContent}
           // Resolve the schema context at the draft's real path (tutorial mode,
           // per-folder contexts) — without this the view falls back to '/org'
-          // and the GUI tab silently disappears for new questions.
+          // and the Semantic tab silently disappears for new questions.
           filePath={file?.path ?? folderPath}
           questionId={typeof effectiveId === 'number' ? effectiveId : undefined}
           queryData={queryData}

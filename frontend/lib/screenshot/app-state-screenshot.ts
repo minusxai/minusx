@@ -48,7 +48,7 @@ export const _internal = {
 
 /**
  * Whether the app-state file view gets position markers + a `<Viewport>` pointer — gated by ONE
- * declared property, `FILE_TYPE_METADATA[type].markers` (Renderer_v2 §2b). Flagged types are
+ * declared property, `FILE_TYPE_METADATA[type].markers`. Flagged types are
  * full-flow rendered documents (story, dashboard, notebook, report, alert, run outputs): they
  * render at full content height in the page, so `offsetHeight` is the whole document and the
  * scroll pointer is meaningful. Internally-scrolled types (question, `h:'100vh'`) and admin/form

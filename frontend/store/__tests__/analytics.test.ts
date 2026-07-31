@@ -17,10 +17,6 @@ import { setupTestDb } from '@/test/harness/test-db';
 import { getModules } from '@/lib/modules/registry';
 
 // ---------------------------------------------------------------------------
-// DB mock (same as read-write-e2e)
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
 // next/headers — return null request-id so fire-and-forget gracefully skips it
 // ---------------------------------------------------------------------------
 

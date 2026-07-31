@@ -61,7 +61,7 @@ interface DashboardViewProps {
   onAddQuestion: (questionId: number) => void;
   onAddTextBlock: () => void;
 
-  /** Design theme (Renderer_v2 Phase 3): stamps [data-theme] so the six story token sets apply. */
+  /** Design theme: stamps [data-theme] so the six story token sets apply. */
   theme?: string | null;
 }
 
@@ -325,13 +325,13 @@ export default function DashboardView({
 
     const gridRowHeight = 80; // Must match rowHeight prop on ResponsiveGridLayout
     const gridMargin = 6;    // Must match margin prop on ResponsiveGridLayout
-    const cellHeight = gridRowHeight + gridMargin; // 90px per row (rowHeight + vertical margin)
+    const cellHeight = gridRowHeight + gridMargin; // 86px per row (rowHeight + vertical margin)
     const minHeight = 1500;
     const cols = currentCols; // Use responsive column count
     const maxLayoutRow = layouts.lg.reduce((max: number, item: Layout) => Math.max(max, item.y + item.h), 0);
     const minRows = Math.ceil(minHeight / cellHeight);
     const numRows = Math.max(minRows, maxLayoutRow + 10);
-    const halfMargin = gridMargin / 2; // 5px — half the margin on each side of a cell
+    const halfMargin = gridMargin / 2; // 3px — half the margin on each side of a cell
 
     return (
       <div className="pointer-events-none absolute inset-x-0 top-0 z-0 h-full overflow-hidden">
@@ -397,7 +397,7 @@ export default function DashboardView({
             // grid-level transition:none rule below).
             className={`flex flex-col overflow-hidden rounded-md bg-card transition-[border-color,background-color,opacity] duration-200 ${publishMark ? 'border-2' : 'border'} ${borderClass} ${opacityClass}`}
           >
-            {/* Windowed (Renderer_v2 Phase 7): off-viewport tiles are BUSY layout ghosts;
+            {/* Windowed: off-viewport tiles are BUSY layout ghosts;
                 the capture readiness gate force-mounts them (see WindowedTile). */}
             <WindowedTile>
               <SmartEmbeddedQuestionContainer

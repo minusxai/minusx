@@ -4,7 +4,7 @@
  * Default (`rawData` false): if the result has a SERVER-RENDERABLE viz, send an IMAGE of the chart
  * (plus the always-on summary) instead of the row data — a picture is smaller and conveys shape
  * better, and the agent can re-request exact rows with `rawData: true`. If there is no viz, or the
- * viz is not server-renderable (table / pivot / single_value / number / trend), fall back to the
+ * viz is not server-renderable (table / pivot / trend / single_value / the geo kinds), fall back to the
  * row data as usual. `rawData: true` always returns the rows.
  *
  * Pure + dependency-light so both the browser-bridged ReadFiles and the server ExecuteQuery share
@@ -28,7 +28,7 @@ export function isImageViz(vizType: string | undefined): boolean {
 }
 
 /**
- * V2-aware image gate over a file's CONTENT (Viz Arch V2 §21 item 2). A V2 `viz`
+ * V2-aware image gate over a file's CONTENT. A V2 `viz`
  * envelope is authoritative — every chart kind images (only the DOM-tier table/pivot
  * don't); otherwise fall back to the legacy `vizSettings.type` gate above.
  */

@@ -2,8 +2,8 @@ import type { Mock } from 'vitest';
 /**
  * Tests for the Slack OAuth 2.0 flow.
  *
- * The flow is split across two routes so the install finishes inside the
- * context without a domain-wide cookie:
+ * The flow is split across three routes so the install finishes on the host where
+ * the admin's session cookie applies, without a domain-wide cookie:
  *   - oauth-start      — admin-gated; mints the HMAC-signed state.
  *   - oauth-callback   — lands on the root domain (Slack's fixed redirect_uri);
  *                        a thin HMAC-verifying forwarder. No DB writes. Redirects
@@ -18,6 +18,7 @@ import type { Mock } from 'vitest';
  *  3. oauth-callback-finish — token exchange, bot saved, admin/initiator check
  *  4. edge cases — user denied, Slack error, missing params, direct install
  *  5. oauth-start host-header handling — returnUrl encoding
+ *  6. oauth-callback direct install (no state) — the login-prompt HTML
  */
 
 vi.mock('server-only', () => ({}));

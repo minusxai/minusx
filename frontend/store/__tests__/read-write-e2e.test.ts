@@ -2,7 +2,8 @@
  * Phase 1 E2E Test - Unified File System API
  *
  * Tests the complete flow of ReadFiles, EditFileStr, PublishFile, and ExecuteQuery
- * with real API calls (no mocking) for true integration testing.
+ * against the real Next.js route handlers and a real test DB (fetch is routed to
+ * the handlers in-process). Only SQL execution (`runQuery`) is mocked.
  */
 
 import { configureStore } from '@reduxjs/toolkit';
@@ -340,8 +341,8 @@ describe('Phase 1: Unified File System API E2E', () => {
     const savedFile = await DocumentDB.getById(questionId);
     expect(savedFile).toBeDefined();
 
-    // Note: The actual save didn't happen in this test (we mocked the API)
-    // In a real E2E test, we'd verify the DB was actually updated
+    // publishFile went through the real PATCH /api/files/:id handler into the
+    // test DB, so this row carries the published content.
 
     // ========================================================================
     // Summary
@@ -928,7 +929,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         expect(editResult.success).toBe(true);
 
         // Simulate AppState: selectAugmentedFiles (pure Redux selector) + compressAugmentedFile
-        // This is exactly what navigationSlice.selectAppState does for a file page
+        // This is exactly what appStateSelector.selectAppState does for a file page
         const state = store.getState() as RootState;
         const [augmented] = selectAugmentedFiles(state, [questionId]);
         const appStateFileState = compressAugmentedFile(augmented).fileState;
@@ -1205,8 +1206,8 @@ describe('Phase 1: Unified File System API E2E', () => {
       });
 
       // ── Special character edge cases ─────────────────────────────────────────
-      // These verify that encodeFileStr correctly handles chars that JSON.stringify
-      // would escape in string values but should remain raw for LLM matching.
+      // These verify that the markup projection keeps string VALUES raw: chars that
+      // JSON.stringify would escape must appear verbatim for LLM matching.
 
       it('matches SQL with real newlines in oldMatch', async () => {
         const id = await DocumentDB.create('Multiline SQL', '/org/ec-multiline', 'question', {
@@ -1454,8 +1455,9 @@ describe('Phase 1: Unified File System API E2E', () => {
 
   // ============================================================================
   // EditFile Tool Handler Integration Tests
-  // These test the full registered frontend tool handler (tool-handlers.ts:1767),
-  // specifically the auto-execute path that builds params from the parameters array.
+  // These test the full registered frontend tool handler (registerFrontendTool('EditFile',
+  // …) in tool-handlers.ts), specifically the auto-execute path that builds params from
+  // the parameters array.
   // The bug was: p.value (always undefined) instead of p.defaultValue.
   // ============================================================================
 
@@ -1651,14 +1653,13 @@ describe('Phase 1: Unified File System API E2E', () => {
   // Subfolder viewer — ancestor context discovery (Bug 2)
   //
   // A viewer with home_folder='sales' (→ /org/sales) should see schema/docs
-  // from an ancestor context at /org/context. The fix is removing paths:[homeFolder]
+  // from an ancestor context at /org/context. The fix was removing paths:[homeFolder]
   // from useContexts criteria — letting the server's isAncestorContext logic run.
   //
   // NOTE: useContexts is a React hook; we cannot test it directly without RTL.
   // Instead we test the underlying readFilesByCriteria layer:
-  //   - WITH paths:[homeFolder]  → ancestor context NOT in Redux (documents the bug)
-  //   - WITHOUT paths filter     → ancestor context IS in Redux (documents the fix)
-  // The fix is a 1-line change in useContexts.ts.
+  //   - WITH paths:[homeFolder]  → ancestor context NOT in Redux (the old bug)
+  //   - WITHOUT paths filter     → ancestor context IS in Redux (the shipped criteria)
   // ===========================================================================
   describe('Subfolder viewer — ancestor context discovery via readFilesByCriteria', () => {
     let subfolderStore: ReturnType<typeof configureStore>;
@@ -1741,7 +1742,7 @@ describe('Phase 1: Unified File System API E2E', () => {
     });
 
     it('WITH paths:[homeFolder] — ancestor context NOT returned (documents the bug in useContexts)', async () => {
-      // This is what the CURRENT (broken) useContexts does:
+      // This is what the OLD (broken) useContexts did:
       // criteria = { type: 'context', paths: [homeFolder], depth: -1 }
       await readFilesByCriteria({
         criteria: { type: 'context', paths: ['/org/sales'], depth: -1 },
@@ -1754,7 +1755,7 @@ describe('Phase 1: Unified File System API E2E', () => {
     });
 
     it('WITHOUT paths filter — ancestor context IS returned (documents the correct criteria for useContexts)', async () => {
-      // This is what the FIXED useContexts should do:
+      // This is what useContexts now sends:
       // criteria = { type: 'context', depth: -1 }  (no paths — server handles filtering)
       await readFilesByCriteria({
         criteria: { type: 'context', depth: -1 },

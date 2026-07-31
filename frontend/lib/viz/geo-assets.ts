@@ -1,5 +1,5 @@
 /**
- * Named boundary-asset registry (RFC §9, §12): the MinusX-approved boundaries the
+ * Named boundary-asset registry: the MinusX-approved boundaries the
  * vega geo recipes look up against. Vega may NOT fetch geometry from the network (the
  * data policy rejects `data.url`), so choropleth/point recipes reference a boundary by
  * a reserved local DATASET NAME and the render pipeline injects the resolved features
@@ -22,7 +22,7 @@ import { feature as topojsonFeature } from 'topojson-client';
  */
 export const GEO_BOUNDARY_DATASET = '__mx_geo_boundary';
 
-/** A vega projection choice paired with a boundary set (RFC §9 — vector basemap). */
+/** A vega projection choice paired with a boundary set (vector basemap). */
 export type GeoProjection = 'albersUsa' | 'mercator' | 'equalEarth';
 
 export interface GeoAsset {
@@ -94,7 +94,7 @@ const cache: Record<string, Feature[]> = {};
  * the browser fetch (same-origin static asset). Root-relative URLs are unparseable in Node, so
  * NO-ORIGIN contexts (headless server renders — Slack images, scripts) install a filesystem
  * fetcher via `lib/viz/geo-assets.server.ts` instead; without it, geo charts silently dropped
- * from server images (Renderer_v2 Phase 2).
+ * from server images.
  */
 type GeoAssetFetcher = (publicPath: string) => Promise<unknown>;
 

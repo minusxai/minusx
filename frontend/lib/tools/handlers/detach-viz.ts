@@ -1,5 +1,5 @@
 /**
- * DetachViz — the agent-side detach (RFC §21.10). Converts a question's RECIPE chart
+ * DetachViz — the agent-side detach. Converts a question's RECIPE chart
  * into its materialized, fully-editable spec (kind:'vega' | 'vega-lite') in Redux, then
  * returns the file's CURRENT markup so the agent can EditFile the spec. The original
  * recipe is kept in `detachedFrom` (reversible). The heavy lifting is the pure

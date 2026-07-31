@@ -1,5 +1,5 @@
 /**
- * Conversations V2 — display projection unit tests (see /conversations-v2.md).
+ * Conversations V2 — display projection unit tests (see CLAUDE.md "Chat serving").
  * The projection shrinks entries for the wire but must never change count, ids, or kinds.
  */
 import {

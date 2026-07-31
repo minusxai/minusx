@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * DashboardSurface (Renderer_v2 Phase 8 — self-contained dashboards): hosts the dashboard view
+ * DashboardSurface (self-contained dashboards): hosts the dashboard view
  * in a SAME-ORIGIN IFRAME whose document is self-contained — the chrome stylesheet
  * (lib/dashboard-surface/chrome-css.gen.ts) + the app-styles mirror (fonts residue) are the
  * document's ONLY style sources, injected INSIDE the svg surface root so a serialized capture

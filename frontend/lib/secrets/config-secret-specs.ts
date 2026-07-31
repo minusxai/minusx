@@ -11,8 +11,10 @@
  * shared so the client can recognise refs/redacted values (e.g. render "•••• (saved)")
  * without ever holding a raw value.
  *
- * Ref keys are IDENTITY-based (`configSecretRefPath(mode, arrayPath, identity, field)`),
- * not index-based, so reordering an array can never attach one entry's secret to another.
+ * Ref keys are IDENTITY-based (`configSecretRefPath(mode, arrayPath, identity, field)`)
+ * wherever `identityField` is populated, so reordering an array cannot attach one entry's
+ * secret to another. Elements with no identity value fall back to a positional key
+ * (`at-<index>`), which reordering CAN mis-attach — always name your entries.
  */
 import { SECRET_REF_PREFIX, isSecretRef } from './secret-refs';
 

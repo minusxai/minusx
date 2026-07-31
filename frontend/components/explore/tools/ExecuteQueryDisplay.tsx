@@ -9,12 +9,13 @@ import { useAppSelector } from '@/store/hooks';
 import { selectVizV2Active } from '@/store/uiSlice';
 
 
-const EXECUTE_SQL_COLLAPSED_COLS = 12; // Narrower when collapsed
-const EXECUTE_SQL_COLLAPSED_COLS_COMPACT = 12; // Compact: 4 tools per row
+// Both are 12 today — collapsing no longer narrows the row.
+const EXECUTE_SQL_COLLAPSED_COLS = 12;
+const EXECUTE_SQL_COLLAPSED_COLS_COMPACT = 12;
 
 export default function ExecuteQueryDisplay({ toolCallTuple, databaseName, isCompact }: DisplayProps) {
   const [isExpanded, setIsExpanded] = useState(false); // Collapsed by default
-  const [isThinkingSQL, setIsThinkingSQL] = useState(true); // Collapsed by default
+  const [isThinkingSQL, setIsThinkingSQL] = useState(true); // Styling only — see the note above the return
   const [toolCall, toolMessage] = toolCallTuple;
   const hasInitializedExpansion = useRef(false);
   const vizV2Enabled = useAppSelector(selectVizV2Active);

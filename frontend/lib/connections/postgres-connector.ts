@@ -138,8 +138,8 @@ export class PostgresConnector extends NodeConnectorBase {
    * (index, column) with `col_pos` ordering; grouped here into
    * `TableIndex[]` keyed by `schema.table`. Plain-column indexes only —
    * expression-index columns (`indkey` entry of 0) are skipped by the
-   * `attnum = ANY(indkey)` join, so a purely-expression index yields an
-   * empty `columns` list.
+   * `attnum = ANY(indkey)` join, so a purely-expression index produces no
+   * rows at all and is omitted from the map entirely.
    */
   private async getIndexes(
     pool: ReturnType<typeof getOrCreatePgPool>,

@@ -4,6 +4,7 @@
  * These functions handle:
  * - `as_user` query parameter which enables admin users to impersonate other users
  * - `mode` query parameter which enables file system isolation (org vs tutorial)
+ * - `view` query parameter which strips app chrome for embedding
  */
 
 /**

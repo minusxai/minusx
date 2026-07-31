@@ -26,7 +26,7 @@ export function getTemplateDefaults(type: FileType, options?: { query?: string }
       return {
         description: '',
         query: options?.query || '',
-        // Viz Arch V2: new questions are born viz-only — an authoritative `viz` envelope
+        // New questions are born viz-only — an authoritative `viz` envelope
         // (a DOM-tier table). `vizSettings` is optional (legacy rollback field, never
         // authored); when absent, the classic pipeline falls back to a table at render time.
         viz: createDefaultTableViz(),

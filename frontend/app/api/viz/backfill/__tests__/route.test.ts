@@ -77,7 +77,7 @@ describe('POST /api/viz/backfill', () => {
 
     const { data } = await FilesAPI.loadFiles([legacy.data.id, v2.data.id], ADMIN);
     const upgraded = data.find(f => f.id === legacy.data.id)!.content as QuestionContent;
-    // The envelope was written from the REAL result columns…
+    // The envelope was derived from vizSettings alone (no query ran)…
     expect(upgraded.viz).toBeTruthy();
     const source = upgraded.viz!.source as unknown as { kind: string; spec: { encoding: Record<string, { field: string }> } };
     expect(source.kind).toBe('vega-lite');

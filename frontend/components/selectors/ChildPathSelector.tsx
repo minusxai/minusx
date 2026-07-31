@@ -2,7 +2,8 @@
 
 /**
  * ChildPathSelector - Reusable collapsible component for selecting child paths
- * Used in both SchemaTreeView (for whitelist items) and ContextEditor (for docs)
+ * Used by SchemaTreeSchemaRow (whitelist items), ContextDocsEditor (docs),
+ * SemanticModelsEditor and ViewsSection.
  *
  * Semantics:
  * - undefined = applies to ALL children (default)

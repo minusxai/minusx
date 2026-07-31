@@ -4,12 +4,13 @@ import type { AppEventPayloads } from './events';
 
 /**
  * Mirror an `AppEvents.ERROR` event to Sentry. This is the single bridge between
- * the app's error pipeline (client `captureError` → `/api/capture-error`, and
- * server `handleApiError`, which both publish `AppEvents.ERROR`) and Sentry.
+ * the app's error pipeline (client `captureError` → `/api/capture-error`, and the
+ * server-side `withAuth` route wrapper, which both publish `AppEvents.ERROR`) and
+ * Sentry.
  *
- * Without it, every error reported through that pipeline reaches Slack (via
- * `notifyAppEvent`) but never Sentry — only code paths that explicitly call
- * `Sentry.captureException` (e.g. `global-error.tsx`) show up there.
+ * Without it, every error reported through that pipeline reaches the configured
+ * webhooks (via `forwardToWebhooks`) but never Sentry — only code paths that
+ * explicitly call `Sentry.captureException` (e.g. `global-error.tsx`) show up there.
  *
  * Client reports arrive as a `message` + a serialized `stack` string (the
  * original Error doesn't cross the network), so reconstruct an Error for Sentry

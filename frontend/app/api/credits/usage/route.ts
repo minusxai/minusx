@@ -5,7 +5,8 @@ import { isAdmin } from '@/lib/auth/role-helpers';
 import { getCreditUsage, getConversationCredits } from '@/lib/analytics/credit-usage.server';
 
 /**
- * GET /api/credits/usage — current calendar month credit usage.
+ * GET /api/credits/usage — credit usage over the two policy-configured windows
+ * (billing/weekly and reset/daily, calendar-aligned).
  * Always returns the signed-in user's `individual` scope; `org` totals are
  * included only for admins (gated server-side — a non-admin can't obtain them).
  */

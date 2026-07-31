@@ -8,7 +8,7 @@ export const navigationListenerMiddleware = createListenerMiddleware();
 /**
  * Listen for setNavigation → load the appropriate data for the current route.
  *
- * - /f/{id}   → loadFiles([id])
+ * - /f/{id}   → readFiles([id])
  * - /p/path   → readFolder(path)
  */
 navigationListenerMiddleware.startListening({

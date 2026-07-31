@@ -3,7 +3,6 @@
 /**
  * VizConfigPanel — lightweight config-only panel for the Viz tab.
  * Renders axis builders without any data aggregation or chart rendering.
- * Extracted from ChartBuilder to avoid duplicate computation.
  */
 
 import { useCallback, useMemo } from 'react'
@@ -90,7 +89,7 @@ export const VizConfigPanel = ({
     return groups
   }, [columns, types])
 
-  // Auto-select columns (same logic as ChartBuilder)
+  // Auto-select columns
   const xAxisColumns = useMemo<string[]>(() => {
     if (initialXCols !== undefined) {
       const validCols = initialXCols.filter(col => columns.includes(col))

@@ -4,16 +4,12 @@
  * DashboardContainer V2 - Phase 2 Implementation
  * Smart component using Core Patterns with useFile hook and filesSlice
  *
- * Improvements over DashboardContainer:
- * - Uses useFile hook for state management
- * - Uses edit() for tracking changes
- * - Uses save() from hook (no manual fetch calls)
- * - Uses selectIsDirty for dirty detection
- * - Uses reload() for canceling changes
- * - Simplified, consistent state management
+ * - useFile + selectMergedContent for state, editFile() for staging changes
+ * - selectIsDirty for dirty detection
+ * - Save/cancel are not handled here: FileHeader drives them via FileView
  *
  * Owns all Redux access for the dashboard visual surface (Container/View convention,
- * CLAUDE.md "Component Patterns") — DashboardView is pure presentation and receives
+ * CLAUDE.md "Component patterns") — DashboardView is pure presentation and receives
  * everything (values + callbacks) as props.
  */
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
@@ -99,7 +95,7 @@ export default function DashboardContainerV2({ fileId, mode }: DashboardContaine
 
   // Publish/edit highlight source data: fileState (persistableChanges diff) + dirtyFiles (child edits).
   const fileState = useAppSelector(state => state.files.files[fileId]);
-  // Dev-only page-marker preview (Renderer_v2 Phase 1) — dashboards are marker-flagged.
+  // Dev-only page-marker preview — dashboards are marker-flagged.
   const devMode = useAppSelector(state => state.ui.devMode);
   const colorMode = useAppSelector(state => state.ui.colorMode);
   const dirtyFiles = useAppSelector(selectDirtyFiles, shallowEqual);

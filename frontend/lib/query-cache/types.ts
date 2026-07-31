@@ -1,7 +1,7 @@
 /**
  * Query Execution, Cache & Params Arch V2 — shared contracts.
  *
- * See docs/Query Execution, Cache, & Params Arch V2.md. These types are the
+ * See `CLAUDE.md` — "Query data plane". These types are the
  * single source of truth for the durable, cross-instance query cache that
  * replaces the in-process `queryCache`/`queryInflight` maps.
  *
@@ -15,8 +15,8 @@ import type { Readable } from 'stream';
 import type { QueryResult, BoundedDrainOptions, BoundedQueryResult } from '@/lib/connections/base';
 
 /**
- * Per-file cache windows. Stored on `QuestionContent.cachePolicy` and copied
- * onto a `published_queries` row at publish time. Both fields are milliseconds.
+ * Per-file cache windows. Stored on `QuestionContent.cachePolicy` and sent on
+ * the `/api/query` request body. Both fields are milliseconds.
  *
  * - `revalidateMs`: results younger than this are served as-is (fresh).
  * - `expiryMs`: results older than this are never served — execution blocks.
@@ -40,7 +40,7 @@ type QueryCacheStatus = 'pending' | 'ready';
 export interface QueryCacheRow {
   /**
    * `${mode}:${getQueryHash(query, params, connection)}` (+ an optional `:${extra}` hash of
-   * parameterTypes/references when present). The prefix is the user's MODE key (org/tutorial/…) —
+   * parameterTypes when present). The prefix is the user's MODE key (org/tutorial/…) —
    * NOT the user id — so all users AND guests of the same mode share a blob for identical
    * SQL+params+connection (safe: identical inputs → identical data; guest access is gated BEFORE
    * the cache is touched, see guest-query.server.ts). There is no separate `pub:` scope.

@@ -23,7 +23,8 @@ import path from 'path';
 import { Type } from 'typebox';
 
 describe('catalog', () => {
-// Tests for buildCatalog: creates the 6 synthetic catalog tables from connection schemas
+// Tests for buildCatalog: creates the synthetic catalog tables from connection schemas —
+// 6 structural ones, plus sample_rows/sample_notes which stay empty without a sampleConfig
 
 
 
@@ -285,8 +286,8 @@ describe('buildCatalog', () => {
 
 // `getCatalogStore` owns the cache + DuckDB-instance lifecycle. The keyed
 // cache lets DoubleCheck sub-agents share the same catalog *contents* but
-// hold independent stores — needed so per-slot sample tables (next step)
-// can differ without per-query filtering. Tested directly here so the
+// hold independent stores — needed so per-slot sample tables can differ
+// without per-query filtering. Tested directly here so the
 // per-key semantics are pinned regardless of which tool calls in.
 describe('getCatalogStore — keyed cache', () => {
   beforeEach(() => {

@@ -37,7 +37,7 @@ const CTX: SchemaCtx = {
 // verbatim except for the banned-CSS strip (§4: position fixed/sticky + external-fetch
 // constructs are removed from <style> blocks and inline styles at the save boundary; legacy
 // stories go through CTX above and keep e.g. their @import fonts live). Validation runs
-// against the shadcn registry names plus the explicit HTML-tag allowlist (Story_Design_V2 §2).
+// against the shadcn registry names plus the explicit HTML-tag allowlist.
 const JSX_STORY_CTX: SchemaCtx = {
   defs: DEFS,
   jsxField: {

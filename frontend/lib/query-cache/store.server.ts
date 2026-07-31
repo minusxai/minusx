@@ -4,8 +4,10 @@
  * Owns the execution lease: concurrent identical misses/revalidations are
  * deduped via an `INSERT … ON CONFLICT … WHERE lease_expired` claim, so exactly
  * one caller executes and the rest wait then read the blob. Stateless per
- * instance (works across the hosted fleet; a graceful no-op on single-writer
- * PGLite). See docs/Query Execution, Cache, & Params Arch V2.md §4.
+ * instance, so the same claim coordinates across the hosted fleet and, on
+ * single-writer PGLite, still dedups concurrent in-process callers — there is
+ * simply nothing cross-instance to coordinate there.
+ * See `CLAUDE.md` — "Query data plane", the cache.
  */
 import 'server-only';
 import { getModules } from '@/lib/modules/registry';

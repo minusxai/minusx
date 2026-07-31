@@ -6,18 +6,18 @@
  * turn's prompt to the model shows the prior assistant message as text-only —
  * the `tool_use` block and the matching `tool_result` message are stripped.
  *
- * Root cause hypothesis: `Orchestrator.projectRootThreadHistory()`
- * (`orchestrator.ts:519`) walks the persisted log to build the root agent's
- * `threadHistory` for a new turn, but only emits:
+ * Root cause: `Orchestrator.projectRootThreadHistory()` (`orchestrator.ts`) walks
+ * the persisted log to build the root agent's `threadHistory` for a new turn, and
+ * used to emit only:
  *   - `user` messages (from the per-turn root toolCall invocation)
  *   - `assistant` messages with `stopReason === 'stop'`
  * Intermediate assistant messages with `stopReason: 'toolUse'` AND every
- * `toolResult` entry are dropped. So the model loses visibility into what it
+ * `toolResult` entry were dropped, so the model lost visibility into what it
  * did on prior turns.
  *
  * This test sets up a two-turn flow with a faux LLM, and on turn 2 captures
  * the `Context.messages` the model actually receives. We assert the turn-1
- * tool_use and tool_result are present. Today this FAILS (proving the bug).
+ * tool_use and tool_result are present.
  */
 import type {
   AssistantMessage,

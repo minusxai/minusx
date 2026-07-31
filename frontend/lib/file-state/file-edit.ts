@@ -41,7 +41,8 @@ export interface EditFileOptions {
  *
  * Accepts partial file changes (name, path, content) and deep merges them.
  * Stores changes in persistableChanges/metadataChanges (doesn't save to database).
- * Auto-executes query for question files.
+ * Does NOT execute the query for question files: queries run only on an explicit
+ * Run (handleExecute), never on every edit.
  *
  * @param options - File ID and changes
  */
@@ -75,8 +76,7 @@ export async function editFile(options: EditFileOptions): Promise<void> {
 
     // REPLACE-semantics keys (same class as cellResults, see setNotebookCellResults):
     // the Viz V2 envelope is always written whole — deep-merging deltas resurrects
-    // deleted encoding channels and mangles spec arrays (docs/Visualization Arch V2.md
-    // §8: specs are never deep-merged).
+    // deleted encoding channels and mangles spec arrays — specs are never deep-merged.
     if (changes.content != null && 'viz' in changes.content) {
       (mergedChanges as Record<string, unknown>).viz = (changes.content as Record<string, unknown>).viz;
     }
@@ -195,12 +195,13 @@ export function buildCurrentFileStr(state: ReturnType<typeof getStore>['getState
 /**
  * EditFileStr - String-based editing using find and replace
  *
- * Searches for oldMatch in the FULL file JSON (including name, path, type, content)
- * and replaces with newMatch. Detects what changed and updates Redux accordingly.
- * By default the match must be UNIQUE (errors if oldMatch occurs more than once);
- * pass replaceAll: true to deliberately replace every occurrence (the result then
- * reports the occurrence count).
- * Validates JSON after edit.
+ * Searches for oldMatch in the file's full MARKUP projection (content only — the
+ * id/name/path wrapper is not part of the editable surface) and replaces it with
+ * newMatch. `replaceAll` defaults to FALSE, so a non-unique oldMatch is an error;
+ * pass true to deliberately replace every occurrence (the result then reports the
+ * count via `occurrences`). The edited string is parsed back to typed content —
+ * a parse failure is the only hard error; schema/lint problems are returned as
+ * non-blocking `validation` feedback and the edit is still staged.
  * Changes are stored in Redux but NOT saved to database until PublishFile is called.
  *
  * @param options - File ID and search/replace strings
@@ -309,11 +310,6 @@ export async function editFileStr(
 }
 
 /**
- * Collect non-blocking validation feedback for an applied edit: the content-schema check
- * (reported as feedback, not a block) plus the story `<Param>` lint (unsatisfied / mismatched
- * params for embedded questions). Best-effort — embedded questions are read from Redux.
- */
-/**
  * Resolve a story/dashboard's embedded questions to their SQL + stored params (for the param lint).
  * - Story: derived from the BODY — saved `<Question id>` embeds (resolved from Redux) plus inline
  *   `<Question query>` embeds (carried in the body). No assets field.
@@ -347,6 +343,11 @@ function collectEmbeddedQuestions(
     .filter((q): q is EmbeddedQuestion => q !== null);
 }
 
+/**
+ * Collect non-blocking validation feedback for an applied edit: the content-schema check
+ * (reported as feedback, not a block) plus the story `<Param>` lint (unsatisfied / mismatched
+ * params for embedded questions). Best-effort — embedded questions are read from Redux.
+ */
 function collectEditValidation(state: ReturnType<ReturnType<typeof getStore>['getState']>, fileState: FileState, content: Record<string, unknown>): string[] {
   const issues: string[] = [];
   const schemaError = validateFileState({ type: fileState.type, content, name: fileState.name, path: fileState.path });
@@ -361,8 +362,9 @@ function collectEditValidation(state: ReturnType<ReturnType<typeof getStore>['ge
     // splits them into separate filters. Non-blocking, same channel as the story lint.
     issues.push(...lintDashboardParams(collectEmbeddedQuestions(state, content, 'dashboard')));
   } else if (fileState.type === 'context') {
-    // Semantic models (Semantic_Model_v2.md §3): tiers 1–2 over EVERY authored model in the
-    // edited content — `undefined` for the saved side, so nothing is skipped as "unchanged".
+    // Semantic models (see `CLAUDE.md` — "Semantic models, contexts, views, and Atlas
+    // schemas"): tiers 1–2 over EVERY authored model in the edited content — `undefined`
+    // for the saved side, so nothing is skipped as "unchanged".
     // This is the NON-blocking half: the EditFile handler already rejected an edit that
     // introduced or changed a broken model, so what surfaces here is a model that was already
     // saved and has since drifted (a dropped column, a narrowed whitelist) — worth telling the

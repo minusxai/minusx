@@ -1,7 +1,9 @@
 /**
- * The SVG story capture path must be STORY-ONLY. Stories drop snapdom entirely; dashboards/questions/
- * notebooks/reports keep it, because their styles live in the PARENT document's stylesheets and would
- * serialize unstyled. `findStorySvg` is the gate that decides — so its contract is pinned here.
+ * The SVG surface capture path must be SURFACE-ONLY. A view that hosts a live story `<svg>` is
+ * captured by serializing that surface; everything else (questions/notebooks/reports, and
+ * DOM-rendered stories) goes through the generic element serializer, which inlines the PARENT
+ * document's stylesheets so it doesn't serialize unstyled. `findStorySvg` is the gate that
+ * decides — so its contract is pinned here.
  */
 import { describe, it, expect } from 'vitest';
 import { findStorySvg } from '@/lib/story-surface/serialize';

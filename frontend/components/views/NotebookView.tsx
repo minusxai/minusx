@@ -12,8 +12,8 @@
  * mutations rebuild the full `cells` array and call `onChange({ cells })`
  * (content keys are shallow-merged by selectMergedContent + editFile).
  *
- * A JSON view (FileHeader's eye/code toggle) is wired like StoryView/dashboards:
- * read-only without a fileId, editable with one (full-content edits).
+ * The JSON view is NOT this view's concern: FileView swaps in the shared CodeView
+ * when the header's eye/code toggle selects "Code".
  */
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
@@ -51,7 +51,7 @@ interface NotebookViewProps {
   /** Persist a cell's executed snapshot to Redux (setNotebookCellExecuted), called by the
    *  container. Only invoked when fileId is defined. */
   onReduxExecutedChange?: (cellId: string, executed: Executed) => void;
-  /** Dev-only page-marker preview (Renderer_v2 Phase 1): this type is marker-flagged. */
+  /** Dev-only page-marker preview: this type is marker-flagged. */
   showDevMarkers?: boolean;
   colorMode?: 'light' | 'dark';
 }

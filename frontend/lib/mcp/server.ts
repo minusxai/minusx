@@ -2,8 +2,9 @@
  * MCP Server Factory
  *
  * Creates a per-session McpServer instance that closes over the authenticated
- * EffectiveUser. Registers tools for schema search, query execution, file
- * search, and file reading, reusing existing handler logic.
+ * EffectiveUser. Registers tools for schema search, query execution, connection
+ * listing, file search, file reading, and — when the user's context has
+ * on-demand docs — context loading, reusing existing handler logic.
  */
 
 import 'server-only';

@@ -1,6 +1,8 @@
 import { auth } from '@/auth';
 import { NextResponse, type NextRequest } from 'next/server';
 import type { Session } from 'next-auth';
+import { AUTH_COOKIE_NAMES } from '@/lib/auth/auth-cookies';
+
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { CURRENT_TOKEN_VERSION } from '@/lib/auth/auth-constants';
 import { isValidMode } from '@/lib/mode/mode-types';
@@ -11,6 +13,14 @@ import { E2E_PARAM, E2E_COOKIE, E2E_HEADER, matchesE2ESecret } from '@/lib/auth/
 import { EMBED_FRAME_ANCESTORS } from '@/lib/config';
 import { GUEST_COOKIE, verifyGuestToken, isShareGuestPath } from '@/lib/auth/guest-session';
 
+/**
+ * The cookies wiped when a request is rejected. Re-exported from the shared list
+ * so this can never drift from what auth mints again — it previously held
+ * NextAuth v4 names on an Auth.js v5 app, so the wipe matched nothing and the
+ * forced logout left the session intact.
+ */
+export { AUTH_COOKIE_NAMES as CLEARED_SESSION_COOKIES } from '@/lib/auth/auth-cookies';
+
 export type AuthReq = NextRequest & { auth: Session | null };
 
 
@@ -19,7 +29,9 @@ export type AuthReq = NextRequest & { auth: Session | null };
  *
  * Sealed rather than passed plain: middleware writes this header and route handlers
  * trust it to say whose data to return, so its integrity has to be verifiable. Returns
- * false when no namespace applies, which means reject — there is no safe default.
+ * false when no namespace applies — there is no safe default, so the authenticated path
+ * treats that as reject (redirect to /login). The public-route path calls this for its
+ * side effect only and lets the request through header-less.
  */
 async function attachNamespace(
   req: NextRequest,
@@ -176,12 +188,7 @@ async function routeRequest(req: AuthReq): Promise<NextResponse> {
     const hasContext = await attachNamespace(req as NextRequest, requestHeaders);
     if (!hasContext) {
       const response = NextResponse.redirect(new URL('/login', req.url));
-      for (const name of [
-        'next-auth.session-token',
-        '__Secure-next-auth.session-token',
-        'next-auth.csrf-token',
-        '__Host-next-auth.csrf-token',
-      ]) {
+      for (const name of AUTH_COOKIE_NAMES) {
         response.cookies.set(name, '', { maxAge: 0, path: '/' });
       }
       return response;

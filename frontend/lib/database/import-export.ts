@@ -54,7 +54,10 @@ export interface InitData {
 }
 
 /**
- * Export entire database to InitData format.
+ * Export the users and files tables to InitData format.
+ * `draft` and `meta` ARE exported and re-imported. They were not, and the round-trip
+ * silently published every draft and discarded `meta` — which carries share grants.
+ * An older export written without those keys still imports, onto the column defaults.
  * _dbPath is accepted for API compat but ignored.
  */
 export async function exportDatabase(_dbPath: string = ''): Promise<InitData> {

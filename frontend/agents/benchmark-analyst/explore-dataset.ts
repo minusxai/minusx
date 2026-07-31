@@ -196,7 +196,7 @@ export class ExploreDataset extends MXTool<
       // Interpolate references to previous query results (e.g. $revenue.product_id)
       const interpolated = isMongo
         ? interpolateMongoRefs(rawQuery, labeledResults)
-        : interpolateRefs(rawQuery, labeledResults);
+        : interpolateRefs(rawQuery, labeledResults, dialect);
 
       let result: QueryResult;
       try {

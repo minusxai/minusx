@@ -41,7 +41,7 @@ export {
 /**
  * Register content-keyed faux responses (the switchboard matcher) on a faux
  * provider, replacing its sequential queue with a single matching factory.
- * The matcher keys on `(user_message [, after])` and fails loud on
+ * The matcher keys on `(userMessage [, after])` and fails loud on
  * duplicate / ambiguous / unmatched calls — see `faux-matcher.ts`.
  *
  * The underlying faux provider consumes one queue entry per LLM call, so the

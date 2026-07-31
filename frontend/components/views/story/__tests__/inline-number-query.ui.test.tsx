@@ -1,7 +1,7 @@
 /**
  * The <Number> footnote popover shows the SOURCE QUERY (read-only, to trace the figure). In the
  * story's EDIT mode it offers an "Edit query" trigger that asks StoryView to open the full SqlEditor
- * in a light-DOM modal (Monaco's autocomplete can't live in the story shadow root). Chart containers
+ * in a light-DOM modal (Monaco's autocomplete can't live in the story iframe). Chart containers
  * + the query hook are mocked so we render InlineNumber directly and assert the popover contents.
  */
 import React from 'react';

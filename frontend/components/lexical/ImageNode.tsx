@@ -5,7 +5,8 @@
  * URL (plus optional alt text). Docs are stored as plain markdown, so images
  * round-trip through the standard `![alt](src)` syntax via the IMAGE transformer
  * in `markdown-transformers.ts`. The node stores only the URL + alt text; the
- * actual upload happens in the toolbar (see LexicalTextEditor) before insertion.
+ * actual upload happens before insertion, in the toolbar's image button (see
+ * LexicalTextEditor) or the "+" insert menu (see InsertMenuPlugin).
  */
 
 import { DecoratorNode } from 'lexical';

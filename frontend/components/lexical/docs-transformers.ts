@@ -2,7 +2,7 @@
  * Composition root for the docs Lexical editor's markdown transformers + nodes.
  *
  * Builds on the generic ALL_TRANSFORMERS (headings, lists, tables, images, ...)
- * and layers the docs-specific custom blocks: @ mentions and :::metric directives.
+ * and layers the docs-specific custom chips: `@{json}` mentions and `:metric{json}`.
  * Order matters — custom transformers come before the defaults so they win for
  * overlapping syntax.
  */

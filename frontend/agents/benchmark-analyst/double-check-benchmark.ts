@@ -1,11 +1,12 @@
 // Cross-check controller: runs two `BenchmarkAnalystAgent` instances in
 // parallel as tool calls, judges their final answers via a `CheckEquivalence`
-// tool, and (on disagreement) retries once with cross-feedback. Toggled by
-// `DAB_DOUBLE_CHECK=1` in the benchmark CLI. See `frontend/benchmarks/README.md`.
+// tool, and (on disagreement) retries with cross-feedback for up to
+// `MAX_ROUNDS - 1` more rounds. Toggled by
+// `DAB_DOUBLE_CHECK=1` in the benchmark CLI (`frontend/benchmarks/runner.ts`).
 //
 // The whole flow is hand-rolled TS — no LLM drives the controller; the
-// only LLM cost is inside the four sub-agent runs and the two judge
-// calls. Each step is dispatched via the orchestrator's normal
+// only LLM cost is inside the sub-agent runs (two per round) and the one
+// judge call per round. Each step is dispatched via the orchestrator's normal
 // `dispatch()` (the same path the LLM-driven loop uses), so the log on
 // disk has the natural orchestrator log shape (assistant turn → toolCall → toolResult,
 // all `parent_id`-chained).
@@ -188,8 +189,9 @@ export class DoubleCheckBenchmarkAgent extends MXAgent<
   static primaryAgent: AnalystAgentClass = BenchmarkAnalystAgent;
   static secondaryAgent: AnalystAgentClass = BenchmarkAnalystAgent;
 
-  // Inherits provider/model from `BenchmarkAnalystAgent` so the judge
-  // and any future LLM calls use the same model as the analyst sub-agents.
+  // Inherits provider/model from `BenchmarkAnalystAgent` so any future
+  // controller LLM calls use the same model as the analyst sub-agents.
+  // (`run()` makes none today, and the judge uses `judgeModel` instead.)
   static model = BenchmarkAnalystAgent.model;
 
   protected override getSystemPrompt(): string {
@@ -430,7 +432,7 @@ function extractText(msg: AssistantMessage): string {
 }
 
 /**
- * Build the round-2 user message for one of the analysts. Embeds the
+ * Build a feedback-round user message for one of the analysts. Embeds the
  * analyst's prior answer + the other analyst's prior answer; asks them
  * to reconsider and either restate or give a new final answer.
  */

@@ -6,6 +6,9 @@
  * give the "static" guarantee for free — this pass enforces it.
  */
 import { immutableSet } from '@/lib/utils/immutable-collections';
+// Shared with the render-time gate in lib/story-ui/interpreter.tsx — see
+// lib/jsx/url-attrs.ts for why these must not be maintained separately.
+import { URL_ATTRS, URL_LIST_ATTRS } from './url-attrs';
 import { STORY_COMPONENT_NAMES } from '@/lib/data/story/story-components';
 import type { JsxNode, JsxElement, ValidationError, ValidateOptions } from './types';
 
@@ -23,8 +26,6 @@ const DANGEROUS_TAGS = immutableSet([
 
 // Attributes whose value is a URL — checked against dangerous schemes. `srcset` and `ping`
 // carry URL LISTS (comma/space separated) and are checked per entry.
-const URL_ATTRS = immutableSet(['href', 'src', 'action', 'formaction', 'poster', 'background', 'cite', 'data', 'xlink:href', 'ping']);
-const URL_LIST_ATTRS = immutableSet(['srcset', 'ping']);
 
 // Attributes rejected by NAME on every tag: HTML injection (dangerouslySetInnerHTML, srcdoc),
 // React internals (ref/key — never serializable data), and customized built-ins (is).

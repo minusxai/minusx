@@ -4,12 +4,15 @@ import { MXTool, UserInputException, type ToolResponse } from '@/orchestrator/ty
 import { loadSkill, listSystemSkillNames } from '@/agents/skill-content';
 import { loadContextDocsByKeys } from '@/lib/sql/context-docs';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
-// All tools below execute in the browser via the existing
-// `executeToolCall` registry (lib/tools/tool-handlers.ts). Server-side they
-// throw UserInputException so the orchestrator pauses; the bridge (Redux
-// listener middleware) calls `executeToolCall(...)` for real and resumes the
-// orchestrator with the resulting ToolResultMessage. The Node side is a thin
-// declaration — no logic, no reimplementation.
+// The frontend-bridged tools below (EditFile, CreateFile, DetachViz, ReadFiles,
+// Navigate, ReviewFile, ClarifyFrontend, PublishAll) execute in the browser via
+// the existing `executeToolCall` registry (lib/tools/tool-handlers.ts).
+// Server-side they throw UserInputException so the orchestrator pauses; the
+// bridge (Redux listener middleware) calls `executeToolCall(...)` for real and
+// resumes the orchestrator with the resulting ToolResultMessage. The Node side
+// is a thin declaration — no logic, no reimplementation. The last two are not
+// bridged the same way: LoadSkill resolves server-side and bridges only for an
+// unresolved user-skill name, and LoadContext is server-side only.
 
 // ─── EditFile ────────────────────────────────────────────────────────────────
 // Schema MUST match the runtime handler in `lib/tools/tool-handlers.ts`
@@ -162,7 +165,7 @@ export class DetachViz extends MXTool<typeof DetachVizParams, RemoteAnalystConte
 // ─── ReadFiles (frontend-bridge variant) ─────────────────────────────────────
 // Replaces the server-side `ReadFiles` from `agents/analyst/file-tools.ts` for
 // WebAnalystAgent. Server-side ReadFiles only sees persisted DB state; this
-// frontend-bridge variant routes through `frontendToolRegistry.ReadFiles@448`
+// frontend-bridge variant routes through the `ReadFiles` frontend handler,
 // which reads Redux file memory (drafts + persisted) and includes chart
 // images. The frontend-bridge ReadFiles behaviour means an
 // agent that edits a draft and reads it back sees its in-flight edits.
@@ -186,8 +189,8 @@ export class ReadFiles extends MXTool<typeof ReadFilesParams, RemoteAnalystConte
 }
 
 // ─── Navigate ────────────────────────────────────────────────────────────────
-// Schema matches `registerFrontendTool('Navigate', ...)` at line 275 — handler
-// reads `file_id`, `path`, `newFileType`. All three are optional but at least
+// Schema matches `registerFrontendTool('Navigate', ...)` in tool-handlers.ts —
+// handler reads `file_id`, `path`, `newFileType`. All three are optional but at least
 // one must be provided (handler enforces).
 const NavigateParams = Type.Object({
   file_id: Type.Optional(Type.Union([Type.Number(), Type.String()], { description: 'Existing file ID to navigate to.' })),
@@ -209,8 +212,9 @@ export class Navigate extends MXTool<typeof NavigateParams, RemoteAnalystContext
 
 // ─── ReviewFile ──────────────────────────────────────────────────────────────
 // Schema matches `registerFrontendTool('ReviewFile', ...)`. Frontend-only: it
-// captures the LIVE rendered DOM (html-to-image) of the file currently open in the
-// browser, so it can't run headless (no DOM).
+// captures the LIVE rendered DOM of the file currently open in the browser by
+// serializing it to SVG (lib/screenshot/capture.ts), so it can't run headless
+// (no DOM).
 const ReviewFileParams = Type.Object({
   fileId: Type.Number({ description: 'ID of the file to review — must be the file currently open in the browser (its rendered view is captured).' }),
   fullHeight: Type.Optional(Type.Boolean({ description: 'Capture the full scrolled height including off-screen content (default true).' })),
@@ -243,13 +247,12 @@ export class Screenshot extends MXTool<typeof ReviewFileParams, RemoteAnalystCon
 }
 
 // ─── ClarifyFrontend ─────────────────────────────────────────────────────────
-// Schema matches `registerFrontendTool('ClarifyFrontend', ...)` at line 382 —
+// Schema matches `registerFrontendTool('ClarifyFrontend', ...)` in tool-handlers.ts —
 // handler reads `question`, `options[{label, description?, value?, imageUrl?}]`, `multiSelect?`,
 // and the optional `type` preset ('design' → app-supplied theme options).
-// Naming: we expose the LLM-visible name as `ClarifyFrontend` (matches the
-// frontend handler exactly, no spawn-wrapper needed). The server-side `Clarify`
-// spawns into `ClarifyFrontend`; v2 short-circuits the spawn since the
-// orchestrator dispatches by exact name.
+// Naming: the LLM-visible name is `ClarifyFrontend`, matching the frontend
+// handler exactly — the orchestrator dispatches by exact name, so no
+// spawn-wrapper tool is needed.
 const ClarifyFrontendParams = Type.Object({
   question: Type.String({ description: 'Question to ask the user.' }),
   options: Type.Array(Type.Object({
@@ -277,7 +280,7 @@ export class ClarifyFrontend extends MXTool<typeof ClarifyFrontendParams, Remote
 }
 
 // ─── PublishAll ──────────────────────────────────────────────────────────────
-// Schema matches `registerFrontendTool('PublishAll', ...)` at line 871 —
+// Schema matches `registerFrontendTool('PublishAll', ...)` in tool-handlers.ts —
 // handler takes no arguments; the bridge surfaces a confirmation modal listing
 // every dirty file before persisting.
 const PublishAllParams = Type.Object({});

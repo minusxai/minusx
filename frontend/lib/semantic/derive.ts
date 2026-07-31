@@ -8,15 +8,15 @@
  * per table. Authored models (`ContextVersion.semanticModels`) are the source
  * of truth; derivation only pre-fills drafts and powers the stub name list.
  *
- * Models are deliberately NOT stored on the context content: a large workspace
- * derives multi-MB of vocabulary (measured: 4.2 MB for one production
+ * Derived models are deliberately NOT stored on the context content: a large
+ * workspace derives multi-MB of vocabulary (measured: 4.2 MB for one production
  * workspace), which would ship in every context load — the exact payload class
- * schema bounding exists to prevent. Instead, `deriveModelStubs` provides the
- * cheap global name list (works on names-only bounded schemas), and full
- * models are derived server-side per request, scoped to the tables in play
- * (lib/semantic/models.server.ts → POST /api/semantic-models). Pass the full
- * names-only schema as `namingDatabases` so scoped derivation names agree with
- * the global stubs.
+ * schema bounding exists to prevent. They are computed on demand instead, in the
+ * browser, when the editor pre-fills a draft from a table
+ * (components/context/SemanticModelsEditor.tsx). What POST /api/semantic-models
+ * serves is AUTHORED models only (lib/semantic/models.server.ts); nothing here
+ * feeds that endpoint. When deriving a scoped subset, pass the full names-only
+ * schema as `namingDatabases` so its business names agree with `deriveModelStubs`.
  *
  * Everything here is pure and connection-agnostic — dialect correctness lives
  * entirely in the IR layer (compile/detect), never here.

@@ -24,7 +24,7 @@ const subtotalBorders = (level: number): React.CSSProperties => ({
 })
 
 // Shared cell class fragments. Native <tbody>/<td> on the kit/Tailwind stack
-// (Renderer_v2 Phase 3) — same DOM + stable class contract (.mx-row/.mx-cell)
+// — same DOM + stable class contract (.mx-row/.mx-cell)
 // as before; only the styling system changed.
 const NUM_CELL = 'text-right font-mono'
 const dataCellClass = (compact: boolean) =>
@@ -102,9 +102,10 @@ export const PivotTableBody = ({
   const hasContrastText = (bg?: string): boolean =>
     !!bg && (bg.startsWith('#') || bg.startsWith('rgb'))
 
-  // Compact mode: wrap a cell in the kit (Radix) tooltip. Content renders inside
-  // the <td> (valid flow content) — the kit TooltipContent is portal-free by
-  // design (story/foreignObject-safe), and its popper wrapper is out-of-flow.
+  // Compact mode: wrap a cell in the kit (Radix) tooltip. TooltipContent portals to
+  // the document by default; inside a story the root TooltipProvider opts out
+  // (portalled={false}, since portals break in foreignObject) and the content then
+  // renders inline inside the <td> — its popper wrapper is out-of-flow either way.
   const withTooltip = (key: React.Key, cell: React.ReactElement, content: React.ReactNode) => (
     <Tooltip key={key}>
       <TooltipTrigger asChild>{cell}</TooltipTrigger>

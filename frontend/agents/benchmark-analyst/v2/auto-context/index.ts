@@ -1,7 +1,9 @@
 /**
- * Public surface of the AutoContext module. The implementation lives in
- * `auto-context.ts` (single-file design); this index re-exports the bits
- * outside callers (benchmark registries, integration code) need.
+ * Public surface of the AutoContext module. `auto-context.ts` is the module's
+ * aggregator — it owns the ensureAutoContext orchestration and re-exports the
+ * pieces from `agent.ts` / `generation.ts` / `catalog-render.ts`; this index
+ * narrows that to the bits outside callers (benchmark registries, integration
+ * code) need.
  */
 export {
   AutoContextAgent,

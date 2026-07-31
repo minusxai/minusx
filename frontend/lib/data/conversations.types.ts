@@ -3,7 +3,7 @@
  *
  * Conversations are first-class rows (not files). The `messages` table holds one row per pi
  * ConversationLogEntry; `content` is the entry verbatim (source of truth) and `seq` is both the
- * 0-based pi log index and the stream cursor. See docs/chat-architecture-v3.md.
+ * 0-based pi log index and the stream cursor. See CLAUDE.md "Chat serving".
  */
 import type { ConversationLogEntry } from '@/orchestrator/types';
 import type { RemoteSessionRecord } from './remote-sessions.types';
@@ -18,7 +18,7 @@ export interface StreamPendingToolCall {
 /**
  * 'remote' = an external agent holds the conversation (Remote Agent Session). Unlike 'running'
  * it is NOT lease/heartbeat-bearing — liveness is judged from `meta.remoteSession` (TTL + idle),
- * lazily released by whichever reader observes expiry. See REMOTE_AGENT_SESSIONS.md.
+ * lazily released by whichever reader observes expiry.
  */
 export type RunStatus = 'idle' | 'running' | 'paused' | 'error' | 'remote';
 

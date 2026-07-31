@@ -114,7 +114,7 @@ const editorTheme = {
 /**
  * Shared CSS for the Lexical editor content — used in both edit and read-only
  * modes. Scoped under `.mx-lexical-content` and injected via a `<style>` tag
- * (the Chakra `css` prop is gone — Renderer_v2 Phase 5 Chakra exit). Colors
+ * (the Chakra `css` prop is gone — removed by the Chakra exit). Colors
  * come from the Tailwind theme tokens (`--muted`, `--border`, ...).
  */
 const LEXICAL_CONTENT_CSS = `
@@ -472,7 +472,8 @@ interface LexicalTextEditorProps {
   editWithAgent?: EditWithAgentSource;
   /** Hands back the editor instance so the parent can imperatively focus it (click-to-edit). */
   onEditorReady?: (editor: LexicalEditor) => void;
-  /** CSS padding for the editable content (default {@link SHARED_TEXT_PADDING}). */
+  /** CSS padding for the editable content (default '32px 32px'; pass {@link SHARED_TEXT_PADDING}
+   *  to match the viewer, as TextBlockCard does). */
   contentPadding?: string;
   /** Render the toolbar as a floating bubble over the selection (no in-flow chrome). */
   floatingToolbar?: boolean;

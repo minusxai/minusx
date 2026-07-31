@@ -1,5 +1,5 @@
 /**
- * DatePicker inside the dashboard iframe surface (Renderer_v2 Phase 8): the calendar (and its
+ * DatePicker inside the dashboard iframe surface: the calendar (and its
  * backdrop) must portal to the ANCHOR's document body — `document.body` is the TOP document,
  * where an iframe-relative anchor rect is meaningless (the calendar landed offset by the
  * iframe's page position). Fixed-position elements are ALSO broken inside <svg><foreignObject>,

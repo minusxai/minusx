@@ -35,7 +35,7 @@ export interface UseContextsReturn {
  * This replaces SSR loading of contexts from layout.tsx
  *
  * @param options - Hook options (ttl, skip)
- * @returns {contexts, homeContext, loading, reload}
+ * @returns {contexts, homeContext, loading, error}
  */
 export function useContexts(options: UseContextsOptions = {}): UseContextsReturn {
   const { ttl, skip = false } = options;

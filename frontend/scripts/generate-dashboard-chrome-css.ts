@@ -1,13 +1,13 @@
 /**
  * Generates `lib/dashboard-surface/chrome-css.gen.ts` — the ONE static stylesheet the
- * self-contained dashboard iframe surface needs (Renderer_v2 Phase 8a).
+ * self-contained dashboard iframe surface needs.
  *
  * Dashboards have no authored classes: every class inside the surface comes from our own
  * components — the kit, the re-skinned embed chrome (shared with stories), and the
  * dashboard-view chrome listed below — a closed set. So unlike stories (compiled per story at
  * save/read time), the dashboard sheet is compiled ONCE, at build time, and shipped as a string
- * module. react-grid-layout's library CSS is prepended (the compiled chrome wins ties on
- * document order).
+ * module. The library CSS (react-grid-layout + react-day-picker) is prepended (the compiled
+ * chrome wins ties on document order).
  *
  * Run: npm run generate-dashboard-chrome-css
  * A freshness test (lib/dashboard-surface/__tests__/chrome-css.test.ts) fails when this file

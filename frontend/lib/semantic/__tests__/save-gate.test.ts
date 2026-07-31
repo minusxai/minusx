@@ -1,5 +1,5 @@
 /**
- * Tier-1 save gate for authored semantic models (Semantic_Model_v2.md M1).
+ * Tier-1 save gate for authored semantic models.
  *
  * Every context write passes through FilesAPI.saveFile → the semantic gate, so
  * an invalid model blocks the version save regardless of author (UI, raw JSON,
@@ -117,8 +117,8 @@ describe('semantic model save gate (tier 1)', () => {
   });
 
   it('tier 2: a model whose ONLY dimensions are m2m still saves (probe must not pick an m2m dimension)', async () => {
-    // m2m compilation is deferred — the tier-2 probe must skip m2m-sourced
-    // dimensions or a perfectly valid model becomes unsaveable.
+    // The tier-2 probe must skip m2m-sourced dimensions: one would drag a
+    // dedup-bridge CTE into a probe that only needs to validate one metric.
     const m2mOnly = model({
       primaryKey: ['zone_name'],
       references: [{

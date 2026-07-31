@@ -43,7 +43,7 @@ export interface GuestSessionPayload {
   /** Relative home folder (e.g. 'demos/acme'), resolved with `mode` at access time. */
   home_folder: string;
   mode: Mode;
-  /** Stable negative synthetic user id — isolates the guest's conversation folder. */
+  /** Stable negative synthetic user id — isolates the guest's conversations. */
   uid: number;
   name: string;
   email: string;
@@ -54,8 +54,8 @@ export interface GuestSessionPayload {
 /**
  * Derive a stable negative synthetic user id from the share nonce + guest email.
  * Negative + nonce-scoped so different shares (and different guests of one share)
- * get isolated `/logs/conversations/{uid}` folders and never collide with real
- * positive ids or the cron `-1` user.
+ * own disjoint sets of conversations (`conversations.owner_user_id`) and never
+ * collide with real positive ids or the cron `-1` user.
  */
 export function deriveGuestUid(nonce: string, email: string): number {
   const hash = crypto.createHash('sha256').update(`${nonce}:${email}`).digest();

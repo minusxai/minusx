@@ -30,10 +30,11 @@ export function useConversation(conversationId?: number) {
   const conversation = useSelector((state: any) =>
     selectConversation(state, conversationId)
   );
-  // Conversations V2 (/conversations-v2.md): non-dev loads get the slim display view; dev mode
+  // Conversations V2 (CLAUDE.md "Chat serving"): non-dev loads get the slim display view; dev mode
   // loads the verbatim log (per-turn appState for the inspector, full tool I/O). devMode is read
   // from the LIVE store at fetch time — not the render-time selector value — because DataLoader
-  // restores it from localStorage in a LAYOUT effect, which fires AFTER this page-level effect:
+  // (components/app-shell) restores it from localStorage in its own mount effect, which can fire
+  // AFTER this page-level effect:
   // a dev-mode cold load would otherwise race and fetch slim. A completion re-check upgrades a
   // load that raced anyway (the flag flipped while the slim fetch was in flight); flips after
   // completion are covered by the chatListener devMode listener.
@@ -126,7 +127,7 @@ export function useConversation(conversationId?: number) {
 
         // Remote Agent Session in progress (this tab may be a refresh / a second tab): re-raise the
         // flag, which hard-freezes the input and starts the observer stream (banner, live remote
-        // activity, frontend-tool execution). See REMOTE_AGENT_SESSIONS.md §9.4 E6.
+        // activity, frontend-tool execution).
         if (v3detail.conversation.runStatus === 'remote') {
           dispatch(setRemoteSession({
             conversationID: conversationId,

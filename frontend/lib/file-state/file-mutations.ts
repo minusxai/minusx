@@ -193,8 +193,6 @@ export interface ClearFileChangesOptions {
 export function clearFileChanges(options: ClearFileChangesOptions): void {
   const { fileId } = options;
 
-  // Import clear actions
-
   // Clear all changes
   getStore().dispatch(clearEdits(fileId));
   getStore().dispatch(clearMetadataEdits(fileId));
@@ -202,11 +200,9 @@ export function clearFileChanges(options: ClearFileChangesOptions): void {
 }
 
 /**
- * discardAll - Discard changes for dirty non-system files.
- *
- * Real files (id >= 0): clears persistableChanges, metadataChanges, ephemeralChanges.
- * Virtual files (id < 0): removed from Redux entirely.
- * Real files are cleared first so dashboard refs to virtual IDs revert before the virtual files are removed.
+ * discardAll - Discard changes for dirty non-system files by clearing their
+ * persistableChanges, metadataChanges and ephemeralChanges. No file is removed
+ * from Redux — every file (including drafts) has a real server-side row.
  *
  * @param fileIds - Optional list of file IDs to scope the discard to.
  *   When provided, only these files (+ their dirty dependencies) are discarded.
@@ -242,10 +238,6 @@ export function discardAll(fileIds?: number[]): void {
 }
 
 // ============================================================================
-// Create Virtual File
-// ============================================================================
-
-// ============================================================================
 // Create Draft File
 // ============================================================================
 
@@ -266,9 +258,9 @@ export interface CreateDraftFileOptions {
 /**
  * createDraftFile - Create a new file on the server immediately with draft:true.
  *
- * Unlike createVirtualFile (which uses a negative client-side ID), this calls the
- * server right away and gets back a real positive ID. The file is stored in the DB
- * with draft:true, making it invisible in folder listings until first real save.
+ * Calls the server right away and gets back a real positive ID — there are no
+ * client-side "virtual" (negative-ID) files. The file is stored in the DB with
+ * draft:true, making it invisible in folder listings until first real save.
  *
  * @param type - The type of file to create (question, dashboard, etc.)
  * @param options - Optional configuration (folder, connection, query)

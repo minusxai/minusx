@@ -2,8 +2,8 @@
  * Shared server-side agent_args builder.
  *
  * Loads connection, schema, and context documentation from the DB using the
- * same pure functions (getWhitelistedSchemaForUser, resolveContextDocs)
- * that the client-side AnalystAgent uses on the explore page and file page.
+ * same pure functions (getWhitelistedSchemaForUser, resolveContextDocs) the
+ * client's context UI resolves with (lib/hooks/useContext.ts).
  *
  * Used by all server-initiated agent conversations (Slack, reports, evals,
  * alerts) so they all receive the same schema/context the client would derive
@@ -155,8 +155,9 @@ export interface BuildServerAgentArgsOptions {
  * Build the base agent_args fields shared by all server-initiated conversations.
  *
  * Resolves connection, whitelisted schema, and context documentation for the
- * user by loading from the DB — the same data the client sends when starting
- * a chat from the explore page or file page.
+ * user by loading from the DB. The client sends only POINTERS (context/connection
+ * ids) — never the schema itself — so this is where that data comes from on every
+ * turn, browser or headless.
  *
  * @param options.contextFileId — override: load this specific context file
  *   instead of resolving the nearest ancestor. Used by context eval jobs so

@@ -27,8 +27,9 @@ import { sparkleKeyframes } from '@/lib/ui/animations';
 // ── Guide configuration ──────────────────────────────────────────────
 // Edit these to change what shows on the "You're all set" page.
 // Each section has a title and a list of accordion items.
-// Items can have an optional link (label + href + disabled flag).
-// Use ${agentName} placeholder in descriptions — it's replaced at render time.
+// Items can have an optional link — either a literal (label + href + disabled flag)
+// or the string 'context', resolved at render time to the first context file.
+// Use the {agentName} placeholder in titles/descriptions — it's replaced at render time.
 
 interface GuideItemConfig {
   icon: IconType;

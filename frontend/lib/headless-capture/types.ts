@@ -1,5 +1,5 @@
 /**
- * Headless story capture — contract types (Story_Design_V2 §6c).
+ * Headless story capture — contract types.
  *
  * `renderStoryToImage` (lib/headless-capture/index.server.ts) is the seam: callers hand it a
  * story file id + base URL and get a bitmap back, never knowing (or caring) which backend
@@ -15,7 +15,7 @@ export interface StoryCaptureInput {
   fileId: number;
   /** Origin of the running app, e.g. `http://localhost:3000`. */
   baseUrl: string;
-  /** Capture width in CSS px (default 800). */
+  /** Capture width in CSS px (default DEFAULT_CAPTURE_WIDTH = STORY_CANVAS_WIDTH). */
   width?: number;
   /** Output encoding (default 'jpeg'). */
   format?: 'jpeg' | 'png';

@@ -5,11 +5,10 @@
  * question (query + connection + params + @refs + viz), edited and run in place.
  *
  * It composes the leaf parts of the question page rather than reusing the
- * file-coupled QuestionViewV2: the SQL/GUI/Viz mode tabs (QueryModeSelector +
- * SqlEditor / QueryBuilderRoot / VizTypeSelector + VizConfigPanel) and the
- * results (QuestionVisualization), with execution via the file-decoupled
- * useQueryResult (keyed on query/params/db) and @-reference wiring via
- * useQuestionReferences.
+ * file-coupled QuestionViewV2: the SQL/Viz mode tabs (QueryModeSelector +
+ * SqlEditor / VizTypeSelector + VizConfigPanel) and the results
+ * (QuestionVisualization), with execution via the file-decoupled useQueryResult
+ * (keyed on query/params/db).
  *
  * Execution is local (cells aren't files): the Run button snapshots the current
  * query/params/connection into `executed`, which drives useQueryResult. Editing
@@ -88,7 +87,7 @@ export default function NotebookSqlCell({
   );
 
   const mergedParameters = useMemo(() => cell.parameters ?? [], [cell.parameters]);
-  // Debounced param sync on SQL edits (was part of the reference hook).
+  // Every SQL edit re-syncs the declared parameters against the :params in the query.
   const handleQueryChange = useCallback((query: string) => {
     handleChange({ query, parameters: syncParametersWithSQL(query, cell.parameters ?? []) } as Partial<SqlCell>);
   }, [handleChange, cell.parameters]);
@@ -109,7 +108,6 @@ export default function NotebookSqlCell({
   // color swatches match split-by charts without re-aggregating the rows.
   const [chartSeriesCount, setChartSeriesCount] = useState<number | undefined>(undefined);
 
-  // Proactive GUI-compatibility check: dim the GUI tab when the query can't be parsed.
 
   const run = useCallback(() => {
     onExecutedChange?.({
@@ -268,7 +266,7 @@ export default function NotebookSqlCell({
         </div>
       )}
 
-      {/* Parameters (current + referenced) */}
+      {/* Parameters declared by this cell's query */}
       {mergedParameters.length > 0 && (
         <ParameterRow
           parameters={mergedParameters}

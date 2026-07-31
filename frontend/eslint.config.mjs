@@ -27,7 +27,7 @@ const RESTRICT_ADAPTER_FACTORY = {
 // pi-ai is isolated to orchestrator/llm/. Nothing else may import it — consumers
 // use the owned types + wrapped runtime from @/orchestrator/llm, faux/test
 // helpers from @/orchestrator/llm/testing, and typebox directly from "typebox".
-// See orchestrator/llm/Migration.md for the rationale.
+// See CLAUDE.md, "Chat Engine", for the rationale.
 //
 // INVARIANT: every `no-restricted-imports` override below must include
 // RESTRICT_PI_AI, EXCEPT the orchestrator/llm/** carve-out (the one place pi-ai
@@ -47,7 +47,7 @@ const RESTRICT_PI_AI_SUBPATHS = {
   message: RESTRICT_PI_AI.message,
 };
 
-// Container/View convention (CLAUDE.md "Component Patterns"):
+// Container/View convention (CLAUDE.md, "Development philosophy"):
 // views must be pure presentation, containers own Redux. Widen the file list here
 // only as each view is actually migrated, never all at once.
 //
@@ -208,7 +208,8 @@ const eslintConfig = defineConfig([
       "no-restricted-syntax": ["error", ...BASE_RESTRICTED_SYNTAX],
     },
   },
-  // Allow process.env in the two centralized config files, scripts, and test bootstrap
+  // Allow process.env in the two centralized config files, scripts, the test bootstrap,
+  // and the build/test-runner configs (next.config.ts, playwright*.config.ts)
   {
     files: ["lib/config.ts", "lib/constants.ts", "scripts/**", "test/setup/**", "next.config.ts", "playwright.config.ts", "playwright.qa.config.ts"],
     rules: {
@@ -270,8 +271,8 @@ const eslintConfig = defineConfig([
       ],
     },
   },
-  // Relax import discipline rules in test files — Jest module mocking requires
-  // require() calls and dynamic imports after jest.mock()/jest.resetModules().
+  // Relax import discipline rules in test files — Vitest module mocking requires
+  // require() calls and dynamic imports after vi.mock()/vi.resetModules().
   {
     files: ["**/*.test.ts", "**/*.test.tsx", "**/__tests__/**", "**/__mocks__/**", "test/**"],
     rules: {
@@ -405,7 +406,7 @@ const eslintConfig = defineConfig([
       ],
     },
   },
-  // Container/View convention (CLAUDE.md "Component Patterns") — these views were
+  // Container/View convention (CLAUDE.md, "Development philosophy") — these views were
   // migrated to pure presentation; guard against regression. See RESTRICT_VIEW_REDUX.
   {
     files: [
@@ -455,7 +456,7 @@ const eslintConfig = defineConfig([
   // (the MX proxy URL), so @/lib/config is permitted here (the app-agnostic
   // pattern ban is intentionally not applied). Must come AFTER the orchestrator/**
   // block so it wins (flat-config: last matching config replaces the rule).
-  // See orchestrator/llm/Migration.md for the rationale.
+  // See CLAUDE.md, "Chat Engine", for the rationale.
   {
     files: ["orchestrator/llm/**/*.ts"],
     rules: {

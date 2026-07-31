@@ -57,7 +57,7 @@ const CTX: BenchmarkAnalystContext = {
 describe('SearchDBSchemaV2', () => {
   beforeAll(() => {
     setLighterModel(fauxReg.getModel());
-    // Sample-building has its own coverage in catalog.test.ts; turning it
+    // Sample-building has its own coverage in catalog-agent-misc.test.ts; turning it
     // off here keeps the prompt-pass response queue under each test's
     // direct control.
     setSamplingEnabled(false);
@@ -240,8 +240,8 @@ describe('SearchDBSchemaV2', () => {
     });
 
     it('re-ranks the catalog-result preview when the prompt model returns rerankedIds', async () => {
-      // The mock schema has 2 tables (users, orders). `SELECT * FROM tables
-      // ORDER BY table_name` gives deterministic row order: [orders, users].
+      // The mock schema has 2 tables (users, orders). `SELECT table_name FROM
+      // tables ORDER BY table_name` gives deterministic row order: [orders, users].
       // rerankedIds [r1, r0] → preview rows in [users, orders] order.
       fauxReg.setResponses([
         fauxAssistantMessage(

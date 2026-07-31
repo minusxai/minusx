@@ -1,5 +1,5 @@
 /**
- * CaptureManager contract tests (Story_Design_V2 §6c) — driven entirely through a FAKE backend:
+ * CaptureManager contract tests — driven entirely through a FAKE backend:
  * env gating, lazy singleton launch, concurrency semaphore, idle shutdown, and error mapping.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';

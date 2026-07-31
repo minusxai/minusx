@@ -117,7 +117,7 @@ function calculateScore(fieldStats: FieldSearchStats[]): number {
       (stats.partialMatches * 1);
 
     totalScore += fieldScore * stats.weight;
-    maxPossible += 30 * stats.weight; // Max: 10 exact matches * weight
+    maxPossible += 30 * stats.weight; // Ceiling: 3 exact matches (10 pts each) * weight
   }
 
   const score = maxPossible > 0 ? totalScore / maxPossible : 0;

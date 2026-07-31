@@ -335,7 +335,8 @@ describe('CreateFile tool — draft file path conflict validation', () => {
   });
 
   // -------------------------------------------------------------------------
-  // Validate-before-create: invalid content is rejected up front, no draft left
+  // Validate-at-create: schema issues come back as NON-BLOCKING feedback — the draft
+  // is still created with the agent's content (Publish is the gate).
   // -------------------------------------------------------------------------
 
   it('flags invalid vizSettings as feedback (permissive: still creates the file)', async () => {

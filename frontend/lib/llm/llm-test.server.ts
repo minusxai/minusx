@@ -1,7 +1,7 @@
 /**
  * One-shot LLM connectivity probe — shared by POST /api/llm/test (Settings /
  * setup-wizard Test button) and the setup-cli (`scripts/setup-cli/validate-llm.ts`,
- * run via `docker run` by setup.sh). Callers own auth and secret-ref
+ * run via `docker run` by install.sh). Callers own auth and secret-ref
  * resolution; this module only builds the step and makes the call.
  */
 import 'server-only';

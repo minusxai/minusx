@@ -1,6 +1,6 @@
 // CLI-safe DB tools. NO server-only imports — this module is loaded by
-// `npm run benchmark:dab` (Node CLI) as well as by the v=2 server agent
-// path. Production variants (which need `runQuery` / `loadConnectionSchema`
+// `npm run benchmark:dab` (Node CLI) as well as by the production server
+// agent path. Production variants (which need `runQueryStream` / `loadConnectionSchema`
 // → server-only chain into NextAuth) live in `db-tools.server.ts` and
 // extend the `Base*` classes here.
 
@@ -167,8 +167,9 @@ export class BaseSearchDBSchema extends MXTool<typeof SearchDBSchemaParams, Benc
       ? await cachedConnectorSchema(this.parameters.connection_id, local)
       : await this._loadSchemaFallback(this.parameters.connection_id);
 
-    // Per-run whitelist (set by the orchestrator from a context file) filters schemas
-    // before they reach the LLM. Same logic as production tool-handlers.server.ts.
+    // Per-run whitelist (built server-side from the request's context pointer — see
+    // `whitelistedTables` in lib/chat/orchestration-core.server.ts) filters schemas
+    // before they reach the LLM.
     const whitelist = this.context.whitelistedTables;
     const filteredSchemas = whitelist
       ? schemas.map((s) => ({
@@ -199,8 +200,8 @@ export class BaseSearchDBSchema extends MXTool<typeof SearchDBSchemaParams, Benc
 // Fields common to the benchmark and production ExecuteQuery schemas.
 // Kept separate so the production variant (`db-tools.server.ts`) can build
 // a schema WITHOUT the benchmark-only `timeout` param — the timeout is only
-// honoured on the benchmark path today; wiring it through the production
-// `_executeFallback` → `runQuery` chain is a tracked follow-up (Tasks.md).
+// honoured on the benchmark path today; the production `_executeFallback` →
+// `runQueryStream` chain does not wire it through.
 const EXECUTE_QUERY_BASE_FIELDS = {
   connectionId: Type.String(),
   query: Type.String(),
@@ -231,8 +232,8 @@ const ExecuteQueryParams = Type.Object({
 /**
  * Production ExecuteQuery params — same as `ExecuteQueryParams` minus
  * `timeout`. Consumed by `db-tools.server.ts::ExecuteQuery`, which routes
- * through `_executeFallback` → `runQuery` (a path that does not yet honour
- * the timeout — see Tasks.md). Hiding the param keeps the production tool
+ * through `_executeFallback` → `runQueryStream` (a path that does not honour
+ * the timeout). Hiding the param keeps the production tool
  * from advertising a capability it doesn't deliver.
  */
 export const ExecuteQueryParamsNoTimeout = Type.Object(EXECUTE_QUERY_BASE_FIELDS);
@@ -265,7 +266,7 @@ interface ExecuteQueryDetails extends Record<string, unknown> {
  * the production schema (no timeout support yet) uses this as-is.
  */
 export const EXECUTE_QUERY_DESCRIPTION =
-  'Execute a query against a named connection. The `query` is interpreted per the connection\'s dialect: for SQL connectors it is SQL; for a MongoDB connection it is a JSON string `{"collection": "...", "pipeline": [...aggregation stages]}` — a native aggregation pipeline, not SQL. A default row cap of 1000 is applied when the query has none, and an explicit cap above 10000 is reduced to 10000 (SQL: `LIMIT`; Mongo: a trailing `$limit` stage) — use COUNT/SUM/GROUP BY (Mongo: `$count`/`$group`) for cardinality questions and LIMIT/OFFSET (Mongo: `$limit`/`$skip`) to page through large results. Before querying a table/collection, confirm its real columns with SearchDBSchema — never reference a column you have not seen in its schema output. A leading-wildcard `LIKE \'%x%\'` forces a full-table scan — prefer equality/range filters on indexed columns (SearchDBSchema reports each table\'s `indexes`), and use FuzzySearch for approximate/typo-tolerant text matching. Returns JSON: data (GFM markdown of first shownRows), totalRows, shownRows, truncated, columns, types, finalQuery (the query as actually run). Increase maxChars (up to 100,000) to see more rows in the text response.';
+  'Execute a query against a named connection. The `query` is interpreted per the connection\'s dialect: for SQL connectors it is SQL; for a MongoDB connection it is a JSON string `{"collection": "...", "pipeline": [...aggregation stages]}` — a native aggregation pipeline, not SQL. A default row cap of 1000 is applied when the query has none, and an explicit cap above 10000 is reduced to 10000 (SQL: `LIMIT`; Mongo: a trailing `$limit` stage) — use COUNT/SUM/GROUP BY (Mongo: `$count`/`$group`) for cardinality questions and LIMIT/OFFSET (Mongo: `$limit`/`$skip`) to page through large results. Before querying a table/collection, confirm its real columns with SearchDBSchema — never reference a column you have not seen in its schema output. A leading-wildcard `LIKE \'%x%\'` forces a full-table scan — prefer equality/range filters on indexed columns (SearchDBSchema reports each table\'s `indexes`), and use FuzzyMatch for approximate/typo-tolerant text matching. Returns JSON: data (GFM markdown of first shownRows), totalRows, shownRows, truncated, columns, types, finalQuery (the query as actually run). Increase maxChars (up to 100,000) to see more rows in the text response.';
 
 const EXECUTE_QUERY_TIMEOUT_NOTE =
   ' A query that exceeds its `timeout` (default 30s, max 150s) is cancelled and returns an error — rewrite an expensive query rather than just raising the timeout.';
@@ -288,7 +289,7 @@ const EXECUTE_QUERY_SCHEMA: Tool<typeof ExecuteQueryParams> = {
  *
  * When the LLM asks about a name that isn't in `ctx.connections`, falls
  * through to `_executeFallback` (default: throws). Production subclasses
- * override this hook to route via the server-side `runQuery` helper.
+ * override this hook to route via the server-side `runQueryStream` helper.
  */
 export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, BenchmarkAnalystContext, ExecuteQueryDetails> {
   // Typed as the loose `Tool<TSchema>` (not the inferred specific type) so
@@ -307,8 +308,9 @@ export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, Benchmar
 
   /**
    * Hook for production subclasses (`db-tools.server.ts::ExecuteQuery`)
-   * to plug in `runQuery`. Default throws — fine for benchmark/CLI where
-   * every queryable connection should already be in `ctx.connections`.
+   * to plug in `runQueryStream` (via the shared query cache). Default throws —
+   * fine for benchmark/CLI where every queryable connection should already be
+   * in `ctx.connections`.
    */
   protected async _executeFallback(
     connectionId: string,
@@ -418,9 +420,9 @@ export class BaseExecuteQuery extends MXTool<typeof ExecuteQueryParams, Benchmar
   }
 
   /**
-   * Render the result's viz to a JPEG buffer. Base returns null (no native renderer in the shared/
-   * benchmark build) so it falls back to row data; the server subclass overrides with the real
-   * ECharts-SSR → JPEG renderer.
+   * Render the result's legacy `vizSettings` to a JPEG buffer. Base returns null (no native
+   * renderer in the shared/benchmark build) so it falls back to row data; the server subclass
+   * overrides with the V1→envelope bridge + `renderVizEnvelopeToJpeg`.
    */
   protected async _renderVizJpeg(
     _queryResult: QueryResult,
@@ -888,7 +890,7 @@ export class ChainedExecuteQuery extends MXTool<
       const interpolated = availableLabels.size > 0
         ? (isMongo
           ? interpolateMongoRefs(spec.query, availableLabels)
-          : interpolateRefs(spec.query, availableLabels))
+          : interpolateRefs(spec.query, availableLabels, dialect))
         : spec.query;
 
       let finalQuery: string;

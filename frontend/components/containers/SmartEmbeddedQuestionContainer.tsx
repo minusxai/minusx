@@ -17,7 +17,7 @@ import {
 import { useExplainQuestion } from '@/lib/hooks/useExplainQuestion';
 import { runOrDefer } from '@/lib/navigation/nav-progress';
 
-// Tile chrome is kit/Tailwind (Renderer_v2 Phase 3 — the Chakra exit for embeds): the classes
+// Tile chrome is kit/Tailwind (the Chakra exit for embeds): the classes
 // below resolve through the shadcn token layer (main document: app/theme-tokens.css under
 // [data-mx-theme-host]; stories: the compiled story CSS). Behavior, aria-labels, and the
 // drag-handle contract are pinned by smart-embedded-tile.ui.test.tsx.

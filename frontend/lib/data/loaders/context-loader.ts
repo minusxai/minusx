@@ -209,6 +209,6 @@ async function computeSchemaFromVersion(
   // fullDocs/fullMetrics already include inherited values (computed in context-loader-utils)
   // Root contexts get empty inherited values (no parent to inherit from)
   // Child contexts get parent.full* + parent.own (filtered by childPaths), minus
-  // whatever this version declines (excludedViews / excludedSemanticModels)
+  // whatever this version does not take (viewWhitelist / semanticModelWhitelist)
   return computeSchemaFromWhitelist(version, contextPath, user);
 }

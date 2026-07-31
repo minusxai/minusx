@@ -1,5 +1,5 @@
 /**
- * CaptureManager — the backend-agnostic lifecycle for headless story capture (Story_Design_V2 §6c):
+ * CaptureManager — the backend-agnostic lifecycle for headless story capture:
  * lazy singleton backend (launched on the first capture, zero cost if unused), a concurrency
  * semaphore bounding simultaneous captures, an idle-shutdown timer that closes the backend after
  * a quiet window, and graceful degradation (disabled/unlaunchable ⇒ `unavailable`, a failed

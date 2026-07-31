@@ -34,8 +34,8 @@ function withServerTimeout<T>(work: Promise<T>): Promise<T> {
  *
  * Every supported connection type has a Node.js connector in
  * `getNodeConnector` (DuckDB, SQLite, Postgres, BigQuery, Athena, CSV,
- * Google Sheets, Mongo, internal_db). Unknown connection names or types
- * throw.
+ * Google Sheets, Mongo, ClickHouse, internal_db). Unknown connection names or
+ * types throw.
  *
  * @param databaseName - Connection name (matches the `name` field in connection config)
  * @param query        - SQL query string
@@ -111,9 +111,10 @@ export async function runQueryStream(
     throw new Error(`No connector available for type: ${type}`);
   }
 
-  // Single seam for row-cap enforcement: every server-side execution (v1 chat
-  // ExecuteQuery, /api/query, v2 chat orchestrator) flows through here, so
-  // applying enforceQueryLimit at this point covers them all uniformly.
+  // Single seam for row-cap enforcement: every server-side execution
+  // (/api/query, the orchestrator's ExecuteQuery, headless file reads) flows
+  // through here, so applying enforceQueryLimit at this point covers them all
+  // uniformly.
   // enforceQueryLimit is a no-op on parse failure and on non-SELECT statements
   // (ATTACH, INSERT, DDL, …), so this is safe for the full set of inputs.
   const dialect = connectionTypeToDialect(type);
@@ -121,7 +122,16 @@ export async function runQueryStream(
 
   // Real connectors all inherit NodeConnector.queryStream; a minimal connector
   // (or a test mock) implementing only query() is wrapped as a one-shot stream.
+  //
+  // Pass the server bound down as the connector's own timeout. `withServerTimeout`
+  // only races the materialization, which frees the caller and its semaphore slot
+  // while the warehouse query keeps running — its error says as much. The engines
+  // that can actually cancel (DuckDB/SQLite interrupt, ClickHouse max_execution_time,
+  // Mongo maxTimeMS) need to be told, and it is a no-op for the rest. `0` disables
+  // the bound, so send `undefined` rather than a zero-millisecond deadline that
+  // would fail every query instantly.
+  const connectorTimeoutMs = QUERY_SERVER_TIMEOUT_MS > 0 ? QUERY_SERVER_TIMEOUT_MS : undefined;
   return typeof connector.queryStream === 'function'
-    ? connector.queryStream(cappedQuery, params, undefined, paramTypes)
-    : queryResultToStream(await connector.query(cappedQuery, params));
+    ? connector.queryStream(cappedQuery, params, connectorTimeoutMs, paramTypes)
+    : queryResultToStream(await connector.query(cappedQuery, params, connectorTimeoutMs));
 }

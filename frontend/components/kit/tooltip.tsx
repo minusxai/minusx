@@ -64,7 +64,7 @@ function TooltipTrigger({
 // StoryJsxBody sets TooltipProvider portalled={false}, so content stays inline
 // inside the story root. Radix still wraps content in an internal
 // `[data-radix-popper-content-wrapper]` div with `position: fixed`; the story
-// stylesheet must include STORY_FLOATING_CSS (see ../floating.ts) to force it to
+// stylesheet must include STORY_FLOATING_CSS (see @/lib/story-ui/floating.ts) to force it to
 // `absolute`. `collisionBoundary` is left at its default; the mounting code
 // should pass the story root as the collision boundary via props where possible.
 function TooltipContent({

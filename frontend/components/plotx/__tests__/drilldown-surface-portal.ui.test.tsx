@@ -1,5 +1,5 @@
 /**
- * DrillDownCard inside the dashboard iframe surface (Renderer_v2 Phase 8): the floating card is
+ * DrillDownCard inside the dashboard iframe surface: the floating card is
  * positioned from CLICK coordinates, which are relative to the document the click happened in —
  * so the card must portal into THAT document's body (`drillDown.doc`), not the top
  * `document.body` (where iframe-relative coordinates land the card offset by the iframe's page

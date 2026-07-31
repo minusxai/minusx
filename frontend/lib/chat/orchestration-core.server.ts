@@ -423,8 +423,9 @@ export async function setupOrchestration(
   // threaded onto the agent context like app_state, rendered as <Viewport> by the projection pass.
   const clientViewport = (agentArgs as { viewport?: string }).viewport;
   const pageType = getPageType(clientAppState);
-  // Attachments: v2 sends images inline as base64 data: URLs (no upload), so we
-  // just parse them; text passes through. Remote URLs are ignored (no fetch).
+  // Attachments: v2 sends images inline as base64 data: URLs (no upload), so we just parse
+  // them; text passes through. An http(s) image rides on as a URL the provider fetches —
+  // our server never fetches it, so there is no SSRF surface here.
   const attachments = normalizeAttachments((agentArgs as { attachments?: unknown }).attachments);
   const schemaForWhitelist = serverArgs.schema;
   const whitelistedTables: string[] = [];
@@ -504,8 +505,8 @@ export async function setupOrchestration(
 
   if (body.user_message) {
     if (isBenchmarkRoot) {
-      // Per-conversation connector configs come from the conversation
-      // file's `meta.benchmark_connections` (set at import time when the
+      // Per-conversation connector configs come from the conversation row's
+      // `meta.benchmark_connections` (set at import time when the
       // user dropped a connections.json alongside the JSONL); falling
       // back to `BENCHMARK_CONNECTIONS_CONFIG` env so dev workflows that
       // pre-set the env still work. The `Base*` DB tools registered for
@@ -711,7 +712,8 @@ export async function recordLlmCalls(piDiff: PiLogEntry[], conversationId: numbe
       });
     }
     if (Object.keys(llmCalls).length === 0) return;
-    // Best-effort central forward (stats → mx-llm-provider via notifyAppEvent).
+    // Best-effort central forward: the app-event registry stores it in `app_events` and fans
+    // it to matching webhooks. Fire-and-forget — `publish` returns void and never throws.
     appEventRegistry.publish(AppEvents.LLM_CALL, {
       mode: user.mode,
       conversationId,

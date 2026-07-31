@@ -1,6 +1,6 @@
 /**
  * Story rendering (e2e, real browser). The svg surface is the ONLY story render path
- * (Story_Design_V2 §4): stories mount as an <iframe> whose body is wrapped in
+ * Stories mount as an <iframe> whose body is wrapped in
  * <svg><foreignObject> — there is no renderer setting. Only a real browser can prove the
  * surface actually mounts. Rendering needs no query connector (the story is static HTML),
  * so this runs cleanly under E2E_MODE.

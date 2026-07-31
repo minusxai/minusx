@@ -20,7 +20,8 @@ interface ConstraintInput {
  * Centralized viz type constraint validation.
  *
  * Returns the first constraint violation found, or { error: null } if valid.
- * Called from ChartBuilder (pre-render) and individual plot components (render-time).
+ * Reached through `getVizSettingsWarning` below, which the EditFile/CreateFile handlers
+ * call via `vizWarningForQuestion` (lib/tools/handlers/viz-warning.ts).
  */
 export function getVizConstraintError(
   chartType: VisualizationType,
@@ -79,7 +80,8 @@ export function getVizConstraintError(
       return { error: null }
 
     case 'geo':
-      // Geo validates via its own getGeoConstraintError in geo-constraints.ts
+      // Geo has its own config validator (getGeoConstraintError in geo-constraints.ts);
+      // no structural column-count check applies here.
       return { error: null }
 
     default:

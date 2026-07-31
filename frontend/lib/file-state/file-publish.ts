@@ -31,7 +31,8 @@ export interface PublishFileResult {
 /**
  * PublishFile - Save file and dirty references to database
  *
- * Handles both virtual files (negative IDs) and real files (positive IDs).
+ * Every file has a real positive ID (drafts included — createDraftFile gets one
+ * from the server), so this is always a saveFile call, never a create.
  * Clears persistableChanges and metadataChanges on success.
  *
  * @param options - File ID to publish
@@ -48,8 +49,6 @@ export async function publishFile(
   if (!fileState) {
     throw new Error(`File ${fileId} not found`);
   }
-
-  // Import isDirty selector
 
   // Check if file is dirty
   const isDirty = selectIsDirty(state, fileId);

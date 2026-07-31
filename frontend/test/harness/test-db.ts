@@ -97,7 +97,7 @@ function buildImportSQL(
 
   if (testConnectionJson) {
     // Compute next_id inline — safe because we just finished inserting all docs above
-    // and the MAX id is deterministic. Use a CTE to avoid a separate query.
+    // and the MAX id is deterministic. INSERT…SELECT avoids a separate query.
     parts.push(
       `INSERT INTO files (id,name,path,type,content,file_references,created_at,updated_at)
        SELECT COALESCE(MAX(id),0)+1, 'default_db', '/org/connections/test_connection',

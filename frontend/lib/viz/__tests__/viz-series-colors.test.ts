@@ -1,5 +1,5 @@
 /**
- * Series color overrides (Viz Arch V2 — the V1 Style-popover colors, done spec-native).
+ * Series color overrides (the V1 Style-popover colors, done spec-native).
  * Colors are keyed by SERIES NAME and written into the color channel's scale
  * (domain + range) — not an index-keyed side-channel like V1's styleConfig.colors —
  * so they survive data reordering, detach, and agent edits, and show in Spec honestly.

@@ -20,9 +20,17 @@ function formatSqlLiteral(value: unknown): string {
   if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
   if (value instanceof Date) return `'${value.toISOString()}'`;
   // Strings + everything else: double internal single quotes (standard SQL).
-  // Backslashes are intentionally left as-is — Postgres (with the default
-  // `standard_conforming_strings = on`), DuckDB, SQLite, and BigQuery all
-  // treat backslash as a literal in single-quoted strings.
+  // Backslashes are left as-is. That is faithful on Postgres (with the default
+  // `standard_conforming_strings = on`), DuckDB, SQLite and Presto/Athena, where a
+  // backslash IS a literal character. It is not faithful on ClickHouse, BigQuery or
+  // MySQL, which process escape sequences — there a value containing `\` renders
+  // here as something the engine would have read differently.
+  //
+  // That is tolerated only because this output is never executed: it fills
+  // `QueryResult.finalQuery`, which exists to show the user what ran, while the
+  // engine received a prepared statement with bound values. Anything that builds
+  // SQL to EXECUTE must use `escapeSqlLiteral` (lib/sql/sql-literal.ts), which
+  // splits the dialects properly.
   const s = String(value);
   return `'${s.replace(/'/g, "''")}'`;
 }

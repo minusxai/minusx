@@ -9,18 +9,19 @@
  * tiny `{ unchanged: true }` marker; only what actually changed is re-sent in full.
  *
  * A "facet" is one independently-diffable piece of a file: its metadata (`data`), its JSX
- * `markup`, its `image`, or a query result's `summary` / `data` / `image`. Diffing happens
+ * `markup`, its `image`, or a query result's `summary` / `finalQuery` / `data` / `image`. Diffing happens
  * per-facet (not per-file) so that, e.g., a file whose chart re-rendered re-sends only the
  * image while its unchanged markup stays a marker.
  *
- * Design invariants (see also the Phase C projector):
+ * Design invariants (see also the projector in `./project`):
  * - **Forward-only.** A turn may be slimmed relative to EARLIER turns, never the reverse.
  *   Earlier emitted messages stay byte-identical across re-projections, so the provider
  *   prompt cache prefix holds.
  * - **Baseline = the emitted window.** {@link FacetMemo} is seeded by walking exactly the
- *   turns being emitted. When history is summarized up to message N, the projector resets
- *   the memo at N and recomputes forward, so an `unchanged` marker can never point at a
- *   value the model can no longer see.
+ *   turns being emitted — `projectMessages` builds a fresh memo per pass over exactly the
+ *   messages it emits — so an `unchanged` marker can never point at a value the model can no
+ *   longer see. {@link FacetMemo.reset} is the rebase hook for a window that ever starts
+ *   mid-log (e.g. a summarization boundary); nothing calls it today.
  *
  * Pure + dependency-light (only canonical-JSON for stable hashing) so it can be unit-tested
  * in isolation and reused by both the client and headless/server projection paths.

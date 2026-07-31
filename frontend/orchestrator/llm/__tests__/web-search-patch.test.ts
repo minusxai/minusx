@@ -1,7 +1,8 @@
 // Validates the pi web-search patch (patches/@earendil-works+pi-ai+0.80.6.patch):
 //  - request: the web_search server tool is injected when options.webSearch is set
 //  - response: web_search_tool_result blocks + text-block citations are parsed,
-//    and server_tool_use is dropped
+//    and server_tool_use is KEPT (needed to re-send the pairing on multi-turn;
+//    the chat-translator hides it from the UI)
 //  - image: an ImageContent with `url` serializes to an Anthropic url source
 // Uses an injected fake Anthropic client (options.client) returning recorded SSE
 // — the exact shapes captured from the real API in the spike.

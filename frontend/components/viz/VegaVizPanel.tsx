@@ -48,7 +48,8 @@ const V2_DISABLED_TYPES = ALL_CLASSIC_TYPES.filter(
   t => !(V2_SUPPORTED_VIZ_TYPES as readonly string[]).includes(t),
 );
 
-// Choropleth sequential color scales (matches CHOROPLETH_SCHEMES in viz-templates).
+// Choropleth sequential color scales offered in the UI — a subset of the
+// CHOROPLETH_SCHEMES keys viz-templates accepts (red/grey are agent-only).
 const CHOROPLETH_SCALE_OPTIONS = [
   { value: 'green', label: 'Green' },
   { value: 'blue', label: 'Blue' },
@@ -193,8 +194,7 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
     </div>
   );
 
-  // Pivot Formulas builder inputs — the same derivation ChartBuilder does for the
-  // classic panel: dimension VALUES come from aggregating the result rows.
+  // Pivot Formulas builder inputs: dimension VALUES come from aggregating the result rows.
   const pivotConfig = useMemo(() => (isPivot ? getPivotConfig(envelope) : null), [isPivot, envelope]);
   const pivotData = useMemo(() => {
     if (!pivotConfig || !rows?.length || pivotConfig.values.length === 0) return null;

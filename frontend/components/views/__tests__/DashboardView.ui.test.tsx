@@ -1,33 +1,33 @@
 /**
- * DashboardView — characterizes CURRENT (pre-move) Redux behavior ahead of the
- * Container/View discipline move (CLAUDE.md "Refactoring — Blue -> Red -> Blue").
- * DashboardView.tsx currently calls useAppDispatch/
- * useAppSelector directly at 8 sites (grep-verified): selectFileEditMode,
- * selectIsDirty, selectMergedContent (dashboard-level parameterValues),
- * ephemeralChanges.lastExecuted.params, questionContents (per-question
- * selectMergedContent), state.files.files[fileId] (fileState), selectDirtyFiles,
- * plus dispatch(...) for updateTextBlockContent/pushView/setEphemeral/
- * addQuestionToDashboard/addTextBlockToDashboard.
+ * DashboardView — characterization tests written for the Container/View
+ * discipline move (CLAUDE.md "Refactoring — Blue → Red → Blue"), which has since
+ * LANDED: DashboardView.tsx is props-only now, and the reads/dispatches it used
+ * to make — selectFileEditMode, selectIsDirty, selectMergedContent
+ * (dashboard-level parameterValues), ephemeralChanges.lastExecuted.params,
+ * questionContents (per-question selectMergedContent), state.files.files[fileId]
+ * (fileState), selectDirtyFiles, plus dispatch(...) for updateTextBlockContent/
+ * pushView/setEphemeral/addQuestionToDashboard/addTextBlockToDashboard — live in
+ * DashboardContainerV2.
  *
  * Mounted via DashboardContainerV2 (NOT DashboardView directly): the
- * container's fileId/mode contract is stable across the refactor, so these
- * same tests — unchanged — must keep passing once the hook calls move up from
- * the view into the container. Rendering DashboardView directly would break
- * across the move since its prop interface is exactly what's being extended.
+ * container's fileId/mode contract stayed stable across the refactor, so these
+ * same tests passed unchanged before and after the move. Rendering DashboardView
+ * directly would instead couple them to its (extended) prop interface.
  *
  * Heavy leaf components are mocked to small aria-labeled stand-ins (repo
  * convention — see chat-input.ui.test.tsx / notebook-view.ui.test.tsx):
  * SmartEmbeddedQuestionContainer, QuestionBrowserPanel, TextBlockCard.
  * react-grid-layout is mocked to a plain passthrough that reports mounts, so
- * the isDirty -> gridVersion remount (DashboardView.tsx:97-105) is directly
- * observable without depending on the real library's drag/resize internals.
+ * the isDirty -> gridVersion remount (DashboardView.tsx's `gridVersion` state)
+ * is directly observable without depending on the real library's drag/resize
+ * internals.
  *
- * All element queries by aria-label only (CLAUDE.md convention). One
+ * All element queries by aria-label only (CLAUDE.md "Writing tests"). One
  * presentational aria-label was added to DashboardView.tsx's question-tile
  * wrapper (`Dashboard tile <id>[ (mark)]`) since the publish/edit highlight
  * state (fileState/dirtyFiles-driven) had no other observable affordance.
  *
- * Renderer_v2 Phase 8: the dashboard view renders inside DashboardSurface's
+ * : the dashboard view renders inside DashboardSurface's
  * same-origin IFRAME (nested React root, commits asynchronously after the
  * container render) — so all dashboard content is queried through
  * withinDashboardSurface() (test/helpers/dashboard-surface.ts), using findBy
@@ -421,7 +421,7 @@ describe('DashboardView via DashboardContainerV2', () => {
     });
   });
 
-  // Dashboard themes (Renderer_v2 Phase 3, §9 Q2): content.theme stamps [data-theme] on the
+  // Dashboard themes: content.theme stamps [data-theme] on the
   // dashboard root so the six story design-token sets restyle it; absent → no attribute (the
   // neutral app look).
   describe('design theme stamp', () => {
@@ -441,7 +441,7 @@ describe('DashboardView via DashboardContainerV2', () => {
     });
   });
 
-  // Self-contained iframe surface (Renderer_v2 Phase 8): the dashboard content lives inside
+  // Self-contained iframe surface: the dashboard content lives inside
   // DashboardSurface's same-origin IFRAME — [data-file-id] (capture anchor) >
   // iframe[aria-label="Dashboard document"] > #document > svg[data-mx-story-svg] > foreignObject.
   // The chrome stylesheet is injected IN-ROOT (style[data-mx-tw]) so a serialized capture of the
@@ -474,7 +474,7 @@ describe('DashboardView via DashboardContainerV2', () => {
     });
   });
 
-  // Dashboards are marker-flagged (Renderer_v2 Phase 1): under dev mode the same numbered
+  // Dashboards are marker-flagged: under dev mode the same numbered
   // position-marker preview stories get (PageMarkerDevOverlay) must mount on the dashboard root,
   // so the DevTools Markers checkbox previews exactly what the agent capture bakes in.
   describe('page-marker dev overlay', () => {

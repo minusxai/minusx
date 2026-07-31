@@ -101,8 +101,8 @@ async function executeQueryTestOnClient(
 
 /**
  * Run an LLM-type Test on the client.
- * Delegates to /api/evals which runs the TestAgent loop server-side.
- * The server runner handles the full agent orchestration and returns a TestRunResult.
+ * Delegates to POST /api/jobs/test, which runs the in-process v2 eval agent
+ * (EvalAnalystAgent) server-side via createServerRunner and returns a TestRunResult.
  */
 async function executeLLMTestOnClient(
   test: Test & { type: 'llm' }

@@ -253,7 +253,7 @@ html.dark .login-card {
     0 14px 44px rgba(0, 0, 0, 0.5);
 }
 
-/* Viz V2 (docs/Visualization Arch V2.md): tooltip elements on <body> (can't be styled
+/* Viz V2 (see CLAUDE.md "Visualization"): tooltip elements on <body> (can't be styled
    from the chart's scoped css). `#vg-tooltip-element` = Vega's default per-mark tooltip
    (pie/scatter/maps); `#mx-shared-tooltip` = our shared multi-series tooltip. Both wear
    the borderless "floating card" look — soft shadow + hairline ring, no 1px border.

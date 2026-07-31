@@ -1,14 +1,13 @@
 /**
- * ReportView — characterizes CURRENT (pre-move) Redux behavior ahead of the
- * Container/View discipline move (CLAUDE.md "Refactoring — Blue -> Red -> Blue").
- * ReportView.tsx currently calls useAppSelector directly
- * at 2 sites (grep-verified, both read-only): selectFileEditMode (editMode),
- * selectIsDirty (isDirty).
+ * ReportView — characterization tests written for the Container/View discipline
+ * move (CLAUDE.md "Refactoring — Blue → Red → Blue"), which has since LANDED:
+ * ReportView.tsx is props-only now, and the two read-only selector calls it used
+ * to make — selectFileEditMode (editMode) and selectIsDirty (isDirty) — live in
+ * ReportContainerV2.
  *
  * Mounted via ReportContainerV2 (NOT ReportView directly): the container's
- * fileId contract is stable across the refactor, so these same tests —
- * unchanged — must keep passing once the two selector calls move up from the
- * view into the container.
+ * fileId contract stayed stable across the refactor, so these same tests passed
+ * unchanged before and after the move.
  *
  * useJobRuns is mocked to a static empty-runs stub (repo convention — see
  * AlertView.ui.test.tsx) so the useEffect-driven reload() never fires.
@@ -19,17 +18,14 @@
  * ReportView) is mocked for the same reason as AlertView.ui.test.tsx: it
  * fires an unmocked /api/users fetch on mount with no .catch.
  *
- * All element queries by aria-label only (CLAUDE.md convention):
+ * All element queries by aria-label only (CLAUDE.md "Writing tests"):
  *  - editMode is observed via the "Report instructions" editor container,
  *    which only renders the Lexical editor (not the read-only viewer) when
  *    editMode is true — detected via the presence of a contenteditable node.
- *  - isDirty is observed via the empty-state text next to "Run Now", read via
- *    a fixed aria-label on the run-content region added for this test... no
- *    such label exists yet, so instead we assert on the RunNowHeader's
- *    disabled state is out of scope; we use the visible empty-state Text
- *    which has no aria-label either. We add one aria-label to the empty
- *    state container in ReportView.tsx (`aria-label="No report runs"`) to
- *    make this queryable, matching AlertView's "No alert checks" pattern.
+ *  - isDirty is observed via the empty-state text next to "Run Now". That
+ *    container carries an aria-label added for this test
+ *    (`aria-label="No report runs"` in ReportView.tsx), matching AlertView's
+ *    "No alert checks" pattern; its copy varies with isDirty/hasPrompt.
  */
 import React from 'react';
 import { screen } from '@testing-library/react';

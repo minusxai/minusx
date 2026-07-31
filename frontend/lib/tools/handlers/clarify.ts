@@ -3,7 +3,7 @@
  * Supports single or multi-select responses, image-card options (options with `imageUrl`),
  * and the preset pickers (`type: 'design'` — story design themes; `type: 'template'` — story
  * templates), whose options are app-supplied and whose answers return the pick PLUS its
- * authoring guidance mini-skill (Story_Design_V2 §6a Layer B + story templates).
+ * authoring guidance mini-skill (Layer B + story templates).
  */
 import type { ClarifyDetails } from '@/lib/types';
 import { getDesignThemeOptions } from '@/lib/branding/story-theme-options';

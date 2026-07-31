@@ -111,7 +111,7 @@ export class AuthModule implements IAuthModule {
 
     const warnings: string[] = [];
 
-    // When MX_GATEWAY_URL + MX_GATEWAY_SHARED_SECRET are set, register this
+    // When MX_GATEWAY_SHARED_SECRET is set, register this
     // workspace with the MinusX gateway and wire it as the models provider, so
     // it is usable without configuring one by hand. Skipped when the installer
     // supplied a config below: an explicit choice should not be overwritten by

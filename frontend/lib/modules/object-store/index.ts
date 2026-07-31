@@ -1,11 +1,10 @@
 import { IObjectStoreModule, PresignedUrl, RequestContext } from '../types';
 
 /**
- * Open source Object Store Module — delegates to existing lib/object-store functions.
- *
- * NOTE: Full wiring of object-store calls into this module is deferred to Phase 5.
- * Existing code continues to call lib/object-store/index.ts directly.
- * This stub satisfies the ModuleSet type requirement.
+ * Open source Object Store Module — a stub that only satisfies the ModuleSet
+ * type requirement. Nothing calls `getModules().store`: every object-store
+ * caller uses lib/object-store/index.ts (createObjectStore) directly, so all
+ * methods here throw except resolvePath, which returns the key unchanged.
  */
 export class ObjectStoreModule implements IObjectStoreModule {
   resolvePath(logicalKey: string, _context: RequestContext): string {

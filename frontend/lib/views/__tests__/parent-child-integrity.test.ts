@@ -19,6 +19,13 @@
  *     continuing to read a table the org just pulled.
  *  6. Deleting a view that another view still reads fails the save, naming the
  *     dependent — breakage is prevented, not discovered later by a failed query.
+ *     A cyclic definition fails the save too (6b), not only at query time.
+ *  7. A child INHERITS the parent's views and may build on them, even on a table
+ *     it never whitelisted.
+ *  8. The ROOT context may read anything — it has full authority.
+ *  9. A child may DECLINE an inherited view: it leaves the exposed schema...
+ * 10. ...but declining does NOT free the name — a sibling still resolves the
+ *     parent's, so one name never means two different numbers.
  */
 import { DocumentDB } from '@/lib/database/documents-db';
 import { FilesAPI } from '@/lib/data/files.server';

@@ -1,10 +1,10 @@
 /**
- * ConnectionFormV2 — characterizes CURRENT (pre-move) Redux behavior ahead of
- * the Container/View discipline move (CLAUDE.md "Refactoring — Blue -> Red ->
- * Blue"). ConnectionFormV2.tsx currently calls
- * useAppSelector directly at 4 sites (grep-verified): state.ui.colorMode,
- * state.auth.user?.mode (userMode), state.ui.devMode (showJson),
- * state.auth.user?.home_folder (homeFolder).
+ * ConnectionFormV2 — characterization tests written for the Container/View
+ * discipline move (CLAUDE.md "Refactoring — Blue → Red → Blue"), which has since
+ * LANDED: ConnectionFormV2.tsx is props-only now, and the 4 selector reads it
+ * used to make — state.ui.colorMode, state.auth.user?.mode (userMode),
+ * state.ui.devMode (showJson), state.auth.user?.home_folder (homeFolder) — live
+ * in ConnectionContainerV2.
  *
  * Mounted via ConnectionContainerV2 (NOT ConnectionFormV2 directly).
  *
@@ -27,7 +27,7 @@
  * deleted as dead code in the post-M4.2 audit.)
  *
  * @/lib/hooks/useContext is mocked wholesale (repo convention).
- * All element queries by aria-label only (CLAUDE.md convention).
+ * All element queries by aria-label only (CLAUDE.md "Writing tests").
  */
 import React from 'react';
 import { screen, fireEvent } from '@testing-library/react';

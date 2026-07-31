@@ -20,8 +20,9 @@ import { cn } from '@/components/kit/cn';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 
 /**
- * Shared "new / empty file" hero used by Story, Question and Dashboard views. Each blank file is
- * conceptually a blank canvas, so we lean into that: a small tilted tile that visibly assembles
+ * Shared "new / empty file" hero used by the Story, Question, Dashboard, Notebook and Alert
+ * views. Each blank file is conceptually a blank canvas, so we lean into that: a small tilted
+ * tile that visibly assembles
  * itself, sitting in a soft atmospheric glow, tinted with the file type's own accent color (from
  * `file-metadata.ts`). Pure CSS, theme-token driven, dark/light aware. One orchestrated entrance
  * (staggered fade-up) rather than scattered micro-interactions.

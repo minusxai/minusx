@@ -8,10 +8,17 @@ import jwt from 'jsonwebtoken';
 import { NEXTAUTH_SECRET } from '@/lib/config';
 
 /**
- * Generate a random 6-digit OTP
+ * Generate a cryptographically random 6-digit OTP.
+ *
+ * `crypto.randomInt`, not `Math.random`: this is a 2FA secret, and `Math.random`
+ * is a non-cryptographic PRNG whose internal state is recoverable from a modest
+ * number of observed outputs — after which every later code is predictable.
+ * Samples are easy to obtain, since anyone can request codes for their own
+ * account. `randomInt` is uniform over the half-open range, so the upper bound
+ * is exclusive.
  */
 export function generateOTP(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return crypto.randomInt(100000, 1000000).toString();
 }
 
 /**
@@ -30,7 +37,9 @@ export interface OTPPayload {
   phone?: string;  // optional — not present for email OTP
   otpHash: string;
   exp: number;  // Unix timestamp (expiry)
-  nonce: string;  // Random string to prevent reuse
+  nonce: string;  // Random string so two tokens issued for the same email/OTP differ.
+                  // Verification is stateless — nothing tracks spent nonces, so a token
+                  // stays replayable until its 5-minute exp.
 }
 
 /**

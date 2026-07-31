@@ -3,7 +3,8 @@ import 'server-only';
 /**
  * ObjectStore — S3-compatible file storage.
  *
- * Requires env vars:
+ * S3 backend env vars — when the bucket or access key is absent the local
+ * filesystem is used instead (see isLocalObjectStore / LocalFsAdapter):
  *   OBJECT_STORE_BUCKET            S3 bucket name
  *   OBJECT_STORE_REGION            AWS region (default: us-east-1)
  *   OBJECT_STORE_ACCESS_KEY_ID     Access key
@@ -41,7 +42,7 @@ import {
 export interface UploadUrlResult {
   /** Presigned PUT URL the client uploads to directly. */
   uploadUrl: string;
-  /** Publicly accessible URL of the object after equal. */
+  /** Publicly accessible URL of the object after upload. */
   publicUrl: string;
 }
 
@@ -75,14 +76,6 @@ function createBackingStore(): ObjectStore {
 }
 
 /**
- * The object store, scoped to the caller's namespace.
- *
- * Async because resolving the namespace is: the prefix is applied HERE rather than at
- * each call site, so no caller can forget it, and a deployment that isolates workspaces
- * gets it without any call site knowing. Every key written or read through this is
- * inside the caller's namespace — there are deliberately no shared keys.
- */
-/**
  * The physical key a logical key resolves to.
  *
  * Some readers cannot go through the store — DuckDB is handed an `s3://` URL or a
@@ -95,6 +88,14 @@ export async function resolveObjectKey(logicalKey: string): Promise<string> {
   return namespaced(await getModules().namespace.isolation(), logicalKey);
 }
 
+/**
+ * The object store, scoped to the caller's namespace.
+ *
+ * Async because resolving the namespace is: the prefix is applied HERE rather than at
+ * each call site, so no caller can forget it, and a deployment that isolates workspaces
+ * gets it without any call site knowing. Every key written or read through this is
+ * inside the caller's namespace — there are deliberately no shared keys.
+ */
 export async function createObjectStore(): Promise<ObjectStore> {
   const namespace = getModules().namespace;
   return new NamespacedObjectStore(createBackingStore(), () => namespace.isolation());
@@ -103,10 +104,9 @@ export async function createObjectStore(): Promise<ObjectStore> {
 /**
  * Key path structure:
  *   Uploads/charts:  {type}/{userId}/{mode}/{YYYY-MM-DD}/{uuid}{ext}
- *   CSV files:       csvs/{mode}/{connectionName}/{uuid}{ext}
- *   Seed files:      seeds/mxfood/{table}.parquet  (shared, read-only)
+ *   CSV files:       csvs/{mode}/{connectionName}/{uuid}{ext}  (generateCsvUploadKey)
  *
- * - type: 'uploads' | 'charts' | 'csvs'
+ * - type: 'uploads' | 'charts'
  */
 export function generateUploadKey(params: {
   userId: number;
@@ -134,7 +134,6 @@ export function generateCsvUploadKey(params: {
   return `csvs/${params.mode}/${params.connectionName}/${randomUUID()}.${ext}`;
 }
 
-/** Shared S3 seed path for a single mxfood table. */
 /** Destination key for a mxfood tutorial table, inside the caller's namespace. */
 function getMxfoodTutorialKey(mode: string, tableName: string): string {
   return `csvs/${mode}/mxfood/${tableName}.parquet`;

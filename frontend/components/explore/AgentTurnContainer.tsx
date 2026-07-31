@@ -83,7 +83,8 @@ function AgentTurnContainerImpl({
   const safeIdx = Math.min(selectedIdx, timeline.length - 1);
   const selectedNode = timeline[safeIdx];
 
-  // Stable min height for right pane — based on ALL timeline contents, not just selected
+  // Stable fixed height for the right pane (and the rail's maxH) — based on ALL timeline
+  // contents, not just the selected node, so switching nodes doesn't resize the pane
   const hasChartContent = useMemo(() =>
     timeline.some(n => n.type === 'query' || (
       FILE_LABELS.has(n.label) && n.messages.some(m => {

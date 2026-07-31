@@ -1,8 +1,7 @@
-// Translator TDD spec — RED before any implementation exists.
-//
-// One module, three exports:
-//   piLogToLegacy     orchestrator ConversationLog        → ConversationLogEntry[]   (forward; file reads + done frame)
-//   legacyToolResultToPi   CompletedToolCallResult → ToolResultMessage     (reverse; orchestrator resume)
+// Translator spec. Covers two of the module's three exports (the third,
+// legacyLogToPi, has its own file — legacy-to-pi.test.ts):
+//   piLogToLegacy          orchestrator ConversationLog → ConversationLogEntry[]  (forward; display structs)
+//   legacyToolResultToPi   CompletedToolCallResult      → ToolResultMessage       (reverse; orchestrator resume)
 
 import { describe, it, expect } from 'vitest';
 import type {

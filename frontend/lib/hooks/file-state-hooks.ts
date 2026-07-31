@@ -1,18 +1,20 @@
 /**
  * File State Hooks - Centralized React hooks for file operations
  *
- * All hooks in this file are thin wrappers around functions from @/lib/file-state/file-state.ts
- * They handle React-specific concerns (state, effects) while delegating actual work to
- * the centralized file-state module.
+ * The loading/mutating hooks here are thin wrappers around functions from
+ * @/lib/file-state/file-state.ts — they handle React-specific concerns (state, effects) while
+ * delegating actual work to the centralized file-state module. useAppState and useDirtyFiles
+ * are pure Redux selectors and touch no loader at all.
  *
  * Hooks included:
- * - useFiles - Load multiple files by IDs
  * - useFile - Load a single file by ID
  * - useFilesByCriteria - Load files by criteria (path, type, depth)
  * - useFileByPath - Load a file by path (read-only)
  * - useFolder - Load folder contents with permissions
  * - useAppState - Get current page app state (file or folder)
  * - useQueryResult - Execute queries with TTL caching
+ * - useDirtyFiles - All non-system files with unsaved changes
+ * - useSaveDecision - Save/publish decision for the current file
  */
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
@@ -470,8 +472,8 @@ export function useQueryResult(
  * useAppState Hook
  *
  * Returns current page context (file or folder) derived from Redux navigation state.
- * All business logic (URL parsing, file loading, virtual file creation) lives in
- * navigationSlice + navigationListener — this hook is a pure selector.
+ * URL parsing lives in navigationSlice, data loading in navigationListener, and the
+ * derivation in appStateSelector — this hook is a pure selector over that.
  *
  * Usage:
  * ```typescript
@@ -496,7 +498,7 @@ export function useAppState(): { appState: AppState | null; loading: boolean } {
  * useDirtyFiles Hook
  *
  * Returns all loaded non-system files that have unsaved changes (content or metadata).
- * System files (connection, config, styles, context) are excluded — they save in-place.
+ * System files (connection, config, styles) are excluded — they save in-place.
  *
  * Re-renders only when the set of dirty files changes (shallowEqual on array).
  *
@@ -524,7 +526,7 @@ export interface SaveResult {
 export interface SaveDecision {
   /** Save current file + its dirty children (auto-saves dependencies) */
   onSave: () => Promise<SaveResult>;
-  /** Discard changes for current file + its dirty children (removes virtual files) */
+  /** Discard changes for current file + its dirty children */
   onCancel: () => void;
   /** Whether the current file or any of its children have unsaved changes */
   isDirty: boolean;
@@ -576,7 +578,8 @@ export function useSaveDecision(fileId: number | undefined): SaveDecision {
     if (idsToSave.length > 0) {
       idMap = await publishAll(idsToSave);
     }
-    // Virtual files get new real IDs via idMap; real files keep their ID
+    // publishAll returns an empty map today (every file already has a real ID);
+    // the lookup is kept as a defensive pass-through.
     const realId = idMap[fileId] ?? fileId;
     const saved = getStore().getState().files.files[realId];
     return { id: realId, name: saved?.name ?? '' };

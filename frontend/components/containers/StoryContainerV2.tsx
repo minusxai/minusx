@@ -3,10 +3,11 @@
 /**
  * StoryContainer V2 — smart component for story pages.
  *
- * The visual canvas is a viewer: the story HTML is authored by the agent
- * (EditFile on `content.story` / `content.assets`). Rendering through
- * selectMergedContent means unpublished agent edits show live before Publish,
- * same as dashboards. The JSON tab is editable (StoryView wires it by fileId).
+ * The visual canvas renders through selectMergedContent, so unpublished agent
+ * edits (EditFile on `content.story` / `content.assets`) show live before
+ * Publish, same as dashboards. In edit mode the canvas is itself WYSIWYG —
+ * inline edits stream into the file's dirty content (StoryView). The admin
+ * Code view (JSON + agent XML) is selected centrally by FileView.
  *
  * Publishing is admin-only: the story registers a "Make public" action into the
  * document-header toolbar (the same generic path notebooks use) and owns the
@@ -58,7 +59,7 @@ export default function StoryContainerV2({ fileId }: FileComponentProps) {
   // Publishing is admin-only; published via a toolbar action + the ShareModal.
   const canShare = numericId !== undefined && isAdmin(effectiveUser?.role || 'viewer');
   const [shareOpen, setShareOpen] = useState(false);
-  // Design theme picker (Story_Design_V2 §5) — jsx stories only; stages a `content.theme`
+  // Design theme picker — jsx stories only; stages a `content.theme`
   // edit (the shared header's Save persists it, Cancel reverts). All [data-theme] token
   // blocks already ship in compiledCss, so a pick previews instantly (attribute change only).
   const canTheme = numericId !== undefined && mergedContent?.format === 'jsx';

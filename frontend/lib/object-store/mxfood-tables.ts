@@ -1,10 +1,11 @@
 /**
  * Canonical list of mxfood tutorial tables.
  *
- * Must stay in sync with the `csv_files` entries on the tutorial-mode
- * connection in `lib/database/workspace-template.json`. Used by:
+ * Must stay in sync with the `config.files` entries on the tutorial-mode
+ * `static` connection in `lib/database/workspace-template.json`. Used by:
  *   - `AuthModule.register` to seed parquets at workspace creation
  *   - `POST /api/admin/reset-tutorial` to re-seed parquets on reset
+ *   - `GET /api/orgs/seed-status` to report how many have landed
  */
 export const MXFOOD_TABLES = [
   'ad_campaigns',

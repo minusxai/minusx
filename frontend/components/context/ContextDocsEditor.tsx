@@ -380,9 +380,10 @@ export default function ContextDocsEditor({
           const previewLine = docEntry.description?.trim()
             || docEntry.content.trim().split('\n')[0]?.slice(0, 80)
             || 'Empty';
-          // Remount the editor only when the saved baseline changes (version switch
-          // / save) or the entry reindexes — never on keystrokes, which would drop
-          // the cursor. When there's no baseline (e.g. onboarding), key on index.
+          // Remount the editor only when edit mode flips, the saved baseline changes
+          // (version switch / save), or the entry reindexes — never on keystrokes,
+          // which would drop the cursor. When there's no baseline (e.g. onboarding),
+          // key on index.
           const editorKey = `doc-${index}-${editMode ? 'edit' : 'view'}-${savedContent ?? ''}`;
 
           return (
@@ -528,7 +529,7 @@ export default function ContextDocsEditor({
                   </Box>
                 </Collapsible.Trigger>
                 <Collapsible.Content>
-                  {/* Title addressability warning for on-demand (lazy) docs. */}
+                  {/* Missing/duplicate title-or-description warning — active docs only. */}
                   {editMode && showAlwaysIncludeToggle && docTitleWarning && (
                     <HStack px={3} py={2} gap={2} bg="bg.muted" borderBottom="1px solid" borderColor="border.default" color="fg.muted">
                       <Icon as={LuCircleAlert} boxSize={3.5} color="orange.fg" flexShrink={0} />

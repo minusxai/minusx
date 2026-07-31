@@ -3,8 +3,9 @@
  * context is rendered into the agent prompt (and the docs sidebar).
  *
  * The *logic* that applies these lives in the modules that own each concern
- * (schema TOC → `lib/chat/render-schema-prompt.ts`; schema notes + doc inlining
- * → `lib/sql/schema-filter.ts`). Only the *numbers* live here, so there's a
+ * (schema TOC → `lib/chat/render-schema-prompt.ts`; schema notes →
+ * `lib/sql/annotation-notes.ts`; doc inlining → `lib/sql/context-docs.ts`).
+ * Only the *numbers* live here, so there's a
  * single dashboard to review/adjust them without hunting across files.
  *
  * Client-safe (plain constants, no `server-only`) — imported by both the

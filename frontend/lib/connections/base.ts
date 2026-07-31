@@ -33,8 +33,9 @@ export interface SchemaColumn {
  * order. Surfaced to the agent via `SearchDBSchema` so it can prefer
  * filtering/joining on indexed columns. Populated by connectors that can
  * introspect indexes (Postgres, SQLite, DuckDB, benchmark DuckDB-attached
- * SQLite); left `undefined` by connectors with no index concept (BigQuery,
- * Athena, CSV) — an honest absence rather than a fabricated empty list.
+ * SQLite); left `undefined` by every other connector (BigQuery, Athena, CSV,
+ * ClickHouse, Mongo, internal_db) — an honest absence rather than a fabricated
+ * empty list.
  */
 export interface TableIndex {
   name: string;
@@ -138,7 +139,9 @@ export interface BoundedDrainOptions {
 }
 
 export type BoundedQueryResult = QueryResult & {
-  /** True when the source had MORE rows than were drained (budget hit). */
+  /** True when the drain stopped on the budget rather than on end-of-stream. On the
+   *  maxRows path that means rows were left behind; on the maxBytes path the row that
+   *  crossed the budget is kept, so this can be true even if it was the last row. */
   truncated: boolean;
 };
 
@@ -159,7 +162,8 @@ export async function drainQueryStreamBounded(
   let truncated = false;
   for await (const row of stream.rows) {
     if (rows.length >= maxRows) { truncated = true; break; }
-    // Measure this row's JSON size; stop BEFORE exceeding the byte budget (but always keep ≥1 row).
+    // Measure this row's JSON size and stop once the budget is reached. The row that crosses
+    // it is kept, so peak RAM is the budget plus one row, and ≥1 row always comes back.
     bytes += Buffer.byteLength(JSON.stringify(row), 'utf8');
     rows.push(row);
     if (bytes >= maxBytes) { truncated = true; break; }
@@ -231,7 +235,8 @@ export abstract class NodeConnector {
    * `params` is `:name` substitution for SQL connectors (ignored by Mongo).
    * `timeoutMs` is a best-effort cancellation hint: connectors that can
    * interrupt / time-bound an in-flight query (DuckDB, SQLite-via-DuckDB,
-   * Postgres, Mongo via `maxTimeMS`) honour it; others currently ignore it.
+   * ClickHouse via `max_execution_time`, Mongo via `maxTimeMS`) honour it;
+   * the rest (Postgres, BigQuery, Athena, CSV, internal_db) ignore it.
    */
   abstract query(
     query: string,
@@ -244,7 +249,7 @@ export abstract class NodeConnector {
    *
    * Default implementation wraps {@link query} as a one-shot stream — correct,
    * but materializes. Connectors override this with a driver-native cursor
-   * (DuckDB chunk reader, pg-query-stream, BigQuery createQueryStream, …) so the
+   * (DuckDB chunk reader, pg-cursor, BigQuery's paged getQueryResults, …) so the
    * server never holds the whole result; their `query()` then just drains this
    * via {@link drainQueryStream}.
    */

@@ -1,5 +1,5 @@
 /**
- * V1→V2 bridge on the EDITABLE question surface (Viz Arch V2 §21) — with V2 as
+ * V1→V2 bridge on the EDITABLE question surface — with V2 as
  * the DEFAULT authoritative format: a legacy question (vizSettings only, no
  * `viz` envelope) opens straight into the V2 experience. The Viz tab shows the
  * V2 panel over the JIT-CONVERTED envelope, and the first edit writes a real

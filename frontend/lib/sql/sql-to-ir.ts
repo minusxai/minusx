@@ -833,7 +833,24 @@ function parseHaving(selectNode: any, dialect: string): FilterGroup | undefined 
   return parseFilterExpression(inner, dialect);
 }
 
-function parseFilterExpression(expr: any, dialect: string): FilterGroup {
+/**
+ * Strip `(...)` wrappers. The IR carries grouping structurally (a nested
+ * FilterGroup), and `generateFilterGroup` re-parenthesises on the way out, so the
+ * AST's paren node has no IR counterpart — it only needs to be seen through.
+ * Left unhandled it is silently dropped, taking the whole group with it.
+ */
+function unwrapParen(expr: any): any {
+  let node = expr;
+  while (node && typeof node === 'object' && Object.keys(node)[0] === 'paren') {
+    const inner = node.paren?.this ?? node.paren;
+    if (!inner) return node;
+    node = inner;
+  }
+  return node;
+}
+
+function parseFilterExpression(rawExpr: any, dialect: string): FilterGroup {
+  const expr = unwrapParen(rawExpr);
   const key = Object.keys(expr)[0];
 
   if (key === 'and' || key === 'or') {
@@ -843,10 +860,14 @@ function parseFilterExpression(expr: any, dialect: string): FilterGroup {
     const conditions: (FilterCondition | FilterGroup)[] = [];
 
     // Flatten nested AND/OR
-    for (const child of [left, right]) {
+    for (const rawChild of [left, right]) {
+      const child = unwrapParen(rawChild);
       const childKey = Object.keys(child)[0];
-      if (childKey === key) {
-        // Same operator → flatten
+      // A parenthesised child of the SAME operator must NOT be flattened away —
+      // `(a OR b) AND c` and `a OR b AND c` are different queries.
+      const wasParenthesised = rawChild !== child;
+      if (childKey === key && !wasParenthesised) {
+        // Same operator, unparenthesised → flatten
         const nested = parseFilterExpression(child, dialect);
         conditions.push(...nested.conditions);
       } else if (childKey === 'and' || childKey === 'or') {
@@ -865,7 +886,8 @@ function parseFilterExpression(expr: any, dialect: string): FilterGroup {
   return { operator: 'AND', conditions: cond ? [cond] : [] };
 }
 
-function parseSingleCondition(expr: any, dialect: string): FilterCondition | null {
+function parseSingleCondition(rawExpr: any, dialect: string): FilterCondition | null {
+  const expr = unwrapParen(rawExpr);
   const key = Object.keys(expr)[0];
 
   // IS NULL / IS NOT NULL (polyglot uses is_null with .not flag)

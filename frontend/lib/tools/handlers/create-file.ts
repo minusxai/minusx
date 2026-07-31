@@ -1,12 +1,16 @@
 /**
- * CreateFile - Create a new virtual file (draft, any type).
- * Always creates as a draft in Redux (negative virtual ID) — no navigation.
+ * CreateFile - Create a new file (draft, any type).
+ * Always creates as a draft on the SERVER (real positive ID, draft:true — see createDraftFile;
+ * there are no client-side negative virtual IDs) — no navigation.
  *
- * Args: {file_type, name?, path?, content?}
+ * Args: {file_type, name?, path?, markup?, content?}
  * - path: folder path to create in (replaces old `folder` param)
+ * - markup: the JSX document the agent authors — parsed into typed content, merged over `content`
  * - content: generic object merged on top of the template defaults
  *
- * Returns: {success: true, state: CompressedAugmentedFile}
+ * Returns: {success: true, state: CompressedAugmentedFile without its markup facet}
+ * (plus optional rubric / vizWarning / validation / pathNote), followed by the markup as a
+ * separate raw <file_markup> block.
  */
 import { type FileType } from '@/lib/types';
 import { setEphemeral, selectMergedContent, type FileId } from '@/store/filesSlice';
@@ -63,7 +67,7 @@ export const createFileHandler: FrontendToolHandler = async (args, context) => {
     content = { ...((content as Record<string, unknown>) ?? {}), ...parsed.content };
   }
 
-  // Inline viz validation (RFC §11, compiler model): a new question carrying a V2
+  // Inline viz validation (compiler model): a new question carrying a V2
   // envelope is validated BEFORE creation. Columns are unknown (the query hasn't
   // run), so field checks are skipped — schema/policy/recipe/css errors reject.
   const createViz = (content as { viz?: unknown } | undefined)?.viz;

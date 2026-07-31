@@ -6,7 +6,7 @@
  *
  * Phase 3 improvements:
  * - Uses useQueryResult hook for automatic query execution with TTL caching
- * - Automatic refetch when externalParameters change (hash changes)
+ * - Automatic refetch when externalParamValues change (hash changes)
  * - Deduplication across multiple dashboard questions with same query
  * - Background refetch for stale data
  */

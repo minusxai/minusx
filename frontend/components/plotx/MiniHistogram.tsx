@@ -1,6 +1,6 @@
 /**
  * Column-stat histogram spark (table header). Plain hand-rendered SVG — no chart engine
- * (Renderer_v2 Phase 2 removed ECharts): N bars is a handful of <rect>s, and the native
+ * (ECharts is gone): N bars is a handful of <rect>s, and the native
  * <title> tooltip carries the bin range + count.
  */
 

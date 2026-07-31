@@ -1,5 +1,5 @@
 /**
- * Capture routing after snapdom removal (Story_Design_V2 §4): EVERYTHING serializes.
+ * Capture routing after snapdom removal: EVERYTHING serializes.
  *
  * This drives the real `captureElementBlob` entry point and asserts the routing contract:
  *  - an SVG-rendered story rasterizes by serializing its LIVE surface (serializeStorySvg) —

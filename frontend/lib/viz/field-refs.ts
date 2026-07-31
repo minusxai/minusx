@@ -1,5 +1,5 @@
 /**
- * The shared field-reference walker (RFC §11): one traversal powers both
+ * The shared field-reference walker: one traversal powers both
  * E_FIELD_NOT_FOUND validation and (later) fieldMeta injection.
  */
 
@@ -112,7 +112,7 @@ function collectDerivedFromSpec(spec: Record<string, unknown>, out: Set<string>)
  * aggregate/joinaggregate op outputs, …) — references to these are legal even though
  * they're absent from the query result. NOTE: the `pivot` transform creates columns
  * from data VALUES, which is statically unverifiable — handled by the caller
- * (specs containing `pivot` skip unknown-field errors, RFC §11 dynamic-fields rule).
+ * (specs containing `pivot` skip unknown-field errors, dynamic-fields rule).
  */
 export function collectDerivedFieldNames(spec: Record<string, unknown>): Set<string> {
   const out = new Set<string>();

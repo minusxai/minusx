@@ -64,8 +64,6 @@ const nextConfig: NextConfig = {
   // '@duckdb/duckdb-wasm'  — browser WASM, should never be in server bundle
   // 'duckdb' / '@duckdb/node-api' — native Node.js DuckDB, can't be bundled
   // '@resvg/resvg-js'      — native SVG renderer
-  // 'node-sql-parser'      — pure-JS but 5.2 MB compiled; server-only (API routes + MCP),
-  //                          so making it external cuts 5 MB from the server chunk graph
   // '@earendil-works/pi-ai' — the in-process LLM client. It loads providers via a
   //                          fully dynamic `import(specifier)`; bundling it makes the
   //                          bundler emit a stub that throws "Cannot find module as

@@ -1,12 +1,13 @@
 /**
  * File Health Rubric — shared report contract.
  *
- * A rubric scores the health of a BI file (question / dashboard / story) and returns
+ * A rubric scores the health of a BI file (question / dashboard / story / context) and returns
  * actionable findings the agent can act on. Two flavors produce the SAME shape:
  *  - deterministic: pure `content → RubricReport` (see `deterministic/*`, `scoring.ts`)
  *  - llm:           `(content + screenshot) → RubricReport` (see `llm/*`)
  *
- * See `frontend/docs/rubrik.md` for the rule catalog and research backing.
+ * See `CLAUDE.md` — "Auth, Access Control, Mode Isolation, HTTP Helpers, and the File-Health
+ * Rubric" — for the rubric architecture and where each threshold lives.
  */
 import type { FileType } from '@/lib/types';
 
@@ -91,9 +92,10 @@ export interface DeterministicContext {
 export type DeterministicScorer<TContent = unknown> = (content: TContent, ctx?: DeterministicContext) => RubricFinding[];
 
 /**
- * Lean, agent-facing projection of a report (auto-injected into what the LLM reads). Drops the
- * internal `weight` / `assessed` bookkeeping and omits categories the source didn't score —
- * just the overall, grade, and each scored category's findings.
+ * Lean, agent-facing projection of a report (what EditFile/CreateFile/ReviewFile and
+ * CheckFileHealth return to the agent). Drops the internal `weight` / `assessed` bookkeeping and
+ * omits categories the source didn't score — just the overall, grade, and each scored category's
+ * findings.
  */
 interface AgentRubricCategory {
   category: RubricCategory;

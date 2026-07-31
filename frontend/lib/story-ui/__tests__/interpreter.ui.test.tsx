@@ -1,5 +1,5 @@
 /**
- * Story interpreter — contract tests (Story_Design_V2 §2).
+ * Story interpreter — contract tests.
  *
  * The interpreter turns a VALIDATED static-JSX AST into React elements over an injected
  * component registry. No eval, ever. It is the second gate after validateJsxSource

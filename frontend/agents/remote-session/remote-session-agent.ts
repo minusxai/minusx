@@ -11,7 +11,7 @@ import { WebAnalystAgent } from '@/agents/web-analyst/web-analyst';
  *
  * Toolset = WebAnalystAgent's leaf tools minus ClarifyFrontend: the external agent has its own
  * human channel (its terminal/chat), and a MinusX clarify-modal while the side chat is frozen
- * would be confusing double-UX. See REMOTE_AGENT_SESSIONS.md §12.
+ * would be confusing double-UX.
  */
 export class RemoteSessionAgent extends WebAnalystAgent {
   static readonly schema: Tool<typeof WebAnalystAgent.schema.parameters> = {

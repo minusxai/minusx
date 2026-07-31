@@ -1,5 +1,5 @@
 /**
- * EditFile semantic-model validation (Semantic_Model_v2.md §3 — the agent loop):
+ * EditFile semantic-model validation (the agent loop):
  * an EditFile on a CONTEXT runs tiers 1–2 over every authored semantic model the
  * edit would leave staged-but-unsaved, and REJECTS the edit atomically with the
  * issue LIST in the tool result, so the agent self-corrects in-loop instead of

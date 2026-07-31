@@ -196,7 +196,9 @@ export class PostgresAdapter implements IDatabaseAdapter {
         const handlers = this.channelHandlers.get(msg.channel);
         if (handlers) for (const h of handlers) h(msg.payload ?? '');
       });
-      // On connection loss, drop it so the next listen() rebuilds + re-LISTENs every channel.
+      // On connection loss, drop it so the next listen() acquires a fresh client. Note that
+      // only a channel with no surviving handler set re-issues LISTEN — channels still held
+      // in channelHandlers are NOT re-LISTENed on the new connection.
       const reset = () => {
         if (this.listenClient === client) { this.listenClient = null; this.listenSetup = null; }
       };

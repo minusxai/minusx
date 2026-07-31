@@ -1,5 +1,5 @@
 /**
- * Recipe "detach" — the full-control escape hatch (RFC §21.10).
+ * Recipe "detach" — the full-control escape hatch.
  *
  * Recipes carry a curated handful of params (the common 80%). For anything beyond that,
  * DETACH the chart: materialize the recipe into its grammar spec and freeze that spec

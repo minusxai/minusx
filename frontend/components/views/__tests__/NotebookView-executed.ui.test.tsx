@@ -1,12 +1,11 @@
 /**
- * NotebookView — characterizes CURRENT (pre-move) Redux behavior of the
- * `reduxExecuted` call site ahead of the Container/View discipline move
- * (CLAUDE.md "Refactoring — Blue -> Red -> Blue").
- * NotebookView.tsx currently calls useAppDispatch + useAppSelector directly
- * (selectNotebookCellExecuted) to source a real file's per-cell "last run"
- * snapshot from Redux ephemeral state — this differs from the local-state
- * fallback used when no fileId is given (covered by the sibling
- * `notebook-view.ui.test.tsx`, which never passes a fileId).
+ * NotebookView — characterizes the `reduxExecuted` path, written for the
+ * Container/View discipline move (CLAUDE.md "Refactoring — Blue → Red → Blue")
+ * that has since LANDED: NotebookContainerV2 now owns the
+ * selectNotebookCellExecuted read / setNotebookCellExecuted dispatch and feeds
+ * a real file's per-cell "last run" snapshot to the view as props. That differs
+ * from the local-state fallback used when no fileId is given (covered by the
+ * sibling `notebook-view.ui.test.tsx`, which never passes a fileId).
  *
  * Mounted via NotebookContainerV2 (NOT NotebookView directly) so the seeded
  * Redux state is read through the real fileId contract.

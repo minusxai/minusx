@@ -22,7 +22,7 @@
  */
 /**
  * The surfaces AgentHtml can mount into. 'svg' is the default and the only production render path
- * (Story_Design_V2 §4); 'dom' is kept as the abstraction's second implementation, not selectable
+ *; 'dom' is kept as the abstraction's second implementation, not selectable
  * via any config.
  */
 export type StorySurfaceKind = 'dom' | 'svg';

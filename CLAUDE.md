@@ -1,374 +1,419 @@
-# CLAUDE.md
+# MinusX
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+MinusX is an open-source agentic business intelligence platform: a file-system-shaped BI tool
+whose questions, dashboards, stories, reports and alerts are documents an AI agent can read and
+write directly.
+
+This file is the **hub**. It carries the system shape, the map of where everything lives, and the
+development philosophy that governs every task — the things that apply no matter what you are
+editing. Twenty module docs carry the detail.
+
+It documents the code **as it is today**: no plan narrative, no migration history, no changelog.
+That is what git is for.
+
+Everything here is loaded into **every** session, so keep it small. A module doc is loaded lazily —
+when files in its directory are read — so its cost is paid only by work that needs it. Directories
+covered by a sibling's doc carry a one-line pointer file, so the right doc loads wherever you land.
+
+## Module docs
+
+| Editing | Read | It covers |
+|---|---|---|
+| `orchestrator/**` | `frontend/orchestrator/CLAUDE.md` | The `MXTool`/`MXAgent` contract, the step loop, the registration rule |
+| `agents/**` | `frontend/agents/CLAUDE.md` | The agent hierarchy — and why `benchmark-analyst` is production, not benchmarks |
+| `lib/chat`, `lib/llm`, `lib/projection` | `frontend/lib/chat/CLAUDE.md` | The turn pipeline, conversation storage, the registrables hub |
+| `lib/sql` | `frontend/lib/sql/CLAUDE.md` | SQL ↔ IR. The subtlest correctness traps in the repo |
+| `lib/connections` | `frontend/lib/connections/CLAUDE.md` | Every connector behind one interface |
+| `lib/query-cache` | `frontend/lib/query-cache/CLAUDE.md` | The execution pipeline and the durable SWR/lease/blob cache |
+| `lib/data`, `lib/database`, `lib/object-store`, `lib/secrets` | `frontend/lib/database/CLAUDE.md` | The document plane: `FilesAPI`, schema-as-data, adapters, migrations, the version gate |
+| `lib/semantic`, `lib/context`, `lib/views`, `lib/validation` | `frontend/lib/semantic/CLAUDE.md` | Semantic models, the context tree, saved views, Atlas content schemas |
+| `lib/viz`, `lib/chart` | `frontend/lib/viz/CLAUDE.md` | Vega rendering, the V1→V2 bridge, the editing surface |
+| `lib/story-ui`, `lib/jsx` | `frontend/lib/story-ui/CLAUDE.md` | Story authoring: static JSX as inert data, registry, interpreter |
+| `lib/story-surface`, `lib/dashboard-surface`, `lib/html` | `frontend/lib/story-surface/CLAUDE.md` | Mounting a self-contained document surface, plus the shared render gotchas |
+| `lib/screenshot`, `lib/headless-capture` | `frontend/lib/screenshot/CLAUDE.md` | Capture: serialization to image, client and headless |
+| `lib/auth`, `lib/http`, `lib/mode`, `lib/middleware`, `lib/oauth`, `lib/namespace`, `lib/rubric` | `frontend/lib/auth/CLAUDE.md` | Sessions, access rules, mode and namespace isolation, file-health scoring |
+| `lib/tools` | `frontend/lib/tools/CLAUDE.md` | The browser-side tool bridge |
+| `lib/jobs`, `lib/integrations`, `lib/messaging`, `lib/analytics`, `lib/mcp`, `lib/search`, `lib/spreadsheet`, `lib/app-event-registry` | `frontend/lib/jobs/CLAUDE.md` | Scheduled jobs, Slack/MCP, message transports, telemetry, file search, the event bus |
+| `store/**`, `lib/file-state`, `lib/hooks` | `frontend/store/CLAUDE.md` | Redux, the listener middleware, browser file/query operations |
+| `components/**` | `frontend/components/CLAUDE.md` | Container/View separation, the kit/Chakra split, chat UI |
+| `app/**` | `frontend/app/CLAUDE.md` | Every API endpoint and page; the `handleApiError` contract |
+| `test/**`, `scripts/**`, `.github/**` | `frontend/test/CLAUDE.md` | npm scripts, Vitest layout, the test DB harness, Playwright, CI |
+| any other `lib/*` | `frontend/lib/CLAUDE.md` | The small shared modules: file-type registry, config vs constants, branding, `lib/og` |
+
+## Shape of the system
+
+There is **one deployable application**: a Next.js app under `frontend/`. There is no separate
+backend service. AI chat and agent orchestration run in-process inside it, and analytics queries
+run in Node.js connectors inside it. A second, entirely separate app under `docs/` builds the
+public documentation site.
+
+```
+                        ┌──────────────────────── frontend/ (Next.js) ────────────────────────┐
+  browser ──HTTP/SSE──▶ │  app/            route handlers + pages                             │
+                        │  components/     containers (Redux) → views (pure presentation)     │
+                        │  store/          Redux + listener middleware (drives chat & tools)  │
+                        │                                                                     │
+                        │  orchestrator/   the engine: append-only log, step loop, tool tiers │
+                        │  agents/         agent + tool definitions (analyst, slack, eval, …) │
+                        │                                                                     │
+                        │  lib/            the substance — see the module map below           │
+                        └──────────┬───────────────────────────────┬──────────────────────────┘
+                                   │                               │
+                       document DB │                               │ analytics engines
+                  (PGLite/Postgres)│                               │ (DuckDB, BigQuery, Postgres,
+                   files, contexts,│                               │  SQLite, Athena, Mongo,
+              conversations, users │                               │  ClickHouse, CSV, Sheets)
+```
+
+**Two data planes, deliberately separate.** The *document DB* stores the BI artefacts themselves —
+files, contexts, conversations, users, connections — as JSON content addressed by integer id. The
+*analytics engines* are the customer's own warehouses, reached through connectors, and MinusX never
+stores their data except as cached query results.
+
+## Module map
+
+| Area | Lives in | Owns |
+|---|---|---|
+| Chat engine | `frontend/orchestrator`, `frontend/agents` | The orchestration loop and every agent/tool definition |
+| Chat serving | `frontend/lib/chat`, `lib/llm`, `lib/projection` | Turning an HTTP request into a run, and streaming it back |
+| Query data plane | `frontend/lib/connections`, `lib/query-cache`, `lib/sql` | Executing SQL: connectors, caching, and the SQL↔IR layer |
+| Semantic layer | `frontend/lib/semantic`, `lib/context`, `lib/views`, `lib/validation` | Authored semantic models, schema whitelisting, content schemas |
+| Storage | `frontend/lib/data`, `lib/database`, `lib/object-store` | The document DB, `FilesAPI`, migrations, blobs |
+| Client state | `frontend/store`, `frontend/lib/file-state`, `lib/hooks` | Redux, the listener middleware, and all browser file/query operations |
+| Visualization | `frontend/lib/viz`, `lib/chart`, `components/viz`, `components/plotx` | Vega rendering, the DOM table/pivot tier, chart config |
+| Render surfaces | `frontend/lib/story-ui`, `lib/story-surface`, `lib/screenshot` | Authoring, mounting and capturing rendered documents |
+| Auth & access | `frontend/lib/auth`, `lib/http`, `lib/mode`, `lib/namespace`, `lib/rubric` | Sessions, permissions, mode and namespace isolation, file-health scoring |
+| Tools & integrations | `frontend/lib/tools`, `lib/jobs`, `lib/integrations`, `lib/analytics` | Browser-bridged tools, scheduled jobs, Slack/MCP, telemetry |
+| Routes | `frontend/app` | Every API endpoint and page |
+| Components | `frontend/components` | The UI |
+| Infrastructure | `frontend/scripts`, `frontend/test`, `.github`, `docs` | Build, tests, CI, and the docs site |
+
+Each area below is an orientation paragraph and a pointer. The detail lives in the module doc.
 
 ---
 
-## ⚠️ PRIMARY WORKING STYLE: TEST-DRIVEN DEVELOPMENT
+## Chat Engine — `frontend/orchestrator/` + `frontend/agents/`
 
-**This is non-negotiable and SUPER IMPORTANT — do not deviate. Every feature and refactor MUST follow this exact order. Do NOT implement first and back-fill tests.**
+The in-process agent runtime behind **all** chat: browser, Slack, scheduled reports, evals,
+micro-tasks, remote sessions and the benchmark CLI. Two trees with a hard boundary:
 
-### The required order (every change)
-1. **Contracts first** — define robust types, interfaces, and method signatures. Reuse existing types; no duplication; keep it elegant.
-2. **Tests second** — write tests that fully exercise the ACTUAL behavior (not just helpers), and **confirm they FAIL (red) before implementing**. A green test that was never red is decoration.
-3. **Implementation third** — write the code until the tests pass (green).
+- **`orchestrator/`** — the generic engine. The conversation log, the step loop, the tool tiers, the
+  single LLM call site. Owns no app concepts.
+- **`agents/`** — every concrete agent and tool, and the app-specific context shapes.
+
+→ **`frontend/orchestrator/CLAUDE.md`** for the `MXTool`/`MXAgent` contract and the registration rule.
+→ **`frontend/agents/CLAUDE.md`** for the agent hierarchy — including why `benchmark-analyst` is the
+base of the production analyst chain despite its name.
+
+## Chat serving
+
+What happens between an HTTP request and a streamed answer: turn orchestration, the registrables hub,
+agent-args resolution, conversation storage (dedicated tables + LISTEN/NOTIFY) and the streaming bus.
+
+→ **`frontend/lib/chat/CLAUDE.md`** for the turn pipeline, what each module owns, and the gotchas.
+
+## Query data plane — `lib/connections`, `lib/query-cache`, `lib/sql`
+
+Everything between "there is a query string" and "rows exist". Strict layering: `lib/sql` is pure
+text/AST work with no I/O, `lib/connections` owns driver contact, `lib/query-cache` wraps execution
+in a durable SWR + lease + blob cache.
+
+→ **`frontend/lib/sql/CLAUDE.md`** — SQL ↔ IR. The subtlest correctness traps in the repo.
+→ **`frontend/lib/connections/CLAUDE.md`** — the nine connectors.
+→ **`frontend/lib/query-cache/CLAUDE.md`** — the execution pipeline and the cache.
+
+## Semantic models, contexts, views, and Atlas schemas
+
+Authored semantic models, the context tree and its whitelisting, saved views, and the Atlas content
+schemas that validate every file type.
+
+→ **`frontend/lib/semantic/CLAUDE.md`**
+
+## Storage & Data Layer
+
+The DOCUMENT plane: the `files` table and its siblings, the schema declared as data, the
+PGLite/Postgres adapters, migrations, the data-version gate, secrets and the object store. Distinct
+from the analytics plane (`frontend/lib/connections/`), which never touches these tables.
+
+→ **`frontend/lib/database/CLAUDE.md`** for the schema declaration, the migration and gate rules,
+and the storage gotchas.
+
+## Client State: Redux store, file-state, hooks, navigation
+
+The browser's source of truth: the store, the listener middleware, and every browser-side file and
+query operation.
+
+→ **`frontend/store/CLAUDE.md`**
+
+## Visualization
+
+How a query result becomes a chart: two vocabularies (V1 `vizSettings`, the V2 `viz` envelope), the
+recipe system, the Vega/Vega-Lite render pipeline, the editing surface and the validation gates.
+**Vega is the only chart engine** — there is no second renderer to fall back to.
+
+→ **`frontend/lib/viz/CLAUDE.md`** for the full pipeline, the V1→V2 bridge and the gotchas.
+
+## Render surfaces
+
+A stored document becoming pixels, in three stages with different consumers — which is why this is
+three docs rather than one chapter:
+
+→ **`frontend/lib/story-ui/CLAUDE.md`** — authoring: static JSX as inert data, registry, interpreter.
+→ **`frontend/lib/story-surface/CLAUDE.md`** — mounting: the same-origin iframe surfaces, plus the
+  gotchas shared across all three.
+→ **`frontend/lib/screenshot/CLAUDE.md`** — capture: serialization to image, server-side and client.
+
+`lib/og` (share cards) is documented with the small shared modules: it has no consumer in common
+with any of the above and was only ever grouped here because it also produces an image.
+
+## Auth, Access Control, Mode Isolation, HTTP Helpers, and the File-Health Rubric
+
+Who the user is, what they may touch, and how one workspace's effects stay out of another's:
+`lib/auth`, `lib/http`, `lib/mode`, `lib/namespace`, `lib/rubric`.
+
+→ **`frontend/lib/auth/CLAUDE.md`**
+
+## Tools, Jobs, Integrations & Telemetry
+
+Scheduled and manual job runs, the Slack and MCP surfaces, message transports, analytics.
+
+→ **`frontend/lib/jobs/CLAUDE.md`** — jobs, integrations, messaging, telemetry.
+→ **`frontend/lib/tools/CLAUDE.md`** — the browser-side tool bridge.
+
+## API & Page Routes (`frontend/app`)
+
+Every API endpoint and page. This layer is deliberately thin: auth staging, the `handleApiError`
+contract, route grouping. The work happens in `lib/`.
+
+→ **`frontend/app/CLAUDE.md`**
+
+## UI Components (`frontend/components`)
+
+The Container/View separation, the kit/Chakra split, the chat UI and the rendered-document surfaces.
+
+→ **`frontend/components/CLAUDE.md`**
+
+## Small shared lib modules
+
+The file-type registry, config-vs-constants, the published compatibility contract, branding /
+white-label, share cards (`lib/og`), the utils that carry a contract, and test/benchmark support.
+
+→ **`frontend/lib/CLAUDE.md`**
+
+## Build, Test & Docs Infrastructure
+
+npm scripts, the Vitest project layout, the test database harness, the two Playwright suites and
+their deliberately opposite gates, CI, and the published docs site.
+
+→ **`frontend/test/CLAUDE.md`**
+
+## Development philosophy
+
+This section is not advisory. It describes how work is done in this repository, and it takes
+precedence over habit, over convenience, and over what a task "seems to need".
+
+### Test-driven development — the required order
+
+**Every feature and every refactor follows this exact order. Do not implement first and back-fill
+tests.**
+
+1. **Contracts first.** Define types, interfaces, and method signatures. Reuse existing types; no
+   duplication. Get the shape right before any behaviour exists.
+2. **Tests second.** Write tests that exercise the ACTUAL behaviour, not helpers around it, and
+   **confirm they FAIL (red) before implementing.**
+3. **Implementation third.** Write code until the tests pass (green).
 4. **Run the full suite** to confirm no regressions.
 5. **Commit and push to the PR.**
-6. **Browser-verify on the running dev server** — drive the real flow; for chat, open the side-chat **debug message** and expand the model to read the EXACT request/response sent to the LLM. Don't assume; check.
+6. **Browser-verify on the running dev server.** Drive the real flow. For chat, open the side-chat
+   debug message and expand the model to read the EXACT request and response sent to the LLM.
+   Don't assume; check.
+
+> A green test that was never red is not a test — it is decoration. When asked "did you do TDD /
+> browser-test?", answer honestly.
 
 ### Refactoring — Blue → Red → Blue
-1. Identify tests covering existing behaviour — they must pass (blue).
-2. Break the old implementation and confirm tests fail (red). This proves the tests guard the behaviour.
-3. Re-implement until all tests pass (blue). Run the full suite, push, browser-verify.
 
-> A green test that was never red is not a test — it's decoration. When asked "did you do TDD / browser-test?", answer honestly.
+1. Identify the tests covering the existing behaviour. They must pass (**blue**).
+2. Deliberately break the old implementation and confirm those tests fail (**red**). This is what
+   proves the tests actually guard the behaviour rather than passing incidentally.
+3. Re-implement until all tests pass (**blue**). Run the full suite, push, browser-verify.
 
-### Pull Requests
+The same proof applies to characterization tests written for existing code: if a test has never
+been observed failing, you do not yet know that it tests anything.
 
-**Raise every PR with NO description body.** Do not write a summary, a "what/why", a test plan, or any descriptive comment on the PR — open it with an empty body (`gh pr create --body ""`). The title alone stands.
+### Keeping documentation consistent with code — enforced, not remembered
 
----
+Documentation drifts silently, and stale documentation is worse than none: it sends the next
+reader (human or agent) to a file that isn't there or a behaviour that no longer exists.
 
-## Chat orchestration: `frontend/orchestrator/` and `frontend/agents/`
+**Any change to the codebase must leave these three consistent, in the same change:**
 
-These directories hold the in-process TypeScript orchestrator and agent/tool definitions that power **all chat**. They are wired into production via `lib/chat/orchestration-core.server.ts` (the shared orchestration core — `setupOrchestration`, `recordLlmCalls`, the tool/agent registries), which the browser chat API routes (`app/api/conversations/[id]/turns/route.ts`, `app/api/conversations/[id]/stream/route.ts`) invoke for every request — and which Slack invokes the same way in-process (`lib/integrations/slack/process-event.ts` → `run-turn.server.ts` → `conversation-turn.server.ts`), bypassing those HTTP routes entirely since it has no browser to respond to. **This is the only chat engine.** (`lib/chat/chat-types.ts` survives only as a shared request/response *types* module, despite the `ChatRequest` name.)
+1. **Code comments in every file touched** — a comment that describes the old behaviour is now a
+   lie. Fix it or delete it.
+2. **The relevant project documentation** (this file, and any per-directory agent guidance) — if
+   the change alters architecture, moves or deletes a file the docs point at, or invalidates a
+   documented gotcha.
+3. **The relevant published docs pages** under `docs/content/**` — if the change alters
+   user-visible behaviour, configuration, or setup.
 
-**What's where:**
-- `frontend/orchestrator/` — the `Orchestrator` engine plus conversation-log types (`@/orchestrator/types`) and LLM types (`@/orchestrator/llm`).
-- `frontend/agents/` — agent + tool definitions (`analyst/`, `benchmark-analyst/`, `web-analyst/`, ...). Server-only tools live in `*.server.ts` variants; the `Base*` classes (no `server-only` import) are reused by the benchmark CLI.
-- Both trees have their own tests under `__tests__/` (the `orchestrator` Vitest project), plus integration coverage through the chat API routes.
+This is part of the change, not follow-up work. A PR that changes behaviour and leaves the
+documentation describing the old behaviour is incomplete.
 
----
+**This is enforced by a hook, not by memory.** A `PostToolUse` hook on `Edit`/`Write` (configured
+in `.claude/settings.json`) fires after code edits and requires the consistency check before the
+change is considered done. Mechanical checks belong in the hook wherever they can be expressed —
+for example, asserting that every file path referenced in documentation still resolves, which
+catches the most common and most damaging form of drift in milliseconds and with no judgement.
+What a mechanical check cannot catch is prose that is merely *wrong*; that remains the author's
+responsibility, and the hook exists to make sure the question is asked every time.
 
-## Project Overview
+### Validation
 
-MinusX is an agentic, file-system based BI Tool that combines:
-- **Frontend**: Next.js 16 + React 19 + Chakra UI v3 + Redux (also hosts the in-process AI chat/agent orchestrator — no separate backend service)
-- **Storage**: PGLite (open-source) or Postgres for documents (questions, dashboards), DuckDB/BigQuery/PostgreSQL for analytics
-- **Architecture**: Dual-database system with integer ID-based file access, hierarchical permissions, and mode-based file system isolation
-
-## Common Development Commands
-
-### Frontend (Next.js)
 ```bash
 cd frontend
-npm run dev                # Start dev server (http://localhost:3000)
-npm run validate           # Type check + lint (use this to validate code)
-npm run build              # Production build (slow, use only before deployment)
-npm run lint               # Run ESLint
-npm test                   # Run all Vitest tests (node + ui + orchestrator projects)
-npm test -- <pattern>      # Run specific test files
-npm run test:main          # Run only the `node` project (integration/server tests)
-npm run test:ui            # Run only the `ui` project (jsdom *.ui.test.tsx tests)
-npm run test:orchestrator  # Run only the `orchestrator` project
-npm run update-workspace-template  # Re-run migrations on the seed template after adding a migration
+npm run validate    # type check + lint — ALWAYS use this to verify code correctness
 ```
 
-**IMPORTANT: Always use `npm run validate` to quickly verify code correctness. Do NOT use `npm run build` for validation - it's too slow and memory-intensive. Only run `npm run build` before deployment.**
+**Never use `npm run build` for validation.** It is slow and memory-intensive. Run it only before
+deployment.
 
-**IMPORTANT: Frontend tests run on Vitest (`npm test` → `vitest run`), configured via `frontend/vitest.config.ts` with three projects: `node` (integration/server tests, node env), `ui` (`*.ui.test.tsx` component tests, jsdom env), and `orchestrator` (the headless orchestrator/agents tree). Run a single project with `npm run test:main` / `test:ui` / `test:orchestrator`, or `npx vitest run --project=<name> <pattern>`. (The repo previously used Jest; that has been fully migrated to Vitest — there is no `jest.config.*` or `npx jest`.)**
+### Commands
 
-### Test taxonomy — which layer for what (Tests/QA/Evals Arch V2)
+```bash
+cd frontend
+npm run dev                # dev server, http://localhost:3000
+npm run validate           # type check + lint
+npm run build              # production build — deployment only
+npm run lint               # ESLint
+npm test                   # all Vitest projects (node + ui + orchestrator)
+npm test -- <pattern>      # specific test files
+npm run test:main          # only the `node` project (integration/server tests)
+npm run test:ui            # only the `ui` project (jsdom *.ui.test.tsx)
+npm run test:orchestrator  # only the `orchestrator` project
+npm run test:e2e           # Playwright full-app e2e
+npm run test:qa            # QA flows (builds a local prod server)
+npm run update-workspace-template   # re-run migrations on the seed template after adding one
+```
 
-Four distinct layers; pick by what you're testing, not by habit:
-- **`node` (Vitest, node env)** — integration/server tests with **no DOM**. Drive Redux by dispatch, hit real API route handlers in-process (`mock-fetch`), faux LLM. Fastest full-stack layer.
-- **`ui` (Vitest, jsdom)** — **component & hook UNIT tests** (`*.ui.test.tsx`). Mount one component / `renderHook` with specific props, assert DOM/behavior. These are **unit tests, not e2e** — keep them here. jsdom is the right tool (fast, direct props, many cases). Do **not** move these to Playwright: hook-identity/render-count tests have no browser-observable equivalent, and component-isolation tests would be far slower/flakier as full-app flows. (`agent-e2e.ui.test.tsx` / `onboarding-wizard-e2e.ui.test.tsx` are misnamed — they're jsdom component tests, candidates to migrate to Playwright since they're flow-shaped.)
+Tests run on **Vitest** (`npm test` → `vitest run`), configured in `frontend/vitest.config.ts`
+with three projects: `node`, `ui`, `orchestrator`. Run one with
+`npx vitest run --project=<name> <pattern>`. There is no Jest — no `jest.config.*`, no `npx jest`.
+
+### Test taxonomy — pick by what you are testing, not by habit
+
+- **`node` (Vitest, node env)** — integration/server tests with **no DOM**. Drive Redux by
+  dispatch, hit real API route handlers in-process (`mock-fetch`), faux LLM. The fastest
+  full-stack layer.
+- **`ui` (Vitest, jsdom, `*.ui.test.tsx`)** — component and hook **unit** tests. Mount one
+  component or `renderHook` with specific props and assert DOM/behaviour. These are unit tests,
+  not e2e; keep them here. Do not migrate them to Playwright: hook-identity and render-count
+  tests have no browser-observable equivalent, and component isolation would be far slower and
+  flakier as a full-app flow.
 - **`orchestrator` (Vitest, node env)** — the headless orchestrator/agents tree.
-- **Playwright (`test/e2e/*.spec.ts`, `npm run test:e2e`)** — **full-app E2E**: real browser drives the booted app under `E2E_MODE` (faux LLM via `/api/test/faux`, store on `window.__MX_STORE__`, SVG charts). Use ONLY for genuine cross-page user flows. See `frontend/test/e2e/README.md`.
+- **Playwright (`test/e2e/*.spec.ts`, `npm run test:e2e`)** — **full-app e2e**: a real browser
+  drives the booted app under `E2E_MODE` (faux LLM via `/api/test/faux`, store exposed on
+  `window.__MX_STORE__`, SVG charts). Use ONLY for genuine cross-page user flows.
+
+If real *rendering* fidelity is ever needed for a component test (real SVG or canvas, which jsdom
+stubs), the right tool is **Vitest browser mode** — component-in-real-browser as a separate
+opt-in project — NOT full-app Playwright e2e.
+
+### QA flows
+
+A separate Playwright project (`playwright.qa.config.ts`, `test/qa/*.spec.ts`, `npm run test:qa`)
+driving the **real app with real data and no faux LLM**, portable across a local prod build and a
+live deployment. It asserts deterministic outcomes — query results, saved files.
+
+**How it runs.** With no `QA_BASE_URL` it builds and starts a production server (build-time e2e
+flag off, runtime e2e gate on) — **always a prod build, never `next dev`**, because the dev server
+compiles routes on demand and races cold builds under parallel workers. Against a deployment, set
+`QA_BASE_URL` (plus `QA_EMAIL` / `QA_PASSWORD` / `QA_E2E_SECRET`) and the webServer is skipped.
+
+**Non-negotiable rules:**
+- **Tutorial mode only — never org/production.** Every navigation and `/api/files` discovery
+  carries `mode=tutorial`; mutating flows additionally `assertTutorialMode(page)` before writing
+  and hard-assert created paths start with `/tutorial`. The system default is `org`, so tutorial
+  is opt-in on *every* request — **a missing `mode=tutorial` silently writes to production.**
+- **Real clicks and typing, not API or URL shortcuts.** Open files by clicking their tile, create
+  via the Create menu, type SQL into the editor, click Save.
+- **Locate elements by `aria-label` only** (`getByLabel`). If a control lacks one, add it to the
+  component — do not work around it.
+- **The setup chain is serial:** login → reset tutorial → wait for data → flows. Flows themselves
+  run with `workers > 1` (read-only plus reset-once-up-front makes them race-free).
+
+### Writing tests
+
+**Chat and agent e2e tests run fully in-process** — there is no separate backend or LLM mock server.
+The LLM is driven by each agent's **faux provider**: import `fauxRegistration` from the agent
+module and call `setResponses([...])`. These tests exercise the full stack: Redux → listener
+middleware → API route → in-process orchestrator → faux LLM, and should observe automatic
+behaviours rather than manually simulating them.
+
+**UI test element queries: `aria-label` ONLY.** Never `getByRole`, `getByText`,
+`getByPlaceholderText`, `getByTestId`, or any other strategy. Every interactive element is located
+via `getByLabelText` / `findByLabelText`. If an element lacks an `aria-label`, add one to the
+component — do not work around it with a different query.
+
+**`TalkToUser` is not a normal tool call for most agents — do not mock it as one.** It exists only
+in the Slack agent's toolset. Every other agent replies via `stopReason: 'stop'` with plain
+content. The correct faux pattern for a non-Slack agent reply is
+`fauxAssistantMessage('reply text', { stopReason: 'stop' })`. Mocking `TalkToUser` as a tool call
+for a non-Slack agent fails to resolve and produces the "I do not have a text reply" fallback.
+
+### Design principles
+
+**Deep modules (Ousterhout) — the guiding design principle of this repository.** Modules should
+have simple, narrow interfaces hiding substantial implementation.
+
+- A feature's complexity belongs in ONE cohesive module; callers compose a few deep hooks or
+  functions rather than orchestrating internals.
+- Components should be thin compositions. If a component grows past roughly 150 lines of logic,
+  extract the subsystems into hooks or pure modules under the owning `lib/` module — pure logic in
+  plain `.ts` files so it is unit-testable without a DOM.
+- Prefer making an existing module **deeper** (adding capability behind the same interface) over
+  adding a new shallow module or a pass-through layer. Classitis, tiny wrappers, and
+  config-forwarding layers are code smells.
+
+### Code smells to avoid
+
+- **Inline/dynamic imports.** Always import at the top of the file. `const { foo } = await
+  import('./bar')` signals a circular dependency or poor module design — fix the architecture by
+  extracting shared code. Never use an inline import to "fix" a circular dependency. Enforced by
+  ESLint.
+- **Direct Redux state mutation.** Always use slice actions.
+- **Inline API calls or data fetching in components.** Use the CORE hooks or listener middleware;
+  do not reach for cascading `useEffect` chains.
+- **Explicit key enumeration.** Never manually re-list every field of a typed object when you can
+  pass or spread it — this causes change amplification, where adding a field to the interface means
+  hunting down every place keys were listed, and you *will* miss some. The typed interface is the
+  single source of truth. Extract specific keys only when the target API requires a different shape.
+
+### Component patterns
+
+- **Container/View separation is enforced.** Containers connect to Redux and pass data and
+  callbacks down; views are pure presentation. An ESLint rule blocks `@/store/hooks` and
+  `react-redux` imports in the migrated view files by name, so a regression fails `npm run validate`
+  rather than review. **When touching a view: if you need new state, add it as a prop and source it
+  in the container — not via a direct Redux hook.**
+- **Composition over inheritance.** Build complex UIs from simple, reusable components.
+- **Single responsibility.** Each component does one thing well.
+
+### UI design — avoid "AI slop"
+
+**Never use a coloured accent bar on the left edge of a card or panel** (for example
+`borderLeft="3px solid <accent>"` to signal state). It reads as generic AI-generated design. Convey
+state with existing affordances instead: badges, toggles, text colour, a subtle background tint.
+
+### Pull requests
+
+**Raise every PR with NO description body** — no summary, no what/why, no test plan, no descriptive
+comment. Open it with an empty body (`gh pr create --body ""`). The title alone stands.
+
+### API routes
+
+**Always use `handleApiError` in catch blocks.** Never return `NextResponse.json({ error }, {
+status: 500 })` directly.
 
-> If real *rendering* fidelity is ever needed for a component test (e.g. real SVG/canvas, which jsdom stubs), the right tool is **Vitest browser mode** (component-in-real-browser), NOT full-app Playwright e2e — a separate opt-in project, not a default.
-
-### QA flows (`test/qa/*.spec.ts`, `npm run test:qa`)
-
-A separate Playwright project (`playwright.qa.config.ts`) that drives the **real app, real LLM-free flows, real data** — for portability across a local prod build *and* live deployments. Distinct from `test/e2e` (faux LLM, `E2E_MODE`): QA flows assert deterministic outcomes (query results, saved files) with **no faux channel**.
-
-**How it runs:**
-- **Locally / in CI (no `QA_BASE_URL`):** the config **builds + starts a prod server** (`npm run build && npm run start`, `output: standalone`-style), with the build-time E2E flag OFF and the runtime e2e gate ON. The CI job is `.github/workflows/qa.yml` (`QA Flows (prod build)`) — it runs in PR CI, so QA flows gate merges. **Always prod build, never `next dev`** — the dev server compiles routes on demand and races cold builds under parallel workers (`page.goto` timeouts).
-- **Against a deployment:** set `QA_BASE_URL` (+ `QA_EMAIL`/`QA_PASSWORD`/`QA_E2E_SECRET`); the webServer is skipped and flows hit that URL. (The `deploys` repo's `qa.yml` action does this.)
-
-**Non-negotiable rules for QA flows:**
-- **Tutorial mode only — never org/production.** Every navigation and `/api/files` discovery carries `mode=tutorial` (helpers `e2eUrl`/`modeUrl`/`QA_MODE` in `test/qa/flows.ts`). Mutating flows additionally `assertTutorialMode(page)` before writing and hard-assert created paths start with `/tutorial`. The system default is `org`, so tutorial is opt-in on *every* request — a missing `mode=tutorial` silently writes to production.
-- **Real clicks/types, not API/URL shortcuts.** Open files by clicking their tile (`openFileByClick`), create via the Create menu, type SQL into the editor, click Save. Locate elements by **`aria-label` only** (`getByLabel`) — if a control lacks one, add it to the component (don't work around it).
-- **Setup chain is serial: login → reset tutorial → wait for data → flows.** `auth.setup` (registers + logs in locally), `reset.setup` (resets tutorial to pristine seed, then `waitForTutorialData`). Flows themselves run with `workers > 1` (read-only + reset-once-up-front = race-free).
-
-**Tutorial sample data:** registration seeds mxfood data fire-and-forget (`lib/modules/auth/index.ts` → `copySeedMxfoodForMode`), so it's briefly unavailable. Readiness is exposed via `GET /api/orgs/seed-status` (`getMxfoodSeedStatus` + `ObjectStore.exists`); the `DataPrepBanner` shows a progress indicator until ready, and QA setup polls it (`waitForTutorialData`) before data-asserting flows.
-
-**Adding a QA flow:** add a `*.spec.ts` under `test/qa/`, compose helpers from `flows.ts` (or add new ones there), stay in tutorial mode, drive via clicks/`getByLabel`, assert against the exposed Redux store (`window.__MX_STORE__`, via `assertRedux`). Verify with `npm run test:qa <pattern>` (builds a local prod server).
-
-### Backend
-
-There is no separate backend service. The AI chat/agent orchestration runs
-in-process inside the Next.js app (TypeScript orchestrator under
-`frontend/orchestrator/` + `frontend/agents/`). Analytics queries run
-in the Node.js connectors (`frontend/lib/connections/`).
-
-Chat is served by `POST /api/conversations/[id]/turns` (fires `runConversationTurn` detached — does not block on the LLM call) and `GET /api/conversations/[id]/stream` (resumable SSE via Postgres LISTEN/NOTIFY), both routing through `lib/chat/conversation-turn.server.ts` → the orchestration core. Tool/skill schemas are served from TypeScript (`GET /api/tools/schema`).
-
-**Query execution** runs on the Next.js side: `app/api/query/route.ts` → `lib/connections/run-query.ts` → Node.js connectors in `lib/connections/` (DuckDB, BigQuery, PostgreSQL, SQLite, Athena, Mongo, CSV, Google Sheets).
-
-### Database Management
-
-The document DB is seeded **automatically at workspace/company registration** (`lib/modules/auth/index.ts`): it reads `lib/database/workspace-template.json`, substitutes template vars, runs `applyMigrations`, and atomically imports the result via `atomicImport`. There is no manual import/export step.
-
-**To change seed data:** edit `lib/database/workspace-template.json` directly.
-
-**After adding a migration**, refresh the template:
-```bash
-cd frontend
-npm run update-workspace-template   # re-runs migrations on the template; review with `git diff`
-```
-
-### Database Migrations
-
-**Documents DB (PGLite/Postgres)** — uses a versioned migration framework:
-1. Increment `LATEST_DATA_VERSION` in `lib/database/constants.ts`
-2. Add a `MigrationEntry` to `MIGRATIONS` array in `lib/database/migrations.ts`
-3. Run `npm run update-workspace-template` to bump the seed template; migrations then apply automatically at workspace registration
-
-**Analytics DuckDB** (`frontend/lib/analytics/file-analytics.db.ts`) — has no migration framework. `initSchema()` runs `CREATE TABLE/INDEX IF NOT EXISTS` once per process restart, which is a no-op on existing databases. To add new columns to an existing table, append `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` guards to `SCHEMA_SQL` after the relevant `CREATE TABLE` block. These guards are idempotent (no-op on fresh installs) and fire automatically on each server restart.
-
-**App Event Registry** (`frontend/lib/app-event-registry/`) — a lightweight server-side pub/sub system for app-level events (file operations, LLM calls, query executions, etc.). API routes publish typed events via `appEventRegistry.publish(AppEvents.X, payload)`; analytics handlers subscribe centrally in `index.ts` rather than being scattered across call sites. Always use this pattern when adding new analytics tracking — never call analytics functions directly from API routes or business logic.
-
-## High-Level Architecture
-
-### Dual-Database System
-
-**Frontend (Next.js)** owns two data planes:
-- **Document DB** — PGLite (open-source) or Postgres (`DATABASE_URL`): questions, dashboards, notebooks, connections, contexts, users, folders. Accessed directly by Next.js server components.
-- **Node.js query connectors** (`lib/connections/`) — execute analytics queries directly against DuckDB / BigQuery / PostgreSQL / SQLite / Athena / Mongo / CSV / Sheets.
-
-**AI chat/agent orchestration** runs in-process in the Next.js app (TypeScript orchestrator under `frontend/orchestrator/` + `frontend/agents/`): LLM calls, append-only conversation log, tool/skill schemas. There is no separate backend service.
-
-### Key Concepts
-
-**Document Storage (PGLite/Postgres)**
-- Open-source: PGLite (embedded Postgres-compatible, directory-based persistence); hosted: Postgres via `DATABASE_URL`; adapters in `lib/database/`
-- Files accessed by integer ID via `/f/{id}` routes (not by path)
-- Path field is display-only for organization (e.g., `/org/Revenue-Summary`)
-- Content stored as JSON in `content` column
-- Schema: `files` table with `id`, `name`, `path`, `type`, `content`, timestamps
-
-**File Types**
-- `question` - SQL query with visualization (table, charts via Vega, pivot)
-- `dashboard` - Collection of questions with grid layout (react-grid-layout)
-- `story` - Agent-authored scrolling narrative document. `content.story` carries STATIC JSX (shadcn/Tailwind via the `lib/story-ui` interpreter — parsed to an AST, never eval'd/innerHTML'd) rendered in an iframe `<svg><foreignObject>` surface (`lib/story-surface`); server-compiled Tailwind in `content.compiledCss`; six design themes via `content.theme` (`STORY_THEME_NAMES`); live question/number/param embeds portaled through a nested React root
-- `notebook` - Vertical list of cells; each cell is either a full inline SQL question (query + viz + connection + params + @refs) or a rich-text (markdown) cell. Content schema `NotebookContent` (`cells: NotebookCell[]`) in `lib/validation/atlas-schemas.ts`; rendered by `NotebookContainerV2` → `NotebookView` → `NotebookSqlCell`/`NotebookTextCell` (`supported: false` today)
-- `report` - Report-style documents (future); `alert` - alert definitions; `alert_run`/`report_run`/`context_run` - read-only rendered run outputs
-- `connection` - Database connection configuration
-- `context` - Schema whitelist + team documentation
-- `users` - User management
-- `folder` - Organizational containers
-- `config` - Company configuration (branding, settings)
-
-(`conversation` is NOT a file type anymore — conversations moved to their own storage in the v3 chat migration; a vestigial `FILE_TYPE_METADATA` entry remains and is slated for removal.)
-
-**Company Configs System**
-The configs system provides per-workspace configuration stored as database documents:
-
-- **Storage**: Document at `/configs/config.json`
-- **File Type**: `'config'`
-- **Content Structure**:
-  ```json
-  {
-    "branding": {
-      "logoLight": "/custom_logo.svg",
-      "logoDark": "/custom_logo_dark.svg",
-      "displayName": "Custom Company",
-      "agentName": "Custom Agent",
-      "favicon": "/custom_favicon.ico"
-    }
-  }
-  ```
-
-**Loading Strategy** (Optimized for SSR):
-- **Configs + Contexts**: Always load on server-side render (SSR)
-- **Connections**: 50ms timeout on SSR, client-side fallback if exceeded
-- **Server hydration**: All three resources (configs, contexts, connections) passed to Redux as `preloadedState`
-- **Client fallback**: API routes (`/api/configs`, `/api/contexts`, `/api/connections`) available if data not SSR'd
-
-**Merge Behavior**:
-- Database values override hardcoded defaults from `frontend/lib/branding/whitelabel.ts`
-- If config document doesn't exist, falls back to hardcoded `COMPANY_BRANDING` object
-- Partial configs supported: only specified fields override, others use defaults
-
-**Client Usage**: `useConfigs()` hook returns `{ branding }` from Redux. Fall back to `getCompanyBranding(companyName)` from `lib/branding/whitelabel.ts` if not loaded.
-
-**File References**
-- Files can reference other files (e.g., dashboards reference questions)
-- FileReference interface: `{ type: 'question', id: number }`
-- Only one level of reference resolution (no recursive references)
-- Dashboards store array of question IDs in their content
-- When loading a dashboard, referenced questions are fetched and included
-- References prevent circular dependencies at save time
-
-**Query Execution Flow** (`lib/query-cache/` — implements `docs/Query Execution, Cache, & Params Arch V2.md`)
-1. User edits SQL → Redux tracks state
-2. Execute → `POST /api/query`; client calls are funneled through `querySemaphore` (caps concurrency at `MAX_CONCURRENT_QUERIES`)
-3. Route applies params (`applyNoneParams`) and derives dialect via the lightweight `ConnectionsAPI.getRawByName` — *not* `FilesAPI.loadFile`, which can trigger schema profiling
-4. `getCachedJsonlStream` (`lib/query-cache/execute.server.ts`) classifies the cache key (`query_cache` control-plane row) as **fresh** (serve the blob), **stale** (serve the blob + fire-and-forget background revalidation), **expired**, or a **miss** (execute) — per-file SWR windows come from `resolveCachePolicy` (`revalidateMs`/`expiryMs`, `lib/query-cache/policy.server.ts`). Execution is lease-guarded (`claimLease`/`renewLease`/`releaseLease`): concurrent identical requests share one run, and a crashed holder's lease is steal-able rather than blocking waiters forever
-5. On a miss/expired/revalidate, `runQueryStream` (`lib/connections/run-query.ts`) picks the connector via `getNodeConnector`, executes, and the result is gzipped-JSONL-encoded to both the client stream and the object-store blob (`QueryCacheBlobStore`) so the wire format and at-rest format never diverge
-
-Guests of a public story can only execute by file id (`assertGuestQueryAllowed`/`sanitizeGuestParams`, `lib/query-cache/guest-query.server.ts`) — never raw SQL. `getQueryResult({ forceLoad: true })` / `useQueryResult().refetch()` pass `forceRefresh`, which skips the fresh/stale serve and re-executes (still lease-guarded) — powers the retry button.
-
-**Schema Profiling & Statistics Enrichment**
-
-Connection schemas are enriched with column-level metadata (category, null counts, top values, min/max) via `lib/connections/statistics-engine.ts` → `profileDatabase(connectorType, schema, queryFn)`, which dispatches per connector (PostgreSQL via `pg_stats`/`pg_class`; DuckDB/CSV/Sheets via `SUMMARIZE`; BigQuery via `INFORMATION_SCHEMA`, descriptions only; SQLite via generic SQL; unknown → pass-through). Profiling runs during schema refresh in `lib/data/loaders/connection-loader.ts` and is cached in the connection document. The `ColumnMeta` interface lives in `lib/connections/base.ts`.
-
-**State Management**
-- Redux for page-level state (questions, dashboards)
-- Dual-state pattern: `originalState` (from DB) vs `currentState` (edited)
-- Dirty detection: Compare states via JSON serialization
-- After save: Update `originalState` to match `currentState`
-
-### Directory Structure
-
-- `frontend/` — Next.js 16 app (React 19, Chakra UI, Redux): `app/` (App Router pages + API routes), `components/`, `lib/` (utilities, API clients, types), `store/` (Redux slices), `orchestrator/` + `agents/` (in-process AI chat/agent engine).
-- `data/` — database files (PGLite documents, DuckDB analytics).
-
-## Key Design Patterns
-
-### Development Patterns & Best Practices
-
-**Deep modules (Ousterhout) — the guiding design principle for this repository.** Modules should have simple, narrow interfaces hiding substantial implementation ("A Philosophy of Software Design"). Concretely:
-- A feature's complexity belongs in ONE cohesive module (e.g. `lib/canvas-story/` owns the entire canvas-render pipeline: raster, selection model, hooks, capture); callers compose a few deep hooks/functions rather than orchestrating internals.
-- Components should be thin compositions — if a component grows past ~150 lines of logic, extract the subsystems into hooks/pure modules under the owning `lib/` module (pure logic in plain `.ts` files so it's unit-testable without a DOM).
-- Prefer making an existing module deeper (adding capability behind the same interface) over adding a new shallow module or a pass-through layer. Classitis, tiny wrappers, and config-forwarding layers are code smells.
-
-**Code Smells to Avoid** (project-specific; ESLint enforces several)
-- **Inline/dynamic imports** — ALWAYS import at the top of the file. `const { foo } = await import('./bar')` signals a circular dependency or poor module design; fix the architecture (extract shared code) rather than working around it. Never use inline imports to "fix" circular deps. ESLint rule `no-restricted-syntax` enforces this.
-- **Direct Redux state mutation** — always use slice actions.
-- **Inline API calls / data fetching in components** — use the CORE hooks (`useFile`, `useFolder`, ...) or listener middleware; don't reach for cascading `useEffect` chains.
-- **Explicit key enumeration** — never manually re-list every field of a typed object when you can pass or spread it. This causes change amplification: add a field to the interface and you must hunt down every place keys were listed, and you WILL miss some.
-  - Bad: `register({ userId: p.userId, email: p.email, role: p.role, ... })`
-  - Good: `register({ ...properties })`
-  - The typed interface is the single source of truth. Only extract specific keys when the target API requires a different shape (e.g. Mixpanel's `$email` reserved field).
-
-**Component Patterns**
-- **Container/View separation (enforced)**: containers (`components/containers/`) connect to Redux and pass data/callbacks down; views (`components/views/`) are pure presentation. All 11 originally-identified candidate views — `QuestionViewV2.tsx`, `DashboardView.tsx`, `ConnectionFormV2.tsx`, `TransformationView.tsx`, `AlertView.tsx`, `ReportView.tsx`, `CodeView.tsx`, `NotebookView.tsx`, `story/StoryView.tsx`, `shared/AgentHtml.tsx`, `story/InlineNumber.tsx` — have been resolved: 10 had their Redux access (`useAppSelector`/`useAppDispatch`) moved up into their container(s) and now take the equivalent values/callbacks as props, each done Blue→Red→Blue with characterization tests proving the move preserved behavior. The ESLint rule `RESTRICT_VIEW_REDUX` (`eslint.config.mjs`) locks this in by name for those 10 files — it blocks `@/store/hooks`/`react-redux` imports there, so a regression fails `npm run validate`, not just review. `story/InlineNumber.tsx` and `shared/StoryEmbeds.tsx` are deliberate, documented exceptions to the guard (structural peer of dynamically-instantiated embed containers, and store re-provider for a nested React root in an iframe, respectively — reasons inline in `eslint.config.mjs`). `components/views/shared/empty-states.tsx` (a shared leaf used by 5 of the above views) also no longer reads Redux directly — it sources branding via the `useConfigs()` CORE hook instead of `useAppSelector(selectBranding)`. **When touching a `components/views/**` file**: the convention now holds — if you need new state in a view, add it as a prop and source it in the container, not via a direct Redux hook.
-- **Composition over inheritance**: Build complex UIs from simple, reusable components
-- **Single responsibility**: Each component should do one thing well
-
-**UI Design — avoid "AI slop" patterns**
-- **Never use a colored accent bar on the left edge of a card/panel** (e.g. `borderLeft="3px solid <accent>"` to signal state). It reads as generic AI-generated design. Convey state with existing affordances instead (badges, toggles, text color, subtle bg tint).
-
-### AI Orchestration & Tool Calling Architecture
-
-The orchestrator (`frontend/orchestrator/`) is a **single-use** engine over an **append-only conversation log** (immutable, forkable, time-travel capable; forks on concurrent edits). Agents dispatch **tool calls**; each goes pending → execution → completed, and a job finishes when no pending tool calls remain. Tools and agents self-register (`REGISTRABLES`); execution streams to the client via Server-Sent Events.
-
-**Tools execute in the tier they need:**
-- **Server tools** — run in-process during orchestration; need the document DB / connectors (querying data, searching schema, loading files: `ExecuteQuery`, `SearchDBSchema`, `ReadFiles`, `SearchFiles`).
-- **Frontend-bridged tools** — need Redux/UI state (modifying the current question, editing dashboard layout, navigating); they throw `UserInputException` to pause the run and are executed in the browser via Redux middleware, then resume. Headless runs swap these for server equivalents where possible (`HEADLESS_REGISTRABLES`; e.g. server-side `ReadFiles`).
-
-**Tool call flow:**
-```
-User Input → orchestrator (server tools execute in-process) → pause on frontend tool
-          → return pending → browser executes → resume orchestrator → … → finish
-```
-The orchestrator auto-executes every server tool, looping until it hits a frontend-only tool, then returns those to the client; completed results flow back in to resume. **Mixed completion:** when a pass yields both completed and pending work, record completions *before* returning pending items — breaking early loses completed results.
-
-**AI chat contexts** (each sends relevant app state to the orchestrator): **Explore** (full-page chat for ad-hoc SQL), **Question** (sidebar with current query/params/results), **Dashboard** (sidebar with dashboard assets + layout).
-
-### Chat Tool Display Architecture
-
-The chat UI has two view modes: **Compact** (inline tool rows via `SimpleChatMessage` → `ToolCallDisplay`) and **Detailed** (timeline + carousel via `AgentTurnContainer`).
-
-**Key components:**
-- `AgentTurnContainer.tsx` — groups messages into turns (user msg → working area → reply). Working area = timeline rail (left) + detail carousel (right)
-- `DetailCarousel.tsx` — shared carousel wrapper with header, nav dots, error count. Also exports shared helpers: `parseToolArgs`, `parseToolContent`, `isToolSuccess`, `getToolNameFromMsg`, and the `DetailCardProps` interface
-- `tool-config.ts` — centralized config per tool: `displayComponent` (compact), `tier`, `chipLabel`, `chipIcon`, `timelineVerb`
-
-**Each tool display file exports two things:**
-1. **Default export** — compact inline display (used by `ToolCallDisplay`)
-2. **Named `DetailCard` export** — card for the detail carousel (e.g., `NavigateDetailCard`, `EditFileDetailCard`, `FileDetailCard`)
-
-**Routing in AgentTurnContainer:**
-- `DETAIL_CARD_BY_TOOL` maps tool name → DetailCard component. Set to `null` to skip a tool in the carousel (e.g., `Clarify` is skipped because `ClarifyFrontend` covers it)
-- `FILE_LABELS` (`created/edited/read`) check for chart items first → `ChartCarousel`, else route per tool name
-- Messages are filtered (null-mapped tools removed), sorted (errors last), and error count shown in header
-
-**Interactive tools (ClarifyFrontend, Navigate):** DetailCards check Redux for `pending_tool_calls` with unresolved `userInputs` and render `UserInputComponent` when pending.
-
-**Color coding (compact displays):** Each tool type has a distinct accent color at `/8` opacity bg + `/15` border + colored icons + `fg.muted` text:
-- Create: `accent.success` (green), Edit: `accent.secondary` (purple), Search: `accent.cyan` (turquoise), Read: `accent.primary` (blue), Navigate: `accent.teal`, Failed: `accent.danger` (red)
-
-### Authentication & Access Control
-- **Auth**: NextAuth v5 with session-based authentication
-- **Authorization**: `getEffectiveUser()` checks permissions on every request
-- **Admin users**: Can see all files and impersonate other users via `?as_user=email` URL parameter (home_folder required but not enforced)
-- **Non-admin users**: Restricted to files in their `home_folder` (hierarchical)
-- **User management**: All users managed via database and `/users` UI (legacy `users.yml` removed)
-- **Required fields**: All users (including admins) must have `home_folder` set (default: `/org`)
-- **Protected paths**: System prevents creation/modification of protected files (e.g., `/config/users.yml`)
-- **Permission model**: File-path based with entity whitelisting (future)
-- **Permission enforcement**: Three-layer defense (files.server.ts data layer → API routes → UI)
-- **rules.json structure**: Defines allowedTypes, createTypes, editTypes, deleteTypes, viewTypes per role
-- **Token versioning**: CURRENT_TOKEN_VERSION in auth.ts/auth-helpers.ts - increment to force re-login on JWT schema changes
-
-### Mode-Based Isolation Pattern
-
-The application supports mode-based file system isolation, similar to the `as_user` impersonation pattern:
-
-- **Mode parameter flow**: URL param (`?mode=tutorial`) → middleware (`x-mode` header) → `EffectiveUser.mode`
-- **Default mode**: 'org' (production files) - mode parameter hidden from UI when default
-- **Alternate modes**: 'tutorial' (onboarding files), future modes for sandboxes/demos
-- **Auto-initialization**: Both 'org' and 'tutorial' modes created automatically with file hierarchies when new company is created
-- **File hierarchy**: Each mode has isolated file tree (e.g., `/org/...`, `/tutorial/...`)
-- **Home folder resolution**: Users store relative home_folder (e.g., `sales/team1`), resolved at runtime:
-  - `resolvePath(mode='org', home_folder='sales/team1')` → `/org/sales/team1`
-  - `resolvePath(mode='tutorial', home_folder='')` → `/tutorial`
-- **Mode + Impersonation**: Both patterns work together - admin can use `?as_user=bob@co.com&mode=tutorial`
-- **Storage isolation**: All file operations (documents, conversations) respect mode
-
-**Pattern consistency**: Mode follows exact same propagation pattern as `as_user` for architectural consistency.
-
-### Parameter System
-- **Syntax**: `:paramName` in SQL queries (e.g., `:limit`, `:start_date`)
-- **Types**: `text`, `number`, `date`
-- **Auto-extraction**: Parameters automatically detected from SQL
-- **Dashboard merging**: Parameters with same name AND type merge at dashboard level
-- **Type locking**: Types can change in question view, but locked in dashboard view
-
-**Parameter value states:**
-| State | JS value | SQL behavior |
-|---|---|---|
-| Has a value | `"foo"` / `100` | Filter condition included, `:param` substituted with the value |
-| Empty **text** | `""` | A regular value — forwarded as-is (filter kept, `:param` bound to `""`) |
-| Empty **number** | `""` → `null` | Normalized to None at param assembly (engines can't cast `""` to a number) — see `EmbeddedQuestionContainer` |
-| **None** (explicit) | `null` | Filter condition removed via IR round-trip; any remaining `:param` refs replaced with `NULL` |
-
-Server-side, `applyNoneParams` (`app/api/query/route.ts`) treats **only `null`** as None — an empty string is a real value, forwarded to the connector. So an empty **numeric** param is coerced `""`→`null` *client-side* where the values are assembled from their declared types (`EmbeddedQuestionContainer`), before it reaches the route. The UI exposes a "Set to None / Clear None" toggle (None = `null`).
-
-**Dashboard fallback rule**: `effectiveSubmittedValues` uses the question's saved `parameterValues` default only when the key is **absent** from the dashboard's submitted params. An explicit `null` or `""` is never overridden by the question default — key-existence checks (`in`) are used, not `??`.
-
-### Charting / Visualization Library
-
-**Vega is the ONLY chart engine** (no renderer toggle exists): every chart on questions, dashboards, and stories draws through `components/viz/VegaChart.tsx`, which hard-forces Vega's **SVG renderer** (captures serialize live DOM — canvas content serializes empty) and reads the design-theme `--chart-1..5` tokens. Legacy charts whose truth is still `vizSettings` render via the just-in-time V1→Vega bridge (`lib/viz/from-vizsettings.ts` — render-only, never written back; its switch is exhaustiveness-guarded). `table`/`pivot` deliberately render on the DOM tier (native `<table>` + tanstack-virtual `TableV2`, `PivotTable`), not through Vega. **ECharts is fully deleted** (Renderer_v2 Phase 2): no rollback toggle, no plotx render stack, no `echarts` dependency. `components/plotx/` retains only the DOM-tier and config components (TableV2, PivotTable, VizConfigPanel, axis builders, download helpers, the plain-SVG column-stat minis). Server images (Slack, benchmark) render Vega-only via `lib/chart/render-viz-image.ts` (+ `svg-to-jpeg.ts`); geo boundaries resolve headlessly via `lib/viz/geo-assets.server.ts`.
-
-**Viz Types** (`lib/types.ts` → `VizSettings.type`): `table`, `line`, `bar`, `area`, `scatter`, `row`, `pie`, `funnel`, `waterfall`, `radar`, `trend`, `combo`, `single_value`, `pivot`, and the geo types (`choropleth`, `point_map`, `geo`). `VizSettings` carries `type`, `xCols`/`yCols`, `pivotConfig` (pivot), `geoConfig` (geo: `lat = xCols[0]`, `lng = xCols[1]` or explicit `latCol`/`lngCol`).
-
-**Key Files**:
-- `components/viz/VegaChart.tsx` - The single browser chart renderer (Vega/vega-lite, SVG-forced)
-- `lib/viz/from-vizsettings.ts` - V1 `vizSettings` → V2 envelope bridge (`vizSettingsToEnvelope`, exhaustiveness-guarded switch)
-- `lib/viz/render-vega.ts` - Headless envelope rendering (`renderEnvelopeToSvg`, `renderer:'none'` → `toSVG()`)
-- `lib/chart/pivot-utils.ts` - Pure pivot aggregation logic; `components/plotx/TableV2.tsx` / `PivotTable.tsx` - DOM-tier table renderers
-- `components/question/VizTypeSelector.tsx` - Viz type icon buttons
-- `components/question/QuestionVisualization.tsx` - The render dispatcher (Vega vs DOM tier)
-
-**Rendered-document surfaces & styling (Renderer_v2).** Rendered documents (story, dashboard, question, notebook, report, alert + run outputs) are on the **Tailwind v4 + vendored shadcn kit** stack (`components/kit/*`; tokens generated into `app/theme-tokens.css` by `npm run generate-app-theme-css`, scoped under `[data-mx-theme-host]` — never bare `:root`). Admin/form surfaces (connections, users, settings) and the app shell KEEP Chakra; an ESLint `@chakra-ui` import ban (`eslint.config.mjs`) locks converted files. **Dashboards render inside a main-document live-svg surface** (Option B2: `[data-file-id] > SvgPageSurface (svg[data-mx-surface-svg] > foreignObject) > [aria-label="Dashboard"]`); capture serializes that live svg (`lib/screenshot/serialize-surface.ts`), and everything else main-document goes through `serialize-element.ts` (both stamp `chakra-theme <mode>` + `[data-mx-theme-host]` so token-backed styles resolve in the detached copy). Dashboards take an optional `content.theme` (one of the six story themes) stamped as `data-theme` on the region inside the surface. **Question tiles are windowed** (`components/views/dashboard/WindowedTile.tsx`): off-viewport tiles are busy layout ghosts; the capture readiness gate broadcasts `mx-force-mount-tiles` so captures never serialize ghosts. Cross-engine guarantees (Chromium/WebKit/Firefox) live in `npm run capture-matrix` (`scripts/capture-matrix.ts` + `b2-surface-matrix.ts` + `story-width-matrix.ts`).
-
-**File-view → LLM Image Pipeline** (`lib/screenshot/app-state-screenshot.ts`):
-The old per-chart `buildChartAttachments()` pipeline is DELETED. On message send from a file page, ONE screenshot of the whole rendered view is captured **lazily at send time** through the serialization pipeline (`captureFileViewBlob` → serialize → data-URL SVG → canvas → 512px JPEG), readiness-gated on `data-mx-busy` (never captures half-hydrated embeds) and cached in a one-slot cache keyed by content+results+color-mode. Marker-flagged types (`FILE_TYPE_METADATA[type].markers` — story, dashboard, notebook, report, alert, run outputs) get numbered position markers baked into the image plus a `<Viewport>` scroll pointer (`lib/screenshot/page-markers.ts`, gate `markersEnabledForAppState`).
-
-**Adding a New Viz Type** — touch-points: add to the `VizSettings.type` union (`lib/types.ts`); extend the `vizSettingsToEnvelope` switch in `lib/viz/from-vizsettings.ts` (the `never` guard forces this); wire `VizTypeSelector.tsx`. There is no other render path — the plotx ECharts stack is deleted.
-
-## Development Workflow
-
-### Database Schema Changes
-Update `lib/database/postgres-schema.ts` (PGLite uses this schema), update `lib/types.ts`, add a migration entry, then run `npm run update-workspace-template` to refresh the seed template.
-
-### Adding Next.js API Routes
-
-**Always use `handleApiError` in catch blocks** — never return `NextResponse.json({ error }, { status: 500 })` directly:
 ```typescript
 import { handleApiError } from '@/lib/http/api-responses';
 
@@ -376,161 +421,88 @@ export async function POST(req: NextRequest) {
   try {
     // ...
   } catch (error) {
-    return handleApiError(error); // reports to bug + returns consistent error shape
+    return handleApiError(error); // reports the bug and returns a consistent error shape
   }
 }
 ```
-`handleApiError` returns a consistent error shape for all unhandled errors. ESLint enforces this — a direct `NextResponse.json` with `{ status: 500 }` is a lint error in `app/api/**`. If a route genuinely needs a custom response shape for 500s (e.g. `/api/chat` returns `ChatResponse`), suppress inline with `// eslint-disable-next-line no-restricted-syntax` and ensure the error is reported via `appEventRegistry.publish(AppEvents.ERROR, ...)` manually. Error events are forwarded to the mx-llm-provider `/notify` endpoint, which routes `type: "error"` to Slack.
 
-### Client-Side Error Handling
+ESLint enforces this: a direct `NextResponse.json` with `{ status: 500 }` is a lint error under
+`app/api/**`. If a route genuinely needs a custom 500 shape, suppress inline with
+`// eslint-disable-next-line no-restricted-syntax` and report the error manually via
+`appEventRegistry.publish(AppEvents.ERROR, ...)`.
 
-Browser-side complement to `handleApiError`:
-- `components/question/error-parser.ts` — `parseErrorMessage()` → `{ title, hint, details?, isNetworkError? }`; flags transport failures (`'failed to fetch'`, etc.) as `isNetworkError` so the UI shows a retryable "Couldn't load results" instead of a SQL error.
-- `lib/messaging/capture-error.ts` — `captureError()` POSTs to `/api/capture-error` with exponential backoff + jitter and 60s dedup; best-effort, never throws.
-- `lib/utils/semaphore.ts` — `Semaphore` (limit may be a getter for live runtime caps); used as `querySemaphore` in `file-state.ts`.
+### Environment variables
 
-### Adding Agent Tools / Agents
-1. Add a tool (`MXTool` subclass with a TypeBox param schema) or agent under `frontend/agents/**`
-2. Register it in `lib/chat/orchestration-core.server.ts` (`REGISTRABLES`); headless runners use `HEADLESS_REGISTRABLES`
-3. Implement the behavior: server tools implement it directly in the `MXTool` subclass's `execute()` method; frontend-bridged tools register a handler in `lib/tools/tool-handlers.ts` (the registry barrel), implemented in `lib/tools/handlers/*.ts`
-4. Keep the TypeBox param schema (colocated with the tool) and the handler behavior in sync — the schema is the single source of truth for the args the LLM is told it can pass
+- **Server-only values** (secrets, DB URLs, internal flags): import from `frontend/lib/config.ts`,
+  which carries an `import 'server-only'` guard and fails the build if a client component imports it.
+- **Client-safe values** (`NEXT_PUBLIC_*`, `NODE_ENV`): import from `frontend/lib/constants.ts`.
+- **Never access `process.env` directly** outside those two files. Enforced by ESLint.
 
-## Important Technical Details
+**Runtime-config → Redux pattern:** server config is read in `lib/config.ts`, passed as Redux
+`preloadedState` at SSR, and consumed via a selector. `Semaphore` takes a *getter* for its limit so
+Redux changes apply without recreating it.
 
-### Frontend
-- **React 19** with Next.js 16 (App Router)
-- **Chakra UI v3** with custom theme (Flat UI colors)
-- **Redux Toolkit** for state management
-- **@electric-sql/pglite** for embedded Postgres (open-source); `pg` for external Postgres (hosted)
-- **Monaco Editor** for SQL editing
-- **Vega / vega-lite** for visualizations (SVG-forced, design-theme chart tokens; ECharts is fully removed)
-- **NextAuth v5** for authentication
+### Scripts
 
-### AI Orchestration (in-process)
-- **TypeScript orchestrator** (`frontend/orchestrator/` + `frontend/agents/`): LLM calls, append-only conversation log, tool/skill schemas — runs inside the Next.js app
-- **Analytics queries** run in the Next.js Node.js connectors (`frontend/lib/connections/`)
-- **Path Resolution**: DuckDB file paths are resolved relative to `BASE_DUCKDB_DATA_PATH` environment variable
-  - Absolute paths (starting with `/`) are used as-is
-  - Relative paths are prepended with `BASE_DUCKDB_DATA_PATH`
-  - Default `BASE_DUCKDB_DATA_PATH` is `.` (current directory)
+**Scripts belong in `frontend/scripts/` as Node.js run through `tsx`.** The frontend already has
+the needed dependencies; use `import { config } from 'dotenv'; config()` to load `frontend/.env`,
+and add an entry to `frontend/package.json`.
 
-### Database
-- **PGLite** (embedded, open-source) or **Postgres** (hosted): Documents, metadata, configuration
-- **DuckDB**: Default analytics database (local)
-- **BigQuery/PostgreSQL**: Optional external data warehouses
+### Adding agent tools and agents
 
-### Environment Variables
+1. Add the tool (an `MXTool` subclass with a TypeBox param schema) or agent under `frontend/agents/**`.
+2. Register it in the orchestration core's `REGISTRABLES`; headless runners use `HEADLESS_REGISTRABLES`.
+3. Implement the behaviour: server tools directly in the subclass's `execute()`; frontend-bridged
+   tools register a handler in the tool-handler registry.
+4. Keep the TypeBox param schema and the handler behaviour in sync — the schema is the single source
+   of truth for the arguments the LLM is told it may pass.
+5. A **root** agent needs a second registration: `ROOT_AGENT_BY_NAME` in the same file. `REGISTRABLES`
+   only makes a class instantiable on resume; without the map entry no request can select it.
+6. Adding a `{slot}` to a shared prompt is a breaking change to every other renderer of that id.
+   `pyFormat` throws `Missing variable '<name>'` — it does not render the literal — so a turn dies at
+   prompt assembly, not at review. Grep every `renderPrompt('<id>', …)` call site and give each the new
+   slot (usually `''`).
 
-#### Frontend & Backend
-- `BASE_DUCKDB_DATA_PATH`: Base directory for resolving DuckDB file paths (default: `.`)
-  - **Dev**: Set to `..` (both frontend and backend run from their respective subdirectories)
-  - **Prod**: Set to `/app` (Docker container working directory)
-  - **Usage**: Relative paths in DuckDB connection configs are resolved relative to this path
-  - **Example**: With `BASE_DUCKDB_DATA_PATH=..` and `file_path: "data/default_db.duckdb"`, resolved path is `../data/default_db.duckdb`
-  - **Note**: Replaces the old `DEFAULT_DUCKDB_PATH` variable which only stored the filename
+**Tool registration is not optional.** When a tool spawns another tool, or an agent dispatches a
+sub-agent, the spawned class MUST be in `REGISTRABLES` — the orchestrator instantiates it from that
+registry by `schema.name` when resuming or reconstructing a saved conversation log.
 
-#### Frontend
-- `DATABASE_URL`: Postgres connection URL (hosted only; open-source uses PGLite, set `DB_TYPE=pglite`)
-- `PGLITE_DATA_DIR`: Directory for PGLite persistence (default: derived from `BASE_DUCKDB_DATA_PATH`)
-- `NEXTAUTH_SECRET`: NextAuth secret for session encryption
-- `NEXTAUTH_URL`: NextAuth URL (default: `http://localhost:3000`)
-- `MAX_CONCURRENT_QUERIES`: max concurrent client `/api/query` calls (default: `10`); hydrated SSR → `configsSlice.maxConcurrentQueries`, read live by `querySemaphore` via `selectMaxConcurrentQueries`
-- `QUERY_CACHE_TTL_MS`: TTL for the server-side `queryCache` (default: `60000`)
-- `MX_TELEMETRY`: leveled runtime control for all outbound telemetry (`lib/telemetry.ts`) — `off`/`0` = nothing; `errors`/`1` (default) = Sentry crash reports only (no traces/logs/PII, baked analytics default ignored); `full`/`2` = traces + logs + PII + baked analytics. Client bundles can't read runtime env, so the root layout stamps `data-mx-telemetry="<level>"` on `<html>` and `instrumentation-client.ts` reads it before `Sentry.init` (absent → `errors`, never `full`). Documented for users in `docs/content/docs/self-hosting/telemetry.mdx`.
+**Prefer one registered class over one class per configuration.** When behaviour varies by
+user-authored data rather than by code — custom agents are the case in hand — put the resolved
+definition on the per-turn context and register a single class. A class per definition makes every
+saved log unresumable as soon as the underlying definition is renamed or deleted.
 
-**Runtime-config → Redux pattern:** server config read in `lib/config.ts` → Redux `preloadedState` at SSR → consumed via selector; `Semaphore` takes a *getter* limit so Redux changes apply without recreating it.
+### Database schema changes
 
-#### Accessing env vars in code
-- **Server-only vars** (secrets, DB URLs, internal flags): import from `frontend/lib/config.ts` — has `import 'server-only'` guard, throws at build time if a client component imports it.
-- **Client-safe vars** (`NEXT_PUBLIC_*` and `NODE_ENV`): import from `frontend/lib/constants.ts` — safe for both server and browser.
-- **Never access `process.env` directly** outside these two files. ESLint enforces this via `no-restricted-syntax`.
+Declare the change in `frontend/lib/database/schema/tables.ts` (PGLite and Postgres share it),
+update the shared types, then re-record `frontend/lib/database/__tests__/__snapshots__/schema-shape.test.ts.snap`.
+Run `npm run update-workspace-template` if the seed template is affected.
 
-## Key Files Reference
+**Additive DDL needs no migration entry.** `frontend/lib/database/schema/render.ts` emits every
+declared column as `ALTER TABLE … ADD COLUMN IF NOT EXISTS` alongside the `CREATE TABLE`, so a
+database built from an older declaration gains new columns, tables and indexes on the next boot by
+itself. A `MigrationEntry` and a `LATEST_DATA_VERSION` bump are for changes to the shape of existing
+**row content** — bumping the version for a bare column add strands every unmigrated workspace
+behind the data-version gate for no reason.
 
-### Frontend Core Modules
+Two fields fail open, so declare them deliberately: a `Table` without `scope` reads as shared across
+the whole deployment, and a `Unique` without `scope` reads as a global invariant.
+`frontend/lib/database/schema/__tests__/equivalence.test.ts` asserts both are present precisely
+because forgetting either is silent. Never smuggle raw SQL through the declaration — see
+`frontend/lib/database/schema/types.ts` for why there is no such field.
 
-> **CRITICAL — always reuse, never re-implement.** `file-state.ts` and `file-state-hooks.ts` are the single source of truth for all file and query operations in the frontend. Before writing any new fetch, Redux read, or file-operation logic, read these files first. Duplicating their functionality elsewhere is a code smell.
+### Debugging async orchestration
 
-- `frontend/lib/file-state/file-state.ts` - **CORE: Centralized file operations** — the only place file fetching, editing, saving, deleting, folder loading, and query execution logic should live. Key exports: `loadFiles`, `readFiles`, `readFolder`, `editFile`, `publishFile`, `deleteFile`, `getQueryResult` (accepts `{ forceLoad }` to bypass the query cache; calls bounded by `querySemaphore`).
-- `frontend/lib/hooks/file-state-hooks.ts` - **CORE: React hooks** wrapping `file-state.ts` — the only hooks components should use for file/query data. Key exports: `useFile`, `useFolder`, `useFileByPath`, `useFilesByCriteria`, `useQueryResult` (returns `refetch()` for force-reload / retry).
+Debug multi-tier async execution by adding temporary logging at tier boundaries — orchestrator
+stream events, tool execution results — to trace data flow through the execution loop.
 
-**FilesAPI dual-implementation pattern:** A shared interface defines the contract for all file CRUD operations. There is a client implementation (HTTP calls) and a server implementation (direct DB access), both exported as `FilesAPI` from their respective modules. `file-state.ts` uses the client `FilesAPI` and adds Redux state management on top. **When adding a new file operation, add it to the interface and implement it in both client and server.** Never bypass `FilesAPI` with raw `fetch` calls.
+### Trace a new field or tool end to end
 
-> **⚠️ `DocumentDB` is a shared server-side data primitive for `lib/data/*.server.ts` modules** — not exclusively for the `FilesAPI` implementation (`lib/data/files.server.ts`). Its siblings doing legitimate direct data access for non-file-shaped concerns (`lib/data/connections.server.ts`, `lib/data/configs.server.ts`, `lib/data/heal-stories.server.ts`, and future modules in the same category) may also import it directly, rather than being forced through `FilesAPI` — an interface not designed for their shapes. It is still forbidden everywhere else: do not call `DocumentDB` directly from API routes, tool handlers, job handlers, or anywhere outside `lib/data/*.server.ts` / `lib/database/**` — go through `FilesAPI`, `ConnectionsAPI`, or `ConfigsAPI` instead. Direct `DocumentDB` usage outside the data layer is a code smell. This boundary is enforced by the `no-restricted-imports` rule for `@/lib/database/documents-db` in `frontend/eslint.config.mjs`.
+Three defect classes from shipping the semantic tier were each invisible to a green test suite, and they share one shape: a value exists at one layer and is silently absent at the next.
 
-- `frontend/lib/database/documents-db.ts` - Document DB CRUD operations (PGLite or Postgres)
-- `frontend/lib/types.ts` - TypeScript interfaces. Imports shared types from `@/lib/validation/atlas-schemas`; defines frontend-only types and extends the shared ones (e.g. `QuestionContent` adds `queryResultId`)
-- `frontend/lib/validation/atlas-schemas.ts` - **TypeBox single source** for Atlas file types (schemas + `Static` types). Edit here; `lib/validation/atlas-json-schemas.ts` re-derives the JSON-Schema objects at module load (no codegen step). Import types from `@/lib/validation/atlas-schemas` or `@/lib/types`.
+- **Registration is not advertisement.** A tool present in `REGISTRABLES` but missing from an agent's `tools` array is never offered to the model — the array replaces rather than extends, and nothing errors.
+- **Schema is not surface.** A field absent from the agent-facing projection (`ContextAgentContent`) is dropped by the markup round-trip in *both* directions, so agent edits vanish without a message.
+- **A fold that enumerates fields drops the new one.** A writer that lists keys instead of spreading them bypasses whatever gate reads the rest.
 
-### Frontend State & Components
-- `frontend/store/` - Redux store with multiple domain slices:
-  - `filesSlice.ts` - File/document state management
-  - `chatSlice.ts` - Chat conversation state
-  - `queryResultsSlice.ts` - Query results cache
-  - `authSlice.ts` - Authentication state
-  - `configsSlice.ts`, `usersSlice.ts`, `jobRunsSlice.ts`, `navigationSlice.ts`, `recordingsSlice.ts`, `uiSlice.ts` - remaining domain slices (see `store/store.ts` for the full reducer map)
+None of these throws, so no test fails. The check is to follow the value through registry → advertisement → schema → markup → persistence in a running app, and to verify by **reading the artifact** — the stored JSON, the debug view of the exact request sent to the model — never by eyeballing output that merely looks plausible.
 
-  Connections and contexts are **not** Redux-slice-backed — they're loaded via SSR `preloadedState` + hooks (see "Loading Strategy" above), not a dedicated slice.
-- `frontend/components/containers/` - Smart container components (QuestionContainerV2, DashboardContainerV2)
-- `frontend/components/views/` - View components (QuestionViewV2, DashboardView)
-- `frontend/app/f/[id]/page.tsx` - File detail page route
-
-### Frontend Other
-- `frontend/scripts/update-workspace-template.ts` - Re-runs migrations on the seed template (`workspace-template.json`)
-- `frontend/lib/database/import-export.ts` - Document import/export + `atomicImport` (seeds the DB at workspace registration)
-- `frontend/lib/auth/access-rules.ts` - Server-side permission helpers (canEditFileType, canDeleteFileType, etc.)
-- `frontend/lib/auth/access-rules.client.ts` - Client-side permission helpers (mirrors server functions)
-
-### AI Orchestration & Connectors
-- `frontend/orchestrator/` - the `Orchestrator` engine + conversation-log/LLM types
-- `frontend/agents/` - agents, tools, and skills (e.g. `analyst/`, `web-analyst/`, `slack/`, `report/`, `eval/`)
-- `frontend/lib/chat/orchestration-core.server.ts` - wires agents/tools into `REGISTRABLES` and runs chat turns
-- `frontend/lib/connections/` - Node.js query connectors (DuckDB, BigQuery, PostgreSQL, SQLite, Athena, Mongo, CSV, Sheets) — query execution lives here
-
-### Writing New Tests
-
-**Chat/agent E2E tests run fully in-process** — there is no separate backend or LLM-mock server to spawn. The LLM is driven by each agent's **faux provider**: `import { fauxRegistration as X } from '@/agents/.../<agent>'` then `X.setResponses([fauxAssistantMessage(...) / fauxToolCall(...)])`. These tests:
-- Test the full stack: Redux → Listener Middleware → API route → in-process orchestrator → faux LLM
-- Use shared test utilities from `store/__tests__/test-utils.ts` (`setupTestDb` + `getTestDbPath`) and `test/harness/mock-fetch.ts` (`setupMockFetch` with the real route handlers)
-- **Automatic tool execution**: observe automatic system behaviors (middleware, listeners) rather than manually simulating them
-
-**Reference patterns:** `lib/integrations/slack/__tests__/slack.e2e.test.ts` (headless orchestration via faux), `store/__tests__/storeE2E.test.ts` (in-process eval agent), and `app/api/conversations/[id]/__tests__/stream-turns.test.ts` (end-to-end through the real v3 chat routes — turn POST, resumable stream GET, interrupt — with a faux LLM).
-
-For component-level UI interaction tests (React rendering, user events, DOM assertions), use the `*.ui.test.tsx` naming convention — these run in the jsdom-based `ui` Vitest project (`npm run test:ui`, or `npx vitest run --project=ui <pattern>`). See `components/__tests__/agent-e2e.ui.test.tsx` for the reference pattern (in-process orchestrator + faux LLM, Redux, async agent flow + tool execution, `waitFor` assertions) and `components/__tests__/chat-input.ui.test.tsx` for chat-input interaction patterns.
-
-**UI test element queries: `aria-label` ONLY.** Never use `getByRole`, `getByText`, `getByPlaceholderText`, `getByTestId`, or any other query strategy. Every interactive element must be located exclusively via `getByLabelText` / `findByLabelText` (which matches `aria-label`). If an element lacks an `aria-label`, add one to the component — do not work around it with a different query.
-
-## Atlas Schemas (TypeBox)
-
-**Single source of truth:** `frontend/lib/validation/atlas-schemas.ts` defines TypeBox schemas for all shared Atlas file types (`VizSettings`, `PivotConfig`, `QuestionContent`, `DashboardContent`, `FileReference`, `DashboardLayoutItem`, etc.). Each `export const X = Type.Object(...)` is BOTH a runtime JSON Schema and a static type via the colocated `export type X = Static<typeof X>`.
-
-**Pipeline (no codegen — pure in-process):**
-1. `frontend/lib/validation/atlas-json-schemas.ts` rebuilds the JSON-Schema objects at module load: full `atlasSchema` and the viz-stripped `atlasSchemaNoViz`. TypeBox's `Symbol(Kind)` metadata is dropped via `JSON.parse(JSON.stringify(...))` so Ajv sees a clean object.
-2. Consumers of `atlasSchema` import directly from there: `lib/validation/content-validators.ts` (Ajv compile — `ajv.addSchema(atlasSchema, 'atlas')`) and `lib/data/story/file-markup.ts` + `lib/data/story/content-jsx.ts` (use `atlasSchema.$defs` to resolve `$ref`s when converting content ↔ JSX markup). The **EditFile / CreateFile tool descriptions do NOT embed the schema** — per-file-type markup is documented in each type's skill (`skill_questions`, `skill_dashboards`, `skill_reports`, `skill_alerts`, `skill_stories`, `skill_notebooks` in `orchestrator/prompts/prompts.yaml`); the tool description (`agents/web-analyst/web-tools.ts` → `MARKUP_FORMAT`) carries only the generic markup mechanics + a pointer to those skills.
-3. Types come directly from `Static<typeof …>` — consumers import from `@/lib/validation/atlas-schemas`; `frontend/lib/types.ts` re-exports them and adds frontend-only fields.
-
-**Key rules:**
-- Edit `atlas-schemas.ts`; everything else re-derives on the next module load. No `npm run generate-types` step, no `*.gen.json` artifacts.
-- `StringEnum` uses a `const` type param so literal arrays narrow to a union (not `string`).
-- Frontend-only fields (e.g. `queryResultId` on `QuestionContent`) go in `types.ts` as interface extensions.
-- `DocumentContent` (frontend abstraction for dashboards/notebooks) lives in `types.ts` only — it's more general than `DashboardContent`.
-
-## Tool Schemas
-
-Frontend tool arg schemas are TypeBox `Type.Object` definitions colocated with the tool (`frontend/agents/**`). They are the single source of truth for what args the LLM is told it can pass — keep the schema and the handler behavior (`lib/tools/handlers/*.ts` for frontend-bridged tools; the `MXTool.execute()` method for server tools) in sync.
-
-## Previous Mistakes
-
-**Scripts belong in `frontend/scripts/` as Node.js (tsx).** The frontend already has all needed dependencies (`@duckdb/node-api`, `@aws-sdk/client-s3`, `dotenv`); use `import { config } from 'dotenv'; config()` to load `frontend/.env`, and add an entry to `frontend/package.json`.
-
-**Schema changes:** Any change to `lib/database/postgres-schema.ts` (used by both PGLite and the Postgres adapter) must be accompanied by the appropriate migration entry.
-
-**Tool Registration:** When a tool spawns another tool (via `FrontendToolException`) or an agent dispatches a sub-agent, the spawned class MUST be in `REGISTRABLES` (`lib/chat/orchestration-core.server.ts`) — the orchestrator instantiates it from that registry by `schema.name` when resuming / reconstructing a saved conversation log.
-
-**Debugging Async Orchestration:** Debug multi-tier async execution by adding temporary logging at tier boundaries (orchestrator stream events, tool execution results) to trace data flow through the execution loop.
-
-**TalkToUser is NOT a normal tool_call for most agents — do not mock it as one.** `TalkToUser` is only in `SlackAgent`'s toolset (so the bot can post back to Slack threads). All other agents (`AnalystAgent`, `DashboardAgent`, etc.) reply via `stopReason: 'stop'` with plain `content` — `TalkToUser` is never in their tool list. In tests, the correct faux pattern for a non-Slack agent reply is `fauxAssistantMessage('reply text', { stopReason: 'stop' })`. Mocking TalkToUser as a `fauxToolCall` for non-Slack agents will fail (the orchestrator can't resolve it) and produce the "I do not have a text reply" fallback — always use `stopReason: 'stop'` with content instead.
-
-## Past Learnings
-
-**Context fullSchema Semantics:** The `fullSchema` field in a context represents what tables/schemas are AVAILABLE for that context to whitelist (inherited from parent or loaded from connections), NOT what the context has actually whitelisted. The context's own `databases[].whitelist` array determines what it actually exposes. When a parent context applies `childPaths` restrictions on whitelist items, those restrictions filter what appears in the child's `fullSchema` - effectively limiting what the child CAN whitelist, not what it HAS whitelisted.

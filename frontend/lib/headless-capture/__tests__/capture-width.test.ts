@@ -1,5 +1,5 @@
 /**
- * Headless captures must render at the width a READER sees (Story_Design_V2 §4: no fidelity fork).
+ * Headless captures must render at the width a READER sees (no fidelity fork).
  *
  * Since the svg surface tracks its container (the width-clip fix), the headless viewport is no
  * longer just an output-size knob — it is a LAYOUT input. An 800px viewport renders the story below

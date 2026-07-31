@@ -26,7 +26,7 @@ import { toVizColumns } from '@/lib/viz/query-data';
 import { ChartDownloadMenu } from '@/components/viz/ChartDownloadMenu';
 import { getBrandLogoUrl } from '@/lib/branding/whitelabel';
 
-// Viz V2 (docs/Visualization Arch V2.md): lazy chunk — vega/vega-lite only load on
+// Viz V2: lazy chunk — vega/vega-lite only load on
 // pages that actually render a V2 envelope (same pattern as GeoPlot/Leaflet).
 // eslint-disable-next-line no-restricted-syntax
 const VegaChart = dynamic(() => import('@/components/viz/VegaChart'), { ssr: false });
@@ -192,11 +192,11 @@ function QuestionVisualizationInner({
     }
   };
 
-  // V1→V2 render bridge (Viz Arch V2 §21 item 1): a chart whose truth is `vizSettings` renders
+  // V1→V2 render bridge: a chart whose truth is `vizSettings` renders
   // through <VegaChart> via just-in-time conversion — render-only, nothing is ever written back;
-  // table/pivot keep their DOM renderers. Vega is the ONLY engine (Renderer_v2 Phase 2 — the
+  // table/pivot keep their DOM renderers. Vega is the ONLY engine (the
   // ECharts rollback path is deleted).
-  // Memoized (Renderer_v2 Phase 7, §1.3 lever 2), and ABOVE the early return (rules-of-hooks):
+  // Memoized, and ABOVE the early return (rules-of-hooks):
   // VegaChart's build effect keys on envelope IDENTITY — a fresh object here on every legitimate
   // re-render (loading flips, new callbacks) would finalize + re-parse + re-render the whole
   // Vega view mid-interaction.
@@ -216,14 +216,12 @@ function QuestionVisualizationInner({
     return null;
   }
 
-  // Two toggles (docs/Visualization Arch V2.md §21): `vizRenderer` picks the
-  // engine — 'echarts' is the classic pre-V2 pipeline where only V1 exists;
-  // 'vega' (default) draws every chart. Under vega, the `vizV2` format flag
-  // picks the AUTHORITATIVE format: off (V1) → `vizSettings` is the truth and
-  // saved `viz` envelopes are ignored (the JIT bridge below renders them);
+  // Vega is the only chart engine. One toggle remains:
+  // the `vizV2` format flag picks the AUTHORITATIVE format: off (V1) → `vizSettings` is
+  // the truth and saved `viz` envelopes are ignored (the JIT bridge below renders them);
   // on (V2) → a saved envelope is the truth and renders directly.
   const hasVizV2 = vizV2Enabled && currentState?.viz != null;
-  // table/pivot kinds render on the DOM tier, never through vega (RFC §10).
+  // table/pivot kinds render on the DOM tier, never through vega.
   const vizV2Kind = hasVizV2 ? (currentState.viz!.source as unknown as { kind: string }).kind : null;
   const isVizV2Table = vizV2Kind === 'table';
   const isVizV2Pivot = vizV2Kind === 'pivot';
@@ -442,7 +440,7 @@ function QuestionVisualizationInner({
                 )}
                 {/* V1 pivot: the bridge deliberately returns null for pivot — it renders on the
                     DOM tier through the SAME view V2 pivots use, via a JIT-bridged envelope
-                    (Renderer_v2 Phase 2: ChartBuilder + the ECharts stack are deleted). */}
+                    (ChartBuilder and the ECharts stack are deleted). */}
                 {!hasVizV2 && !legacyRenderViz && currentState?.vizSettings?.type === 'pivot' && (
                   <VizPivotView
                     envelope={vizSettingsToEnvelopeStatic(currentState.vizSettings, currentState?.query)}
@@ -472,7 +470,7 @@ function QuestionVisualizationInner({
  *
  * If a caller later starts passing inline callbacks, those would correctly
  * trigger re-renders here — we intentionally don't ignore them, so the child
- * subtree (ChartBuilder/BaseChart/EChart) never sees a stale closure.
+ * subtree (VegaChart/VizTableView/VizPivotView/TableV2) never sees a stale closure.
  *
  * Pre-fix this was 33/33 wasted; the layer also gates the entire chart
  * pipeline below it.

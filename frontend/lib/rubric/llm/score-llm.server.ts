@@ -7,7 +7,8 @@
  * bespoke LLM call: prompts live in `micro.rubric_llm` (prompts.yaml), model + usage tracking
  * come for free. The screenshot rides along as an image content block on the micro context.
  *
- * See `frontend/docs/rubrik.md`.
+ * See `CLAUDE.md` — "Auth, Access Control, Mode Isolation, HTTP Helpers, and the File-Health
+ * Rubric".
  */
 import 'server-only';
 import { runMicroTask } from '@/lib/chat/run-micro-task.server';
@@ -21,9 +22,10 @@ import { LLM_CHECKS, formatChecklist } from '../checks';
 const CATEGORIES: readonly RubricCategory[] = ['correctness', 'clarity', 'aesthetics'];
 
 // LLM-as-judge is lenient and noisy — one pass rubber-stamps, and a skipped check is silently
-// treated as "passed". Run the judge several times and aggregate WORST-OF: a check fails if it
-// fails in at least FAIL_VOTES of the runs (default 1 — any run that catches a real problem wins).
-// Bump FAIL_VOTES toward a majority if the strict prompt starts producing false positives.
+// treated as "passed". The judge runs JUDGE_VOTES times and the runs aggregate WORST-OF: a check
+// fails if it fails in at least FAIL_VOTES of them, so any run that catches a real problem wins.
+// Both are 1 today — a SINGLE pass. Raise JUDGE_VOTES to buy noise reduction at N× cost, and
+// FAIL_VOTES toward a majority if the strict prompt starts producing false positives.
 const JUDGE_VOTES = 1;
 const FAIL_VOTES = 1;
 
@@ -108,7 +110,8 @@ function findingsFromVotes(fileType: RubricFileType, runs: CheckVerdict[][]): Ru
 }
 
 /** Merge a deterministic and an LLM report into one. A category is assessed if EITHER scored it
- *  (the LLM covers all three); each finding already carries its own `source`. */
+ *  (every check in `LLM_CHECKS` is categorized `aesthetics`, so in practice the LLM contributes
+ *  that category and the deterministic scorer the rest); each finding carries its own `source`. */
 export function combineReports(deterministic: RubricReport, llm: RubricReport): RubricReport {
   const findings = [...deterministic.categories, ...llm.categories].flatMap((c) => c.findings);
   const assessed = CATEGORIES.filter((cat) =>

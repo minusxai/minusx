@@ -43,7 +43,7 @@ describe('extractCallIds', () => {
   });
 
   it('captures _lllmCallId on the assistant message itself (text-only stops)', () => {
-    // Per `lib/chat-translator/index.ts:240-242`: callLLM attaches
+    // Per `lib/chat-translator/index.ts`: callLLM attaches
     // `_lllmCallId` to the first toolCall OR to the AssistantMessage
     // itself when the stop is text-only.
     const jsonl = JSON.stringify({

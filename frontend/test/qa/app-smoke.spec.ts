@@ -1,14 +1,14 @@
 /**
  * QA app smoke (Tests/QA/Evals Arch V2 — Phase 5). Deterministic synthetic
  * check of a deployment — login works, the app loads with hydrated Redux, and
- * the chat surface is present. No LLM call (zero cost; the real-LLM eval is Phase 6).
+ * the chat surface is present. No LLM call (zero cost; the real-LLM flows live in
+ * chat-flow.spec.ts).
  *
  * Uses the runtime opt-in (`?e2e=<secret>`) for Redux assertions; falls back to
  * DOM-only where the store isn't available.
  */
-import { test, expect } from '@playwright/test';
 import { getState } from '@/test/flows/e2e';
-import { e2eUrl } from './flows';
+import { test, expect, e2eUrl } from './flows';
 
 test('deployment is healthy: authenticated, store hydrated, chat surface present', async ({ page }) => {
   // Opt into store exposure for this session (tutorial mode).

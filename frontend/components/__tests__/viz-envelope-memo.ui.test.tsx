@@ -1,5 +1,5 @@
 /**
- * Vega envelope memoization (Renderer_v2 Phase 7, §1.3 lever 2): VegaChart's build effect is
+ * Vega envelope memoization: VegaChart's build effect is
  * keyed on envelope IDENTITY — a parent that reconstructs the envelope object every render
  * forces a full Vega view rebuild (finalize + re-parse + re-render) on every unrelated
  * re-render. QuestionVisualization's legacy bridge (`resolveLegacyRenderEnvelope`) must

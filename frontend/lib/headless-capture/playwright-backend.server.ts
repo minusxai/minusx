@@ -1,5 +1,5 @@
 /**
- * Playwright backend for headless story capture (Story_Design_V2 §6c).
+ * Playwright backend for headless story capture.
  *
  * Spawns headless Chromium from Node in the same container, loads the story page (`/f/[id]`)
  * exactly as a browser user would — same route, same iframe, same `svg[data-mx-story-svg]`

@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * Download menu for a V2 (Vega/Vega-Lite envelope) chart — the parity of the V1 chart
- * download (image + CSV), as a React overlay rather than baked-in ECharts graphics.
+ * Download menu for a V2 (Vega/Vega-Lite envelope) chart — image + CSV, rendered as a
+ * React overlay on the chart rather than as marks inside the chart itself.
  *
  * - Image (.jpg): the envelope rendered off-screen through Vega's canvas (real tiles),
  *   via the shared client image renderer + JPEG encoder.

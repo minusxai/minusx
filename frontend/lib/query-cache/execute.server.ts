@@ -1,6 +1,6 @@
 /**
  * executeQueryCached — the ONE chokepoint for cached query execution, now fully
- * STREAMING write-through (arch doc §1, §3–5).
+ * STREAMING write-through (CLAUDE.md, "Query data plane").
  *
  *   fresh   → serve blob (cache stream, no execution)
  *   stale   → serve blob NOW + fire-and-forget background revalidation (lease)
@@ -47,12 +47,6 @@ export interface CachedExec {
    */
   parameterTypes?: Record<string, string>;
   /**
-   * Composed-query references ({id, alias}). The route CTE-composes these into a different final
-   * SQL, so two requests with identical raw SQL+params but different refs must not share a blob.
-   * Keyed by id+alias in order (order affects the composed SQL).
-   */
-  references?: Array<{ id: number; alias?: string }>;
-  /**
    * Force a fresh execution that refreshes the cache, bypassing the fresh/stale
    * serve (the "Run query" button). Still lease-guarded, so concurrent forced
    * runs don't stampede the warehouse.
@@ -86,8 +80,8 @@ const HEARTBEAT_MS = Math.max(5_000, Math.floor(QUERY_CACHE_LEASE_MS / 3));
 
 function cacheKey(opts: CachedExec): string {
   const base = `${opts.mode}:${getQueryHash(opts.query, opts.params, opts.connectionName)}`;
-  // Fold in the facets getQueryHash omits but that change the executed SQL/result. Omit the suffix
-  // entirely when neither is present so existing keys are unchanged (back-compat, no needless
+  // Fold in the facet getQueryHash omits but that changes the executed SQL/result. Omit the suffix
+  // entirely when it is absent so existing keys are unchanged (back-compat, no needless
   // cold cache for the common no-types case). parameterTypes canonicalized (key-sorted)
   // so map order doesn't fork the key.
   const hasTypes = opts.parameterTypes && Object.keys(opts.parameterTypes).length > 0;

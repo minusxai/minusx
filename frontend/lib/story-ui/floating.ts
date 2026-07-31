@@ -5,8 +5,10 @@
  * (fixed positioning resolves against the nearest SVG viewport, not the page,
  * so Radix's viewport-relative coordinates land in the wrong place entirely).
  *
- * The vendored tooltip/popover components therefore render WITHOUT a Portal
- * (content stays inline inside the story root), but Radix's Popper still wraps
+ * The vendored popover never uses a Portal, and the vendored tooltip drops its
+ * Portal when the nearest TooltipProvider is `portalled={false}` (which
+ * StoryJsxBody sets) — so in a story, content stays inline inside the story
+ * root. Radix's Popper still wraps
  * the content in an internal `[data-radix-popper-content-wrapper]` div that it
  * styles with `position: fixed`. There is no `strategy` prop on the Radix
  * Content components to change this, so the story stylesheet must force the

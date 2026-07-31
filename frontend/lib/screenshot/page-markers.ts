@@ -72,10 +72,10 @@ export function visibleMarkers(
 
 /**
  * Marker label + its y in OUTPUT-image pixels, given the capture's content scale (output px per
- * document px). The capture layer draws the badge text at each `y`; because the badge glyphs
- * themselves are sized in fixed output px (not scaled), they stay legible however hard the content
- * shrank — only their POSITION tracks the content. Pure so the alignment is unit-tested without a
- * canvas.
+ * document px) — the same `y * scale` the capture layer applies when it paints each badge. The
+ * badge box/glyphs there are scaled too, but with a legibility FLOOR (draw-markers.ts), so a hard
+ * content downscale shrinks the badges only down to that floor. Pure so the alignment is
+ * unit-tested without a canvas.
  */
 export function markerDrawPositions(
   docHeightPx: number,

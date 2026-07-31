@@ -1,5 +1,5 @@
 /**
- * In-page drivers for the B2 dashboard-surface matrix (Renderer_v2 Phase 4, re-hosted on the
+ * In-page drivers for the B2 dashboard-surface matrix (re-hosted on the
  * Phase 8 self-contained iframe surface) — bundled into the capture-matrix browser bundle.
  * Everything here drives the REAL shipped modules: the actual `DashboardSurface` host (iframe +
  * svg surface + nested root + chrome stylesheet), the actual story-serializer capture path the

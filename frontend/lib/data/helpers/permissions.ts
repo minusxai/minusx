@@ -49,7 +49,8 @@ export function checkFileAccess(file: DbFile, user: EffectiveUser): boolean {
 
 /**
  * Check if path is a system path that non-admins can access
- * System paths: /database/* (connections), /logs/conversations/{userId}/* (user conversations)
+ * System paths: /database/* (connections), /logs/conversations/{userId}/* (user conversations),
+ * /logs/runs/* (job run outputs)
  *
  * @param path - File path to check
  * @param user - Effective user
@@ -118,7 +119,9 @@ function isAncestorContext(file: DbFile, user: EffectiveUser): boolean {
  * Checks in order:
  * 1. Type access (role-based)
  * 2. Mode isolation (all users)
- * 3. Path access (admin = full in mode, non-admin = home folder)
+ * 3. Path access (admin = full in mode, non-admin = home folder minus system subtrees)
+ * 4. Non-admin fallback: accessible system paths (isAccessibleSystemPath)
+ * 5. Non-admin fallback: ancestor context files (isAncestorContext)
  *
  * @param file - The file to check access for
  * @param user - The effective user
@@ -152,7 +155,7 @@ export function canAccessFile(file: DbFile, user: EffectiveUser, overrides?: Acc
     return true;
   }
 
-  // Non-admin: Check system path access (database, user conversations)
+  // Non-admin: Check system path access (database, user conversations, job runs)
   if (isAccessibleSystemPath(file.path, user)) {
     return true;
   }

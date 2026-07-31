@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * Tile windowing (Renderer_v2 Phase 7): a dashboard question tile renders as a lightweight
+ * Tile windowing: a dashboard question tile renders as a lightweight
  * layout GHOST until it comes within `OVERSCAN_PX` of the viewport; once mounted it STAYS
  * mounted (no unmount thrash on scroll — the win is initial mount cost).
  *

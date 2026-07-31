@@ -475,20 +475,6 @@ function internalAttachName(name: string, datasetKey?: string): string {
   return datasetKey ? `__ds_${datasetKey}__${name}` : name;
 }
 
-/**
- * Build a single benchmark NodeConnector for one connection. Idempotent
- * with respect to the shared DuckDBInstance: sqlite/duckdb entries route
- * through a process-wide singleton (`getOrCreateShared`) with idempotent
- * `ensureAttached`, so repeated calls for the same name are cheap and
- * safe. Other dialects (postgres, bigquery, …) fall through to
- * `getNodeConnector`.
- *
- * Used by `BaseExecuteQuery._initialiseConnectors` / `BaseSearchDBSchema._initialiseConnectors`
- * to lazily wire up connectors from `ctx.connections[*]` on each tool
- * invocation. The single in-memory `:memory:` DuckDBInstance with all
- * dataset files ATTACHed is preserved across tool calls (one thread
- * pool, one buffer cache).
- */
 export interface BenchmarkConnectorOptions {
   /**
    * Dataset-scoped namespace for the ATTACH alias inside the shared
@@ -511,6 +497,20 @@ export interface BenchmarkConnectorOptions {
  */
 const SCRATCH_CONNECTION_NAME = '_scratch';
 
+/**
+ * Build a single benchmark NodeConnector for one connection. Idempotent
+ * with respect to the shared DuckDBInstance: sqlite/duckdb entries route
+ * through a process-wide singleton (`getOrCreateShared`) with idempotent
+ * `ensureAttached`, so repeated calls for the same name are cheap and
+ * safe. Other dialects (postgres, bigquery, …) fall through to
+ * `getNodeConnector`.
+ *
+ * Used by `BaseExecuteQuery._initialiseConnectors` / `BaseSearchDBSchema._initialiseConnectors`
+ * to lazily wire up connectors from `ctx.connections[*]` on each tool
+ * invocation. The single in-memory `:memory:` DuckDBInstance with all
+ * dataset files ATTACHed is preserved across tool calls (one thread
+ * pool, one buffer cache).
+ */
 export async function getOrCreateBenchmarkConnector(
   name: string,
   dialect: string,

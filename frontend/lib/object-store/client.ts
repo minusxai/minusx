@@ -6,9 +6,10 @@
  *   2. PUT the file directly to the returned uploadUrl (S3 or local route)
  *   3. Return the publicUrl for use in attachments, markdown, etc.
  *
- * When USE_BASE64_UPLOADS=true (server-side env), the upload-url API returns
- * uploadUrl='base64:' as a sentinel. The client embeds the content as a base64
- * data URL instead of uploading anywhere.
+ * When USE_BASE64_UPLOADS=true (server-side env) AND the content type is an
+ * image, the upload-url API returns uploadUrl='base64:' as a sentinel. The
+ * client embeds the content as a base64 data URL instead of uploading anywhere.
+ * Anything else still gets a real upload URL.
  */
 
 export interface UploadResult {
@@ -45,7 +46,7 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 /**
  * Upload a blob and return a usable URL.
  * Handles two cases based on the uploadUrl returned by the server:
- *   'base64:'         → embed as base64 data URL (USE_BASE64_UPLOADS=true)
+ *   'base64:'         → embed as base64 data URL (USE_BASE64_UPLOADS + image type)
  *   anything else     → PUT to the URL (S3 presigned or local FS route), return publicUrl
  */
 export async function uploadBlobOrEmbed(

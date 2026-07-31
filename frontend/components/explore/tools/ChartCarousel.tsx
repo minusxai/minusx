@@ -136,9 +136,8 @@ export default function ChartCarousel({
   const safeIndex = Math.min(activeIndex, Math.max(0, count - 1));
   const current = successful[safeIndex] ?? null;
 
-  // Proactive GUI-compatibility check: dim the GUI tab when the current query can't
-  // be parsed into the builder IR (this is a read-only preview, but entering GUI on
-  // an unparseable query would just show a "cannot be edited" message).
+  // Read-only preview: the settings panel offers SQL + Viz only (no Semantic tab), so nothing
+  // here gates on whether the query parses into the semantic/builder IR.
   const dialect = connectionTypeToDialect('');
 
   const [localContent, setLocalContent] = useState<QuestionContent | null>(current?.question ?? null);

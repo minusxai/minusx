@@ -1,15 +1,15 @@
 /**
  * SemanticExplorer — the single-surface semantic editor that replaces
- * SemanticCanvas. TOP: the shelves first (selected Measures / Dimensions /
+ * SemanticCanvas. TOP: the shelves first (selected Metrics / Dimensions /
  * Time / Filters chips + Limit), then a compact strip with the model chip,
  * field search and Run button. BELOW: the full field vocabulary split into
- * two click-to-toggle columns — Dimensions (with Time beneath) | Measures
+ * two click-to-toggle columns — Dimensions (with Time beneath) | Metrics
  * (every metric type in one list). No drag and drop: every field has exactly
  * one home, so a click is unambiguous. Every edit compiles REAL SQL
  * client-side and emits spec + SQL + viz columns.
  *
  * With no spec yet the columns give way to the AUTHORED-MODEL picker
- * (Semantic_Model_v2.md §2.4 — the UI lists models, dimensions and metrics,
+ * (the UI lists models, dimensions and metrics,
  * never raw tables), so a fresh question can always start a semantic query.
  */
 import React from 'react';

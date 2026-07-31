@@ -1,5 +1,5 @@
 /**
- * Neutral font-asset mechanism (Story_Design_V2 §4/§11 Phase 2): the PLATFORM provides story fonts
+ * Neutral font-asset mechanism: the PLATFORM provides story fonts
  * for jsx stories — a theme registry maps theme name → font assets (family + static asset URL), and
  * `getStoryFontCss` turns the active theme's entries into @font-face CSS. The live view loads fonts
  * by URL (cacheable static assets under /fonts); the data-URI form exists only in the capture-time

@@ -14,8 +14,8 @@ export { NodeConnector } from './base';
 
 /**
  * Factory: return a NodeConnector for the given type, or null if the type is unknown.
- * All analytics connector types (postgresql, bigquery, athena, duckdb, csv, google-sheets)
- * are all handled by the Node.js connectors.
+ * Every supported type (postgresql, bigquery, athena, duckdb, sqlite, csv,
+ * google-sheets, internal_db, mongo, clickhouse) is handled by a Node.js connector.
  *
  * CSV routing:
  *   - S3-backed format (files array) → CsvConnector (in-memory DuckDB + httpfs)

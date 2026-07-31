@@ -141,7 +141,9 @@ export function conversationDisplayName(
  * Extracts user messages, tool calls, and debug entries from log
  *
  * @param log - Conversation log entries
- * @returns Array of user messages, completed tool calls, and debug entries
+ * @param errors - Optional parallel `errors[]` rows, merged in as `role:'error'` messages
+ * @returns Array of user messages, completed tool calls, debug entries, and (when `errors`
+ *          is given) error rows, re-sorted by created_at
  */
 export function parseLogToMessages(log: ConversationLogEntry[], errors?: ErrorLogEntry[]): any[] {
   const messages: any[] = [];
@@ -165,7 +167,8 @@ export function parseLogToMessages(log: ConversationLogEntry[], errors?: ErrorLo
         });
       }
 
-      // Otherwise, this is a tool call task - store it until we see its result
+      // Every task (the main one included) is also stored until its result shows up, so the
+      // task_result branch below can pair them into a completed tool call.
       pendingTasks.set(entry.unique_id, entry);
 
     } else if (entry._type === 'task_result') {

@@ -7,8 +7,8 @@
  * lives); the header just renders them. No Redux command bus, no per-type
  * coupling — any file view can register actions.
  *
- * Present (reading) mode is handled separately as a generic per-file flag
- * (uiSlice.filePresent) that FileHeader toggles for presentable types.
+ * Present (fullscreen) mode is handled separately by PresentationContext, which
+ * FileHeader toggles for presentable types.
  */
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 

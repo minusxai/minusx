@@ -1,6 +1,6 @@
 /**
  * Regenerate lib/story-ui/recipe-classes.ts — the Tailwind candidate tokens used by the
- * vendored shadcn component sources (Story_Design_V2 §3). The per-story compile extracts
+ * vendored shadcn component sources. The per-story compile extracts
  * candidates from STORY markup only; component chrome classes (rounded-xl, shadow-sm, …)
  * live in the component sources, so they are pre-extracted here and unioned at compile
  * time for format:'jsx' stories.
@@ -19,7 +19,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const COMPONENTS_DIR = join(ROOT, 'components', 'kit');
 
-// Re-skinned EMBED CHROME (Renderer_v2 Phase 3): these render INSIDE stories (portaled into the
+// Re-skinned EMBED CHROME: these render INSIDE stories (portaled into the
 // iframe), so their Tailwind classes must be part of every story's compiled CSS — the mirror no
 // longer carries them once Chakra leaves the embed tree. Add each re-skinned embed file here.
 export const EMBED_CHROME_FILES = [

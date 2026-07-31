@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 /**
  * serializeEditedStory rebuilds a clean `content.story` string from the live
- * (edited) shadow-root DOM. It must undo everything AgentHtml does at render so
+ * (edited) surface-root DOM. It must undo everything AgentHtml does at render so
  * the saved HTML round-trips: drop the injected app-styles tag, restore each
  * chart embed to its authored empty placeholder (size from data-mx-osz), strip
  * contenteditable attributes, and re-insert the hoisted @import font lines.
  */
 import { serializeEditedStory } from '@/lib/html/serialize-story';
 
-/** Build a stand-in for AgentHtml's live shadow root after render + editing. */
+/** Build a stand-in for AgentHtml's live surface root after render + editing. */
 function makeRoot(): HTMLDivElement {
   const root = document.createElement('div');
   root.innerHTML =
@@ -37,7 +37,7 @@ describe('serializeEditedStory', () => {
   });
 
   it('drops every render-injected data-mx-* style node (compiledCss, floating css, fonts)', () => {
-    // Styles now live INSIDE the story root (Story_Design_V2 §4 self-contained doc), so every save
+    // Styles now live INSIDE the story root (self-contained doc), so every save
     // path reading root contents must strip them — else derived CSS compounds into content.story.
     const root = document.createElement('div');
     root.innerHTML =
@@ -106,10 +106,11 @@ describe('serializeEditedStory', () => {
 
 /**
  * AgentHtml renders `sanitizeAgentHtml(html)` — which wraps the authored story in a single
- * `<div data-mx-story-root>` — into the iframe <body>, and calls serializeEditedStory(doc.body).
- * The body ALSO holds non-story siblings (the hidden embed-root host, and Ark popover/menu DOM
- * that inline widgets portal to the body). Two historical bugs bloated content.story on every save:
- *   (1) serialize returned the WHOLE body incl. the wrapper → each load+save re-nested the story;
+ * `<div data-mx-story-root>` — into the surface root, and calls serializeEditedStory on that root.
+ * The root can hold non-story siblings (on the dom surface it IS the iframe <body>, which also
+ * carries the hidden embed-root host and Ark popover/menu DOM portaled to the body). Two historical
+ * bugs bloated content.story on every save:
+ *   (1) serialize returned the WHOLE root incl. the wrapper → each load+save re-nested the story;
  *   (2) it captured the body-level Ark popover portals as if they were prose.
  * These tests pin the fixed behaviour: serialize the wrapper's CONTENT only, collapse any nested
  * wrappers accumulated by prior saves, and strip leaked Ark runtime DOM ([data-scope]).

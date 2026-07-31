@@ -121,7 +121,7 @@ export function isUnderSystemFolder(physicalPath: string, mode: Mode): boolean {
  * File types that are allowed in system folders
  * - connection: must be in /database
  * - config: must be in /configs or /config
- * - conversation, session: allowed in /logs
+ * - session, report_run, alert_run, context_run: allowed in /logs
  * - connector: allowed in /recordings
  */
 const SYSTEM_FOLDER_ALLOWED_TYPES = {

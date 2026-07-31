@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * The V2 table source renderer (RFC §10: the DOM tier) — a thin envelope adapter
+ * The V2 table source renderer (the DOM tier) — a thin envelope adapter
  * over the REAL TableV2, so every table capability (sorting, faceted filters,
  * column visibility/resize, virtualization, stats, CSV, drilldown, header format
  * editor) is reused wholesale.

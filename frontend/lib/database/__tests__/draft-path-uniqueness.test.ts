@@ -62,10 +62,9 @@ describe('draft path uniqueness (partial unique index)', () => {
   });
 });
 
-// EXISTING-DEPLOYMENT migration path: a pre-existing DB has the legacy global UNIQUE(path)
-// constraint (files_path_key). The fresh-DB tests above never exercise the DROP — this runs the
-// REAL shipped migration statements against a DB that has the constraint, to prove they cleanly
-// drop it and install the partial index. Uses raw PGLite so we control the starting (legacy) state.
+// EXISTING-DEPLOYMENT migration path: a pre-existing DB carried the legacy global UNIQUE(path)
+// constraint (files_path_key), and a test here used to run the shipped DROP against a DB in that
+// starting state, since the fresh-DB tests above never exercise it.
 // The one-time upgrade off the legacy global UNIQUE(path) constraint shipped in
 // 4972cb58 (2026-06-25) and ran on every boot thereafter, so no live database still
 // carries it. The statement — and the test that exercised it — are retired; the

@@ -1,5 +1,5 @@
 /**
- * Story_Design_V2 §4 — self-contained story document on the (now default) svg surface:
+ *  — self-contained story document on the (now default) svg surface:
  *
  *  1. The svg surface is the DEFAULT: AgentHtml mounts the story body inside <svg><foreignObject>
  *     with no explicit `surface` prop (there is no user-facing renderer setting anymore).

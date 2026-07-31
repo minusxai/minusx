@@ -1,22 +1,24 @@
 /**
- * Rebuild a clean `content.story` string from AgentHtml's live (edited)
- * shadow-root DOM, undoing everything AgentHtml mutated at render time so the
- * saved HTML round-trips losslessly:
+ * Rebuild a clean `content.story` string from AgentHtml's live (edited) surface DOM — the
+ * surface root in the live path, a detached Element when healing a stored string, or a
+ * ShadowRoot — undoing everything AgentHtml mutated at render time so the saved HTML
+ * round-trips losslessly:
  *
  *  - drop the injected `<style data-mx-app-styles>` (mirrored app CSS, not part
  *    of the story);
- *  - restore each chart embed (`[data-question-id]` saved, `[data-question-inline]`
- *    inline) to its authored EMPTY placeholder — clear the portal-rendered chart DOM
- *    and put back the original inline style snapshotted in `data-mx-osz` (AgentHtml
- *    clamps width/height at render, so the live style is not what was authored);
+ *  - restore each embed placeholder (`[data-question-id]` saved, `[data-question-inline]`
+ *    inline, `[data-number-inline]` inline number) to its authored EMPTY form — clear the
+ *    portal-rendered DOM and put back the original inline style snapshotted in
+ *    `data-mx-osz` (AgentHtml clamps width/height at render, so the live style is not
+ *    what was authored);
  *  - strip the `contenteditable` attributes added for inline editing;
  *  - re-insert the `@import` web-font lines AgentHtml hoisted out of the story's
  *    `<style>` into `document.head` (otherwise the saved story loses its fonts).
  *
- * Operates on a clone, so the live (still-displayed) shadow root is untouched.
+ * Operates on a clone, so the live (still-displayed) surface root is untouched.
  */
 // AgentHtml-injected style tags that are NOT part of the authored story and
-// must be stripped on save. Styles live INSIDE the story root now (Story_Design_V2 §4: the
+// must be stripped on save. Styles live INSIDE the story root now (the
 // serialized <svg> must carry them without head-cloning), so every save path reading root
 // contents drops the whole data-mx-* family — else derived CSS compounds into content.story:
 // the app-styles mirror, the fluid/mobile shim, the compiled design-system css (data-mx-tw),
@@ -40,10 +42,11 @@ export function serializeEditedStory(
   root: Element | ShadowRoot | DocumentFragment,
   imports: string[] = [],
 ): string {
-  // Scope to the authored story wrapper. AgentHtml passes the whole iframe <body>, which also
-  // holds non-story siblings (the hidden embed-root host, body-level Ark popover/menu portals) —
-  // taking the wrapper's children alone drops them. Fall back to `root` when there is no wrapper
-  // (unit tests pass bare content).
+  // Scope to the authored story wrapper. AgentHtml passes the SURFACE ROOT — the <foreignObject>
+  // div on the svg surface, and the iframe <body> itself on the dom surface, where the wrapper has
+  // non-story siblings (the hidden embed-root host, body-level Ark popover/menu portals). Taking
+  // the wrapper's children alone drops them. Fall back to `root` when there is no wrapper (unit
+  // tests pass bare content).
   const storyRoot = root.querySelector(STORY_ROOT_SELECTOR);
   const source: Element | ShadowRoot | DocumentFragment = storyRoot ?? root;
 

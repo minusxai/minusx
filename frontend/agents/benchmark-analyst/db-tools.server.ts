@@ -1,7 +1,7 @@
 // Production DB tools. Extends `Base*` variants from `./db-tools` to plug
-// in the server-side `runQuery` / `loadConnectionSchema` chokepoints.
+// in the server-side `runQueryStream` / `loadConnectionSchema` chokepoints.
 //
-// Server-only: `runQuery` transitively imports `ConnectionsAPI` →
+// Server-only: `runQueryStream` transitively imports `ConnectionsAPI` →
 // `auth-helpers` → `next-auth`, none of which load in a plain Node CLI
 // process. The benchmark CLI imports `./db-tools` (Base classes only) and
 // never reaches this file.
@@ -44,17 +44,15 @@ import type { QueryIR } from '@/lib/sql/ir-types';
 /**
  * Production ExecuteQuery variant. Overrides `_initialiseConnectors` to a
  * no-op (production context carries no embedded connector configs) and
- * routes the fallback through `runQuery`, which goes via
- * `ConnectionsAPI.getRawByName` + `getNodeConnector` — the standard
- * production seam.
+ * routes the fallback through the durable query cache over `runQueryStream`,
+ * which goes via `ConnectionsAPI.getRawByName` + `getNodeConnector` — the
+ * standard production seam.
  *
  * Overrides `static schema` with the no-`timeout` variant: the production
- * path (`_executeFallback` → `runQuery`) does not yet honour the query
+ * path (`_executeFallback` → `runQueryStream`) does not honour the query
  * timeout, so the param + its description are hidden here rather than
- * advertising a capability the production tool doesn't deliver. Wiring
- * the timeout through the production path is tracked in Tasks.md; restore
- * the full schema once that lands. `schema.name` is unchanged, so the LLM
- * still sees one consistent tool name.
+ * advertising a capability the production tool doesn't deliver.
+ * `schema.name` is unchanged, so the LLM still sees one consistent tool name.
  */
 export class ExecuteQuery extends BaseExecuteQuery {
   static override readonly schema: Tool<TSchema> = {
@@ -65,7 +63,7 @@ export class ExecuteQuery extends BaseExecuteQuery {
 
   protected override async _initialiseConnectors(): Promise<void> {
     // No-op: production context.connections is metadata-only (no `config`).
-    // Query execution goes through `runQuery` via the fallback hook below.
+    // Query execution goes through `runQueryStream` via the fallback hook below.
   }
 
   protected override async _executeFallback(
@@ -79,7 +77,7 @@ export class ExecuteQuery extends BaseExecuteQuery {
         'ExecuteQuery: missing effectiveUser on agent context — cannot resolve connection. This is a server bug; please report.',
       );
     }
-    // Route through the SHARED durable cache (arch doc §5): an agent query and a
+    // Route through the SHARED durable cache (`lib/query-cache`): an agent query and a
     // UI query of the same SQL+params in the same mode hit one blob + SWR. The
     // cache is best-effort, so a DB/blob hiccup degrades to direct execution.
     //
@@ -99,7 +97,7 @@ export class ExecuteQuery extends BaseExecuteQuery {
     return result;
   }
 
-  /** Server-side Vega → JPEG render of the result viz via the V1→V2 bridge (used when rawData is off). */
+  /** Server-side Vega → JPEG render of the result viz via the V1→V2 bridge (rendered regardless of rawData; rawData only keeps the rows too). */
   protected override async _renderVizJpeg(
     queryResult: QueryResult,
     vizSettings: unknown,
@@ -149,10 +147,10 @@ export class SearchDBSchema extends BaseSearchDBSchema {
 }
 
 /**
- * Production FuzzyMatch tool.
- * execution shares `executeFuzzyMatch` with the v1 Next.js handler so v1 and v2
- * behave identically. `semantic_expansion` is advertised for schema parity but
- * not acted on (matching the v1 handler, which runs a single fuzzy match).
+ * Production FuzzyMatch tool. Executes through `executeFuzzyMatch`
+ * (lib/connections/fuzzy-match-tool.ts). `semantic_expansion` is advertised for
+ * schema parity with the benchmark `FuzzyMatch` but is NOT acted on here — this
+ * variant always runs a single fuzzy match.
  */
 const FuzzyMatchParams = Type.Object({
   connection_id: Type.String({ description: 'Database connection name' }),

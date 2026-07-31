@@ -1,5 +1,5 @@
 /**
- * Story interpreter (Story_Design_V2 §2): validated static-JSX AST → React elements over an
+ * Story interpreter: validated static-JSX AST → React elements over an
  * injected component registry. No eval, ever — the AST is data, the registry is code we ship.
  *
  * Runs in the PARENT React tree; the caller portals the result into the story iframe's root
@@ -15,6 +15,9 @@ import React from 'react';
 import type { JsxNode, JsxElement } from '@/lib/jsx';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import { hasDangerousScheme, listHasDangerousScheme } from '@/lib/jsx/validate';
+// Shared with the save-time gate in lib/jsx/validate.ts — see lib/jsx/url-attrs.ts
+// for why these must not be maintained separately.
+import { URL_ATTRS as URL_PROPS, URL_LIST_ATTRS as URL_LIST_PROPS } from '@/lib/jsx/url-attrs';
 
 export interface StoryInterpreterOptions {
   /** Component registry: shadcn components + embeds. Unknown component tags render nothing. */
@@ -48,8 +51,6 @@ const VALUE_CONTROLLED_TAGS = immutableSet(['Tabs', 'Accordion']);
 const DENIED_PROPS = immutableSet(['dangerouslysetinnerhtml', 'ref', 'key', 'srcdoc', 'is']);
 
 /** URL-bearing props, lowercase (scheme-filtered; list-valued ones checked per entry). */
-const URL_PROPS = immutableSet(['href', 'src', 'action', 'formaction', 'poster', 'background', 'cite', 'data', 'xlinkhref', 'ping']);
-const URL_LIST_PROPS = immutableSet(['srcset', 'ping']);
 
 export const AST_PATH_ATTR = 'data-mx-ast';
 

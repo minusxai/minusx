@@ -421,7 +421,7 @@ describe('Completions SQL IR - E2E Tests', () => {
 
       const result = await CompletionsAPI.irToSql({ ir: invalidIR, dialect: 'postgres' });
 
-      // Should still attempt to generate, but may produce invalid SQL
+      // No `from` → generation fails and the error is surfaced, not silently emitted as bad SQL
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();
     });

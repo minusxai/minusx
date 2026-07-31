@@ -1,7 +1,8 @@
 /**
- * Mirrors the document's stylesheet rules into a shadow root so portaled
- * chart components (Chakra/emotion class-based styles) render correctly inside
- * the shadow tree — document styles don't match shadow content.
+ * Mirrors the app residue the surface document still needs — the static base guards below plus
+ * the top document's `@font-face` rules — into a surface root (the story/dashboard iframe
+ * `Document`, or a `ShadowRoot`). Document styles don't reach another realm, and self-hosted
+ * next/font faces are declared only in the app's sheets. See `mirrorAppStyles` for the contract.
  *
  * Kept in its own module so the UI test environment can mock it to a no-op:
  * in jsdom, reading `cssRules`/`cssText` is a slow JS reimplementation (not
@@ -53,7 +54,7 @@ const APP_STYLES_BASE_CSS =
 
 
 /**
- * The 6a mirror shrink (Renderer_v2): of everything the document's stylesheets contain, ONLY
+ * The 6a mirror shrink: of everything the document's stylesheets contain, ONLY
  * `@font-face` rules still belong in the story iframe — embed chrome is compiled into every
  * story's CSS (kit + EMBED_CHROME_FILES recipe union) and Chakra never reaches the iframe.
  * Relative url()s (self-hosted font src) are absolutized against each sheet's own location so
@@ -67,7 +68,7 @@ export function collectFontFaceCss(rules: Array<{ cssText: string; base: string 
 }
 
 /**
- * Fill the shadow root's dedicated app-styles tag with the SHRUNK app residue: the static
+ * Fill the surface root's dedicated app-styles tag with the SHRUNK app residue: the static
  * base guards (chart-fill, min-width guard, marquee) + the document's `@font-face` rules
  * (read from cssRules — link sheets carry the self-hosted next/font faces). Everything else
  * the mirror used to carry (the Chakra/emotion CSSOM, ~43% of ~455KB per story) is gone:

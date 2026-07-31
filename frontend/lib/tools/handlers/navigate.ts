@@ -14,8 +14,8 @@ export const navigateHandler: FrontendToolHandler = async (args, context) => {
 
   // Navigation is always user-confirmed in NORMAL chat (an accidental LLM navigation is cheap to
   // prevent). Remote Agent Sessions are the exception: the user granted STANDING consent by
-  // minting the session (the banner + Stop button are always visible, and REMOTE_AGENT_SESSIONS.md
-  // §9.4 makes the external agent the sole driver), and agent workflows navigate on every file
+  // minting the session (the banner + Stop button are always visible, and the session holds the
+  // conversation exclusively while active), and agent workflows navigate on every file
   // hop — per-hop confirms would make the experience unusable.
   const isRemoteSession = Object.values(state?.chat?.conversations ?? {}).some(
     (c) => (c as { remoteSession?: { active?: boolean } } | undefined)?.remoteSession?.active,

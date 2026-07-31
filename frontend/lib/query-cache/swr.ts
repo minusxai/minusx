@@ -1,7 +1,9 @@
 /**
  * Pure SWR classification — no I/O, fully unit-testable. Decides how a cache row
- * should be treated at time `now`. The execution lease is acquired ONLY for the
- * states that execute (`miss`, `stale` → background, `expired`), never for `fresh`.
+ * should be treated at time `now`. On the classification path the execution lease
+ * is acquired only for the states that execute (`miss`, `stale` → background,
+ * `expired`) and never for `fresh`; `forceRefresh` skips classification entirely
+ * and takes the lease regardless (see execute.server's `resolve`).
  */
 import type { QueryCacheRow } from './types';
 

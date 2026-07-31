@@ -33,7 +33,7 @@ interface ReportViewProps {
   onChange: (updates: Partial<ReportContent>) => void;
   onRunNow: (opts: RunOptions) => Promise<void>;
   onSelectRun?: (runId: number | null) => void;
-  /** Dev-only page-marker preview (Renderer_v2 Phase 1): this type is marker-flagged. */
+  /** Dev-only page-marker preview: this type is marker-flagged. */
   showDevMarkers?: boolean;
   colorMode?: 'light' | 'dark';
 }

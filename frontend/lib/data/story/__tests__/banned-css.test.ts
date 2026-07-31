@@ -1,5 +1,5 @@
 /**
- * Banned story CSS (Story_Design_V2 §4): one constant module feeding every enforcement point.
+ * Banned story CSS: one constant module feeding every enforcement point.
  *
  *  1. `position: fixed` / `position: sticky` — containing-block semantics break inside
  *     foreignObject, so a fixed element would render somewhere else in the capture.

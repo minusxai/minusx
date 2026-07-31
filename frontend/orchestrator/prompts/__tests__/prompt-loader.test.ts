@@ -100,7 +100,7 @@ prompts:
 
 // Skills are templates
 // whose keys start with `skill_`; HIDDEN_SKILLS (the nav skills) are dropped
-// when skipHidden is set; get_skill resolves nested template refs but does NOT
+// when skipHidden is set; getSkill resolves nested template refs but does NOT
 // run variable substitution (so `{{` JSON escapes stay literal — matching the
 // preloaded-skills injection path).
 const SKILLS = tree(`

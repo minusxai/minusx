@@ -1,6 +1,6 @@
 /**
  * The app-state screenshot is captured LAZILY — ONLY on send, when the image is actually needed.
- * There is no speculative warming: a synchronous multi-second snapdom rasterize must never fire on
+ * There is no speculative warming: a synchronous multi-second rasterize must never fire on
  * a view change (agent edit / query revalidation / theme toggle / GUI tweak) while the user edits
  * or types. That was the "every time I make changes it takes screenshots and the app hangs" bug.
  *
@@ -10,7 +10,7 @@
  *  - A changed view (different markup / query result / colorMode) invalidates the cache → re-capture.
  *  - disabled / non-file app states are pass-through (no capture, no image).
  *  - A capture that THROWS is the only case that sends without an image (best-effort: a broken
- *    snapdom must not wedge the send) — it returns the app state unchanged.
+ *    capture must not wedge the send) — it returns the app state unchanged.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
@@ -124,7 +124,7 @@ describe('appStateWithFileScreenshot (the ONLY capture path — lazy, on send)',
   });
 });
 
-// Markers are gated by ONE declared flag in FILE_TYPE_METADATA (Renderer_v2 §2b), replacing the
+// Markers are gated by ONE declared flag in FILE_TYPE_METADATA, replacing the
 // old story-only isStoryAppState check. Full-flow document types are flagged; internally-scrolled
 // (question) and admin/form types (connection/context — h:'none' but NOT rendered documents, the
 // over-match review finding) are not.

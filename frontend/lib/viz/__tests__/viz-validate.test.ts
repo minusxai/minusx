@@ -1,5 +1,5 @@
 /**
- * ValidateVisualization pipeline (RFC §11) — the agent feedback contract.
+ * ValidateVisualization pipeline — the agent feedback contract.
  * Written RED-first per house TDD; validateVizEnvelope is implemented against these.
  */
 import { describe, it, expect } from 'vitest';

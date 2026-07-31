@@ -1,5 +1,5 @@
 /**
- * StoryThemePicker (Story_Design_V2 §5) — the settings picker is rendered FROM the theme
+ * StoryThemePicker — the settings picker is rendered FROM the theme
  * registry: one option per STORY_THEMES entry (label + description + preview image) plus a
  * "Default" option that clears the field. Selection reports the theme name (or null) via
  * onChange. aria-label-only queries per repo test rules.

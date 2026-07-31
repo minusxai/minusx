@@ -22,7 +22,7 @@ export const runtime = 'nodejs';
  * The frontend rebuilds the chat from `messages[].content`.
  * Readable by the owner (same mode) or any admin by direct id; mutations below stay owner-only.
  *
- * Conversations V2 (see /conversations-v2.md): the default `display` view projects each entry
+ * Conversations V2 (see CLAUDE.md "Chat serving"): the default `display` view projects each entry
  * to display-grade size (LLM-only payloads stripped); `view=full` (dev mode) returns the
  * verbatim log. `since` returns only rows with seq > since (incremental post-turn reload);
  * `maxSeq` in the response lets the client detect server-side truncation (retry/replay) and

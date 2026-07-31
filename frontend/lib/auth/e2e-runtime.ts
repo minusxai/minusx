@@ -1,5 +1,5 @@
 /**
- * Runtime E2E opt-in (Tests/QA/Evals Arch V2 — Phase 5 enabler).
+ * Runtime E2E opt-in.
  *
  * Lets a QA session opt into E2E affordances (exposing `window.__MX_STORE__`) on
  * a normal production build via `?e2e=<E2E_RUNTIME_SECRET>`, without baking the

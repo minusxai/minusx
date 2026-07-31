@@ -48,7 +48,7 @@ export default function StylesContainerV2({
     } as StylesContent;
   }, [file]);
 
-  // Save handler - uses save() from hook (handles both create and update)
+  // Save handler - publishFile persists the staged changes (a draft already has a real id)
   const handleSave = useCallback(async () => {
     if (!currentContent || typeof fileId !== 'number') return;
 

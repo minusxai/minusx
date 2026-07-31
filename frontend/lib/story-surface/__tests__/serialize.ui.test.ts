@@ -194,7 +194,7 @@ describe('serializeStorySvg — self-contained root', () => {
     expect(img.getAttribute('src')).toBe('/hero.png');
   });
 
-  // CAPTURE PARITY (Story_Design_V2 §4 "no fidelity fork"): the serialized SVG's intrinsic size is
+  // CAPTURE PARITY ("no fidelity fork"): the serialized SVG's intrinsic size is
   // its width/height ATTRIBUTES, while every capture site derives its output box from the LIVE svg's
   // element box. A surface pinned wider than the container the user sees would serialize that wider
   // layout — the agent's screenshot would show content the reader cannot. So whatever width the

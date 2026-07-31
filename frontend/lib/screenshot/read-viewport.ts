@@ -6,7 +6,7 @@
  * The file view ([data-file-id]) is laid out at its full height in the page, so the WINDOW scrolls,
  * not the element: `-rect.top` is how far the document's top has scrolled above the viewport's top.
  *
- * On top of the window position, the pointer carries PER-ELEMENT scroll offsets (Story_Design_V2
+ * On top of the window position, the pointer carries PER-ELEMENT scroll offsets (
  * §4): internal scroll (a wide table, a code pane) is DOM state — the capture bakes it in visually
  * as transforms, and this is the matching TEXTUAL fix so the agent knows what is scrolled where.
  */

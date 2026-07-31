@@ -1,6 +1,6 @@
 /**
  * Multi-measure Y (the classic yCols case): dropping a second quantitative column
- * onto Y creates a `fold` transform (RFC §4 — wide data dissolves into fold), with
+ * onto Y creates a `fold` transform (wide data dissolves into fold), with
  * y = folded value + color = measure key. Further drops append; removals unfold
  * back to a plain field when one measure remains. Agent-authored folds (default
  * ['key','value'] output names) are recognized and extended, not duplicated.

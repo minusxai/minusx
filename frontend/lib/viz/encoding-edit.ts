@@ -250,7 +250,7 @@ const withMark = (spec: Record<string, unknown>, type: string): void => {
     : { type };
 };
 
-/** Native-spec viz types (recipes and the DOM table route through setEnvelopeVizType instead). */
+/** Native-spec viz types (recipes and the DOM-tier table/pivot route through setEnvelopeVizType instead). */
 export type SpecVizType = Exclude<V2VizType, 'table' | 'pivot' | 'combo' | 'funnel' | 'waterfall' | 'radar' | 'trend' | 'single_value' | 'choropleth' | 'point_map'>;
 
 /** Switch a unit (or annotated-unit) spec's viz type, transforming encodings where the
@@ -581,7 +581,7 @@ export function getEnvelopeVizType(envelope: VizEnvelope): V2VizType | null {
 }
 
 /**
- * Whether an envelope renders to a CHART image (Viz Arch V2 §21 item 2). Everything
+ * Whether an envelope renders to a CHART image. Everything
  * except the DOM-tier table/pivot sources is image-able — vega-lite, native vega (incl.
  * detached specs), and every recipe. Mirrors the ECharts `isImageViz` gate but for V2.
  */
@@ -686,7 +686,8 @@ export function removeZoneField(envelope: VizEnvelope, channel: string, name: st
   return setZoneField(envelope, channel, null);
 }
 
-/** Assign/remove a zone's column. Recipe bindings are required — removal is a no-op there. */
+/** Assign/remove a zone's column. A REQUIRED recipe binding cannot be cleared — removal is
+ *  a no-op there; optional bindings are removable. */
 export function setZoneField(
   envelope: VizEnvelope,
   channel: string,
@@ -935,7 +936,7 @@ export function setRecipeParam(envelope: VizEnvelope, key: string, value: unknow
   return next;
 }
 
-// ── DOM-tier sources (RFC §10: table + pivot) ───────────────────────────────────────
+// ── DOM-tier sources (table + pivot) ───────────────────────────────────────
 //
 // Both persist display state. Tables additionally persist wrapColumns because wrapping
 // changes row geometry and must be known to the virtualizer; it is not merely CSS.
@@ -1027,7 +1028,7 @@ export function setPivotConfig(envelope: VizEnvelope, config: PivotConfig): VizE
 
 // ── Multi-measure Y (the classic yCols case) ────────────────────────────────────────
 //
-// A second quantitative column on Y folds the measures (RFC §4: wide data → `fold`),
+// A second quantitative column on Y folds the measures (wide data → `fold`),
 // y reads the folded value and color the measure key. Agent-authored folds using the
 // default output names ('key'/'value') are recognized and extended rather than
 // wrapped in a second fold.
@@ -1469,7 +1470,7 @@ export function setSeriesColor(
 
 // ── Channel presentation (the zone-chip settings popover) ──────────────────────────
 //
-// Alias and format are NATIVE spec properties (RFC §6): alias = the channel's
+// Alias and format are NATIVE spec properties: alias = the channel's
 // `title`; format = a d3 pattern on `axis.format` for positional channels, or the
 // field def's `format` where there is no axis (theta). Surgical edits only.
 

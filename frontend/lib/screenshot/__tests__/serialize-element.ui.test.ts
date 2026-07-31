@@ -1,5 +1,5 @@
 /**
- * Generic app-page serialization capture (Story_Design_V2 §4) — replaces snapdom for
+ * Generic app-page serialization capture — replaces snapdom for
  * dashboards/questions/notebooks: the target element is cloned into an in-memory
  * `<svg><foreignObject>` document with ALL same-origin document CSS inlined, the parsed-copy
  * fixup pass applied (scroll transforms, form-value stamping, canvas→<img> stamps, transient
@@ -131,7 +131,7 @@ describe('serializeElementToSvg', () => {
     document.documentElement.classList.remove('dark');
   });
 
-  // Renderer_v2 Phase 3/4: re-skinned views consume shadcn tokens declared under
+  // Re-skinned views consume shadcn tokens declared under
   // `[data-mx-theme-host]` / `.dark [data-mx-theme-host]` (app/theme-tokens.css). The live host
   // is an ANCESTOR outside the captured subtree (FileLayout's content root), so without a host
   // stamp in the wrapper every token-backed Tailwind style (bg-muted, text-foreground, chart

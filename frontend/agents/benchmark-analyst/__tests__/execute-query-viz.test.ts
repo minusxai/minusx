@@ -1,5 +1,5 @@
 /**
- * ExecuteQuery V2 viz-envelope image path (Viz Arch V2 §21 item 2/3). A `viz` envelope
+ * ExecuteQuery V2 viz-envelope image path. A `viz` envelope
  * on ExecuteQuery renders the chart IMAGE via `_renderVizEnvelopeJpeg` and wins over the
  * legacy `vizSettings`; a table envelope returns rows; legacy `vizSettings` still works.
  * Uses the `_executeFallback` seam to feed canned rows (no DB).

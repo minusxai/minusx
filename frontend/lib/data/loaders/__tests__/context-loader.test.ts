@@ -635,7 +635,7 @@ describe('Context Loader Integration with Versioning', () => {
       const { data: salesContexts } = await FilesAPI.loadFiles([salesContextId], nonAdminUser);
       const salesContent = salesContexts[0].content as ContextContent;
 
-      // Should see users table (from childPaths: ['/org/sales'])
+      // Should see users table (from childPaths: ['/org/testing/sales'])
       expect(salesContent.fullSchema).toBeDefined();
       const salesDb = salesContent.fullSchema!.find(d => d.databaseName === 'duckdb_main');
       expect(salesDb).toBeDefined();
@@ -647,7 +647,7 @@ describe('Context Loader Integration with Versioning', () => {
       const { data: marketingContexts } = await FilesAPI.loadFiles([marketingContextId], nonAdminUser);
       const marketingContent = marketingContexts[0].content as ContextContent;
 
-      // Should see orders table (from childPaths: ['/org/marketing'])
+      // Should see orders table (from childPaths: ['/org/testing/marketing'])
       expect(marketingContent.fullSchema).toBeDefined();
       const marketingDb = marketingContent.fullSchema!.find(d => d.databaseName === 'duckdb_main');
       expect(marketingDb).toBeDefined();
@@ -775,13 +775,13 @@ describe('Context Loader Integration with Versioning', () => {
         []
       );
 
-      // Nested child should see users (path matches /org/sales/*)
+      // Nested child should see users (path matches /org/testing3/sales/*)
       const { data: [nestedChild] } = await FilesAPI.loadFiles([nestedChildId], nonAdminUser);
       const nestedContent = nestedChild.content as ContextContent;
       const nestedTables = nestedContent.fullSchema![0].schemas[0].tables.map(t => t.table);
       expect(nestedTables).toContain('users');
 
-      // Unrelated child should NOT see users (path doesn't match /org/sales/*)
+      // Unrelated child should NOT see users (path doesn't match /org/testing3/sales/*)
       // Since parent only whitelists users, unrelated child should have empty fullSchema
       const { data: [unrelatedChild] } = await FilesAPI.loadFiles([unrelatedChildId], nonAdminUser);
       const unrelatedContent = unrelatedChild.content as ContextContent;
@@ -1127,7 +1127,7 @@ describe('Context Loader Integration with Versioning', () => {
     });
 
     it('getFiles without path filter returns both ancestor and home-folder contexts (Bug B)', async () => {
-      // This is exactly what ensureContextsLoaded() calls — no paths, type=context
+      // This is exactly what useContexts (lib/hooks/useContexts.ts) calls — no paths, type=context
       const result = await FilesAPI.getFiles({ type: 'context', depth: -1 }, subfolderViewer);
       const paths = result.data.map(f => f.path);
       expect(paths).toContain('/org/context');       // ancestor — via isAncestorContext

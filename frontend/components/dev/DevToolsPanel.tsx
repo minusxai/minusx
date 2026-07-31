@@ -26,7 +26,7 @@ interface DevToolsPanelProps {
   appState: AppState | null | undefined;
 }
 
-// OpenAI function tool schema format from describe_tool()
+// OpenAI function tool schema format served by /api/tools/schema (built from the TS registrables)
 interface ToolSchema {
   type: 'function';
   function: {
@@ -220,7 +220,7 @@ function ToolTester() {
   );
 }
 
-// ── Kit preview (Renderer_v2 Phase 3 conflict check) ─────────────────────────
+// ── Kit preview (conflict check) ─────────────────────────
 // Renders the shadcn kit next to live Chakra chrome, inside its own `data-mx-theme-host`
 // token scope — the permanent eyeball-check that main-document Tailwind tokens resolve and
 // neither system bleeds into the other. Dev-only by construction (this whole panel is).

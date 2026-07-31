@@ -45,7 +45,7 @@ describe('PresentationContext', () => {
 
   it('reports the Fullscreen API as supported', async () => {
     render(<PresentationProvider><Consumer /></PresentationProvider>);
-    // supported is set in an effect → flush
+    // supported comes from useSyncExternalStore's client snapshot → flush
     await act(async () => {});
     expect(screen.getByLabelText('supported').textContent).toBe('yes');
   });

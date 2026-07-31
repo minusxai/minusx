@@ -5,9 +5,10 @@
  * variant maps over this instead of restating every table, so the two can no longer
  * drift. See ./types.ts for why there is no raw-SQL field.
  *
- * Conversion is in progress — `postgres-schema.ts` is still the shipped source of
- * truth. Each table added here is checked against it by the equivalence test, which
- * asserts the rendered DDL produces exactly the same catalog.
+ * This is the shipped source of truth: `postgres-schema.ts` is now only
+ * `renderSchema(TABLES, …)`. The equivalence test still checks each table against the
+ * catalog the original hand-written SQL produced, which is the evidence that generating
+ * the DDL changed nothing about the database it builds.
  */
 
 import type { Schema } from './types';

@@ -25,7 +25,8 @@ const mockQuery = vi.fn(async (): Promise<QueryResult> => ({
 // Partial mock: only the connector factory is faked — the handle-table
 // helpers stay real so `storeHandle` / `clearHandles` exercise the real
 // shared DuckDB instance. (Real `FROM handle_xyz` joins against live data are
-// covered by execute-query.handle-tables.test.ts, which uses a real connector.)
+// covered by the `execute-query.handle-tables` block in catalog-agent-misc.test.ts,
+// which uses a real connector.)
 vi.mock('../../shared-duckdb', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../shared-duckdb')>()),
   getOrCreateBenchmarkConnector: vi.fn(async () => ({
@@ -201,10 +202,10 @@ describe('ExecuteQueryV2', () => {
     });
   });
 
-  // Real `FROM handle_xyz` join coverage lives in
-  // execute-query.handle-tables.test.ts — that test uses a real sqlite
-  // connector so the handle actually resolves as a table. A mocked connector
-  // here can't verify it (mockQuery ignores the SQL).
+  // Real `FROM handle_xyz` join coverage lives in the
+  // `execute-query.handle-tables` block of catalog-agent-misc.test.ts — that
+  // test uses a real duckdb fixture + connector so the handle actually resolves
+  // as a table. A mocked connector here can't verify it (mockQuery ignores the SQL).
 
   describe('duplicate column names — surfaces handle_error instead of renaming', () => {
     // When the agent issues `SELECT MIN(a) AS min, MIN(b) AS min`, the

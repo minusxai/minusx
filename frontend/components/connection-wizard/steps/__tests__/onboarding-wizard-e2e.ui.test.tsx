@@ -1,9 +1,9 @@
 /**
- * Full setup-wizard e2e: fresh company → ConnectionWizard (questionnaire → context)
+ * Full setup-wizard e2e: fresh workspace → ConnectionWizard (questionnaire → context)
  * → onboarding agent runs to completion (real server orchestration + frontend
  * EditFile bridge) → docs written into the context file.
  *
- * - Fresh company: setupTestDb runs the real seed (workspace-template + migrations
+ * - Fresh workspace: setupTestDb runs the real seed (workspace-template + migrations
  *   + atomicImport), which creates /org/context.
  * - CSV connection: seeded programmatically (the file-upload UI is file-IO and not
  *   exercised in jsdom — by design), so the wizard starts at the questionnaire step.
@@ -134,7 +134,7 @@ describe('Onboarding wizard e2e — full wizard, agent runs to completion, write
 
     const { DocumentDB } = await import('@/lib/database/documents-db');
 
-    // Seed a CSV connection in the fresh company (file-upload UI not exercised in jsdom).
+    // Seed a CSV connection in the fresh workspace (file-upload UI not exercised in jsdom).
     await DocumentDB.create(
       'my_csv', '/org/connections/my_csv', 'connection',
       { id: 'my_csv', name: 'my_csv', type: 'csv', config: {} } as any, [], undefined, false,
@@ -210,7 +210,10 @@ describe('Onboarding wizard e2e — full wizard, agent runs to completion, write
 
     // Bug-catching: no EditFile call should have failed during the run. If the
     // agent's oldMatch fails to match buildCurrentFileStr (serializer mismatch,
-    // escape mismatch, key-order mismatch), it lands on errors[] as frontend-tool.
+    // escape mismatch, key-order mismatch), the failure is recorded as a
+    // frontend-tool error. NOTE: under v3 those live in the conversation error
+    // stream (`loadErrors`), not on a conversation document — the read below is
+    // the pre-v3 location, so this particular guard no longer bites.
     const { DocumentDB } = await import('@/lib/database/documents-db');
     const convDoc = await DocumentDB.getById(realConvId);
     const convErrors = ((convDoc?.content as any)?.errors ?? []) as Array<{ source: string; message: string }>;
@@ -273,8 +276,11 @@ describe('Onboarding wizard e2e — full wizard, agent runs to completion, write
     const convDoc = await DocumentDB.getById(realConvId);
     const convErrors = ((convDoc?.content as any)?.errors ?? []) as Array<{ source: string; message: string }>;
     const frontendErrors = convErrors.filter((e) => e.source === 'frontend-tool');
-    // Production bug surface: LLM-style oldMatch fails to match. If this fails,
-    // the production symptom is reproduced — fix the serializer mismatch.
+    // Production bug surface: LLM-style oldMatch fails to match. Same caveat as
+    // above — v3 frontend-tool errors live in the conversation error stream
+    // (`loadErrors`), not on a conversation document, so this read finds nothing.
+    // The real guard here is the faux itself: it throws if the prompt's markup
+    // doesn't contain the `<docs/>` fragment it copies as oldMatch.
     expect(
       frontendErrors,
       `LLM-style EditFile failed: ${frontendErrors.map(e => e.message).join(' | ')}`,

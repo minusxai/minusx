@@ -4,10 +4,12 @@ import 'server-only';
  * Client for the MinusX gateway — the hosted service that provides model access
  * for MinusX-operated workspaces.
  *
- * Two env vars turn this on, and if either is missing NOTHING here runs. That
- * is the default, and the most important property in this file: an install must
- * never reach out to a hosted service because one variable happened to be set
- * in its environment.
+ * `MX_GATEWAY_SHARED_SECRET` alone turns this on, and without it NOTHING here
+ * runs. That is the default, and the most important property in this file: an
+ * install must never reach out to a hosted service by accident. The secret is
+ * the gate rather than the URL because `MX_GATEWAY_ORIGIN` carries a production
+ * default — every install already addresses that origin for inference — whereas
+ * the secret is issued by MinusX and a self-hosted install cannot obtain one.
  *
  * Everything is best-effort. Registration has already committed by the time
  * `createGatewayOrg` runs, so an outage degrades to "no gateway configured" —
@@ -35,8 +37,11 @@ function baseUrl(): string {
 }
 
 /**
- * Both variables, or nothing. Half-configured is OFF rather than an error, so
- * setting one by accident still leaves a working install.
+ * The shared secret is the switch. `baseUrl()` is checked too, but it reads
+ * `MX_GATEWAY_ORIGIN`, which defaults to the production origin and so is never
+ * empty — naming the gateway has to stay harmless on its own, since every
+ * install resolves inference against it. Missing secret is OFF rather than an
+ * error: a half-configured environment still leaves a working install.
  */
 export function gatewayEnabled(): boolean {
   return Boolean(baseUrl() && MX_GATEWAY_SHARED_SECRET);

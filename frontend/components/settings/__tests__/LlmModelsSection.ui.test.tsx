@@ -358,7 +358,7 @@ describe('LlmModelsSection', () => {
 
     await user.click(screen.getByLabelText('Add Core model'));
     expect(screen.getByLabelText('Core provider')).toBeInTheDocument();
-    // The reasoning-options gear is hidden for now (low is stored implicitly).
+    // The reasoning-options gear is hidden for now (low is stored explicitly).
     expect(screen.queryByLabelText('Core options')).not.toBeInTheDocument();
 
     await user.click(screen.getByLabelText('Save LLM configuration'));

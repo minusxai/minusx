@@ -50,7 +50,7 @@ export interface MigrationEntry {
   description: string;
 }
 
-// Template IDs (1–999 range) — these are never renumbered.
+// Every id the workspace template ships with — these are never renumbered.
 const TEMPLATE_IDS = immutableSet(
   (workspaceTemplate.documents as { id: number }[]).map(d => d.id)
 );
@@ -126,11 +126,11 @@ function v36ShiftUserFileIds(data: InitData): InitData {
 
 /**
  * Migration registry. All historical migrations (V33–V35) have been folded into
- * the initial seed data. MINIMUM_SUPPORTED_DATA_VERSION is now 35, so any export
- * below that version is rejected — re-import from a fresh export.
+ * the initial seed data. MINIMUM_SUPPORTED_DATA_VERSION is 35, so an export below
+ * that version is treated as if it were at 35 and run through the chain from there.
  */
 /**
- * V37 — Viz Arch V2: add a `viz` envelope to every question and notebook SQL cell
+ * V37 —: add a `viz` envelope to every question and notebook SQL cell
  * that lacks one, derived FILE-LEVEL from its `vizSettings` (no query execution —
  * column kinds come from vizSettingsToEnvelopeStatic's conservative name heuristic).
  *
@@ -304,7 +304,8 @@ export function fixData(data: InitData): InitData {
 
 /**
  * Apply all migrations to data starting from specified version.
- * Throws if data version is below MINIMUM_SUPPORTED_DATA_VERSION.
+ * Versions below MINIMUM_SUPPORTED_DATA_VERSION (including 0 for unversioned DBs)
+ * are clamped to the minimum — never rejected.
  */
 export function applyMigrations(data: InitData, fromDataVersion: number): InitData {
   // Clamp anything below minimum (including 0 for unversioned DBs) to minimum.

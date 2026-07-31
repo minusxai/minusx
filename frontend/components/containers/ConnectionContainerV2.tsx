@@ -4,10 +4,11 @@
  * ConnectionContainer V2 - Phase 2 Implementation
  * Smart component using Core Patterns with useFile hook and filesSlice
  *
- * Hybrid API approach for connections:
- * - CREATE: POST /api/connections initializes the connector + creates document
- * - UPDATE: PATCH /api/files/[id] → updates document only (Phase 2 pattern)
- * - DELETE: DELETE /api/connections/[name] → cleans up the connector + document
+ * Writes go through the unified file endpoints, not the connections API:
+ * publishFile → PATCH /api/files/[id] for both create and edit (a draft already
+ * carries a real id). The live connection test is a separate, user-driven action
+ * in ConnectionFormV2 (POST /api/connections/test) — saving does not require it
+ * to have passed; the schema is introspected by the connection loader on load.
  */
 import { useAppSelector } from '@/store/hooks';
 import { selectIsDirty, selectEffectiveName, type FileId } from '@/store/filesSlice';
@@ -88,8 +89,8 @@ export default function ConnectionContainerV2({
 
     try {
       if (mode === 'create') {
-        // Set the correct name and path on the draft before saving.
-        // Server validates both (name format, path matches /database/{name}, live connection test).
+        // Set the correct name and path on the draft before saving: a connection
+        // document is identified by its path, /database/{name} in the user's mode.
         const correctPath = resolvePath(userMode, `/database/${effectiveName}`);
         editFile({ fileId: fileId as number, changes: { name: effectiveName, path: correctPath } });
 

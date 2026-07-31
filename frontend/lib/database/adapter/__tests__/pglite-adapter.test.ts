@@ -5,11 +5,10 @@
  * Tests every DocumentDB operation end-to-end against an in-memory PGLite instance.
  * No SQLite files, no mocked db-config — PGLite is the only DB used here.
  *
- * Pattern: registerModules({ db: new DBModule() }) in beforeEach.
- * Re-calling registerModules() overrides the default test module from vitest.setup.ts.
+ * Pattern: registerModules({ db: new DBModule() }) once in beforeAll, then truncate
+ * between tests. Re-calling registerModules() overrides the default test modules from
+ * test/setup/vitest.setup.ts.
  */
-
-// Workspace mock is already in vitest.setup.ts (getWorkspaceId → 1, runWithWorkspace → no-op)
 
 import { DocumentDB } from '@/lib/database/documents-db';
 import { registerModules, getModules } from '@/lib/modules/registry';

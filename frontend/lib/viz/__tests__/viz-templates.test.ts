@@ -1,5 +1,5 @@
 /**
- * Shipped recipes (RFC §5 `recipe` source kind): the saved content is ONLY the
+ * Shipped recipes (`recipe` source kind): the saved content is ONLY the
  * reference {kind, recipe, bindings}; the spec materializes at render from the
  * code registry. These tests cover materialization, validation of the reference
  * (including bindings → real columns), and headless rendering.

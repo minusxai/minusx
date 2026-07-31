@@ -17,7 +17,9 @@ import { searchFilesInFolder } from '@/lib/search/file-search';
  *
  * Request body:
  * - query: string (required) - Search query
- * - file_types?: FileType[] - File types to search (default: ['question', 'dashboard'])
+ * - file_types?: FileType[] - File types to search (default: every user-facing
+ *   type — question, dashboard, story, notebook, report, alert, folder,
+ *   connection, context)
  * - folder_path?: string - Folder to search in (default: user's home folder)
  * - depth?: number - Folder depth to search (default: 999)
  * - limit?: number - Results per page (default: 20)

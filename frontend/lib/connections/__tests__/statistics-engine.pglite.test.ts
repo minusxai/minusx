@@ -1,12 +1,12 @@
 /**
  * High-fidelity tests for profilePostgres against a real Postgres engine (PGLite).
  *
- * Reproduces the production bug where a connection refresh on a TimescaleDB-flavored
- * Postgres wipes the cached schema to []. Root cause: profilePostgres drops every
- * table whose columns don't appear in pg_stats (empty when the role lacks SELECT
- * on the table OR when ANALYZE has never run). PGLite gives us a fresh, real
- * Postgres where we can recreate the empty-pg_stats state by simply not running
- * ANALYZE.
+ * Regression guard for the production bug where a connection refresh on a
+ * TimescaleDB-flavored Postgres wiped the cached schema to []. Root cause:
+ * profilePostgres dropped every table whose columns don't appear in pg_stats
+ * (empty when the role lacks SELECT on the table OR when ANALYZE has never run);
+ * it now emits plain columns instead. PGLite gives us a fresh, real Postgres
+ * where we can recreate the empty-pg_stats state by simply not running ANALYZE.
  */
 
 import { PGlite } from '@electric-sql/pglite';
@@ -71,8 +71,8 @@ describe('profilePostgres (PGLite-backed)', () => {
   it('preserves all tables when pg_stats is empty (regression: production wipe)', async () => {
     const result = await profileDatabase('postgresql', asSchemaList(), pgliteQueryFn(db));
 
-    // Should contain both tables — currently returns [] because every table
-    // is silently dropped via `continue` when pg_stats has no entries.
+    // Both tables must survive. The pre-fix code dropped every one of them via
+    // `continue` when pg_stats had no entries, returning [].
     const t1 = result.schema.find(s => s.schema === 's1')?.tables.find(t => t.table === 't1');
     const t2 = result.schema.find(s => s.schema === 's2')?.tables.find(t => t.table === 't2');
 

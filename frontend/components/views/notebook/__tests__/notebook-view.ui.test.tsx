@@ -2,7 +2,7 @@
  * NotebookView — a vertical, ordered list of cells. Each cell is either a full
  * inline SQL question (query + viz + connection + params + @refs) or a rich-text
  * cell. The view is presentational: it takes `content` + an `onChange` patch
- * callback and owns cell add/remove/reorder/update as pure array transforms.
+ * callback and owns cell add/insert/remove/update as pure array transforms.
  *
  * Heavy leaves are mocked: the rich-text editor, the visualization, the DB/viz
  * selectors, and useQueryResult (so a "run" yields a deterministic result row).

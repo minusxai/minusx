@@ -1,8 +1,8 @@
 /**
- * Custom useRouter hook that automatically preserves `as_user` and `mode` parameters
+ * Custom useRouter hook that automatically preserves `as_user`, `mode` and `view` parameters
  *
- * This hook wraps Next.js's useRouter and ensures that both impersonation
- * and mode parameters are preserved across client-side navigation.
+ * This hook wraps Next.js's useRouter and ensures that impersonation, mode
+ * and view parameters are preserved across client-side navigation (preserveParams).
  */
 
 'use client';

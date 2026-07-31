@@ -65,7 +65,7 @@ interface StoryViewProps {
  */
 export default function StoryView({ content, fileId, readOnly = false, headerEditMode, storyPath, storyName, colorMode, compiledCss, showDevMarkers = false }: StoryViewProps) {
   const numericId = typeof fileId === 'number' ? fileId : undefined;
-  // New-format story (Story_Design_V2 §2): content.story holds JSX source, rendered through the
+  // New-format story: content.story holds JSX source, rendered through the
   // lib/story-ui interpreter (AgentHtml format="jsx"); anything else is the legacy HTML path.
   const storyFormat = content.format === 'jsx' ? ('jsx' as const) : undefined;
   const canEdit = !readOnly && numericId !== undefined;

@@ -8,8 +8,9 @@
  * markup the agent actually reads/edits (File Architecture v2, `fileToMarkup`),
  * switchable via a JSON | XML sub-toggle.
  *
- * Rendered by FileView when the header's view mode is "Code" — the single place
- * the visual-vs-code decision now lives.
+ * Rendered by FileView when the header's view mode is "Code", and by
+ * ContextEditorV2 for a context file's own Code tab (which supplies
+ * `xmlContentTransform`, since context's agent view diverges from the file).
  */
 import { useState } from 'react';
 import { LuBraces, LuCode } from 'react-icons/lu';

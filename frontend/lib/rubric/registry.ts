@@ -1,6 +1,8 @@
 /**
  * Deterministic rubric entrypoint: maps a file type to its pure scorer and assembles the
- * report. This is what auto-inject, the CheckFileHealth tool, and the API route all call.
+ * report. This is what the client health badge, the EditFile/CreateFile/ReviewFile review path,
+ * the CheckFileHealth tool, and the rubric API route all call (the last two via
+ * `scoreFileDeterministicResolved` in `score-file.server.ts`).
  */
 import type { DeterministicContext, DeterministicScorer, RubricCategory, RubricFileType, RubricReport } from './types';
 import { buildReport } from './scoring';
@@ -19,7 +21,8 @@ const SCORERS: Record<RubricFileType, DeterministicScorer> = {
 /**
  * Which categories the DETERMINISTIC scorer actually evaluates per file type. Aesthetics is
  * judge-only for question/dashboard (no static beauty rules), so it's not claimed here — the
- * report marks it unassessed rather than a misleading 5/5. The judge assesses all three.
+ * report marks it unassessed rather than a misleading 5/5. The judge's checks are all
+ * `aesthetics`, so it fills exactly that gap.
  */
 const DETERMINISTIC_COVERAGE: Record<RubricFileType, RubricCategory[]> = {
   question: ['correctness', 'clarity'],

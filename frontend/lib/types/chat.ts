@@ -79,7 +79,7 @@ export interface ToolCall {
   id: string;
   type: 'function';
   function: {
-    name: string;           // Tool name (e.g., "GetMetadata", "ExecuteSQL")
+    name: string;           // Tool name (e.g., "SearchDBSchema", "ExecuteQuery")
     arguments: Record<string, any>;  // Always an object - HTTP response handles JSON serialization
     child_tasks_batch?: Array<Array<{  // Child results grouped by run_id (optional, runtime only, not persisted)
       tool_call_id: string;
@@ -158,7 +158,8 @@ export const ToolNames = {
 
 /**
  * Conversation Management Types
- * For file-based conversation storage with orchestration tasks
+ * The orchestrator log-entry shapes (still live — chat-translator, the MCP session
+ * logger, and `conversations.meta`) plus the legacy pre-v3 file-storage envelope.
  */
 
 /**
@@ -245,14 +246,17 @@ export interface MessageDebugInfo {
 }
 
 /**
- * Conversation file structure
- * Stored in /logs/conversations/{userId}/{conversationId}-{name}.chat.json
+ * Legacy pre-v3 conversation file structure — conversations of type `conversation`
+ * stored as documents under `/logs/conversations/`. Chat v3 moved live conversations
+ * into the dedicated `conversations`/`messages` tables; this shape survives only for
+ * reading historical rows.
  */
 /**
- * Append-only error log entry persisted on the conversation document alongside
- * the orchestrator log. NEVER sent to the LLM (filtered out of pi-ai context);
- * surfaced in the UI as a distinct ErrorMessage row. One entry per failure point —
- * LLM call, server tool, frontend tool, transport, persist, session, unhandled.
+ * Append-only error entry. Persisted by `appendError` as a `kind='error'`, `seq=NULL`
+ * row in the `messages` table — the NULL seq keeps it out of the contiguous pi-log
+ * index, so it is never sent to the LLM. Surfaced in the UI as a distinct error row
+ * per source. One entry per failure point — LLM call, server tool, frontend tool,
+ * transport, persist, session, unhandled.
  */
 export interface ErrorLogEntry {
   _type: 'error';
@@ -335,7 +339,8 @@ export interface CompressedAugmentedFile {
 /**
  * Unified `ReadFiles` tool output — the single shape every read path emits (frontend-bridge
  * and server/headless), identical in structure to the AppState `file` payload. Imported by
- * both `agents/analyst/file-tools.ts` and `lib/tools/tool-handlers.ts` so the envelope can't drift.
+ * both `agents/analyst/file-tools.ts` and `lib/tools/handlers/read-files.ts` so the envelope
+ * can't drift.
  */
 export interface ReadFilesResult {
   success: boolean;

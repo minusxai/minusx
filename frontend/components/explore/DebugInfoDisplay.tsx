@@ -143,7 +143,7 @@ export default function DebugInfoDisplay({ debugInfo }: DebugInfoDisplayProps) {
   const totalCost = debugInfo.llmDebug.reduce((sum, llm) => sum + llm.cost, 0);
   const totalLLMDuration = debugInfo.llmDebug.reduce((sum, llm) => sum + (llm.duration ?? 0), 0);
 
-  // Format duration (ms vs seconds). duration is optional — v=2 translator omits it.
+  // Format duration (ms vs seconds). Tolerates a missing/non-finite duration.
   const formatDuration = (seconds: number | undefined) => {
     if (seconds == null || !Number.isFinite(seconds)) return '—';
     if (seconds < 1) return `${Math.round(seconds * 1000)}ms`;

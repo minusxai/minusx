@@ -178,9 +178,9 @@ export const DATE_FORMAT_OPTIONS = [
 const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const FULL_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
-/** Format a date string using a Unicode date pattern (yyyy, MM, dd, HH, mm, ss, MMM, MMMM). */
+/** Format a date string using a Unicode date pattern (yyyy, yy, MM, dd, HH, mm, ss, MMM, MMMM). */
 export const formatDateValue = (dateStr: string, format: string): string => {
-  // ECharts time axis passes epoch-ms as numbers; Number("1704096000000") is finite
+  // Callers may pass epoch-ms as a numeric string; Number("1704096000000") is finite
   // but new Date("1704096000000") returns Invalid Date — must use new Date(number)
   const numeric = Number(dateStr)
   const d = Number.isFinite(numeric) && String(numeric) === dateStr
@@ -212,7 +212,7 @@ export const formatDateValue = (dateStr: string, format: string): string => {
     .replace('ss', pad(seconds))
 }
 
-// Resolve format configs for chart axes (shared by PiePlot, FunnelPlot, and buildChartOption)
+// Resolve format configs for chart axes from a question's columnFormats.
 export const resolveChartFormats = (
   columnFormats?: Record<string, ColumnFormatConfig>,
   xAxisColumns?: string[],

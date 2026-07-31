@@ -23,9 +23,9 @@ import { VIEWS_SCHEMA, type ViewDef } from '@/lib/types/views';
 import type { AnyQueryIR, QueryIR, TableReference } from '@/lib/sql/ir-types';
 
 /**
- * A view whose SQL is known. Question-backed views are hydrated from their
- * question before resolution (lib/views/views.server.ts) — the resolver itself
- * never touches the database.
+ * A view whose SQL is known to be non-empty (views.server.ts drops the blank
+ * ones before handing them over) — the resolver itself never touches the
+ * database.
  */
 export type HydratedView = ViewDef & { sql: string };
 
@@ -201,9 +201,9 @@ export async function resolveViewsInSql(
 
   // View CTEs come first: the user's own CTEs may read them, never the reverse.
   if (isCompoundQueryIR(ir)) {
-    // A compound (UNION) query has no top-level CTE slot — wrap each branch's
-    // refs are already rewritten; attach the CTEs to the first branch, which is
-    // where the generator emits the WITH clause.
+    // A compound (UNION) query has no top-level CTE slot; every branch's refs are
+    // already rewritten, so attach the CTEs to the FIRST branch — the generator
+    // emits that branch's WITH clause at the top of the whole statement.
     ir.queries[0].ctes = [...viewCtes, ...(ir.queries[0].ctes ?? [])];
   } else {
     const simple = ir as QueryIR;

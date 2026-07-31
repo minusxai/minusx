@@ -1,6 +1,6 @@
 /**
- * Agent question authoring + parameter-driven querying (e2e, faux LLM, real browser + real query
- * execution against tutorial data). Two integration flows the lower layers can't cover end-to-end:
+ * Agent question authoring + parameter handling (e2e, faux LLM, real browser; query EXECUTION is
+ * out of scope — see below). Two integration flows the lower layers can't cover end-to-end:
  *
  *  1. The agent (faux LLM) issues a real CreateFile tool call that the BROWSER bridges through Redux
  *     → a new question lands as a DRAFT in the store (the core "ask, and it builds it" path).
@@ -64,9 +64,9 @@ test('a question parameter round-trips: a value lands in parameterValues, None s
   test.skip(!q, 'no seeded question available to exercise params against');
   const fileId = q.id as number;
 
-  // Rewrite the seeded question's SQL to a self-contained parameterized query via the API — the value
-  // typed for `:myval` is echoed straight back, so the result cell is a direct, deterministic proof
-  // the parameter reached the connector. Preserving the seeded content keeps its WORKING connection
+  // Rewrite the seeded question's SQL to a self-contained parameterized query via the API — a single
+  // `:myval` with no table dependency, so the param row is deterministic to locate and set.
+  // Preserving the seeded content keeps its WORKING connection
   // (a brand-new question has no selectable DB in tutorial). Done over the API rather than by driving
   // Monaco, whose view layer intercepts pointer events and makes editor-clear flaky.
   const full = await (await request.get(`/api/files/${fileId}?mode=${mode}`)).json();

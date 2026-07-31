@@ -1,5 +1,5 @@
 /**
- * JSX story render path (Story_Design_V2 §2) — AgentHtml `format="jsx"`.
+ * JSX story render path — AgentHtml `format="jsx"`.
  *
  * A new-format story's `content.story` holds STATIC JSX source; AgentHtml parses it
  * (lib/jsx) and renders it through the story interpreter (lib/story-ui) into the same
@@ -108,7 +108,7 @@ describe('AgentHtml format="jsx" — shadcn components in the iframe', () => {
   });
 
   it('injects the floating-element CSS inside the story root (absolute-positioned poppers)', async () => {
-    // In-root, not head (Story_Design_V2 §4): the serialized <svg> subtree must carry it.
+    // In-root, not head: the serialized <svg> subtree must carry it.
     render(<AgentHtml html={TABS_JSX} format="jsx" width={800} colorMode="light" />);
     const doc = iframeDoc();
     await waitFor(() => expect(doc.querySelector('[data-mx-story-root] style[data-mx-floating]')).toBeTruthy());

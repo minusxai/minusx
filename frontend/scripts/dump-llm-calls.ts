@@ -26,7 +26,7 @@ interface Message {
   /** `callLLM` attaches `_lllmCallId` here for text-only stops (no
    *  toolCalls to hang it off). For tool-use stops it lives on the
    *  first toolCall content item instead. See
-   *  `lib/chat-translator/index.ts:240-242`. */
+   *  `lib/chat-translator/index.ts`. */
   _lllmCallId?: string;
 }
 

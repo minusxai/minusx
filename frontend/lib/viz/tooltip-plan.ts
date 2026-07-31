@@ -1,5 +1,5 @@
 /**
- * Shared multi-series tooltip (Viz Arch V2) — the ECharts "axis tooltip" for V2 cartesian
+ * Shared multi-series tooltip — the ECharts "axis tooltip" for V2 cartesian
  * charts: hovering an x shows EVERY series at that x with a color swatch, not just the one
  * mark under the cursor. This module is the PURE core (plan + aggregation + HTML); the DOM
  * handler + color scale + vertical guide line live in `VegaChart` (browser).
@@ -78,10 +78,6 @@ const foldFields = (spec: Record<string, unknown>, yField: string): string[] | n
   return null;
 };
 
-/**
- * Build a shared-tooltip plan from a unit Vega-Lite spec, or null when the chart isn't a
- * shared-x cartesian (line/area/bar with a categorical/temporal x).
- */
 /** Combo recipe: layered bar+line with independent Y over a shared x → a dual-measure plan. */
 function comboPlan(spec: Record<string, unknown>): TooltipPlan | null {
   const layers = spec.layer;
@@ -147,6 +143,12 @@ function waterfallPlan(spec: Record<string, unknown>): TooltipPlan | null {
   };
 }
 
+/**
+ * Build a shared-tooltip plan from a spec, or null when the chart isn't shared-x. The
+ * combo and waterfall recipes are recognized structurally first; otherwise a unit (or
+ * annotated-unit) line/area/bar/point/boxplot spec plans off its x/y channels. Everything
+ * else — pie, heatmap, maps, an unbinned bar on a quantitative x (row) — returns null.
+ */
 export function buildTooltipPlan(spec: Record<string, unknown>): TooltipPlan | null {
   const combo = comboPlan(spec);
   if (combo) return combo;

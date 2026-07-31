@@ -41,10 +41,15 @@ export const fauxRegistration = registerFauxProvider({
 const FAUX_MODEL = fauxRegistration.getModel();
 
 /**
- * Browser-side analyst. Inherits the full RemoteAnalystAgent toolset (DB
- * tools + ReadFiles/SearchFiles) and adds three frontend-only tools that
- * pause the orchestrator via UserInputException. The Redux listener
- * middleware calls `executeToolCall()` for them and resumes.
+ * Browser-side analyst. Inherits the RemoteAnalystAgent DB tools and adds the
+ * frontend-bridged tools (EditFile, CreateFile, DetachViz, ReadFiles, Navigate,
+ * ReviewFile, ClarifyFrontend, PublishAll), which pause the orchestrator via
+ * UserInputException. The Redux listener middleware calls `executeToolCall()`
+ * for them and resumes. LoadContext runs server-side; LoadSkill resolves system
+ * skills server-side AND any user-defined Knowledge Base skill whose body the
+ * server-built catalog already carries, bridging to the browser only for a
+ * catalog name it could not resolve — which is why the headless paths (Slack,
+ * reports, cron), where no browser can answer, still work.
  */
 export class WebAnalystAgent extends RemoteAnalystAgent {
   static readonly schema: Tool<typeof RemoteAnalystAgent.schema.parameters> = {

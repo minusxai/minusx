@@ -1,10 +1,11 @@
 /**
  * Serialize a static-JSX AST back to jsx text — the inverse of {@link parseJsx}.
  *
- * The `jsx` body of a document file is stored as its parsed AST (jsonb); the agent reads
- * and edits it as jsx text, so we need a faithful AST→text serializer. Round-trips with
- * parseJsx: `parseJsx(serializeJsx(parseJsx(src).nodes))` is stable (formatting may
- * normalize, but structure + text/SQL/CSS leaves are preserved).
+ * The `jsx` body of a document file is stored as jsx TEXT, but every edit path works on the
+ * parsed AST (the content⇄jsx converter, the WYSIWYG write-back in lib/data/story/jsx-edit.ts),
+ * so we need a faithful AST→text serializer. Round-trips with parseJsx:
+ * `parseJsx(serializeJsx(parseJsx(src).nodes))` is stable (formatting may normalize, but
+ * structure + text/SQL/CSS leaves are preserved).
  *
  * - string attribute value → `name="value"`; any other JSON literal → `name={<json>}`.
  * - text child → raw; static-string expression child → a template literal `{`…`}` (so

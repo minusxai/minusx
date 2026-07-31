@@ -1,5 +1,5 @@
 /**
- * Story_Design_V2 §5 — `--chart-1..5` drive Vega chart colors.
+ *  — `--chart-1..5` drive Vega chart colors.
  *
  * The token→range mapping is a pure function (chartTokenRange) tested here; the DOM wrapper
  * resolves computed style from the chart's container so charts recolor with the surrounding

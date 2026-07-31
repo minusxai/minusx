@@ -1,5 +1,5 @@
 /**
- * m2m compilation (Semantic_Model_v2.md §5, M3): grain-preserving dedup-bridge
+ * m2m compilation: grain-preserving dedup-bridge
  * CTE for m2m dimensions, semi-join for m2m filters — proven against real
  * DuckDB with the fixture where a naive join double-counts (order 1 carries
  * two tags), re-authoring the executed derisk scenarios as regression tests.
@@ -125,7 +125,7 @@ describe('m2m dimensions — dedup-bridge CTE, grain-preserving', () => {
     const naive = await run(
       'SELECT SUM(orders.amount) FROM orders JOIN order_tags ON orders.id = order_tags.order_id JOIN tags ON order_tags.tag_id = tags.id',
     );
-    expect(Number(naive[0][0])).toBeGreaterThan(250); // 275 with the duplicate bridge row — inflated either way
+    expect(Number(naive[0][0])).toBeGreaterThan(250); // 350 on the distinct bridge rows, 450 with the duplicate — inflated either way
   });
 
   it('LEFT semantics: untagged orders appear once under a NULL group', async () => {

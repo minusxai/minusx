@@ -5,8 +5,8 @@
  * vocabulary. `import type` only from the server channel — types are erased, so
  * this file never pulls the `server-only` module into the Playwright process.
  *
- * `client` is Playwright's `APIRequestContext` (typed structurally here so this
- * compiles before Playwright is installed in Phase 4).
+ * `client` is Playwright's `APIRequestContext`, typed structurally here so this
+ * module carries no Playwright import.
  */
 import type { FauxMatchDTO } from '@/lib/test/faux-llm-channel.server';
 
