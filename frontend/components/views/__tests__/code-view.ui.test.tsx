@@ -1,9 +1,9 @@
 /**
- * CodeView — the admin "Code view" body: an editable JSON tab plus a read-only
- * XML tab showing the exact agent-facing markup (fileToMarkup). A small JSON|XML
+ * CodeView — the admin "Code view" body: editable JSON and XML tabs, with XML
+ * showing the exact agent-facing markup (fileToMarkup). A small JSON|XML
  * sub-toggle switches between them. All element queries by aria-label per repo
  * convention (the Monaco mock labels the editor textarea "<LANG> editor"; the
- * sub-toggle buttons are labelled "JSON" / "XML").
+ * sub-toggle buttons are labelled "File" / "Markup").
  *
  * As of M4.2, CodeView no longer reads Redux itself — `persistableContent`/
  * `mergedContent` are sourced by the caller (ContextEditorV2 / FileView) and
@@ -19,6 +19,7 @@ import * as storeModule from '@/store/store';
 import { setFile, selectPersistableContent, selectMergedContent } from '@/store/filesSlice';
 import CodeView from '@/components/views/CodeView';
 import { shapeContextForAgent } from '@/lib/context/context-agent-view';
+import type { ContextContent } from '@/lib/types';
 
 const FILE_ID = 4242;
 
@@ -99,17 +100,49 @@ describe('CodeView', () => {
     expect(screen.queryByLabelText('XML editor')).not.toBeInTheDocument();
   });
 
-  it('shows the read-only agent XML markup when the XML sub-toggle is clicked', () => {
+  it('shows editable agent XML markup when the XML sub-toggle is clicked', () => {
     const store = setup();
     renderWithProviders(<CodeView fileId={FILE_ID} fileType="question" {...contentProps(store, FILE_ID)} editable />, { store });
 
-    fireEvent.click(screen.getByLabelText('XML'));
+    fireEvent.click(screen.getByLabelText('Markup'));
 
     const xml = screen.getByLabelText('XML editor') as HTMLTextAreaElement;
     expect(xml.value).toContain('<query');
     expect(xml.value).toContain('SELECT 1');
-    expect(xml.readOnly).toBe(true);
+    expect(xml.readOnly).toBe(false);
     expect(screen.queryByLabelText('JSON editor')).not.toBeInTheDocument();
+  });
+
+  it('stages edits made in the agent XML markup', () => {
+    const store = setup();
+    renderWithProviders(<CodeView fileId={FILE_ID} fileType="question" {...contentProps(store, FILE_ID)} editable />, { store });
+
+    fireEvent.click(screen.getByLabelText('Markup'));
+    const xml = screen.getByLabelText('XML editor') as HTMLTextAreaElement;
+    fireEvent.change(xml, { target: { value: xml.value.replace('SELECT 1', 'SELECT 2') } });
+
+    const saved = store.getState().files.files[FILE_ID];
+    const content = { ...saved.content, ...saved.persistableChanges } as Record<string, unknown>;
+    expect(content.query).toBe('SELECT 2');
+  });
+
+  it('shows a parse error and does not stage invalid agent XML markup', () => {
+    const store = setup();
+    renderWithProviders(<CodeView fileId={FILE_ID} fileType="question" {...contentProps(store, FILE_ID)} editable />, { store });
+
+    fireEvent.click(screen.getByLabelText('Markup'));
+    fireEvent.change(screen.getByLabelText('XML editor'), { target: { value: '<query>' } });
+
+    expect(screen.getByLabelText('XML editor error')).toBeInTheDocument();
+    expect(store.getState().files.files[FILE_ID].persistableChanges).toEqual({});
+  });
+
+  it('keeps agent XML read-only when the file is not editable', () => {
+    const store = setup();
+    renderWithProviders(<CodeView fileId={FILE_ID} fileType="question" {...contentProps(store, FILE_ID)} editable={false} />, { store });
+
+    fireEvent.click(screen.getByLabelText('Markup'));
+    expect((screen.getByLabelText('XML editor') as HTMLTextAreaElement).readOnly).toBe(true);
   });
 
   it('JSON tab is read-only when not editable', () => {
@@ -124,10 +157,10 @@ describe('CodeView', () => {
     const store = setup();
     renderWithProviders(<CodeView fileId={FILE_ID} fileType="question" {...contentProps(store, FILE_ID)} editable />, { store });
 
-    fireEvent.click(screen.getByLabelText('XML'));
+    fireEvent.click(screen.getByLabelText('Markup'));
     expect((screen.getByLabelText('XML editor') as HTMLTextAreaElement).value).toContain('<query');
 
-    fireEvent.click(screen.getByLabelText('JSON'));
+    fireEvent.click(screen.getByLabelText('File'));
     const json = screen.getByLabelText('JSON editor') as HTMLTextAreaElement;
     expect(json.value).toContain('"query"');
     expect(json.value).not.toContain('<query');
@@ -157,7 +190,7 @@ describe('CodeView', () => {
     expect(json.value).not.toContain('fullDocs');
 
     // Agent XML tab (agent view): flat, no version wrapper, no computed cache.
-    fireEvent.click(screen.getByLabelText('Agent XML'));
+    fireEvent.click(screen.getByLabelText('Markup'));
     const xml = screen.getByLabelText('XML editor') as HTMLTextAreaElement;
     expect(xml.value).not.toContain('<versions');
     expect(xml.value).not.toContain('fullSchema');
@@ -191,7 +224,7 @@ describe('CodeView', () => {
     expect(fileJson.value).not.toContain('fullSchema');
 
     // 2) Agent JSON — the flattened view (docs at top level, no version wrapper / whitelist).
-    fireEvent.click(screen.getByLabelText('Agent JSON'));
+    fireEvent.click(screen.getByLabelText('Agent'));
     const agentJson = screen.getByLabelText('JSON editor') as HTMLTextAreaElement;
     expect(agentJson.value).toContain('"docs"');
     expect(agentJson.value).toContain('# Live doc');
@@ -199,7 +232,7 @@ describe('CodeView', () => {
     expect(agentJson.value).not.toContain('whitelist');
 
     // 3) Agent XML — fileToMarkup of that same agent view.
-    fireEvent.click(screen.getByLabelText('Agent XML'));
+    fireEvent.click(screen.getByLabelText('Markup'));
     const xml = screen.getByLabelText('XML editor') as HTMLTextAreaElement;
     expect(xml.value).toContain('<docs>');
     expect(xml.value).toContain('# Live doc');
@@ -227,5 +260,23 @@ describe('CodeView', () => {
     expect(content.fullSchema).toBeDefined();
     expect(content.parentSchema).toBeDefined();
     expect(content.fullDocs).toBeDefined();
+  });
+
+  it('folds editable context agent XML back into the live version', () => {
+    const store = setupContext();
+    renderWithProviders(
+      <CodeView fileId={CTX_ID} fileType="context" {...contentProps(store, CTX_ID)} editable xmlContentTransform={shapeContextForAgent} />,
+      { store },
+    );
+
+    fireEvent.click(screen.getByLabelText('Markup'));
+    const xml = screen.getByLabelText('XML editor') as HTMLTextAreaElement;
+    fireEvent.change(xml, { target: { value: xml.value.replace('<docs/>', '<docs><item><content>New doc</content><title>Doc</title><description>Notes</description></item></docs>') } });
+
+    const saved = store.getState().files.files[CTX_ID];
+    const content = { ...saved.content, ...saved.persistableChanges } as unknown as ContextContent;
+    expect(content.versions?.[0]?.docs?.[0]?.content).toBe('New doc');
+    expect(content.versions?.[0]?.whitelist).toEqual([]);
+    expect(content.published).toEqual({ all: 1 });
   });
 });

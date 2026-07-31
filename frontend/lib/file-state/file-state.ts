@@ -7,7 +7,8 @@
  * working with zero changes:
  *
  *   - file-read.ts        — loadFiles, loadFileByPath, readFiles, readFilesByCriteria, readFolder
- *   - file-edit.ts         — editFile, editFileStr, applyJsonContentEdit, applyStoryHtmlEdit, replaceFileState
+ *   - file-edit.ts         — editFile, editFileStr, applyJsonContentEdit, applyMarkupContentEdit,
+ *                            applyStoryHtmlEdit, replaceFileState
  *   - file-publish.ts      — publishFile, publishAll
  *   - file-mutations.ts    — deleteFile, moveFile, batchMoveFiles, reloadFile, clearFileChanges,
  *                            discardAll, createDraftFile, duplicateFile, dryRunSave, createFolder

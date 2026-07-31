@@ -12,7 +12,7 @@ interface JsonEditorProps {
   readOnly?: boolean;
   /** External error (e.g. schema validation from the parent) shown in the banner */
   error?: string | null;
-  /** Monaco language. Defaults to 'json' (with parse validation). Use e.g. 'xml' for read-only markup. */
+  /** Monaco language. Defaults to 'json' (with parse validation). */
   language?: string;
 }
 
@@ -73,7 +73,7 @@ export default function JsonEditor({ value, onChange, originalValue, readOnly = 
     <Box>
       {displayError && (
         <Box
-          aria-label="JSON editor error"
+          aria-label={`${language.toUpperCase()} editor error`}
           mb={2}
           p={2}
           bg="accent.danger/10"
