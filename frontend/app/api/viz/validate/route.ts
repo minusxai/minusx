@@ -5,7 +5,7 @@ import { validateVizEnvelope } from '@/lib/viz/validate';
 import type { VizResultColumn } from '@/lib/viz/types';
 
 /**
- * POST /api/viz/validate — validate a Viz V2 envelope (RFC §11).
+ * POST /api/viz/validate — validate a Viz V2 envelope.
  *
  * The validator lives server-side only (the vendored 1.4MB Vega-Lite schema must
  * never ship to the browser); this route is how browser-side callers reach it —

@@ -350,7 +350,7 @@ describe('StoryView', () => {
   });
 
   // Design-system stories: the server-compiled Tailwind stylesheet (content.compiledCss) is
-  // injected INSIDE the story root as a data-mx-tw node (Story_Design_V2 §4 — the serialized
+  // injected INSIDE the story root as a data-mx-tw node (the serialized
   // <svg> must carry it without head-cloning), prepended before the story's own <style> blocks
   // so authored CSS wins ties; save paths strip it via INJECTED_STYLE_SELECTOR.
   describe('design-system CSS injection', () => {

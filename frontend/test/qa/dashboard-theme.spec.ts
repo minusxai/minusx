@@ -1,5 +1,5 @@
 /**
- * Themed-dashboard QA flow (Renderer_v2 Phase 6b). Mutating + click-driven for everything that
+ * Themed-dashboard QA flow. Mutating + click-driven for everything that
  * HAS a click path: create a dashboard, add a question, save. `content.theme` has NO UI — it is
  * an agent-set content field (skill_dashboards) — so it is written via the files API; what this
  * flow verifies is the RENDERER: the reopened dashboard stamps `data-theme`, resolves the theme's

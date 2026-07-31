@@ -1,5 +1,5 @@
 /**
- * SHIPPED recipe registry (RFC §5, the `recipe` source kind).
+ * SHIPPED recipe registry (the `recipe` source kind).
  *
  * A recipe instance stores ONLY the reference — {kind: 'recipe', recipe: 'minusx/x@1',
  * bindings} — and the spec is materialized at render time from this registry. Shipped
@@ -64,7 +64,7 @@ export interface VizTemplate {
    */
   build(bindings: Record<string, string | string[]>, formats?: VizFormats, params?: VizParams, columns?: VizResultColumn[]): Record<string, unknown>;
   /**
-   * Named boundary/lookup datasets this recipe references by local name (RFC §9/§12):
+   * Named boundary/lookup datasets this recipe references by local name:
    * `{localDatasetName: assetId}`. The renderer resolves each asset id from the geo
    * registry and injects its features under the local name (alongside `main`). Only
    * geo recipes declare assets; everything else binds `main` alone.
@@ -460,7 +460,7 @@ const radar: VizTemplate = {
 };
 
 // ── minusx/trend@1 ──────────────────────────────────────────────────────────────
-// KPI cards on the NATIVE VEGA engine (the RFC §17 spike, recipe-first): one card
+// KPI cards on the NATIVE VEGA engine (the spike, recipe-first): one card
 // per bound measure — big value, delta vs the comparison period, period labels,
 // and a sparkline. Comparison semantics mirror computeTrendComparison exactly:
 // 'last' = last vs second-to-last (includes the possibly-partial current period);
@@ -1092,7 +1092,7 @@ const combo: VizTemplate = {
 };
 
 // ── minusx/choropleth@1 ─────────────────────────────────────────────────────────
-// Region-keyed thematic map (RFC §9): each boundary polygon is filled by a value
+// Region-keyed thematic map: each boundary polygon is filled by a value
 // looked up from the query result by region NAME. The boundary geometry is the
 // primary data (one mark per region) injected from the named-asset registry under
 // GEO_BOUNDARY_DATASET — never fetched from the network (§12); the query result is
@@ -1216,7 +1216,7 @@ export const POINT_MAP_DEFAULT_TILE_URL = 'https://a.basemaps.cartocdn.com/light
 export const POINT_MAP_DARK_TILE_URL = 'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png';
 
 // ── minusx/point-map@1 ──────────────────────────────────────────────────────────
-// Coordinate map (RFC §9): point/marker rows plotted over a vector basemap backdrop
+// Coordinate map: point/marker rows plotted over a vector basemap backdrop
 // via a projection. The query result is the primary data (`main`); the boundary is a
 // light outline layer beneath (injected from the asset registry — the reverse of
 // choropleth). `size` bound → bubbles; `color` bound → category palette (or a
@@ -1258,7 +1258,7 @@ const pointMap: VizTemplate = {
     // column is bound. A bound `color` wins (it drives the category/ramp scale). Accepts
     // any CSS color (hex or name). Default MinusX teal.
     const markColorVal = typeof p.markColor === 'string' && p.markColor ? p.markColor : '#16a085';
-    // Projection controls (RFC §9). The map is a recenterable MERCATOR driven by
+    // Projection controls. The map is a recenterable MERCATOR driven by
     // `scale` + `center` signals — the canonical vega zoomable-map pattern. (Vega's
     // projection `fit` can't frame a computed box; it only fits real source geometry.)
     // `center` [lat, lng] recenters GEOGRAPHICALLY, so it holds across basemaps

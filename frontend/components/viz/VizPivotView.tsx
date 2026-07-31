@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * The V2 pivot source renderer (RFC §10: DOM tier, second resident) — a thin
+ * The V2 pivot source renderer (DOM tier, second resident) — a thin
  * envelope adapter over the REAL PivotTable: aggregation (pure pivot-utils),
  * formulas, heatmap, subtotals, collapsible groups, and cell drilldown all
  * reused wholesale.

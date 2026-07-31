@@ -1,5 +1,5 @@
 /**
- * WYSIWYG AST write-back for format:'jsx' stories (Story_Design_V2 §2).
+ * WYSIWYG AST write-back for format:'jsx' stories.
  *
  * `applyDomEditsToJsx` maps a contenteditable host's edited innerHTML back onto the JSX
  * source: locate the element by its `data-mx-ast` path, convert the HTML to sanitized JSX

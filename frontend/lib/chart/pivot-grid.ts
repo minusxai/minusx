@@ -1,5 +1,5 @@
 /**
- * Pure pivot grid-layout engine — RFC §10's "pure data engine" half of the
+ * Pure pivot grid-layout engine — 's "pure data engine" half of the
  * pivot split. Converts PivotData (+ FormulaResults + collapse state) into the
  * presentational structures a grid renders: column entries, nested header
  * rows, display rows (data/subtotal/formula), visible-row filtering, row-header

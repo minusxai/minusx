@@ -1,5 +1,5 @@
 /**
- * minusx/radar@1 — the native-Vega tier's first recipe (RFC §16: radar is
+ * minusx/radar@1 — the native-Vega tier's first recipe (radar is
  * inexpressible in Vega-Lite; no polar coordinates). The recipe materializes a
  * full Vega spec; rendering skips the VL compile and parses directly with the
  * themed Vega parser config (same token source, ast + interpreter as always).

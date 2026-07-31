@@ -59,7 +59,7 @@ export default function StoryContainerV2({ fileId }: FileComponentProps) {
   // Publishing is admin-only; published via a toolbar action + the ShareModal.
   const canShare = numericId !== undefined && isAdmin(effectiveUser?.role || 'viewer');
   const [shareOpen, setShareOpen] = useState(false);
-  // Design theme picker (Story_Design_V2 §5) — jsx stories only; stages a `content.theme`
+  // Design theme picker — jsx stories only; stages a `content.theme`
   // edit (the shared header's Save persists it, Cancel reverts). All [data-theme] token
   // blocks already ship in compiledCss, so a pick previews instantly (attribute change only).
   const canTheme = numericId !== undefined && mergedContent?.format === 'jsx';

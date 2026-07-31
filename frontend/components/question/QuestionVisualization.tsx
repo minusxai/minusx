@@ -194,9 +194,9 @@ function QuestionVisualizationInner({
 
   // V1→V2 render bridge: a chart whose truth is `vizSettings` renders
   // through <VegaChart> via just-in-time conversion — render-only, nothing is ever written back;
-  // table/pivot keep their DOM renderers. Vega is the ONLY engine (Renderer_v2 Phase 2 — the
+  // table/pivot keep their DOM renderers. Vega is the ONLY engine (the
   // ECharts rollback path is deleted).
-  // Memoized (Renderer_v2 Phase 7), and ABOVE the early return (rules-of-hooks):
+  // Memoized, and ABOVE the early return (rules-of-hooks):
   // VegaChart's build effect keys on envelope IDENTITY — a fresh object here on every legitimate
   // re-render (loading flips, new callbacks) would finalize + re-parse + re-render the whole
   // Vega view mid-interaction.
@@ -440,7 +440,7 @@ function QuestionVisualizationInner({
                 )}
                 {/* V1 pivot: the bridge deliberately returns null for pivot — it renders on the
                     DOM tier through the SAME view V2 pivots use, via a JIT-bridged envelope
-                    (Renderer_v2 Phase 2: ChartBuilder + the ECharts stack are deleted). */}
+                    (ChartBuilder and the ECharts stack are deleted). */}
                 {!hasVizV2 && !legacyRenderViz && currentState?.vizSettings?.type === 'pivot' && (
                   <VizPivotView
                     envelope={vizSettingsToEnvelopeStatic(currentState.vizSettings, currentState?.query)}

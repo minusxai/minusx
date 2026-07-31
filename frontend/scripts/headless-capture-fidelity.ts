@@ -1,5 +1,5 @@
 /**
- * Headless-capture fidelity check (Story_Design_V2 §6c / §11 Phase 5).
+ * Headless-capture fidelity check.
  *
  * Captures ONE fixture story two ways and pixel-diffs the results:
  *  1. HEADLESS — through the REAL production seam `renderStoryToImage`

@@ -1,6 +1,6 @@
 /**
  * The engine-free SVG→JPEG composer (survivor of the deleted ECharts SSR renderer,
- * Renderer_v2 Phase 2): any SVG string → Resvg rasterize → Sharp JPEG. Feeds the
+ * ): any SVG string → Resvg rasterize → Sharp JPEG. Feeds the
  * server-side Vega image pipeline (render-viz-image → Slack, benchmark tools).
  */
 import { describe, it, expect } from 'vitest';

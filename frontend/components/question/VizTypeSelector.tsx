@@ -114,7 +114,7 @@ const ALL_VIZ_GROUPS: VizTypeGroup[] = [
       { type: 'pivot', icon: <LuTable2 size={16} />, label: 'Pivot' },
       { type: 'trend', icon: <LuTrendingUp size={16} />, label: 'Trend' },
       { type: 'single_value', icon: <LuHash size={16} />, label: 'Number' },
-      // V2 analytic geo (RFC §9), authored as native-Vega recipes: choropleth (region
+      // V2 analytic geo, authored as native-Vega recipes: choropleth (region
       // fill) + the coordinate map (points/bubbles/flows over a vector or street-tile
       // basemap). These supersede the legacy combined `geo` type, which is no longer
       // offered here (existing `geo` questions still render via the V1→V2 bridge).

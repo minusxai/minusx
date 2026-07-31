@@ -1,5 +1,5 @@
 /**
- * Headless story capture — contract types (Story_Design_V2 §6c).
+ * Headless story capture — contract types.
  *
  * `renderStoryToImage` (lib/headless-capture/index.server.ts) is the seam: callers hand it a
  * story file id + base URL and get a bitmap back, never knowing (or caring) which backend

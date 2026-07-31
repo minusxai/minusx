@@ -1,5 +1,5 @@
 /**
- * Phase 1 security hardening (Story_Design_V2 §2): the validator is the shared gate for
+ * Phase 1 security hardening: the validator is the shared gate for
  * agent markup, code-view edits, AND the WYSIWYG write-back — a real XSS boundary, since
  * `content.story` is org-user-editable and rendered to other viewers (public guests included).
  *

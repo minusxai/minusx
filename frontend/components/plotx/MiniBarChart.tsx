@@ -1,6 +1,6 @@
 /**
  * Column-stat top-values spark (table header). Plain hand-rendered SVG — no chart engine
- * (Renderer_v2 Phase 2 removed ECharts): a row per value with a truncated label, a
+ * (ECharts is gone): a row per value with a truncated label, a
  * proportional bar, and a native <title> tooltip.
  */
 

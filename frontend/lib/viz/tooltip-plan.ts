@@ -1,5 +1,5 @@
 /**
- * Shared multi-series tooltip (Viz Arch V2) — the ECharts "axis tooltip" for V2 cartesian
+ * Shared multi-series tooltip — the ECharts "axis tooltip" for V2 cartesian
  * charts: hovering an x shows EVERY series at that x with a color swatch, not just the one
  * mark under the cursor. This module is the PURE core (plan + aggregation + HTML); the DOM
  * handler + color scale + vertical guide line live in `VegaChart` (browser).

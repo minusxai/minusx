@@ -2,7 +2,7 @@
 
 /**
  * StoryThemePicker — pure view (no Redux): the story settings dialog for picking a design
- * theme (Story_Design_V2 §5). Rendered FROM the theme registry (the container passes
+ * theme. Rendered FROM the theme registry (the container passes
  * `STORY_THEMES`); shows each theme's label + description + preview image and a "Default"
  * option that clears the field. Selection calls `onChange(name | null)` — the container
  * stages the `content.theme` edit — and stays open so themes can be compared live.

@@ -1,19 +1,19 @@
 /**
- * The single Vega render pipeline (RFC §3): prepare → theme config → vega-lite compile
+ * The single Vega render pipeline: prepare → theme config → vega-lite compile
  * → vega parse (ast) → View (CSP-safe expression interpreter) → named data injection.
  *
  * Used by the browser component (<VegaChart>, renderer 'svg' into a container) and
  * headlessly (renderer 'none' → toSVG) for server previews, exports, and the
  * chart→LLM image pipeline. One pipeline, no divergence.
  *
- * Security (RFC §12): specs are parsed with {ast: true} and evaluated with
+ * Security: specs are parsed with {ast: true} and evaluated with
  * vega-interpreter — no generated JavaScript functions, CSP-safe everywhere.
  * External data can't reach this layer (the validator rejects data.url/values, and the
  * only datasets bound are the query result under the reserved name plus the boundary
  * assets a recipe — or a detached spec — declares. Every one goes through the geo
  * registry, which throws on any id outside its allowlist, so a spec-supplied URL is
  * never fetched however the envelope was authored).
- * TODO(RFC §12): tighten the Vega event config (deny window/timer/selector sources).
+ * TODO: tighten the Vega event config (deny window/timer/selector sources).
  * The shipped interactions — legend toggle, map pan/zoom — use only view-scoped
  * pointer/wheel events, so nothing depends on those sources today.
  */
@@ -40,14 +40,14 @@ export type ResolvedEnvelopeSpec =
 /**
  * Resolve an envelope's renderable spec + grammar engine: native sources return their
  * spec, recipe sources materialize from the shipped registry (render-time, never stored).
- * A recipe's declared boundary/lookup `assets` (RFC §9) ride along for the injection step.
+ * A recipe's declared boundary/lookup `assets` ride along for the injection step.
  */
 export function resolveEnvelopeSpec(envelope: VizEnvelope, columns?: VizResultColumn[]): ResolvedEnvelopeSpec {
   const source = envelope.source as unknown as Record<string, unknown>;
   if (source.kind === 'recipe') {
     return materializeRecipe(source as unknown as { recipe: string; bindings: Record<string, string> }, columns);
   }
-  // Detached native-Vega spec (RFC §21.10): render as-is on the vega engine, carrying
+  // Detached native-Vega spec: render as-is on the vega engine, carrying
   // any named boundary/lookup datasets for injection (geo maps keep working post-detach).
   if (source.kind === 'vega') {
     const assets = source.assets as Record<string, string> | null | undefined;
@@ -62,7 +62,7 @@ export function resolveEnvelopeSpec(envelope: VizEnvelope, columns?: VizResultCo
 }
 
 /**
- * Inject a recipe's named boundary/lookup datasets into a built view (RFC §9/§12).
+ * Inject a recipe's named boundary/lookup datasets into a built view.
  * Each `{localName: assetId}` is resolved from the geo registry and bound under its
  * local name alongside `main` — the only path secondary geometry reaches the renderer
  * (there is no network fetch inside the vega runtime). Features are shallow-cloned per
@@ -136,7 +136,7 @@ export function injectSingleSeriesLegend(prepared: Record<string, unknown>): voi
  * highlights that series (shift-click for multi-select, click elsewhere to clear).
  * Injected at render time only — never persisted — and only when it's safely additive:
  * a single-view spec with a discrete color field, no author params, no author opacity.
- * Uses the reserved `mx` signal namespace (RFC §13).
+ * Uses the reserved `mx` signal namespace.
  */
 function injectLegendToggle(prepared: Record<string, unknown>): void {
   if ('params' in prepared) return;
@@ -439,7 +439,7 @@ export interface CompileVegaLiteOptions {
 /**
  * Compile a (raw, saved) Vega-Lite spec into a full Vega spec with the MinusX theme.
  * A responsive-by-default autosize is applied at render time only — never persisted
- * into the saved spec (the container owns sizing, RFC §15); explicit spec autosize wins.
+ * into the saved spec (the container owns sizing,); explicit spec autosize wins.
  */
 export function compileVegaLite(
   spec: Record<string, unknown>,
@@ -455,7 +455,7 @@ export function compileVegaLite(
   // single/layer specs). Without an explicit width, VL STEP-SIZES discrete axes
   // (band-step × category count) — a 3-category bar renders ~60px wide instead of
   // filling the card. Container sizing flips the scale range to [0, container].
-  // An explicit spec width/height/autosize is the author's opt-out (RFC §15).
+  // An explicit spec width/height/autosize is the author's opt-out.
   const composed = ['hconcat', 'vconcat', 'concat', 'repeat', 'facet'].some(k => k in prepared);
   if (!composed) {
     if (!('width' in prepared)) prepared.width = 'container';
@@ -491,7 +491,7 @@ export function compileVegaLite(
   // House look: legends are entry labels only, with no redundant heading.
   if (!composed) suppressLegendTitles(prepared);
   const config = getVegaLiteConfig(mode);
-  // Theme chart tokens (Story_Design_V2 §5): a surrounding [data-theme] scope's --chart-1..5
+  // Theme chart tokens: a surrounding [data-theme] scope's --chart-1..5
   // (resolved by the renderer via lib/viz/chart-tokens.ts) replace the house categorical palette.
   if (options?.categoryRange?.length) {
     config.range = { ...config.range, category: options.categoryRange as never };
@@ -556,7 +556,7 @@ export async function renderVegaLiteToSvg(
 }
 
 /**
- * Browser image export: render a full envelope to a raster canvas (Viz Arch V2 §21
+ * Browser image export: render a full envelope to a raster canvas (
  * item 2, the client path). Unlike the SVG paths this rasterizes through Vega's canvas
  * renderer, so image marks (slippy street TILES) are captured for real — the direct
  * analogue of the ECharts `getDataURL` off-screen render. Browser-only (needs a canvas).

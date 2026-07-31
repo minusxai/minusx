@@ -1,5 +1,5 @@
 /**
- * Phase 4 Layer A (Story_Design_V2 §6a): Clarify image options end-to-end.
+ * Phase 4 Layer A: Clarify image options end-to-end.
  *
  * - The ClarifyFrontend schema's options gain optional `imageUrl` + `value` and the tool gains an
  *   optional `type: 'design'` preset param.

@@ -6,7 +6,7 @@ interface ChartErrorProps {
   variant?: 'warning' | 'info'
 }
 
-// App accent palette (Renderer_v2 Phase 5 — kit/Tailwind stack, no Chakra tokens).
+// App accent palette (kit/Tailwind stack, no Chakra tokens).
 const ORANGE = '#f39c12'
 const TEAL = '#16a085'
 const mix = (color: string, pct: number) => `color-mix(in srgb, ${color} ${pct}%, transparent)`

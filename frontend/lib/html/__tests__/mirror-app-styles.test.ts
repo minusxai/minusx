@@ -6,7 +6,7 @@ import { absolutizeCssUrls, collectFontFaceCss } from '@/lib/html/mirror-app-sty
 
 const CSS_BASE = 'http://localhost:3000/_next/static/css/abc.css';
 
-// Phase 6a (Renderer_v2): the mirror is SHRUNK to @font-face only — embed chrome is compiled
+// Phase 6a: the mirror is SHRUNK to @font-face only — embed chrome is compiled
 // into every story's CSS (kit + EMBED_CHROME_FILES recipe union), and Chakra never reaches the
 // iframe. Mirroring the app's full CSSOM (~455KB, 43% emotion runtime rules) is deleted.
 describe('collectFontFaceCss (the 6a mirror shrink)', () => {

@@ -130,7 +130,7 @@ function v36ShiftUserFileIds(data: InitData): InitData {
  * that version is treated as if it were at 35 and run through the chain from there.
  */
 /**
- * V37 — Viz Arch V2: add a `viz` envelope to every question and notebook SQL cell
+ * V37 —: add a `viz` envelope to every question and notebook SQL cell
  * that lacks one, derived FILE-LEVEL from its `vizSettings` (no query execution —
  * column kinds come from vizSettingsToEnvelopeStatic's conservative name heuristic).
  *

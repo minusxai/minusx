@@ -56,7 +56,7 @@ export async function captureStoryPreview(fileId: number): Promise<boolean> {
     const width = el?.offsetWidth ?? 0;
     if (!el || !width) return false;
     // Render the whole story at ~1200px wide, then crop the TOP BAND to the OG aspect (the card only
-    // shows the story header). Both branches are serialization capture (Story_Design_V2 §4).
+    // shows the story header). Both branches are serialization capture.
     const scale = Math.max(1, OG_SOURCE_W / width);
     // SVG-rendered story: rasterize by serializing the live surface. Falls through to the generic
     // element serializer for DOM-rendered stories.

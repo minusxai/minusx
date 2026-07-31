@@ -157,7 +157,7 @@ describe('compiledCss never crosses the agent-markup boundary', () => {
   });
 });
 
-// Phase 0 hardening (Story_Design_V2 §3): a malformed class token must never fail the compile —
+// Phase 0 hardening: a malformed class token must never fail the compile —
 // bad candidates are bisected out and the survivors' CSS is returned. A build() that rejects a
 // token like `w-[calc(100%` (unbalanced bracket) used to throw all the way up and fail the whole
 // save; the salvage guard itself is covered by the `buildSalvaging` block below.
@@ -209,7 +209,7 @@ describe('buildSalvaging', () => {
   });
 });
 
-// ── jsx-format stories (Story_Design_V2 §3) ────────────────────────────────────────────────
+// ── jsx-format stories ────────────────────────────────────────────────
 describe('jsx-format stories — className candidates + always-compile', () => {
   const JSX_STORY =
     '<div className="p-6 bg-card"><Card className="rounded-xl">' +
@@ -298,7 +298,7 @@ describe('shadcn token preamble + recipe base sheet (format:jsx)', () => {
   });
 });
 
-// Banned-CSS candidate filter (Story_Design_V2 §4): banned Tailwind candidates are dropped
+// Banned-CSS candidate filter: banned Tailwind candidates are dropped
 // BEFORE compile as a SEPARATE guard step — never absorbed by buildSalvaging's error-bisect.
 // Proof of separation: `fixed`/`sticky` compile perfectly fine in Tailwind, so their absence
 // from the output can only come from the guard, not from a compile failure.
@@ -328,7 +328,7 @@ describe('compileStoryCss — banned candidate filter (format:jsx)', () => {
   });
 });
 
-// Theme token blocks (Story_Design_V2 §5): every jsx story's compiledCss ships ALL SIX
+// Theme token blocks: every jsx story's compiledCss ships ALL SIX
 // `[data-theme="<name>"]` variable blocks, so switching a story's theme is an attribute
 // change only — instant preview, no recompile. Appended AFTER the compiled sheet so the
 // attribute-scoped blocks beat the `:root`/`.dark` neutral defaults on document order.

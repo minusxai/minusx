@@ -1,5 +1,5 @@
 /**
- * WYSIWYG AST write-back for format:'jsx' stories (Story_Design_V2 §2).
+ * WYSIWYG AST write-back for format:'jsx' stories.
  *
  * The interpreter (lib/story-ui/interpreter) stamps every rendered element with its AST
  * path (`data-mx-ast`, dot-separated child indexes counting ALL JsxNodes). While editing,

@@ -2,7 +2,7 @@
  * SVG → JPEG composer for server-side chart images (Resvg rasterize → Sharp encode, with
  * optional padding + logo overlay). Engine-free — the input is ANY SVG string (today: Vega
  * output via lib/chart/render-viz-image). Survivor of the deleted ECharts SSR renderer
- * (Renderer_v2 Phase 2).
+ *.
  */
 import 'server-only';
 import { Resvg } from '@resvg/resvg-js';

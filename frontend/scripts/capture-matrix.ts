@@ -1,5 +1,5 @@
 /**
- * Three-engine browser matrix (Story_Design_V2 §4/§11 Phase 2) — the gate for snapdom removal, and
+ * Three-engine browser matrix — the gate for snapdom removal, and
  * the home of every property that only a REAL layout engine can assert. Three suites run here:
  *  1. the CAPTURE matrix (below) — serialize → data: URL → <img> → canvas, on every fixture shape;
  *  2. the FLUID-WIDTH guard (scripts/story-width-matrix.ts) — the story must lay out at the width

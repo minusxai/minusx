@@ -1,5 +1,5 @@
 /**
- * V2 (Vega/Vega-Lite envelope) chart → JPEG, headless path (Viz Arch V2 §21 item 2).
+ * V2 (Vega/Vega-Lite envelope) chart → JPEG, headless path.
  * Proves an envelope rasterizes to a real JPEG buffer via the shared compositor, and
  * that DOM-tier sources (table/pivot) are correctly not image-able.
  */

@@ -1,5 +1,5 @@
 /**
- * WYSIWYG editing for format:'jsx' stories (Story_Design_V2 §2) — AgentHtml `format="jsx"`.
+ * WYSIWYG editing for format:'jsx' stories — AgentHtml `format="jsx"`.
  *
  * Scoped contenteditable: HTML text hosts (elements with direct non-whitespace text and no
  * component/embed descendants) become editable; component chrome and embed-carrying hosts

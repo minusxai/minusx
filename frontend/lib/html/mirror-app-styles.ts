@@ -54,7 +54,7 @@ const APP_STYLES_BASE_CSS =
 
 
 /**
- * The 6a mirror shrink (Renderer_v2): of everything the document's stylesheets contain, ONLY
+ * The 6a mirror shrink: of everything the document's stylesheets contain, ONLY
  * `@font-face` rules still belong in the story iframe — embed chrome is compiled into every
  * story's CSS (kit + EMBED_CHROME_FILES recipe union) and Chakra never reaches the iframe.
  * Relative url()s (self-hosted font src) are absolutized against each sheet's own location so

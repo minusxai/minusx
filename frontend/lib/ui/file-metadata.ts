@@ -122,7 +122,7 @@ export const FILE_TYPE_METADATA = {
   },
   // context_run: NO markers flag — nothing renders context_run today (zero component
   // references; it is not even in FileView's READ_ONLY_FILE_TYPES). Flag it when it gets
-  // a rendered view (Renderer_v2 §2b).
+  // a rendered view.
   context_run: {
     label: 'Eval Run',
     icon: LuNotebookText,

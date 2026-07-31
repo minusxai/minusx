@@ -1,5 +1,5 @@
 /**
- * FLUID story width plumbing (Story_Design_V2 §4).
+ * FLUID story width plumbing.
  *
  * The svg surface pins its <svg>/<foreignObject> to an explicit width, and the story root lays out
  * at THAT width — not at the width of the iframe it sits in. A fluid caller renders a 100%-wide
@@ -141,7 +141,7 @@ describe('non-fluid: the surface stays pinned to the width prop (fixed logical c
   });
 });
 
-// ── Post-fix review findings (Story_Design_V2 §4 width contract) ────────────────────────────────
+// ── Post-fix review findings (width contract) ────────────────────────────────
 describe('width tracking is independent of the HEIGHT mode', () => {
   it('keeps re-applying width on resize for a FLUID + fixed-height caller', async () => {
     // The ResizeObserver used to be gated on `fixedHeight === undefined`, conflating "height is

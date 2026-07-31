@@ -1,6 +1,6 @@
 /**
  * Generic app-page serialization capture for main-document React views (questions / notebooks /
- * reports — everything that does NOT live on an svg surface), Story_Design_V2 §4.
+ * reports — everything that does NOT live on an svg surface),
  *
  * The target element is CLONED into an in-memory `<svg><foreignObject>` document that must be
  * fully self-contained, because it renders in an isolated <img> context (no parent document, no
@@ -231,7 +231,7 @@ export async function serializeElementToSvg(
     + (opts.backgroundColor ? `background:${opts.backgroundColor};` : '')
     + snapshotInheritedStyle(element));
   const inner = doc.createElement('div');
-  // shadcn token host (Renderer_v2 Phase 3+): re-skinned views consume tokens declared under
+  // shadcn token host: re-skinned views consume tokens declared under
   // `[data-mx-theme-host]` / `.dark [data-mx-theme-host]` (app/theme-tokens.css), and the live
   // host is an ANCESTOR outside the captured subtree (FileLayout's content root). Stamp it on the
   // INNER wrapper — nested under the mode wrapper — so the dark-descendant selector matches too.

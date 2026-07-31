@@ -1,5 +1,5 @@
 /**
- * Three-engine B2 DASHBOARD-SURFACE matrix (Renderer_v2 Phase 4, re-hosted on the Phase 8
+ * Three-engine B2 DASHBOARD-SURFACE matrix (re-hosted on the Phase 8
  * self-contained iframe surface) — the §7.2 spike promoted to a permanent fixture, re-proven
  * through the PRODUCTION code path: the shipped `DashboardSurface` host (iframe + svg surface +
  * chrome stylesheet + nested React root), the shipped dashboard capture (the story serializer —

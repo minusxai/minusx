@@ -1,5 +1,5 @@
 /**
- * Dashboard chrome CSS artifact (Renderer_v2 Phase 8a — self-contained dashboards).
+ * Dashboard chrome CSS artifact (self-contained dashboards).
  *
  * Dashboards have NO authored classes — every class inside the dashboard iframe surface comes
  * from our own components (kit + embed chrome + dashboard view chrome), a closed set. So ONE

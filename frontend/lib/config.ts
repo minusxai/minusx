@@ -47,7 +47,7 @@ interface EnvironmentConfig {
   OBJECT_STORE_PUBLIC_URL: string | undefined;
   USE_BASE64_UPLOADS: boolean;
   DISABLE_APP_STATE_IMAGES: boolean;
-  /** Headless story capture (Story_Design_V2 §6c): opt-in flag for the Playwright backend.
+  /** Headless story capture: opt-in flag for the Playwright backend.
    *  Off by default — when off (or when Chromium can't launch) renderStoryToImage returns
    *  { ok: false, reason: 'unavailable' } and callers degrade to today's no-image behavior. */
   HEADLESS_CAPTURE: boolean;

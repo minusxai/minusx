@@ -1,5 +1,5 @@
 /**
- * Geo boundaries in NO-ORIGIN contexts (Renderer_v2 Phase 2): `loadGeoFeatures` fetches
+ * Geo boundaries in NO-ORIGIN contexts: `loadGeoFeatures` fetches
  * root-relative `/geojson/…` — fine in a browser, unparseable in Node. The server seam
  * (`installFsGeoAssetFetcher`) resolves those paths against `public/` on the filesystem so
  * headless renders (Slack images, scripts) can draw choropleths/point maps instead of

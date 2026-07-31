@@ -1,5 +1,5 @@
 /**
- * Headless render pipeline: VL spec + rows + theme → SVG (RFC §3 headless sibling).
+ * Headless render pipeline: VL spec + rows + theme → SVG (headless sibling).
  * This exercises the full chain the browser component uses: prepare → theme config →
  * vega-lite compile → vega parse (ast + interpreter) → named data injection → SVG.
  */

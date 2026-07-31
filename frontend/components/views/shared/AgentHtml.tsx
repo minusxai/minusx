@@ -35,7 +35,7 @@ interface AgentHtmlProps {
   html: string;
   /**
    * Story body format. Undefined (default) = legacy sanitized-HTML path (placeholder embeds).
-   * 'jsx' = new-format story (Story_Design_V2 §2): `html` carries STATIC JSX source, parsed and
+   * 'jsx' = new-format story: `html` carries STATIC JSX source, parsed and
    * rendered through the lib/story-ui interpreter into the same nested-in-iframe React root the
    * legacy path uses for embeds (see StoryJsxBody). WYSIWYG edits commit by AST write-back
    * (applyDomEditsToJsx) — the DOM is render output, never scraped into the file.
@@ -50,7 +50,7 @@ interface AgentHtmlProps {
   /** Color mode for the iframe document's dark/light class (sourced by the caller, M4.2). */
   colorMode: 'light' | 'dark';
   /**
-   * Design theme (Story_Design_V2 §5) — the story's `content.theme`. Jsx stories only: stamped
+   * Design theme — the story's `content.theme`. Jsx stories only: stamped
    * as `data-theme` on the story root so the compiledCss's `[data-theme]` token blocks (and the
    * matching platform font set) activate. Switching is an attribute change — no doc rebuild.
    */
@@ -186,7 +186,7 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     if (!iframe || !doc) return;
 
     // Fresh document each build. Injected styles do NOT go in <head>: they live INSIDE the story
-    // root (Story_Design_V2 §4 self-contained doc) so a serialized capture of the <svg> surface
+    // root (self-contained doc) so a serialized capture of the <svg> surface
     // carries them without head-cloning — see the prepend below.
     // Defense-in-depth CSP for the agent-authored document (see lib/html/agent-iframe-csp.ts).
     const CSP = AGENT_IFRAME_CSP;
@@ -226,7 +226,7 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     // @import web-fonts load natively inside an iframe (unlike a shadow root) — no hoisting needed.
     if (!isJsx) surface.root.innerHTML = sanitized;
 
-    // ── Injected styles: INSIDE the story root, as data-mx-*-tagged nodes (Story_Design_V2 §4) ──
+    // ── Injected styles: INSIDE the story root, as data-mx-*-tagged nodes ──
     // The serialized <svg> subtree must be self-contained, so everything the story depends on lives
     // in-root, not in <head>. Prepend order (first → last): app-styles mirror, compiled Tailwind,
     // select-outline css, floating css, platform fonts — the story's own <style> blocks come later
@@ -498,7 +498,7 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
   // Resolve the story's @import web-fonts into real @font-face rules in the TOP document.head.
   // This was originally how a capture got the real fonts: snapdom's embedCustomFonts read the
   // GLOBAL document for @font-face, so iframe-only (or cross-origin @import) fonts were ignored
-  // and captured text fell back to a wider serif. snapdom is gone (Story_Design_V2 §4) and the
+  // and captured text fell back to a wider serif. snapdom is gone and the
   // serialization capture now resolves the same @imports off the IFRAME document itself
   // (collectSurfaceCss). The live iframe uses its own @import either way; nothing reads the
   // top-document `[data-mx-story-fonts]` tag — mirrorAppStyles explicitly skips it.

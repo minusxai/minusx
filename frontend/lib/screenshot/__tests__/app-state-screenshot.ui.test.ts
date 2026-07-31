@@ -124,7 +124,7 @@ describe('appStateWithFileScreenshot (the ONLY capture path — lazy, on send)',
   });
 });
 
-// Markers are gated by ONE declared flag in FILE_TYPE_METADATA (Renderer_v2 §2b), replacing the
+// Markers are gated by ONE declared flag in FILE_TYPE_METADATA, replacing the
 // old story-only isStoryAppState check. Full-flow document types are flagged; internally-scrolled
 // (question) and admin/form types (connection/context — h:'none' but NOT rendered documents, the
 // over-match review finding) are not.

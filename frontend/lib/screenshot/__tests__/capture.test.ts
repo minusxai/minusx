@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // The non-hook capture core: renders a DOM element / FileView to an image Blob via the
 // serialization pipeline (serializeElementToSvg → svgToImage → canvas), mocked here — jsdom can't
-// rasterize. snapdom is GONE (Story_Design_V2 §4): every capture path goes through serialization.
+// rasterize. snapdom is GONE: every capture path goes through serialization.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const h = vi.hoisted(() => ({

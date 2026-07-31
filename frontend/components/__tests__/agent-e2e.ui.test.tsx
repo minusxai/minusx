@@ -50,7 +50,7 @@ vi.mock('@/lib/navigation/NavigationGuardProvider', () => ({
 import React, { useEffect, useRef } from 'react';
 import { screen, waitFor, within, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-// Renderer_v2 Phase 8: the dashboard view renders inside DashboardSurface's same-origin IFRAME
+// The dashboard view renders inside DashboardSurface's same-origin IFRAME
 // (nested React root, commits asynchronously) — dashboard content is queried through
 // withinDashboardSurface(); top-document chrome (FileHeader) stays on `screen`.
 import { withinDashboardSurface } from '@/test/helpers/dashboard-surface';

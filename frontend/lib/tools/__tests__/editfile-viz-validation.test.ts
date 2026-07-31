@@ -1,5 +1,5 @@
 /**
- * EditFile viz validation (RFC §11 — the agent loop): viz changes are validated
+ * EditFile viz validation (the agent loop): viz changes are validated
  * INLINE in the write path, compiler-style. Errors REJECT the edit atomically with
  * the issues in the tool result; the file is untouched. Nothing to remember to
  * call — validation happens because the agent edited.

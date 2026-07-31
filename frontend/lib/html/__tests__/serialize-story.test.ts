@@ -37,7 +37,7 @@ describe('serializeEditedStory', () => {
   });
 
   it('drops every render-injected data-mx-* style node (compiledCss, floating css, fonts)', () => {
-    // Styles now live INSIDE the story root (Story_Design_V2 §4 self-contained doc), so every save
+    // Styles now live INSIDE the story root (self-contained doc), so every save
     // path reading root contents must strip them — else derived CSS compounds into content.story.
     const root = document.createElement('div');
     root.innerHTML =

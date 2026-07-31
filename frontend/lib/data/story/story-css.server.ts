@@ -21,7 +21,7 @@ import { hasDesignSystemMarker, extractClassCandidates, type CompiledCssStoryCon
 const TW_INPUT = '@import "tailwindcss";\n@custom-variant dark (&:where(.dark, .dark *));\n';
 
 /**
- * The shadcn v4 token layer for format:'jsx' stories (Story_Design_V2 §3):
+ * The shadcn v4 token layer for format:'jsx' stories:
  *  - `@theme inline` maps Tailwind color/radius utilities onto the shadcn CSS-variable
  *    contract, so `bg-card` / `text-muted-foreground` / `rounded-lg` compile and resolve
  *    through `--card` etc. — which themes (Phase 3) override per `[data-theme]`.
@@ -33,7 +33,7 @@ const TW_INPUT = '@import "tailwindcss";\n@custom-variant dark (&:where(.dark, .
  * The `@theme inline` mapping that registers shadcn token utilities (`bg-background`,
  * `text-muted-foreground`, `rounded-lg`, …) onto the CSS-variable contract. Shared by the story
  * compile AND the app's main-document Tailwind build (scripts/generate-app-theme-css.ts —
- * Renderer_v2 Phase 3), so both surfaces speak the same token language.
+ * ), so both surfaces speak the same token language.
  */
 export const SHADCN_THEME_MAPPING = `@theme inline {
   --color-background: var(--background);
@@ -124,12 +124,12 @@ export const SHADCN_NEUTRAL_DARK_BODY = `{
 }`;
 
 /**
- * The MAIN document's shadcn token layer (Renderer_v2 Phase 3) — written to `app/theme-tokens.css`
+ * The MAIN document's shadcn token layer — written to `app/theme-tokens.css`
  * by scripts/generate-app-theme-css.ts and imported by globals.css. Same sources as the story
  * compile; the difference is SCOPE: neutral values live under `[data-mx-theme-host]` (stamped by
  * FileLayout around file content) so the Chakra app shell never sees a bare `:root` override.
  */
-// Unthemed content must keep TODAY'S chart colors (the visual bar — Renderer_v2 Phase 3):
+// Unthemed content must keep TODAY'S chart colors (the visual bar —):
 // the stock shadcn --chart-1..5 would silently recolor every existing chart, because VegaChart
 // reads those tokens wherever they resolve. Substitute the app palette (lib/chart/chart-theme
 // COLOR_PALETTE head) into every NEUTRAL token body — app host blocks AND story neutral bodies
@@ -271,7 +271,7 @@ async function compileStoryCssUncached(story: string, opts?: { force?: boolean }
   const compiler = await compile(TW_INPUT_JSX, { base: process.cwd(), onDependency: () => {} });
   let candidates = [...new Set([...extractClassCandidates(story), ...STORY_RECIPE_UNION])].sort();
   if (jsx) {
-    // Banned-CSS guard (Story_Design_V2 §4) — a SEPARATE, explicit step BEFORE compile, never
+    // Banned-CSS guard — a SEPARATE, explicit step BEFORE compile, never
     // folded into buildSalvaging's error-bisect: a guard reject must be a deliberate drop, not a
     // silently-absorbed "bad token". Legacy marked stories are frozen and skip this.
     const { kept, banned } = partitionBannedCandidates(candidates);
@@ -284,7 +284,7 @@ async function compileStoryCssUncached(story: string, opts?: { force?: boolean }
   if (dropped.length > 0) {
     console.warn(`[story-css] dropped ${dropped.length} uncompilable class candidate(s):`, dropped.join(' '));
   }
-  // Theme token blocks (Story_Design_V2 §5): ALL themes' `[data-theme]` variable blocks ship in
+  // Theme token blocks: ALL themes' `[data-theme]` variable blocks ship in
   // every jsx story's compiledCss, so switching theme is an attribute change only (no recompile).
   // Appended AFTER the compiled sheet: the attribute-scoped blocks beat the `:root`/`.dark`
   // neutral defaults on document order, while authored <style> blocks still come later in the
@@ -293,7 +293,7 @@ async function compileStoryCssUncached(story: string, opts?: { force?: boolean }
 }
 
 /**
- * Compile CHROME CSS (Renderer_v2 Phase 8a — self-contained dashboards): the closed set of
+ * Compile CHROME CSS (self-contained dashboards): the closed set of
  * component classes that render inside the dashboard iframe surface. Same pipeline as the story
  * compile (TW_INPUT_JSX token layer, salvaging build, flattened layers, theme blocks appended)
  * with exactly ONE difference: no banned-candidate partition. The fixed/sticky and external-url

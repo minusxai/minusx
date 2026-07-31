@@ -1,5 +1,5 @@
 /**
- * Three-engine FLUID-WIDTH guard (Story_Design_V2 §4) — the permanent, real-browser regression net
+ * Three-engine FLUID-WIDTH guard — the permanent, real-browser regression net
  * for "the story lays out wider than the reader can see".
  *
  * WHY THIS EXISTS IN A BROWSER, NOT IN JSDOM

@@ -52,7 +52,7 @@ export function DataLoader() {
       if (vizV2 !== null) flags.vizV2 = vizV2 === 'true';
       localStorage.removeItem('vizV2');
       localStorage.removeItem('vizRenderer');
-      // Renderer_v2 Phase 2: the vizRenderer toggle is deleted — vega is the only engine.
+      // The vizRenderer toggle is deleted — vega is the only engine.
       localStorage.removeItem('vizRenderer_v2');
       const suggestedQuestions = localStorage.getItem('showSuggestedQuestions');
       if (suggestedQuestions !== null) flags.showSuggestedQuestions = suggestedQuestions === 'true';

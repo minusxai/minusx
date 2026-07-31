@@ -1,5 +1,5 @@
 /**
- * Shared-tooltip GUIDE LINE injection (Viz Arch V2).
+ * Shared-tooltip GUIDE LINE injection.
  *
  * The ECharts-style axis tooltip draws a vertical guide line at the hovered x. It's a
  * native Vega `rule` mark injected BEHIND the data marks (so bars occlude it) and driven

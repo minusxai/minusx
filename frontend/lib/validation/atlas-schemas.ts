@@ -25,7 +25,7 @@ const NullableD = <T extends TSchema>(schema: T, description: string) =>
   Type.Optional(Type.Union([schema, Type.Null()], { description }));
 
 /**
- * The six story design themes (Story_Design_V2 §5). The enum lives HERE (this module imports
+ * The six story design themes. The enum lives HERE (this module imports
  * nothing but typebox); the theme registry (`lib/data/story/story-themes.ts`) types its entries
  * against it and a registry test asserts one entry per name.
  */
@@ -289,7 +289,7 @@ export const VizSourceVegaLite = Type.Object({
 }, { title: 'VizSourceVegaLite' });
 export type VizSourceVegaLite = Static<typeof VizSourceVegaLite>;
 
-// Raw native-Vega spec — the full-control escape hatch (RFC §21.10). A recipe is
+// Raw native-Vega spec — the full-control escape hatch. A recipe is
 // "detached" into this via detachRecipe(): its materialized spec is frozen here so the
 // agent can edit ANY property (marks, signals, projections, layers) with no recipe
 // param. Native Vega expresses charts Vega-Lite can't (projections/signals/geo/tiles),
@@ -308,7 +308,7 @@ export const VizSourceVega = Type.Object({
 }, { title: 'VizSourceVega' });
 export type VizSourceVega = Static<typeof VizSourceVega>;
 
-// The DOM grid tier (RFC §10): tables never route through vega. The only persisted
+// The DOM grid tier: tables never route through vega. The only persisted
 // state is display formatting — sorting/filtering/visibility are ephemeral UI state.
 export const VizSourceTable = Type.Object({
   kind: Type.Literal('table'),
@@ -336,7 +336,7 @@ export const VizSourceTable = Type.Object({
 }, { title: 'VizSourceTable' });
 export type VizSourceTable = Static<typeof VizSourceTable>;
 
-// The pivot grid (RFC §10): same DOM tier + css contract as table; the pivot
+// The pivot grid: same DOM tier + css contract as table; the pivot
 // STRUCTURE (rows/columns/values) is real config, so it stays typed — reusing the
 // classic PivotConfig schema wholesale (subtotals, heatmap, formulas included).
 export const VizSourcePivot = Type.Object({
@@ -366,7 +366,7 @@ export type VizSource = Static<typeof VizSource>;
 export const VizEnvelope = Type.Object({
   version: Type.Literal(2),
   source: VizSource,
-  // Reserved namespaces (RFC §13) — schema-present so saved envelopes never need a shape
+  // Reserved namespaces — schema-present so saved envelopes never need a shape
   // migration when these land; ignored by the probe runtime.
   dataBindings: Nullable(Type.Record(Type.String(), Type.Unknown(), { description: 'RESERVED: query param bindings (re-execute). Not yet implemented — omit.' })),
   viewParams: Nullable(Type.Record(Type.String(), Type.Unknown(), { description: 'RESERVED: presentation-only params/signals. Not yet implemented — omit.' })),

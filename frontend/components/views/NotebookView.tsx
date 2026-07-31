@@ -51,7 +51,7 @@ interface NotebookViewProps {
   /** Persist a cell's executed snapshot to Redux (setNotebookCellExecuted), called by the
    *  container. Only invoked when fileId is defined. */
   onReduxExecutedChange?: (cellId: string, executed: Executed) => void;
-  /** Dev-only page-marker preview (Renderer_v2 Phase 1): this type is marker-flagged. */
+  /** Dev-only page-marker preview: this type is marker-flagged. */
   showDevMarkers?: boolean;
   colorMode?: 'light' | 'dark';
 }

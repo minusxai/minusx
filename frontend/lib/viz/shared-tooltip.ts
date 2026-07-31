@@ -1,5 +1,5 @@
 /**
- * Browser DOM controller for the shared multi-series tooltip CARD (Viz Arch V2). The
+ * Browser DOM controller for the shared multi-series tooltip CARD. The
  * vertical guide line is NOT here — it's a native Vega `rule` mark injected behind the
  * data (see VegaChart), so it aligns exactly with the points and sits behind the bars.
  * The card content (all series at x, color swatches) is built by the pure `tooltip-plan`

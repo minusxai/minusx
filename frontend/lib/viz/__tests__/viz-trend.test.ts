@@ -1,5 +1,5 @@
 /**
- * minusx/trend@1 — the RFC §17 spike, recipe-first: KPI cards on the NATIVE VEGA
+ * minusx/trend@1 — the spike, recipe-first: KPI cards on the NATIVE VEGA
  * engine (like radar). One card per bound measure: big value, delta vs the
  * comparison period (computeTrendComparison semantics: 'last' = last vs
  * second-to-last, 'previous' = skip the partial current period), period labels,

@@ -1,11 +1,11 @@
 'use client';
 
 /**
- * <VegaChart> — the single browser renderer for Viz V2 envelopes (RFC §3).
+ * <VegaChart> — the single browser renderer for Viz V2 envelopes.
  * Pure view: envelope + rows + colorMode in, chart out. No Redux.
  *
  * Lifecycle: compile+parse+mount on spec/mode change (theme change = recompile,
- * RFC §7); data-only updates flow through view.data() without a rebuild; container
+ * ); data-only updates flow through view.datawithout a rebuild; container
  * resizes update the width/height signals; every view is finalized on unmount.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -105,7 +105,7 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
   // plan is baked into the parsed runtime). The epoch re-arms the build
   // effect only on an actual flip; plain resizes stay signal-only updates.
   const [legendEpoch, setLegendEpoch] = useState(0);
-  // Design-theme chart tokens (Story_Design_V2 §5): `--chart-1..5` from the surrounding
+  // Design-theme chart tokens: `--chart-1..5` from the surrounding
   // [data-theme] scope drive the categorical range; a theme switch (a data-theme attribute
   // change anywhere in this document) bumps the epoch so the view rebuilds with new colors.
   const [themeEpoch, setThemeEpoch] = useState(0);
@@ -176,7 +176,7 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
         if (cancelled) return;
         el.replaceChildren(); // drop any stale chart DOM from a failed predecessor
         view = createVegaView(vegaSpec, rowsRef.current, {
-          // Always vega's SVG renderer: captures serialize the live DOM (Story_Design_V2 §4/§7 —
+          // Always vega's SVG renderer: captures serialize the live DOM (
           // <canvas> content serializes empty, so charts must be SVG in every captured surface).
           renderer: 'svg',
           container: el,
@@ -203,7 +203,7 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
         // render wiped the just-painted chart with no error, and nothing repainted
         // until the next interaction-triggered run (the silent-blank-chart bug).
         if (tooltipPlan) view.tooltip(() => {});
-        // Recipe boundary/lookup datasets (choropleth & analytic geo, RFC §9) are
+        // Recipe boundary/lookup datasets (choropleth & analytic geo,) are
         // resolved from the asset registry and bound before the first layout.
         await injectNamedAssets(view, resolved.ok ? resolved.assets : undefined);
         // Street-tile basemap follows the app theme: swap the default Carto tiles to the

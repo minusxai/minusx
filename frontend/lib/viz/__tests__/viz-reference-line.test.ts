@@ -1,5 +1,5 @@
 /**
- * Reference lines (annotations, Viz Arch V2): written as REAL Vega-Lite layers — the
+ * Reference lines (annotations,): written as REAL Vega-Lite layers — the
  * idiomatic rule pattern, plus a BADGE label (tinted rect plate + colored text, the
  * house chip look) — directly into source.spec. No sidecar config: the spec is the
  * single source of truth, and the annotated shape is RECOGNIZED (see

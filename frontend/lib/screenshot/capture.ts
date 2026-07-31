@@ -4,7 +4,7 @@
  * of reading it from Redux via a hook. `useScreenshot` delegates here so there is a
  * single capture implementation.
  *
- * Browser-only. Every path is SERIALIZATION capture (Story_Design_V2 §4 — snapdom is gone):
+ * Browser-only. Every path is SERIALIZATION capture (snapdom is gone):
  *  - Stories AND dashboards (Phase 8: both live on the self-contained iframe svg surface)
  *    serialize their live `<svg>` (lib/story-surface/serialize) — the capture IS the renderer
  *    the user is looking at, and the iframe document is self-contained by construction.

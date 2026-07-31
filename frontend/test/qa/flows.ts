@@ -222,7 +222,7 @@ export async function createDashboard(page: Page): Promise<number> {
 }
 
 /**
- * The dashboard's self-contained iframe surface (Renderer_v2 Phase 8): the dashboard view —
+ * The dashboard's self-contained iframe surface: the dashboard view —
  * grid, params, the add-question panel — renders inside this frame, so locators for
  * in-dashboard controls must go through it. Header/save/create chrome stays in the page.
  */

@@ -234,7 +234,7 @@ export async function serializeStorySvg(svg: SVGSVGElement): Promise<string> {
     if (h) clone.setAttribute('height', String(h));
   }
 
-  // In-root styles (compiledCss, app-styles mirror, platform font css — Story_Design_V2 §4) travel
+  // In-root styles (compiledCss, app-styles mirror, platform font css —) travel
   // inside the cloned subtree already, but their remote url() refs (e.g. data-mx-fonts @font-face
   // src) can't load in an <img>-rendered SVG. Splice the data-URI form into the PARSED COPY only —
   // the live DOM keeps the cacheable URL form.
@@ -270,7 +270,7 @@ export async function serializeStorySvg(svg: SVGSVGElement): Promise<string> {
  * Rasterize a serialized SVG string into an <img> the caller can draw.
  *
  * URL scheme is load-bearing: a percent-encoded `data:` URL, NEVER a Blob URL — Blob-URL SVG
- * rasterization taints the canvas in Chromium and WebKit (Story_Design_V2 §12).
+ * rasterization taints the canvas in Chromium and WebKit.
  *
  * Awaits `document.fonts.ready` and full image decode before resolving — racing resource decode is
  * the dominant cause of blank captures (especially Safari), where drawImage lands before the SVG's

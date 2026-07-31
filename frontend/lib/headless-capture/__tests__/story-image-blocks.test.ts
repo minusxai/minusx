@@ -1,5 +1,5 @@
 /**
- * renderStoryImageBlocks — the headless-turn integration seam (Story_Design_V2 §6c):
+ * renderStoryImageBlocks — the headless-turn integration seam:
  * story files read in a clientless turn (Slack / benchmarks) get a capture attached as an
  * orchestrator-native `image` block (base64 inline), the server-tool equivalent of the browser's
  * `image_url` blocks. Capability

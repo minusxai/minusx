@@ -1,5 +1,5 @@
 /**
- * Story_Design_V2 §5 — `data-theme` stamping on the story root.
+ *  — `data-theme` stamping on the story root.
  *
  * The story's `content.theme` is threaded to AgentHtml (like colorMode) and stamped as a
  * `data-theme` attribute on the surface root, so the compiledCss's `[data-theme]` variable

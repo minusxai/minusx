@@ -24,7 +24,7 @@ const subtotalBorders = (level: number): React.CSSProperties => ({
 })
 
 // Shared cell class fragments. Native <tbody>/<td> on the kit/Tailwind stack
-// (Renderer_v2 Phase 3) — same DOM + stable class contract (.mx-row/.mx-cell)
+// — same DOM + stable class contract (.mx-row/.mx-cell)
 // as before; only the styling system changed.
 const NUM_CELL = 'text-right font-mono'
 const dataCellClass = (compact: boolean) =>

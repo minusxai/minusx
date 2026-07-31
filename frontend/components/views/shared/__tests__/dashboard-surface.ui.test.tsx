@@ -1,5 +1,5 @@
 /**
- * DashboardSurface (Renderer_v2 Phase 8b — self-contained dashboards): the dashboard renders in
+ * DashboardSurface (self-contained dashboards): the dashboard renders in
  * a same-origin IFRAME whose document carries everything it needs (chrome css, fonts mirror) —
  * live render and capture read the same style universe by construction.
  *

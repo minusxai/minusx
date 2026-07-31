@@ -1,6 +1,6 @@
 /**
  * Generates `lib/dashboard-surface/chrome-css.gen.ts` — the ONE static stylesheet the
- * self-contained dashboard iframe surface needs (Renderer_v2 Phase 8a).
+ * self-contained dashboard iframe surface needs.
  *
  * Dashboards have no authored classes: every class inside the surface comes from our own
  * components — the kit, the re-skinned embed chrome (shared with stories), and the

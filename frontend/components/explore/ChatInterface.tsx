@@ -842,7 +842,7 @@ export default function ChatInterface({
     agentArgs.app_state = appStateForSend;
     // Scroll pointer (client-only): which numbered sections of the app-state screenshot the user is
     // looking at right now. Rendered as <Viewport> in the tail so scrolling never busts the image
-    // cache. Gated by FILE_TYPE_METADATA.markers (Renderer_v2 §2b) — exactly the types whose
+    // cache. Gated by FILE_TYPE_METADATA.markers — exactly the types whose
     // captures get the marker gutter baked in, so pointer and gutter never disagree.
     const viewFileId = markersEnabledForAppState(appStateForSend)
       ? (appStateForSend as { state?: { fileState?: { id?: number } } }).state?.fileState?.id

@@ -32,7 +32,7 @@ export const serverChartImageRenderer: IChartImageRenderer = {
     for (const { queryResult, vizSettings, viz, titleOverride } of inputs) {
       // Vega-only rendering: a V2 `viz` renders directly; legacy `vizSettings` converts
       // through the SAME bridge as the on-screen chart, so images match what users see.
-      // (Renderer_v2 Phase 2: the ECharts crash-fallback is deleted.)
+      // (the ECharts crash-fallback is deleted.)
       let buf: Buffer | null = null
       let label = titleOverride
       const envelope = resolveImageEnvelope({
@@ -46,7 +46,7 @@ export const serverChartImageRenderer: IChartImageRenderer = {
           label = label ?? getEnvelopeVizType(envelope) ?? 'chart'
         } catch (e) {
           // Render-only path: a failed chart is SKIPPED, never a crash (the ECharts
-          // fallback is deleted — Renderer_v2 Phase 2; the bridge is the only renderer).
+          // fallback is deleted —; the bridge is the only renderer).
           console.error('[ChartImageRenderer] vega render failed, skipping chart:', e)
         }
       }

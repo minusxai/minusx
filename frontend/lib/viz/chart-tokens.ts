@@ -1,5 +1,5 @@
 /**
- * Chart color tokens (Story_Design_V2 §5): the shadcn `--chart-1..5` CSS variables drive the
+ * Chart color tokens: the shadcn `--chart-1..5` CSS variables drive the
  * Vega categorical color range. Resolved from COMPUTED style at render time, so a chart picks
  * up whatever `[data-theme]` scope (or `:root` default block) surrounds its container — no
  * theme plumbing through the embed chain. Outside a token scope (dashboards, questions) the

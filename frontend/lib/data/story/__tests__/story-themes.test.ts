@@ -1,5 +1,5 @@
 /**
- * Story design themes (Story_Design_V2 §5) — registry + CSS emitter contract.
+ * Story design themes — registry + CSS emitter contract.
  *
  * One registry (`STORY_THEMES`), four consumers: the CSS emitter, the picker UI, preview
  * generation, and the font-asset mapping. These tests pin:

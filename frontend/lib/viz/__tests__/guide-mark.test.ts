@@ -1,5 +1,5 @@
 /**
- * Shared-tooltip guide-line injection (Viz Arch V2).
+ * Shared-tooltip guide-line injection.
  *
  * Bounds invariant: the guide `rule` must read its height from the rest-at-zero
  * `mxGuideH` signal, never from the fit-solved `height` signal — a hidden rule spanning

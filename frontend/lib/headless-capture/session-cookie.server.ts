@@ -1,5 +1,5 @@
 /**
- * Mint a short-lived NextAuth session cookie for the headless capture browser (Story_Design_V2 §6c).
+ * Mint a short-lived NextAuth session cookie for the headless capture browser.
  *
  * AUTH REQUIREMENT (documented per §6c): the story page (`/f/[id]`) is behind interactive login —
  * there is no anonymous story route (`/l/[shareId]` exists only for explicitly-shared stories).

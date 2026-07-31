@@ -1,5 +1,5 @@
 /**
- * ValidateVisualization (RFC §11): the agent-facing feedback pipeline for viz envelopes.
+ * ValidateVisualization: the agent-facing feedback pipeline for viz envelopes.
  *
  * Stages, in order (later stages only run while no errors have been found):
  *   1. envelope shape          → E_ENVELOPE
@@ -88,7 +88,7 @@ function validateEnvelopeShape(envelope: unknown): { issues: VizIssue[]; env?: V
     }
     return { issues: [], env: env as unknown as VizEnvelope };
   }
-  // Detached raw native-Vega source (RFC §21.10): pinned grammar + a spec object.
+  // Detached raw native-Vega source: pinned grammar + a spec object.
   if (source.kind === 'vega') {
     if (source.grammar !== VIZ_GRAMMAR_VEGA) {
       return { issues: [err('E_ENVELOPE', '/source/grammar', `source.grammar must be "${VIZ_GRAMMAR_VEGA}", got ${JSON.stringify(source.grammar)}`)] };
@@ -214,7 +214,7 @@ export function validateVizEnvelope(
   let rawSpec: Record<string, unknown>;
   // Dataset names the spec may reference. Agent-authored specs get only `main`;
   // recipe sources add their declared boundary/lookup assets (injected by the
-  // renderer, RFC §9). Populated in the recipe branch below.
+  // renderer,). Populated in the recipe branch below.
   const allowedDatasets = new Set<string>([VIZ_DATASET_MAIN]);
   const source = shape.env.source as Record<string, unknown>;
   if (source.kind === 'table' || source.kind === 'pivot') {
@@ -255,7 +255,7 @@ export function validateVizEnvelope(
     }
     return { ok: !issues.some(i => i.severity === 'error'), issues };
   }
-  // Detached raw native-Vega spec (RFC §21.10): the full-control escape hatch. Can't run
+  // Detached raw native-Vega spec: the full-control escape hatch. Can't run
   // the Vega-Lite pipeline — enforce the data policy on the native `data` array (no
   // external urls / inline values; the query result is the injected "main" dataset) and
   // smoke-parse the spec. Field refs aren't statically checked (same as native recipes).

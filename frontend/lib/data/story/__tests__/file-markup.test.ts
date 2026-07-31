@@ -341,7 +341,7 @@ describe('markupToContent — vizSettings is optional (viz-first authoring)', ()
   });
 });
 
-// ── New-format (`format:'jsx'`) stories — Story_Design_V2 §2/§3 ────────────────────────────
+// ── New-format (`format:'jsx'`) stories — ────────────────────────────
 // New stories store the agent's shadcn JSX SOURCE verbatim in `content.story` with
 // `format:'jsx'`; legacy stories (stored data-c HTML, no format) keep the old compile
 // pipeline byte-identical. Legacy-ness derives EXCLUSIVELY from the EXISTING stored content.
@@ -433,7 +433,7 @@ describe('markupToContent / fileToMarkup — jsx-format stories', () => {
   });
 });
 
-// Banned-CSS sanitizer at the save boundary (Story_Design_V2 §4): where markup becomes content,
+// Banned-CSS sanitizer at the save boundary: where markup becomes content,
 // a format:'jsx' story's <style> blocks and inline styles are stripped of position:fixed/sticky
 // and every external-fetch construct (url()/src()/@import; only data: URIs pass). Legacy stories
 // are FROZEN — their @import fonts stay live, so the legacy path is never sanitized.
@@ -481,7 +481,7 @@ describe('markupToContent — banned CSS stripped for jsx stories, legacy left a
   });
 });
 
-// StoryContent.theme (Story_Design_V2 §5): `<theme>nocturne</theme>` is a plain schema field —
+// StoryContent.theme: `<theme>nocturne</theme>` is a plain schema field —
 // the generic codec round-trips it like colorMode, no special-casing.
 describe('story <theme> field round-trip', () => {
   it('markupToContent parses <theme> into content.theme (jsx pipeline)', () => {

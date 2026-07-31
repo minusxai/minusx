@@ -1,5 +1,5 @@
 /**
- * tileViewportRect (Renderer_v2 Phase 8c): windowing visibility math for tiles that live inside
+ * tileViewportRect: windowing visibility math for tiles that live inside
  * the dashboard IFRAME surface. A tile's getBoundingClientRect is relative to ITS OWN frame's
  * viewport, while scrolling happens in the TOP document — so the rect must be composed up
  * through the frame chain and measured against the TOP viewport, or every tile inside a

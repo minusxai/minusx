@@ -10,7 +10,7 @@ interface HeaderCell {
 }
 
 // Table header rows (column dimension headers + formula column headers). Native <thead>/<th>
-// on the kit/Tailwind stack (Renderer_v2 Phase 3) — same DOM + stable class contract
+// on the kit/Tailwind stack — same DOM + stable class contract
 // (.mx-header-row/.mx-th) as before; only the styling system changed.
 interface PivotTableHeaderProps {
   augmentedColHeaderRows: HeaderCell[][]

@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * StoryJsxBody — the live React body of a NEW-FORMAT (format: 'jsx') story (Story_Design_V2 §2).
+ * StoryJsxBody — the live React body of a NEW-FORMAT (format: 'jsx') story.
  *
  * The story's `content.story` is STATIC JSX source; this component parses it (lib/jsx) and
  * renders it through the story interpreter (lib/story-ui) over the shadcn registry plus the
@@ -15,7 +15,7 @@
  * `data-*` placeholders resolve to (SmartEmbeddedQuestionContainer / EmbeddedQuestionContainer /
  * InlineNumber / StoryParamControl). Chart rendering is never reimplemented here.
  *
- * WYSIWYG editing (Story_Design_V2 §2): with `editable`, HTML text hosts (direct non-whitespace
+ * WYSIWYG editing: with `editable`, HTML text hosts (direct non-whitespace
  * text, no component/embed descendants — isEditableTextHost) render contenteditable; component
  * chrome stays locked. A blur after REAL user input commits by AST write-back
  * (applyDomEditsToJsx against the CURRENT `jsx` prop, with the full accumulated edit set so

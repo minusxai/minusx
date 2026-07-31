@@ -257,7 +257,7 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
       }
     }
 
-    // Inline viz validation (RFC §11, compiler model): a changed V2 envelope is
+    // Inline viz validation (compiler model): a changed V2 envelope is
     // validated BEFORE the edit applies — errors reject atomically with the issues
     // in the tool result. Field checks use the cached result columns only when the
     // query is unchanged (else they're skipped here and re-run after auto-execute).
@@ -389,7 +389,7 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
           database: finalContent.connection_name,
           filePath: fileState?.path,
         });
-        // Re-validate the viz against the FRESH result columns (RFC §11) — the
+        // Re-validate the viz against the FRESH result columns — the
         // pre-apply check skips field refs when the query changed in the same edit.
         // Advisory only: the edit is staged; issues feed back so the agent fixes next.
         if (finalContent.viz != null && execResult?.columns && execResult?.types) {

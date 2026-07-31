@@ -1,7 +1,7 @@
 /**
  * The zone-chip settings popover (alias + format) in V2: surgical spec edits —
  * alias = the channel's `title`, format = a d3 pattern on `axis.format` (x/y) or
- * the field def's `format` (theta). Presets in the UI compile to d3 strings (RFC §6).
+ * the field def's `format` (theta). Presets in the UI compile to d3 strings.
  */
 import { describe, it, expect } from 'vitest';
 import { getChannelPresentation, setChannelPresentation } from '@/lib/viz/encoding-edit';

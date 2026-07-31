@@ -61,7 +61,7 @@ interface DashboardViewProps {
   onAddQuestion: (questionId: number) => void;
   onAddTextBlock: () => void;
 
-  /** Design theme (Renderer_v2 Phase 3): stamps [data-theme] so the six story token sets apply. */
+  /** Design theme: stamps [data-theme] so the six story token sets apply. */
   theme?: string | null;
 }
 
@@ -397,7 +397,7 @@ export default function DashboardView({
             // grid-level transition:none rule below).
             className={`flex flex-col overflow-hidden rounded-md bg-card transition-[border-color,background-color,opacity] duration-200 ${publishMark ? 'border-2' : 'border'} ${borderClass} ${opacityClass}`}
           >
-            {/* Windowed (Renderer_v2 Phase 7): off-viewport tiles are BUSY layout ghosts;
+            {/* Windowed: off-viewport tiles are BUSY layout ghosts;
                 the capture readiness gate force-mounts them (see WindowedTile). */}
             <WindowedTile>
               <SmartEmbeddedQuestionContainer

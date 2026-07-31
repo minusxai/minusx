@@ -28,7 +28,7 @@ export function isImageViz(vizType: string | undefined): boolean {
 }
 
 /**
- * V2-aware image gate over a file's CONTENT (Viz Arch V2 §21 item 2). A V2 `viz`
+ * V2-aware image gate over a file's CONTENT. A V2 `viz`
  * envelope is authoritative — every chart kind images (only the DOM-tier table/pivot
  * don't); otherwise fall back to the legacy `vizSettings.type` gate above.
  */

@@ -2,7 +2,7 @@
 
 /**
  * The dashboard surface's measured width, provided by DashboardSurface to the view tree inside
- * the iframe (Renderer_v2 Phase 8).
+ * the iframe.
  *
  * Why this exists: react-grid-layout's `WidthProvider` measures through resize-observer-polyfill
  * — a PURE polyfill whose refresh triggers (top-document mutations/transitions/window resize)

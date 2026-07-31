@@ -1,5 +1,5 @@
 /**
- * Story interpreter (Story_Design_V2 §2): validated static-JSX AST → React elements over an
+ * Story interpreter: validated static-JSX AST → React elements over an
  * injected component registry. No eval, ever — the AST is data, the registry is code we ship.
  *
  * Runs in the PARENT React tree; the caller portals the result into the story iframe's root

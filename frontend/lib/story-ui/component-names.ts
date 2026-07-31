@@ -1,5 +1,5 @@
 /**
- * Names-only contract for the story design system (Story_Design_V2 §2) — importable by
+ * Names-only contract for the story design system — importable by
  * server-side validation (lib/jsx) WITHOUT pulling React or the component sources in.
  * `lib/story-ui/registry.ts` maps these names to the real components; a registry test
  * asserts the two never drift.

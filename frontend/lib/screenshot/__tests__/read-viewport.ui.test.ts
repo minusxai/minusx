@@ -1,6 +1,6 @@
 /**
  * `<Viewport>` pointer — window-scroll position plus PER-ELEMENT scroll offsets for the captured
- * surface (Story_Design_V2 §4: scroll is DOM state; the visual fix bakes it into the capture as
+ * surface (scroll is DOM state; the visual fix bakes it into the capture as
  * transforms, the TEXTUAL fix reports it in app state so the agent knows what is scrolled where).
  */
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -75,7 +75,7 @@ describe('readViewportPointer — includes per-element scroll offsets', () => {
   });
 });
 
-// Renderer_v2 Phase 1: markers now apply to every flagged full-flow type (dashboard, notebook,
+// Markers now apply to every flagged full-flow type (dashboard, notebook,
 // report, …), which all scroll inside FileLayout's overflow:auto VStack — NOT the window. This
 // pins the contract that makes that work with zero new code: the pointer derives scrollTop from
 // the view's OWN getBoundingClientRect().top (viewport-relative, identical whichever ancestor

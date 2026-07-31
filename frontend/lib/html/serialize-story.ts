@@ -18,7 +18,7 @@
  * Operates on a clone, so the live (still-displayed) surface root is untouched.
  */
 // AgentHtml-injected style tags that are NOT part of the authored story and
-// must be stripped on save. Styles live INSIDE the story root now (Story_Design_V2 §4: the
+// must be stripped on save. Styles live INSIDE the story root now (the
 // serialized <svg> must carry them without head-cloning), so every save path reading root
 // contents drops the whole data-mx-* family — else derived CSS compounds into content.story:
 // the app-styles mirror, the fluid/mobile shim, the compiled design-system css (data-mx-tw),

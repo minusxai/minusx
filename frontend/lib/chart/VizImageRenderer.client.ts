@@ -1,5 +1,5 @@
 /**
- * Client-side V2 (Vega/Vega-Lite envelope) chart image renderer (Viz Arch V2 §21 item 2,
+ * Client-side V2 (Vega/Vega-Lite envelope) chart image renderer (
  * the client path). Renders an envelope off-screen through Vega's canvas renderer and
  * hands the PNG to the shared `toJpegObjectUrl` encoder, which owns the watermark,
  * downscale and JPEG encoding for every client-side chart image.

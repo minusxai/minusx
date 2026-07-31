@@ -49,7 +49,7 @@ describe('POST /api/story-css', () => {
   });
 });
 
-// jsx-format drafts (Story_Design_V2 §3): no data-design marker exists in shadcn JSX source,
+// jsx-format drafts: no data-design marker exists in shadcn JSX source,
 // so the client sends format:'jsx' and the route force-compiles — otherwise drafts render
 // unstyled until save.
 describe('format:"jsx" force compile', () => {

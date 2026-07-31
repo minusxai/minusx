@@ -1,7 +1,7 @@
 'use client'
 
 // Compact-mode tooltip content for a pivot cell. Native/Tailwind on the kit stack
-// (Renderer_v2 Phase 3) — same content structure as the Chakra original.
+// — same content structure as the Chakra original.
 interface PivotTableTooltipContentProps {
   value: number
   rowIndex: number

@@ -1,5 +1,5 @@
 /**
- * Shared multi-series tooltip core (Viz Arch V2). The plan classifies a spec's series
+ * Shared multi-series tooltip core. The plan classifies a spec's series
  * shape (wide fold / single / long color-column), the aggregator sums each series per x,
  * and the renderer emits swatch+name+value rows — all pure (DOM lives in VegaChart).
  */

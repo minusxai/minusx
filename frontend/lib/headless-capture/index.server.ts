@@ -1,5 +1,5 @@
 /**
- * Headless story capture — the public seam (Story_Design_V2 §6c).
+ * Headless story capture — the public seam.
  *
  * `renderStoryToImage(input)` → bitmap, behind the `StoryCaptureBackend` interface: callers
  * never know (or import) the backend. Today's backend is Playwright-in-the-same-container

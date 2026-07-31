@@ -1,5 +1,5 @@
 /**
- * Tile chrome characterization (Renderer_v2 Phase 3): pins SmartEmbeddedQuestionContainer's
+ * Tile chrome characterization: pins SmartEmbeddedQuestionContainer's
  * user-visible behavior across the Chakra→kit re-skin — title link vs plain title, the
  * actions menu (Explain/Edit/Remove), edit-mode overlay buttons, loading state. Mostly
  * behavioral; the class assertions that remain pin load-bearing contracts only — the kit

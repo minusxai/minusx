@@ -44,7 +44,7 @@ export interface FileViewReadiness {
 const BUSY_SELECTOR = '[data-mx-busy="true"]';
 
 /**
- * Windowed-tile force-mount request (Renderer_v2 Phase 7). Dashboards window their question
+ * Windowed-tile force-mount request. Dashboards window their question
  * tiles: off-viewport tiles are BUSY layout ghosts. A capture must never serialize ghosts, so the
  * readiness wait broadcasts this event — every ghost mounts its real tile, whose own busy markers
  * then gate the settle. Dispatched on `document`; ghosts listen there.

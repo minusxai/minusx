@@ -1,5 +1,5 @@
 /**
- * UI-test helpers for the self-contained dashboard surface (Renderer_v2 Phase 8): the dashboard
+ * UI-test helpers for the self-contained dashboard surface: the dashboard
  * view renders inside DashboardSurface's IFRAME (nested React root), so testing-library's
  * `screen` — bound to the TOP document — cannot see it. These helpers bind the same aria-label
  * queries to the surface's document instead.

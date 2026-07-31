@@ -135,7 +135,7 @@ export default function FileLayout(props: FileLayoutProps) {
         >
           {/* data-mx-theme-host: scopes the shadcn token VALUES (app/theme-tokens.css) to file
               content — kit components (components/kit) resolve their tokens here while the
-              Chakra shell outside never sees them (Renderer_v2 Phase 3). */}
+              Chakra shell outside never sees them. */}
           <VStack maxW="100%" flex="1" mx="0" data-mx-theme-host=""
               px={{ base: 4, md: 8, lg: 12 }}
               pt={{ base: 3, md: 4, lg: 5 }}

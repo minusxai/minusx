@@ -1,5 +1,5 @@
 /**
- * The app's main-document shadcn token layer (Renderer_v2 Phase 3): `app/theme-tokens.css`
+ * The app's main-document shadcn token layer: `app/theme-tokens.css`
  * is GENERATED from the same single sources the story compile uses (SHADCN_THEME_MAPPING,
  * neutral bodies, storyThemeCss). This pins:
  *  1. the generated file is IN SYNC with the sources (drift check, like the kit registry test);
