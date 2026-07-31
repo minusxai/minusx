@@ -407,9 +407,10 @@ for the debug endpoints), `tool-inspector.server.ts` (admin re-run of one regist
 per-grade "Auto" default. `frontend/lib/llm/minusx-default.ts` builds the managed-gateway model
 handle. `frontend/lib/llm/model-catalog.server.ts` overlays models.dev onto the baked pi-ai registry.
 `frontend/lib/llm/chat-grade-catalog.ts` projects config → the chat picker.
-`frontend/lib/llm/llm-env-seed.server.ts` converts `ANALYST_AGENT_MODEL_CONFIG` /
-`MICRO_AGENT_MODEL_CONFIG` into DB config once. `frontend/lib/llm/llm-test.server.ts` is the one-shot
-connectivity probe. This tree owns no prompt, no agent, and no usage accounting.
+`frontend/lib/llm/llm-test.server.ts` is the one-shot connectivity probe.
+Provider configuration lives in the DB (or arrives from the gateway); there is no env-var
+seeding path — `ANALYST_AGENT_MODEL_CONFIG` survives only as a runner-side hint in
+`frontend/test/qa/auth.setup.ts`. This tree owns no prompt, no agent, and no usage accounting.
 
 **`frontend/lib/projection/`** — the **LLM-facing facet projection**:
 `frontend/lib/projection/facets.ts` (`FacetMemo`, stable `facetHash`),
