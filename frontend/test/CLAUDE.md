@@ -1,20 +1,15 @@
 # Build, test and docs infrastructure
 
-How this repo is built, tested and documented: npm scripts, the Vitest project layout, the test
-database harness, the two Playwright suites and their deliberately opposite gates, CI, and the
-published docs site.
+How this repo is built, tested and documented: the npm script surface and the one-shot CLIs behind
+it (`frontend/scripts/`), the Vitest project layout and shared test harness plus the two Playwright
+suites and their deliberately opposite gates (`frontend/test/`), the offline agent benchmark
+(`frontend/benchmarks/`), ambient type declarations (`frontend/types/`), CI (`.github/workflows/`),
+and the separately-deployed documentation site (`docs/`).
 
 > Part of the MinusX project documentation. The root `CLAUDE.md` carries the system
 > overview, the module map and the development principles that apply everywhere.
 
-## Build, Test & Docs Infrastructure
-
-This area covers the npm script surface and the one-shot CLIs behind it (`frontend/scripts/`),
-the shared test harness and the two Playwright suites (`frontend/test/`), the offline agent
-benchmark (`frontend/benchmarks/`), ambient type declarations (`frontend/types/`), CI
-(`.github/workflows/`), and the separately-deployed documentation site (`docs/`).
-
-### What each module owns
+## What each module owns
 
 **`frontend/scripts/`** — one-shot Node CLIs run through `tsx`, never imported by app runtime code.
 Five families: **generators** that write committed artifacts (`generate-app-theme-css.ts`,
@@ -68,14 +63,14 @@ anything it flags.
 It owns product documentation under `docs/content/`. Only `content/` is built into the site; any
 other file in that directory is a plain repo file and is never published.
 
-### npm scripts
+## npm scripts
 
 Everything runs from `frontend/`. Names that mean what they say are omitted.
 
 | Script | Notes |
 |---|---|
-| `validate` | The only types+lint gate. Runs `tsc --noEmit`, `eslint --quiet`, and `scripts/check-docs-consistency.ts` concurrently. |
-| `check-docs` | `check-docs-consistency.ts` alone: every backticked path in the repo-root `CLAUDE.md` must resolve, and no source comment may reference a missing `*.md`. Exits 1 if `CLAUDE.md` is absent. |
+| `validate` | The only types+lint gate. Runs `tsc --noEmit`, `eslint --cache --quiet`, and `scripts/check-docs-consistency.ts` concurrently (via `concurrently -g`). |
+| `check-docs` | `check-docs-consistency.ts` alone. Three sweeps over **every** `CLAUDE.md` in the repo, not just the root: (1) each backticked path resolves, (2) no source comment references a missing `*.md`, (3) each nested doc is named in the root `CLAUDE.md`, unless it is a short pointer stub whose redirect target exists. Exits 1 if the root `CLAUDE.md` is absent. |
 | `test` / `test:main` / `test:ui` / `test:orchestrator` | Vitest; all projects, or one. |
 | `test:e2e` / `test:qa` | The two Playwright configs (see below). |
 | `capture-matrix` | Chromium+WebKit+Firefox fixture matrix over the real serialization modules. No dev server. |
@@ -85,7 +80,7 @@ Everything runs from `frontend/`. Names that mean what they say are omitted.
 | `build:setup-cli` | esbuild-bundles `scripts/setup-cli/*.ts` into a gitignored setup-cli/ directory for the Docker image. |
 | `postinstall` | `copy-duckdb-wasm.mjs` (node_modules → `public/duckdb/`) then `patch-package --error-on-fail`. Two patches live in `frontend/patches/`: the pi-ai one carries real semantics (web search, remote image URLs, and the provider-reported cost that managed billing depends on), while `next+16.1.6.patch` edits Next's *compiled, minified* app-page runtime — its intent is not recoverable from the diff, so treat it as opaque and re-derive it against upstream on a Next bump rather than hand-merging. `--error-on-fail` is what stops either from being skipped silently. |
 | `benchmark:dab` | Requires `DAB_BENCH_BASE_DIR`; throws immediately without it. |
-| `knip` | Dead-export detection. `knip.json` declares `scripts/*`, `benchmarks/dataanalystbench.ts` and the Playwright `*.setup.ts` files as entry points so they are not reported unused. |
+| `knip` | Dead-export detection (`knip --no-config-hints`). `knip.json` declares `scripts/*.ts`, `scripts/*.mjs`, `benchmarks/dataanalystbench.ts`, `lib/__checks__/*.ts` and the Playwright `test/{e2e,qa}/*.setup.ts` files as entry points so they are not reported unused. `lib/__checks__/*.ts` is there because it holds compile-time-only guards with no runtime importer. |
 | `generate-og:generic` | Regenerates the committed `public/ogs/generic.png`. |
 
 `frontend/scripts/check-min-data-version.ts` is deliberately **not** an npm script and is wired to no
@@ -100,9 +95,11 @@ something the endpoint could answer alone. Run it with
 `200 {ok: true}`, so a missing `min` in the response must never read the same as a pass.
 
 Most of these (`generate-app-theme-css`, `generate-dashboard-chrome-css`,
-`generate-theme-previews`, `update-workspace-template`, `capture-fidelity`, `prompt-visualizer`,
-and the two operational CLIs) run with `tsx --conditions react-server` because they import
-`server-only`-guarded modules; `generate-story-ui-classes` does not need it. `setup-cli` can't
+`generate-theme-previews`, `generate-og:generic`, `update-workspace-template`, `capture-fidelity`,
+`prompt-visualizer`, `benchmark:dab`, and the two operational CLIs `heal-stories` /
+`migrate-conversations-to-v3`) run with `tsx --conditions react-server` because they import
+`server-only`-guarded modules; `generate-story-ui-classes`, `capture-matrix` and `dump-llm-calls`
+do not need it. `setup-cli` can't
 use that trick — it runs under plain `node` inside the image — so `build:setup-cli` esbuild-aliases
 `server-only` to the empty `scripts/setup-cli/server-only-empty.js` instead. Two escapes from the
 same guard, for two different execution contexts.
@@ -113,7 +110,7 @@ same guard, for two different execution contexts.
 `prompt-visualizer`. All three must stay in sync or the affected runtime dies with
 `ERR_UNKNOWN_FILE_EXTENSION ".yaml"`.
 
-### Vitest layout
+## Vitest layout
 
 `frontend/vitest.config.ts` defines three projects sharing one `@` → `frontend/` alias and a 45s
 test/hook timeout:
@@ -144,7 +141,7 @@ guarantees a 401 on a real call.
 track the real module: add an export there without adding a stub here and every test that
 transitively imports it fails with a Vitest mock error.
 
-### Test database harness
+## Test database harness
 
 `test/harness/test-db.ts` gives each suite an isolated Postgres schema inside one shared PGLite
 adapter:
@@ -173,7 +170,7 @@ with a matcher that routes matching URLs into real Next.js route handlers (const
 `NextRequest` from the *pattern*, not the actual URL) and **throws on any unmatched call**. That
 throw is the contract — an unmocked network call is a loud failure, never a silent pass.
 
-### Playwright: two suites, deliberately opposite gates
+## Playwright: two suites, deliberately opposite gates
 
 `playwright.config.ts` (`test/e2e/`) and `playwright.qa.config.ts` (`test/qa/`) use the same tooling
 to prove different things:
@@ -211,10 +208,15 @@ assertions (`assertQuestionSaved`, `assertDashboardSavedWithQuestion`) hard-requ
 `path.startsWith('/tutorial')`. `resetTutorial()` by contrast is best-effort — a non-admin QA
 account gets a `console.warn` and the read-only flows continue.
 
-Both suites locate elements by `aria-label` via `getByLabel` only. A control without one is a
-missing `aria-label` on the component, not a reason to use a different query.
+Both suites locate controls by `aria-label` via `getByLabel` — 55 of the ~67 locators across
+`test/e2e`, `test/qa` and `test/flows`. A control without one is a missing `aria-label` on the
+component, not a reason to use a different query. The three standing exceptions are structural, not
+loopholes: `getByPlaceholder` in the two `auth.setup.ts` files (the login form), and `.locator()`
+over the `data-*` DOM contract (`[data-file-id]`, `svg[data-mx-story-svg] foreignObject`) in
+`test/e2e/story-lifecycle.spec.ts` and `test/qa/dashboard-theme.spec.ts`, where the target is an
+iframe surface rather than a control.
 
-### CI
+## CI
 
 | Workflow | Trigger | Gates |
 |---|---|---|
@@ -258,7 +260,7 @@ Non-obvious CI facts:
   `node:20` — the docs site is a separate app with its own `package.json` and shares nothing with the
   frontend build.
 
-### The docs site
+## The docs site
 
 A second Next app with its own `package.json`, `node_modules`, and `tsconfig.json`. `output: 'export'`
 (`docs/next.config.mjs`) makes it a fully static bundle; `docs/app/api/search/route.ts` is
@@ -284,7 +286,7 @@ parent so imports may cross above `docs/`, and `docs/Dockerfile` copying the fil
 `/frontend/compatibility.json` to preserve the relative path. Consequence: **the docs image must be
 built from the repository root**, not from `docs/`.
 
-### Interactions with other areas
+## Interactions with other areas
 
 - **`lib/` and `components/` → the test harness.** Over 200 test files import `@/test/harness/test-db`
   (integration) or `@/test/helpers/render-with-providers` (jsdom). `render-file-page.tsx` reproduces
@@ -322,7 +324,7 @@ built from the repository root**, not from `docs/`.
   and disables the import-discipline and `no-restricted-syntax` rules across `test/**` and all
   `__tests__/`.
 
-### Gotchas
+## Gotchas
 
 - **`vitest.setup.ui.ts` still mocks ECharts.** `vi.mock('@/lib/chart/echarts-init', …)` names a
   module that does not exist and `vi.mock('echarts', …)` names a package that is not a dependency.
@@ -347,8 +349,13 @@ built from the repository root**, not from `docs/`.
   rest (`"..."`) entry, so omission from `pages` always means omission from the tree.
 - **`check-docs` is part of `validate`.** It exits non-zero if the repo-root `CLAUDE.md` is missing,
   so `npm run validate` fails until that file exists.
+- **`check-docs`'s path sweep falls back to matching by BASENAME.** Before failing, it looks for the
+  path's last segment anywhere under `frontend/` and then anywhere in the repo. So a pointer with the
+  right filename and the *wrong directory* passes the gate — `lib/ui/story-theme-options.ts` resolves
+  even though the file is at `lib/branding/`. The gate catches deleted files, not moved ones; a
+  green `check-docs` is not proof that a doc's paths are correct.
 
-### Key files
+## Key files
 
 | Task | File |
 |---|---|

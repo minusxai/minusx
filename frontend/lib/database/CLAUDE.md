@@ -1,17 +1,13 @@
 # Storage and the data layer
 
-The document DB and everything around it: the `files` table and its siblings, the schema declared
-as data, the PGLite/Postgres adapters, migrations, the data-version gate, secrets and the object
-store. This is the DOCUMENT plane — analytics connectors are `frontend/lib/connections/`.
+Everything that persists, across four directories: **`lib/database`** (schema-as-data, the
+PGLite/Postgres adapters, migrations, the data-version gate), **`lib/data`** (the `FilesAPI` dual
+client/server data layer and its loader pipeline), **`lib/object-store`** (blobs) and
+**`lib/secrets`** (the credential boundary). This is the DOCUMENT plane — analytics connectors are
+`frontend/lib/connections/`.
 
 > Part of the MinusX project documentation. The root `CLAUDE.md` carries the system
 > overview, the module map and the development principles that apply everywhere.
-
-## Storage & Data Layer
-
-Everything that persists: the document DB behind `files`/`users`/`conversations`/`secrets`, the
-`FilesAPI` dual client/server data layer and its loader pipeline, migrations and the workspace seed
-template, blob storage, the module registry that owns the DB handle, and secret extraction.
 
 ## Module ownership
 
@@ -25,13 +21,15 @@ warm) live there rather than in `frontend/instrumentation.ts` because that file 
 deployment supplying its own module set: anything after the branch had to be re-implemented verbatim,
 and silently missed whatever was added later. Tests register their own set in
 `test/setup/vitest.setup.ts`. Three slots carry the traffic — counting non-test call sites,
-`getModules().db` has 81, `.namespace` 19, `.auth` 6 — while `.store` and `.cache` remain
-effectively unused: `ObjectStoreModule`'s methods throw and `InMemoryCacheModule` is dead code, and
+`getModules().db` has 81, `.namespace` 19, `.auth` 6 — while `.store` and `.cache` have none:
+`ObjectStoreModule` exists only to satisfy the `ModuleSet` type and every method throws except
+`resolvePath` (which returns the key unchanged), `InMemoryCacheModule` is dead code, and
 object-store callers go through `lib/object-store/index.ts` directly.
 
 **`lib/database/`** — SQL and schema. `documents-db.ts` (`DocumentDB`) is the only SQL surface for the
 `files` table; `user-db.ts` for `users`; `job-runs-db.ts` for `job_runs`; `config-store.ts` for the
-`configs` key/value table (data/schema version stamps). The DDL is still one idempotent string —
+version stamps (`schema_version` in `configs`, `data_version` in `public_data` — see Migrations).
+The DDL is still one idempotent string —
 tables, partial indexes, triggers, and `ALTER … IF NOT EXISTS` self-heal guards, replayed on every
 boot by both adapters — but it is now *generated*: `postgres-schema.ts` is only
 `renderSchema(TABLES, { schemaName })`. It does **not** own row-level access control (that
@@ -54,26 +52,36 @@ first-class for exactly this reason. Every column is emitted twice, once inside
 `CREATE TABLE IF NOT EXISTS` and once as `ALTER TABLE … ADD COLUMN IF NOT EXISTS`, so a database
 built from an older declaration gains newly-declared columns on the next boot with no migration step.
 
-**`lib/namespace/`** — the prefixes that keep one workspace's effects out of another's. A `Namespace`
-is three already-joined levels, coarse to fine: `isolation` (the boundary everything durable is keyed
-by), `mode` (`isolation` + `org`/`tutorial`/`internals`), and `user` (`mode` + the user id). Call
-sites name the level they want and never concatenate, which is the whole point — a deployment that
-inserts a coarser level ahead of `mode` changes no consumer, because no consumer builds a path.
-`namespaced()` does the join, stripping a leading `/` so a stray separator cannot silently re-root a
-store; `namespacedChannel()` does the identifier-safe join for LISTEN/NOTIFY, scrubbing
-`[^a-zA-Z0-9_]` and prefixing `ns` because a channel name is a SQL identifier and a numeric isolation
-value would emit `1_conv_7`, which Postgres reads as a malformed numeric literal — `LISTEN` throws
-and the stream silently never subscribes. `DEFAULT_ISOLATION` is `'mx'` and is non-empty on purpose:
-an empty root would emit a leading separator on every key, so every call site would need its own
-emptiness check. It is pure string algebra and performs no I/O; the *value* of `isolation` comes from
+**`lib/namespace/types.ts`** — the prefixes that keep one workspace's effects out of another's. The
+*seam* (`INamespaceModule` in `lib/modules/types.ts`) belongs to `frontend/lib/auth/CLAUDE.md`; the
+three verbs that matter to storage are `isolation()` (the prefix every durable key carries),
+`minDataVersion()` (the oldest data version across every namespace, which is what makes raising
+`MINIMUM_SUPPORTED_DATA_VERSION` checkable before a deploy) and `provision()` (create + seed a
+namespace). What this file owns is the string algebra. A `Namespace` is three already-joined levels,
+coarse to fine: `isolation`, `mode` (`isolation` +
+`org`/`tutorial`/`internals`), and `user` (`mode` + the user id). Call sites name the level they
+want and never concatenate, which is the whole point — a deployment that inserts a coarser level
+ahead of `mode` changes no consumer, because no consumer builds a path. `namespaced()` does the
+join, stripping a leading `/` so a stray separator cannot silently re-root a store;
+`namespacedChannel()` does the identifier-safe join for LISTEN/NOTIFY, scrubbing `[^a-zA-Z0-9_]` and
+prefixing `ns` because a channel name is a SQL identifier and a numeric isolation value would emit
+`1_conv_7`, which Postgres reads as a malformed numeric literal — `LISTEN` throws and the stream
+silently never subscribes. `DEFAULT_ISOLATION` is `'mx'` and is non-empty on purpose: an empty root
+would emit a leading separator on every key, so every call site would need its own emptiness check.
+It is pure string algebra and performs no I/O; the *value* of `isolation` comes from
 `getModules().namespace`.
 
 **`lib/data/`** — the data layer proper. `files.server.ts` / `files.ts` are the two `IFilesDataLayer`
 implementations; `connections.server.ts`, `configs.server.ts`, `shares/shares.server.ts`,
-`conversations.server.ts`, `completions/completions.server.ts` are siblings for non-file-shaped
-concerns. `loaders/` holds per-type read-time transforms. It owns *what a file means on read and
-write*; it does not own SQL string construction (that is `DocumentDB`) nor HTTP shapes (that is
-`app/api/files/**`).
+`conversations.server.ts`, `completions/completions.server.ts`, `remote-sessions.server.ts` are
+siblings for non-file-shaped concerns. `loaders/` holds per-type read-time transforms; `helpers/`
+holds the pure predicates they and `files.server.ts` share (`permissions.ts`, `references.ts`,
+`connections.ts`, `prune-connection-schema.ts`, `param-resolution.ts`); `story/` holds the story
+markup codec, the server-side CSS compile and the theme/template registries (documented in
+`frontend/lib/story-ui/CLAUDE.md`). `conversation-log.ts` /
+`conversation-projection.ts` shape chat rows for the wire and are documented with chat. It owns
+*what a file means on read and write*; it does not own SQL string construction (that is
+`DocumentDB`) nor HTTP shapes (that is `app/api/files/**`).
 
 **`lib/object-store/`** — binary blobs. `createObjectStore()` is **async** and always returns a
 `NamespacedObjectStore` (`namespaced.ts`) wrapping `S3Adapter` when both `OBJECT_STORE_BUCKET` and
@@ -157,6 +165,13 @@ coalescing maps precisely because of this (`inflightRefreshes` keyed by file id 
 `connection-loader.ts`; `inflightContextLoads` keyed by `fileId:userId:mode` in `context-loader.ts`),
 each with a targeted `no-restricted-syntax` eslint-disable.
 
+`LoaderOptions` (`loaders/types.ts`) carries three flags, and the third is the second way to skip
+the fan-out: `refresh` (block on fresh data), `backgroundRefresh` (serve cached, refresh behind),
+and `skipEnrichment` (serve the stored content — used by file search, which must not pay a
+minutes-long introspection and must not hit the context loader's throw on a version-less document).
+`skipEnrichment` deliberately does **not** skip sanitisation: `connectionLoader` still runs
+`getSafeConfig` after it, because a redaction that an option can turn off is not a boundary.
+
 **Loaders** (`loaders/registry.ts`, four entries; every other type is `defaultLoader`):
 - `connection-loader.ts` — stale-while-revalidate schema cache. Fresh (<24h) cache is served as-is;
   stale or `backgroundRefresh` serves the cache and re-introspects in the background; no schema at
@@ -180,6 +195,7 @@ canAccessFile → canCreateFileByRole → PROTECTED_FILE_PATHS
   ├ connection: strip client `schema`, mergeExistingSecretRefs, extractConnectionSecrets,
   │             pruneConnectionSchemaToFiles (static CSV/Sheets)
   ├ context:    strip fullSchema/parentSchema/fullDocs/fullSkills/fullAgents, normalise version whitelists
+  │             (see the strip-asymmetry gotcha — the loader injects more than this)
   ├ config:     restoreRedactedConfigSecrets → extractConfigSecrets
   └ story:      withCompiledStoryCss (client copy always discarded)
 validateFileStateServer            (Ajv against lib/validation/atlas-json-schemas)
@@ -193,8 +209,9 @@ publish AppEvents.FILE_UPDATED
 connection → reload with backgroundRefresh; context → reload with refresh
 ```
 
-**Drafts and publishing.** `files.create` starts a row as `draft = true` unless the type is
-structural (`folder, config, styles, context, context_run, alert_run, report_run, session`).
+**Drafts and publishing.** `FilesAPI.createFile` starts a row as `draft = true` unless the type is
+structural — `LIVE_ON_CREATE_TYPES` in `files.server.ts`:
+`folder, config, styles, context, context_run, alert_run, report_run, session`.
 `DocumentDB.listAll` unconditionally ANDs `draft = false`, which is the entire reason agent-created
 files stay invisible in the folder browser until the user saves. Path uniqueness is a **partial**
 unique index (`idx_files_path_published_unique … WHERE draft = false`), so many drafts may share a
@@ -202,21 +219,32 @@ path; `DocumentDB.update` flips `draft = false` and can therefore fail the index
 `withPathConflictTranslation` turns into a `UserFacingError` telling the user to rename.
 `getByPath` orders `draft ASC, updated_at DESC LIMIT 1` so a draft never shadows the published file.
 
-**Migrations.** Version stamps live in `configs` (`data_version`, `schema_version`);
-`LATEST_DATA_VERSION` / `MINIMUM_SUPPORTED_DATA_VERSION` in `constants.ts`. Each `MigrationEntry` in
-`migrations.ts` may declare a whole-DB `dataMigration` and/or a streaming `rowMigration`
-(`{ types, migrateContent }`).
+**Migrations.** `schema_version` lives in `configs`; `data_version` lives in **`public_data`**, the
+one `scope: 'public'` table — a deployment serving several workspaces has to answer "what is the
+oldest version any of them is on?" *before* it knows which workspace a request belongs to, and every
+namespace-scoped table is unreadable at that point. `getDataVersion` falls back to the old `configs`
+row for workspaces written before the move; `getMinDataVersion` is the aggregate, and passing
+`legacyFallback: false` makes it return `0` ("not determinable") rather than answer a different
+question with one workspace's row. `LATEST_DATA_VERSION` and `MINIMUM_SUPPORTED_DATA_VERSION` are
+in `constants.ts`. Each `MigrationEntry` in `migrations.ts` may declare a whole-DB
+`dataMigration` and/or a streaming `rowMigration` (`{ types, migrateContent }`); the two must
+produce identical content, because which one runs depends on the caller.
 
-**Boot applies the schema and does not migrate.** `registerWithModules` calls `db.init()` and
-nothing else; `runMigrationsIfNeeded` in `run-migrations.ts` has no caller outside tests, so its row
-path — keyset-paginated batches of 200, `UPDATE`-in-place, bounded memory — is dormant rather than
-preferred. Migrating at boot cannot be made correct for a deployment serving more than one workspace:
-there is no request, so no workspace to be in, and every replica races to rewrite the same rows.
-`lib/instrumentation/__tests__/boot-does-not-migrate.test.ts` asserts this at the seam — no migrate
-call, `init()` still happens, and no `runMigrations` hook exists for a deployment to implement —
-rather than by reading the source. The only production migration path is now
-`POST /api/admin/migrate-db`, which runs `exportDatabase → applyMigrations → atomicImport`
-unconditionally, materialising the whole `files` table.
+**Boot applies the schema and does not migrate.** `registerWithModules` registers the module set,
+calls `db.init()`, and then runs `runBootTasks()` (the unhandled-rejection router, the chat warm) —
+no migration anywhere. `runMigrationsIfNeeded` in `run-migrations.ts` has no caller outside tests, so
+its row path — keyset-paginated batches of 200, `UPDATE`-in-place, bounded memory — is dormant rather
+than preferred. Migrating at boot cannot be made correct for a deployment serving more than one
+workspace: there is no request, so no workspace to be in, and every replica races to rewrite the same
+rows. `lib/instrumentation/__tests__/boot-does-not-migrate.test.ts` asserts this at the seam — no
+migrate call, `init()` still happens, and no `runMigrations` hook exists for a deployment to
+implement — rather than by reading the source.
+
+The only production migration path is `POST /api/admin/migrate-db`. It short-circuits when the
+stored versions already match the target (unless `{ force: true }`), and otherwise always takes the
+**whole-DB** path — `exportDatabase → applyMigrations → validateInitData → atomicImport`, then
+stamps both versions. It never uses the row path, so it materialises the entire `files` table in
+memory; validation failure aborts before `atomicImport`, leaving the database untouched.
 
 **The data-version gate replaces boot migration.** A build declares the oldest data version it can
 READ (`MINIMUM_SUPPORTED_DATA_VERSION`) and the version it WRITES (`LATEST_DATA_VERSION`);
@@ -224,8 +252,8 @@ READ (`MINIMUM_SUPPORTED_DATA_VERSION`) and the version it WRITES (`LATEST_DATA_
 migrated — or a build rolled back — while the process is running. Both bounds fail silently without
 it: data below the minimum is *misread* rather than rejected (`upgrade-pending`), and data above the
 maximum means an older build is about to write v38 shapes over v39 rows (`build-too-old`). Version
-`0` passes: it means the `configs` row does not exist yet, i.e. a workspace mid-provision, and
-refusing there would break registration itself. `withAuth` turns a failing verdict into a 503 carrying
+`0` passes: it means neither the `public_data` row nor its `configs` fallback exists yet, i.e. a
+workspace mid-provision, and refusing there would break registration itself. `withAuth` turns a failing verdict into a 503 carrying
 `code`, and `app/layout.tsx` renders `components/banners/UpgradePendingGate.tsx` instead of the app —
 a banner would be decoration when every API call 503s. `build-too-old` gets no Migrate button on
 purpose: the fix is redeploying the newer build, not rewriting newer rows with older shapes.
@@ -254,22 +282,25 @@ config and creates a first connection. After adding a migration, `npm run update
 | `lib/file-state/` → `lib/data/files.ts` | The **only** browser path to files. `file-read.ts`/`file-mutations.ts`/`file-publish.ts` wrap the client `FilesAPI` and add Redux. Components must not `fetch('/api/files')` themselves. |
 | `app/api/files/**` → `files.server.ts` | Routes are thin: parse, call `FilesAPI`, `handleApiError`. All authorization is inside the data layer, not the route. |
 | Agent tools → `files.server.ts` | Server tools (`ReadFiles`, `EditFile`, health tools in `agents/analyst/health-tools.ts`) and `lib/tools/handlers/*` go through the same `FilesAPI`, so the save gates apply to agent writes identically to browser writes. |
-| `lib/views/save-gate.server.ts`, `lib/semantic/save-gate.server.ts` | Called from `saveFile` for `type === 'context'` only. They recompute a view's `reads` from its SQL (never trusting the client) and reject a version that reaches outside the parent knowledge base. `SemanticModelSaveError.issues` is joined with `\n` (not `; `) so `components/context/SemanticModelsEditor` can split it back per model. |
+| `lib/views/save-gate.server.ts`, `lib/semantic/save-gate.server.ts` | Called from `saveFile` for `type === 'context'` only. They recompute a view's `reads` from its SQL (never trusting the client) and reject a version that reaches outside the parent knowledge base. `SemanticModelSaveError` carries the problems as an `issues` array (its own `message` joins them with `; `); `saveFile` re-throws as `UserFacingError(err.issues.join('\n'))` because `components/context/SemanticModelsEditor` splits the message back per model on a newline boundary — join them any other way and the editor shows one blob. |
 | `lib/connections/` | `connection-loader` calls `getNodeConnector` + `profileDatabase`; `run-query.ts` calls `ConnectionsAPI.getRawByName` then `resolveConnectionSecrets`. Connectors never touch `files` rows. |
-| `lib/query-cache/` | Owns the `query_cache` control-plane table (defined in `postgres-schema.ts`) and stores result blobs through `lib/object-store`. Reads connection metadata via `ConnectionsAPI.getRawByName`, never `FilesAPI.loadFile` — that would drag in schema profiling on the hot path. |
+| `lib/query-cache/` | Owns the `query_cache` control-plane table (declared in `lib/database/schema/tables.ts`) and stores result blobs through `lib/object-store`. Reads connection metadata via `ConnectionsAPI.getRawByName`, never `FilesAPI.loadFile` — that would drag in schema profiling on the hot path. |
 | `lib/analytics/` + `lib/app-event-registry/` | `FilesAPI` publishes `FILE_CREATED` / `FILE_UPDATED` / `FILE_DELETED` / `FILE_VIEWED_AS_REFERENCE` fire-and-forget; `loadFile` merges `getFileAnalyticsSummary` into result metadata and swallows its failures. |
 | `lib/auth/` | `EffectiveUser` (role, `home_folder`, `mode`) is an input to every data-layer method. `lib/auth/share-tokens.ts` mints and validates public share links whose records `SharesAPI` writes into `files.meta.shares[]`. |
 | `lib/mode/path-resolver` | Mode isolation is a *path prefix* convention (`/org/…`, `/tutorial/…`) enforced in `canAccessFile`; the data layer stores physical paths and resolves relative `home_folder` values at check time. |
-| Chat v3 | `conversations` + `messages` tables live in `postgres-schema.ts` and are served by `lib/data/conversations.server.ts`; conversation ids are allocated from the **same id-space as `files`**. Streaming wakeups ride `IDatabaseAdapter.notify/listen`. |
+| Chat v3 | `conversations` + `messages` are declared in `lib/database/schema/tables.ts` and served by `lib/data/conversations.server.ts`; a conversation id is `MAX(id)` over **both** `files` and `conversations` (floor 1000) + 1, taken under the advisory lock the files allocator uses, so the two share one id-space. Streaming wakeups ride `IDatabaseAdapter.notify/listen`. |
 | Scripts | `scripts/heal-stories.ts` → `lib/data/heal-stories.server.ts`; `scripts/migrate-conversations-to-v3.ts` → `lib/data/migrate-conversations-v3.server.ts`. Both check `isModulesRegistered()` first. |
-| Admin routes | `app/api/admin/{export-db,import-data,migrate-db,validate-db,reset-tutorial}` are the only callers of `exportDatabase`/`validateInitData` outside migrations. |
+| Admin routes | `app/api/admin/{export-db,import-data,migrate-db,validate-db}` are the only callers of `exportDatabase`/`validateInitData` outside `run-migrations.ts`. `reset-tutorial` is the odd one out: it wipes and re-seeds the `/tutorial` and `/internals` subtrees from `workspace-template.json` + `copySeedMxfoodForMode` with direct SQL, deliberately never touching `/org` (the template also carries `/org/configs/config`, i.e. real workspace branding). |
 
 ## Gotchas
 
-- **`DocumentDB` is import-restricted.** ESLint `RESTRICT_DOCUMENTS_DB` allows it only in
-  `lib/data/*.server.ts` / `lib/data/*/*.server.ts` and `lib/database/**`. A sibling rule
-  (`RESTRICT_ADAPTER_FACTORY`) bans `getAdapter()` outside `lib/modules/db/**` and `lib/database/**`
-  — direct adapter construction creates an isolated instance that silently loses writes.
+- **`DocumentDB` is import-restricted.** ESLint `RESTRICT_DOCUMENTS_DB` allows
+  `@/lib/database/documents-db` only in `lib/data/*.server.ts` / `lib/data/*/*.server.ts`,
+  `lib/database/**`, `scripts/**`, and tests/mocks. The allowlist is keyed on the `*.server.ts`
+  *category*, not a file list, so a genuine new sibling needs no eslint edit. A sibling rule
+  (`RESTRICT_ADAPTER_FACTORY`) bans `@/lib/database/adapter/factory` (`createAdapter`/`getAdapter`)
+  outside `lib/modules/db/**` and `lib/database/**` — direct adapter construction creates an
+  isolated instance that silently loses writes.
 - **`export → import` used to lose `draft` and `meta`, and now must not.** `exportDatabase` mapped
   neither column and `importToDatabase`'s INSERT list omitted both, so the whole-DB migration path
   (and the admin export/import round-trip) reset every row to `draft = false, meta = NULL` —
@@ -290,6 +321,16 @@ config and creates a first connection. After adding a migration, `npm run update
   without `resolveConnectionSecrets`, so a connection whose credentials are `@SECRETS/…` refs cannot
   authenticate on that path. Reachable via `GET /api/connections?includeSchemas=true`; no in-repo
   caller sets it.
+- **The context strip list is shorter than the context inject list.** `contextLoader` adds
+  `fullSchema, parentSchema, fullDocs, fullMetrics, fullAnnotations, fullViews, fullSemanticModels,
+  parentViews, parentSemanticModels, viewProblems, fullSkills, fullAgents` to the content it
+  returns (same set on the admin and non-admin branches); `saveFile` destructures away only the
+  first three plus `fullSkills`/`fullAgents`. The other seven round-trip back into the stored row:
+  `dbFileToFileState` keeps the enriched content verbatim, `persistableContentOf` hands it back
+  whole, `file-publish.ts` POSTs it, and nothing downstream drops it — Ajv runs without
+  `removeAdditional` and the context JSON schema does not name these fields. So a save persists a
+  snapshot of derived state that the next load recomputes anyway. Add a computed context field and
+  you must add it to BOTH lists.
 - **Access-rule overrides are not cached.** `_getOverrides` in `files.server.ts` and
   `shares/shares.server.ts` calls `getConfigs(user)`, which re-reads the config document from the DB;
   that is an extra lookup on every `loadFile`/`loadFiles`/`getFiles`/`createFile`/`saveFile`.
@@ -308,11 +349,15 @@ config and creates a first connection. After adding a migration, `npm run update
   `postgres-schema.ts`) is comment-unaware and only understands dollar-quoting. There is no
   hand-written SQL left to put a comment in, so the live hazard is a `default` / `check` / `where` or
   expression-index string in `lib/database/schema/tables.ts` — nothing tests this.
-- **`scope` fails open on both axes.** Every `Table` must declare `scope`
-  (`shared` / `per-namespace` / `public`) and every `Unique` must declare `scope`
+- **`scope` is required on two axes because it fails open on both.** Every `Table` must declare
+  `scope` (`shared` / `per-namespace` / `public`) and every `Unique` must declare `scope`
   (`scoped` / `global`). `lib/database/schema/__tests__/equivalence.test.ts` asserts both are present
   precisely because forgetting either produces the permissive answer silently: an unscoped table reads
-  as shared across the whole deployment, an unscoped unique as a global invariant.
+  as shared across the whole deployment, an unscoped unique as a global invariant. A unique *index*
+  is a third axis, and the opposite case: `Index.scope` is optional and defaults to the conservative
+  `scoped`, so the test does not check it — but that means a genuinely deployment-wide index has to
+  say `global` out loud (`idx_public_data_binding_unique` does; `idx_files_path_published_unique`
+  takes the default).
 - **Primary keys must stay auto-named `<table>_pkey`.** `renderTable` always emits the PK as a
   table-level constraint, never inline, and `equivalence.test.ts` checks every one. Upserts target the
   constraint by name rather than by column list, which is what lets one statement keep working against
@@ -356,7 +401,8 @@ config and creates a first connection. After adding a migration, `npm run update
 | Change what a file type looks like on read | `lib/data/loaders/registry.ts` + the loader (guard `content === null`) |
 | Change permission semantics | `lib/data/helpers/permissions.ts` (`canAccessFile`, `canViewFileInUI`) |
 | Add SQL against `files` | `lib/database/documents-db.ts` (nowhere else) |
-| Add a table/column/index | `lib/database/schema/tables.ts` (declare `scope`), then re-record `lib/database/__tests__/__snapshots__/schema-shape.test.ts.snap` |
+| Add a table/column/index | `lib/database/schema/tables.ts` (declare `scope`), then re-record `lib/database/__tests__/__snapshots__/schema-shape.test.ts.snap`. **No migration entry** — `schema/render.ts` emits `ALTER TABLE … ADD COLUMN IF NOT EXISTS` for every column on every boot |
+| Change what a loader may skip | `lib/data/loaders/types.ts` (`LoaderOptions`) — a new flag must never be able to skip redaction |
 | Widen what the schema can express | `lib/database/schema/types.ts` + `schema/render.ts` — never a raw-SQL string |
 | Add a migration | `lib/database/migrations.ts` + bump `LATEST_DATA_VERSION` in `constants.ts` — only for changes to existing row *content* |
 | Change the data-version range this build serves | `lib/database/constants.ts`, then run `scripts/check-min-data-version.ts` against the deployment |

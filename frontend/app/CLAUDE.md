@@ -6,15 +6,13 @@ the `handleApiError` contract, and route grouping. The work happens in `lib/`.
 > Part of the MinusX project documentation. The root `CLAUDE.md` carries the system
 > overview, the module map and the development principles that apply everywhere.
 
-## API & Page Routes (`frontend/app`)
+## What this layer owns — and what it does not
 
-### What this layer owns — and what it does not
-
-`frontend/app` is the Next.js App Router tree: 119 `route.ts` handlers plus 15 page routes and three
+`frontend/app` is the Next.js App Router tree: 121 `route.ts` handlers plus 15 page routes and three
 error boundaries (`error.tsx`, `global-error.tsx`, `not-found.tsx`). Its job is **HTTP adaptation only**:
 parse and shape-check the request, resolve the caller, delegate to a `lib/` module, and map the outcome
-onto a status code. Total across every route file is ~6800 lines; the largest is
-`api/conversations/[id]/stream/route.ts` at 210 lines and 84 of the 119 are under 60.
+onto a status code. Total across every route file is ~6900 lines; the largest is
+`api/conversations/[id]/stream/route.ts` at 211 lines and 85 of the 121 are under 60.
 
 It owns: request parsing/validation, auth and role gating at the edge, HTTP status/response shaping,
 streaming envelopes (SSE, NDJSON), CORS headers on the public protocol endpoints, and `revalidateTag`
@@ -26,14 +24,16 @@ non-test file under `app/` imports `DocumentDB` — data access goes through `Fi
 modules (`loadFile` is access-checked; `addShare`/`getShares` enforce admin + story type); routes that
 add a role check on top are adding a second layer, not the only one.
 
-### Auth: three stages, and the two that routes can skip
+## Auth: three stages, and the two that routes can skip
 
 ```
 request
   └─ middleware.ts → lib/middleware/create-middleware.ts
        · public allowlist (login/register, /l/, /s/, /oauth, /.well-known/oauth,
-         /api/auth, /api/orgs/register, /api/mcp, /api/health, /api/jobs/cron,
-         slack events|interact|oauth-callback)  → pass through
+         /opengraph-image, /api/auth, /api/share/guest-session, /api/orgs/register,
+         /api/mcp, /api/health, /api/jobs/cron, /api/admin/min-data-version,
+         /api/public/slack-chart, slack events|interact|oauth-callback) → pass through
+       · plus a valid mx-guest cookie, but ONLY on share paths (isShareGuestPath)
        · otherwise require NextAuth session + CURRENT_TOKEN_VERSION, else redirect /login
        · stamps x-request-id, x-request-path, x-user-id, x-mode, x-view,
          x-impersonate-user (admins only), E2E header
@@ -42,30 +42,46 @@ request
        · or a bespoke gate (see below)
 ```
 
-`lib/http/with-auth.ts` exports two wrappers. `withAuth` 401s when `getEffectiveUser()` returns null, and
-wraps the handler in a try/catch that publishes `AppEvents.ERROR` (skipping client aborts, matched by
-`isClientAbortError`) and then **rethrows**. `withCronAuth` accepts only `Authorization: Bearer
-$CRON_SECRET` and — deliberately — answers a bad/absent secret with `200 {ok:true}` rather than 401, so a
-misconfigured scheduler doesn't alarm.
+`lib/http/with-auth.ts` exports **three** wrappers. `withAuth` 401s when `getEffectiveUser()` returns
+null, then — before calling the handler — applies the **data-version gate**: `checkDataVersion()` per
+request, answering `503` with `{error, code}` when this build cannot correctly read the workspace's
+data. (Per request, not at boot, because a workspace can be migrated or a build rolled back while the
+process runs.) It then wraps the handler in a try/catch that publishes `AppEvents.ERROR` (skipping
+client aborts, matched by `isClientAbortError`) and **rethrows**.
+`withAuthSkippingDataVersionGate` is `withAuth` minus that gate — a separate named export rather than
+an option, so the exemption is visible at the route's definition. `withCronAuth` accepts only
+`Authorization: Bearer $CRON_SECRET` and — deliberately — answers a bad/absent secret with
+`200 {ok:true}` rather than 401, so a misconfigured scheduler doesn't alarm.
 
 Routes that do not use `withAuth` fall into four groups, all verified:
 
 | Gate | Routes |
 |---|---|
-| `getEffectiveUser()` inline | `api/files/search`, `api/conversations`, `api/recordings/**`, `api/micro-task`, `api/llm-logs`, `api/capture-error`, `api/benchmark/import`, `api/jobs/test`, `api/chat/debug-context`, `api/viz/backfill`, `api/object-store/{upload-url,local-upload}`, `api/conversations/[id]/{stream,llm-calls}` |
+| `getEffectiveUser()` inline | `api/files/search`, `api/conversations`, `api/recordings/**`, `api/micro-task`, `api/llm-logs`, `api/capture-error`, `api/benchmark/import`, `api/jobs/test`, `api/chat/debug-context`, `api/viz/backfill`, `api/gateway/status`, `api/object-store/{upload-url,local-upload}`, `api/conversations/[id]/{stream,llm-calls}` |
 | NextAuth `auth()` session | `api/users`, `api/users/[id]`, `oauth/authorize/approve` |
 | bespoke credential | `s/[code]/*` (bearer code via `lib/http/with-remote-session-auth.ts`), `api/mcp` (OAuth bearer via `lib/mcp/auth.ts`), `api/integrations/slack/{events,interact}` (HMAC signature), `api/integrations/slack/oauth-callback` (signed state), `api/test/faux/*` (`E2E_MODE` flag) |
 | middleware session only, no in-route identity | `api/sql-to-ir`, `api/ir-to-sql`, `api/llm-calls/[callId]`, `api/object-store/serve/[...key]` |
 | public by design | `api/health`, `api/auth/*`, `api/orgs/register`, `api/share/guest-session`, `l/[shareId]/og`, `s/[code]`, `oauth/{token,register}`, `.well-known/oauth-*` |
 
-### The `handleApiError` contract, and every deviation
+**Every route in that table also escapes the data-version gate**, since the gate lives inside
+`withAuth`. That is correct for the public and bespoke-credential rows, and incidental for the
+`getEffectiveUser()`-inline row — those routes will happily read data this build may misread. Prefer
+`withAuth` for anything new.
+
+## The `handleApiError` contract, and every deviation
 
 `lib/http/api-responses.ts` defines the shape all JSON APIs are supposed to speak:
 `{ success, data | error: { code, message, details?, type? }, request_id? }`. `handleApiError` maps
 `UserFacingError` subclasses onto status codes (`FileNotFoundError`→404, `AccessPermissionError`→403,
-`FileExistsError`→409), falls back to substring sniffing on the message (`'not found'`, `'already
-exists'`, `'validation'`), and otherwise returns a 500. It also `console.error`s and, via the
-`AppEvents.ERROR` fan-out, reaches internal Slack.
+`FileExistsError`→409, any other `UserFacingError`→400), falls back to substring sniffing on the
+message (`'not found'`, `'already exists'`, `'validation'`), and otherwise returns a 500.
+
+**`handleApiError` only `console.error`s — it does not publish `AppEvents.ERROR`.** That fan-out (the
+one that reaches internal Slack) lives in `withAuth`'s catch, which fires on a **rethrow**. So the
+two are mutually exclusive in practice: a route that catches and calls `handleApiError` returns the
+standard envelope and is *not* reported; a route that lets the error escape is reported but answers
+with a framework 500. The lint rule below pushes toward the first, so "all 500s reach monitoring" is
+not what the code does.
 
 The ESLint rule lives in `eslint.config.mjs` and is scoped to `files: ["app/api/**/*.ts"]`. It bans
 exactly one AST shape: `NextResponse.json(...)` containing a `status: 500` property. Consequences worth
@@ -75,22 +91,27 @@ knowing:
   `oauth/authorize/approve`, the five `s/[code]/*` handlers, `l/[shareId]/og`, and both `.well-known/`
   routes. The `s/[code]/*` handlers still get the standard treatment because
   `withRemoteSessionAuth` calls `handleApiError` in its own catch; the others do not.
-- The rule only catches the literal `500`. A route that returns a raw 401/403/400 `NextResponse.json`
-  passes lint while still breaking the response shape — `api/files/search`, `api/jobs/test`,
-  `api/viz/backfill`, `api/object-store/{local-upload,serve}`, `api/micro-task` and `api/recordings` all
-  do this.
+- The rule only catches the literal `500`. A route returning a raw 4xx `NextResponse.json` passes lint
+  while still breaking the response shape, and **30 of the 121 routes do exactly that** — including
+  `api/files/[id]`, `api/query`, `api/files/search`, `api/conversations`, `api/recordings/**`,
+  `api/micro-task`, `api/jobs/test`, `api/viz/backfill`, `api/object-store/**`, `api/csv/register`,
+  `api/google-sheets/{import,reimport}`, `api/chat/{feedback,log-error,debug-context}` and both
+  suggestion routes. Treat the envelope as the convention for *new* code, not as an invariant you can
+  rely on when consuming these: a client parsing an error body must tolerate both
+  `{ success:false, error:{ code, message } }` and a bare `{ error: "…" }`.
 - Deliberate deviators: **`api/query`** catches everything and returns `ApiErrors.badRequest` — a failed
   query is the query's fault, not the server's, and a 4xx keeps the client from paging the team via
   `capture-error`; `handleApiError` is only reached for non-`Error` throws. **`api/jobs/test`** shapes
   its errors as `Partial<TestRunResult>` so the eval UI can render them uniformly. **`api/mcp`** and
   `oauth/token` speak JSON-RPC and OAuth error shapes respectively.
-- Eight `withAuth` routes wrap **no outer try/catch**, so an unexpected throw is rethrown by the wrapper
+- Nine `withAuth` routes wrap **no outer try/catch**, so an unexpected throw is rethrown by the wrapper
   and becomes a Next.js framework 500 rather than the standard envelope: `api/validate-sql` (inner
-  try only), `api/autocomplete`, `api/chat/mentions`, `api/skills/system`, `api/tools/schema`, and
+  try only), `api/autocomplete`, `api/chat/mentions`, `api/skills/system`, `api/tools/schema`,
+  `api/test-error` (which exists to throw), and
   `api/integrations/slack/{oauth-start,manifest,oauth-configured}`. `l/[shareId]/og` has neither a
-  try/catch nor a wrapper.
+  try/catch nor a wrapper. These are the routes whose failures *do* reach `AppEvents.ERROR`.
 
-### Route groups
+## Route groups
 
 **Conversations / chat.** The browser's chat entry points (Slack goes in-process; `s/[code]/tool` and
 `api/mcp` are separate agent surfaces onto the same log). `POST api/conversations/[id]/turns` claims the run
@@ -205,7 +226,7 @@ conversation; `api/story-css` compiles Tailwind for *staged* (unsaved) story dra
 compiler as the save path; `api/viz/validate` is the browser's only route to the server-side Vega-Lite
 validator (the 1.4 MB vendored schema must never ship to the client).
 
-### Page routes
+## Page routes
 
 Only four pages are server components — `l/[shareId]`, `login`, `register`, `oauth/authorize`; the
 other eleven are `'use client'`. `layout.tsx` is the only SSR data boundary: `loadInitialState()` resolves the effective
@@ -218,11 +239,12 @@ org styles, and redirects to `/hello-world` when `setupWizard.status !== 'comple
 The rest: `page.tsx` (home feed), `p/[[...path]]` (folder browser; middleware redirects bare `/p` to
 `/p/{mode}`), `f/[id]` (file detail; the id segment may be slugged, `parseFileId`), `explore/[[...id]]`
 (full-page chat — uses `useParams()` rather than `use(params)` to avoid remounting `ExploreInterface`),
-`new/[type]` (creates a draft then `router.replace`s to `/f/{id}`), `l/[shareId]` (public story landing;
+`new/[type]` (creates a draft then `router.replace`s to `/f/{id}`), `new/connection` (the connection
+wizard, a dedicated page rather than a `new/[type]` draft), `l/[shareId]` (public story landing;
 server-renders metadata, body is client-only), `settings`, `conversations`, `recordings`, `benchmark`,
 `hello-world` (onboarding wizard, `ssr:false`), `login`, `register`, `oauth/authorize`.
 
-### Interactions with other areas
+## Interactions with other areas
 
 - **← `lib/file-state/`**: the client `FilesAPI` and `lib/file-state/query-results.ts` are the callers of
   `api/files*` and `api/query`. Client query calls are bounded by `querySemaphore`, whose limit is read
@@ -247,7 +269,7 @@ server-renders metadata, body is client-only), `settings`, `conversations`, `rec
   project, and `frontend/test/qa/*.spec.ts` drives them through a real browser in tutorial mode. Route handlers
   are imported and called directly in `app/**/__tests__/*.test.ts`.
 
-### Gotchas
+## Gotchas
 
 - **`api/query` returns 400 for query failures, not 500.** The client's `parseErrorMessage` and
   `captureError` both key off that. Changing it to `handleApiError` would start paging the team on every
@@ -295,7 +317,7 @@ server-renders metadata, body is client-only), `settings`, `conversations`, `rec
 - **QA flows must carry `mode=tutorial` on every request.** The system default is `org`; a missing mode
   parameter silently writes to production data.
 
-### Key files
+## Key files
 
 | Task | File |
 |---|---|

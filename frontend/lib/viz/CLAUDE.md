@@ -2,17 +2,26 @@
 
 How a query result becomes a chart: the two vocabularies (V1 `vizSettings` and the V2 `viz`
 envelope), the recipe system, the Vega/Vega-Lite render pipeline, the editing surface and the
-validation gates. Vega is the only chart engine.
+validation gates.
 
 > Part of the MinusX project documentation. The root `CLAUDE.md` carries the system
 > overview, the module map and the development principles that apply everywhere.
 
-## Visualization
+## What this area owns
 
-Vega is the only chart engine. Every chart on a question, dashboard, notebook, story, Slack
-message or LLM tool result ends up as a `vega` `View` — most via a `vega-lite` compile, a few
-(radar, both geo maps) as native Vega specs that skip it. `table` and `pivot` deliberately never
-touch Vega — they render as real DOM (`<table>` + tanstack-virtual).
+**Vega/Vega-Lite is the only chart *rendering engine*.** ECharts and Leaflet are gone and neither
+is a dependency — `frontend/package.json` carries `vega`, `vega-lite`, `vega-interpreter` and
+`vega-tooltip`, plus the non-rendering helpers the pipeline needs (`d3-format`, `d3-time-format`,
+`topojson-client`), and no second engine. Stale `ECharts`/`Leaflet` words survive in comments and
+in `next.config.ts`'s `optimizePackageImports`; none of them is a live code path, and nothing new
+may reintroduce a second engine.
+
+Every chart on a question, dashboard, notebook, story, Slack message or LLM tool result ends up as
+a `vega` `View`. Most get there through a `vega-lite` compile; the five recipes that declare
+`engine: 'vega'` (radar, trend, single-value, choropleth, point-map) are native Vega specs that
+skip the compile entirely. `table` and `pivot` deliberately never touch Vega — they render as real
+DOM (`<table>` + tanstack-virtual).
+
 Four directories own this: `lib/viz` (the V2 engine), `lib/chart` (engine-free chart math,
 formatting and the image compositors), `components/viz` (the V2 renderer + settings panel),
 `components/plotx` (the DOM tier, the V1 drop-zone builders, and small SVG widgets).
@@ -39,12 +48,22 @@ combo  radar  geo  single_value  row  choropleth  point_map
 
 **V2 — `VizEnvelope`** (same file): `{version: 2, source}` where `source.kind` is one of
 `vega-lite | vega | recipe | table | pivot`. `recipe` names one of exactly eight shipped
-builders in `lib/viz/viz-templates.ts` (`VIZ_TEMPLATES`):
+builders in `lib/viz/viz-templates.ts` (`VIZ_TEMPLATES`), each declaring its own `engine` and the
+`vizType` it maps back to:
 
-```
-minusx/funnel@1  minusx/waterfall@1  minusx/radar@1  minusx/trend@1
-minusx/single-value@1  minusx/combo@1  minusx/choropleth@1  minusx/point-map@1
-```
+| Recipe id | `engine` | `vizType` |
+|---|---|---|
+| `minusx/funnel@1` | `vega-lite` | `funnel` |
+| `minusx/waterfall@1` | `vega-lite` | `waterfall` |
+| `minusx/combo@1` | `vega-lite` | `combo` |
+| `minusx/radar@1` | `vega` | `radar` |
+| `minusx/trend@1` | `vega` | `trend` |
+| `minusx/single-value@1` | `vega` | `single_value` |
+| `minusx/choropleth@1` | `vega` | `choropleth` |
+| `minusx/point-map@1` | `vega` | `point_map` |
+
+The `engine` is load-bearing beyond render — it decides which validation path a recipe takes (see
+Validation) and which source kind `lib/viz/detach.ts` freezes to.
 
 The panel's own selector vocabulary is a third list — `V2_SUPPORTED_VIZ_TYPES` in
 `lib/viz/encoding-edit.ts`. The two lists are not nested: V2 adds `heatmap`, `boxplot` and
@@ -53,10 +72,10 @@ have no `VizSettings.type`, and are classified back out of the spec by `getVizTy
 umbrella `geo` has no V2 member at all — it decomposes on `geoConfig.subType` into the two geo
 recipes, so a `geo` question converts but nothing converts back to `geo`.
 
-`lib/viz/from-vizsettings.ts` is the bridge, and its switch is exhaustiveness-guarded
-(`const _never: never = type`) — adding a member to `VIZ_TYPES` fails the type check until the
-switch handles it. `envelopeVizType()` in `lib/viz/viz-templates.ts` is the reverse map (recipes →
-their `vizType`, DOM kinds pass through, raw specs → `undefined`).
+`lib/viz/from-vizsettings.ts` is the bridge between the two (detailed below), and its switch is
+exhaustiveness-guarded (`const _never: never = type`) — adding a member to `VIZ_TYPES` fails the
+type check until the switch handles it. `envelopeVizType()` in `lib/viz/viz-templates.ts` is the
+reverse map (recipes → their `vizType`, DOM kinds pass through, raw specs → `undefined`).
 
 ## Render pipeline
 
@@ -158,14 +177,31 @@ column stats, faceted filters, drilldown, header format editor) and `components/
 renderers; `components/viz/VizTableView.tsx` and `components/viz/VizPivotView.tsx` are thin envelope adapters
 over them, unpacking `columnFormats` / `conditionalFormats` / `wrapColumns` / `config` / `css` via
 `encoding-edit` getters. The `css` field is scoped to the instance with native CSS nesting under
-a per-mount class and is written against the stable class contract
-(`.mx-table`, `.mx-column`, `.mx-header-row`, `.mx-th`, `.mx-th-accented`, `.mx-row`,
-`.mx-row-odd/-even`, `.mx-row-wrap`, `.mx-cell`, `.mx-cell-wrap`, `.mx-col-<name>` from
-`components/plotx/table-v2-utils.ts`, `.mx-column-type-<text|number|date|json>`, `.mx-type-icon`,
-`.mx-sort-icon`, `.mx-filter-icon`, `.mx-resize-handle`, `.mx-toolbar`, `.mx-pivot`, plus the custom
-properties `--mx-column-width`, `--mx-table-accent` and the padding pairs). The authority is the
-`css` field description on `VizSourceTable` in `lib/validation/atlas-schemas.ts` — that string is what the agent
-reads, so a class added here without a schema edit is undiscoverable.
+a per-mount class (`.mx-viz-scope-*`) and is written against a stable class contract.
+
+**The classes are emitted from four files, not one.** `components/plotx/TableV2.tsx` writes
+`.mx-table`, `.mx-header-row` and the `<col>` classes (`.mx-column`,
+`.mx-column-type-<text|number|date|json>`, `.mx-col-<name>` via `cssColumnClass` in
+`components/plotx/table-v2-utils.ts`); `components/plotx/TableBody.tsx` writes `.mx-row`,
+`.mx-row-odd/-even`, `.mx-row-wrap`, `.mx-row-clickable`, `.mx-cell`, `.mx-cell-wrap`;
+`components/plotx/TableHeaderCell.tsx` writes `.mx-th`, `.mx-th-accented`, `.mx-type-icon`
+(+ `.mx-type-icon-<type>`), `.mx-header-toggle`, `.mx-sort-icon`, `.mx-filter-icon`,
+`.mx-resize-handle`, `.mx-facet-list`; `components/plotx/TableBottomBar.tsx` writes `.mx-toolbar`;
+the pivot's `components/plotx/PivotTableBody.tsx` / `PivotTableHeader.tsx` write the same
+row/cell/th classes under the `.mx-pivot` root. Every *default* for those classes is a
+zero-specificity `:where()` rule in `TABLE_BASE_CSS` (`components/plotx/TableV2.tsx`) — that file
+styles far more classes than it emits, so grep for the `className=` to find the owner. Custom
+properties: `--mx-column-width`, `--mx-table-accent`, `--mx-cell-padding-block/inline`,
+`--mx-header-padding-block/inline`.
+
+**The contract exists in three hand-maintained copies and they have already drifted.** The
+authority is the `css` field description on `VizSourceTable` (and `VizSourcePivot`) in
+`lib/validation/atlas-schemas.ts` — that string is what the agent reads, so a class added in a
+component without a schema edit is undiscoverable. The panel's help text in
+`components/viz/VegaVizPanel.tsx` is a second copy shown to humans. Today the schema description
+omits `.mx-th-accented`, `.mx-row-wrap`, `.mx-cell-wrap`, `.mx-resize-handle`, `.mx-header-toggle`,
+`.mx-facet-list`, `--mx-column-width` and `--mx-table-accent`; treat those as
+emitted-but-undocumented until the description is updated.
 
 Pivot math is split: `lib/chart/pivot-utils.ts` is the aggregation engine (`aggregatePivotData`,
 `computeFormulas`, dimension-value helpers) and `lib/chart/pivot-grid.ts` is the pure layout
@@ -199,9 +235,11 @@ otherwise a silent no-op.
 
 Vega may not fetch geometry: the validator rejects `data.url` and `data.values`, and the only
 dataset bound at render is the query result. Boundaries therefore go through a named-asset
-allowlist. `lib/viz/geo-assets.ts` defines `GEO_ASSETS` (`us-states`, `us-counties`, `world`,
-`india-states`, each a file under `public/geojson/`, TopoJSON converted at load) and the reserved
-dataset name `GEO_BOUNDARY_DATASET` (`__mx_geo_boundary`). A recipe declares
+allowlist. `lib/viz/geo-assets.ts` defines `GEO_ASSETS` — `us-states`, `us-counties`, `world`,
+`india-states`, each naming a file under `public/geojson/` plus the `nameProp` lookup key and the
+Vega projection that frames it. An entry with a `topojsonObject` is converted from TopoJSON at
+load; `india-states` has none and is plain GeoJSON. `DEFAULT_GEO_ASSET` is `us-states`. The
+reserved dataset name is `GEO_BOUNDARY_DATASET` (`__mx_geo_boundary`). A recipe declares
 `{localName: assetId}` via `VizTemplate.assets`, and `injectNamedAssets` resolves and binds the
 features next to `main`. Loading goes through a swappable fetcher: browsers `fetch` the
 root-relative path; headless contexts must install
@@ -237,12 +275,28 @@ suppresses it.
 
 ## Validation
 
-`lib/viz/validate.ts` (`validateVizEnvelope`) runs five stages, short-circuiting on the first
-error stage: envelope shape (`E_ENVELOPE`) → data policy (`E_EXTERNAL_DATA`, `E_DATASET_NAME`) →
-the Vega-Lite package schema via Ajv (`E_SCHEMA`) → field references against the actual result
-columns (`E_FIELD_NOT_FOUND`, with suggestions; transform-derived names allowed) → compile
-warnings (`W_COMPILE`, never fatal). `E_CSS` rejects `@import` and external `url()`.
-Codes and `formatVizIssues` live in `lib/viz/types.ts`.
+`lib/viz/validate.ts` (`validateVizEnvelope`) runs stages that short-circuit on the first error:
+envelope shape (`E_ENVELOPE`) → recipe materialization (`E_RECIPE` — unknown id or missing
+bindings) → data policy (`E_EXTERNAL_DATA`, `E_DATASET_NAME`) → the Vega-Lite package schema via
+Ajv (`E_SCHEMA`) → field references against the actual result columns (`E_FIELD_NOT_FOUND`, with
+suggestions; transform-derived names allowed) → compile warnings (`W_COMPILE`, never fatal).
+`E_CSS` rejects `@import` and **any** `url()`, not merely an external one. Codes and
+`formatVizIssues` live in `lib/viz/types.ts`.
+
+Three source kinds take shortcuts, and knowing which avoids chasing a check that never runs.
+`table`/`pivot` have no grammar: only column references (`columnFormats`, `wrapColumns`, pivot
+`config`) and the `css` sanitizer apply. A detached `vega` source and a `vega` recipe cannot run
+the Vega-Lite pipeline, so they are data-policy checked and then smoke-parsed
+(`parse(spec, undefined, {ast: true})`). Recipe **bindings** are field-checked directly against the
+columns, but the materialized spec is not — it legitimately references boundary geometry fields
+(`properties.name`) that are not query columns, and checking it would false-positive. `columns`
+being undefined (headless paths, or an edit changing query and viz together) skips every field
+check rather than false-positive against stale columns.
+
+`lib/viz/query-data.ts` is where "column kinds" come from: `sqlTypeToVizKind` maps a connector's
+SQL type string onto `quantitative | temporal | nominal | boolean | unknown`, and `toVizColumns`
+zips `QueryResult.columns` with `.types`. Every caller that hands `columns` to the validator, the
+bridge or the encoding panel goes through it.
 
 The Vega-Lite schema is large and server-only, so the browser reaches the validator over
 `POST /api/viz/validate` through `lib/viz/validate-remote.ts`, which **fails open**: an
@@ -336,6 +390,66 @@ ESLint (`frontend/eslint.config.mjs`) bans Chakra imports under `components/plot
 - **`lib/viz/tooltip-styles.ts` injects into the chart's `ownerDocument`.** Charts render inside
   story/dashboard iframes; `globals.css` only styles the app document, and vega-tooltip's own
   handler closes over the wrong realm's `document` (hence `lib/viz/vega-tooltip-handler.ts`).
+- **A wrong field name is not a Vega-Lite error.** Vega-Lite compiles and renders a spec that
+  references a column the query result does not have — as an empty chart, with no warning anywhere.
+  That is why `lib/viz/validate.ts` walks field references against the actual result columns as its
+  own stage rather than trusting the package schema, which cannot see the data.
+- **CSP-safe rendering needs both halves.** `parse(spec, config, { ast: true })` and
+  `new View(runtime, { expr: expressionInterpreter })` are one mechanism in `lib/viz/render-vega.ts`.
+  `ast: true` only changes how expressions are *stored*; the interpreter is what evaluates them
+  without `new Function`. Drop either half and rendering keeps working wherever no CSP is enforced,
+  then breaks only in the environments that matter. Interpreter mode is CSP *compatibility*, not a
+  boundary against untrusted specs — that boundary is `lib/viz/validate.ts` (external `data.url`
+  rejected, `main` the only bound dataset, boundaries only from the named-asset allowlist). Every
+  mounted view is `finalize()`d when it is torn down.
+
+## Design rules
+
+**Chart types are data, not components.** MinusX owns the envelope, the data binding, the theme,
+validation and security; visualization *semantics* live in the Vega/Vega-Lite grammar and in
+versioned recipes. Adding a chart shape therefore normally adds no rendering code: a new spec shape
+needs none at all, and a new recipe is one entry in `lib/viz/viz-templates.ts`. `trend` and
+`single_value` ship as recipes specifically so they add no DOM leaf renderer, and the editor's
+controls are generated from envelope metadata — binding zones from `getEnvelopeZones`, per-recipe
+controls from a recipe's declared `params` — rather than written per chart type. A per-type React
+renderer or a per-type settings panel is the anti-pattern this design exists to prevent.
+
+**Grammar versions are pinned as a correctness contract.** `grammar` is a literal on every
+grammar-bearing source — `vega-lite@6` on `VizSourceVegaLite`, `vega@6` on `VizSourceVega`
+(`VIZ_GRAMMAR_VEGA_LITE` / `VIZ_GRAMMAR_VEGA` in `lib/validation/atlas-schemas.ts`) — recorded
+separately from the envelope's `version`. Specs validate against the schema exported by the
+*installed* Vega-Lite package; `$schema` is never fetched from the network. Bumping Vega or
+Vega-Lite to a new major is therefore an explicit migration with visual regression checks, not a
+dependency update: a saved spec must never be silently reinterpreted by a newer grammar.
+
+**Where a transformation belongs.** Business semantics — joins, governed metrics, expensive
+calculations, the major aggregation — belong in SQL. Presentation-oriented reshaping — `fold`,
+`window`, `stack`, ranking, regression, binning — belongs in the grammar, because that is what lets
+one recipe work across datasets. Display naming and number/date formatting belong in neither: they
+are `columnFormats` (`alias` plus a d3 `format`, carried on every source kind and applied at
+materialization). Renaming a column in SQL to change a chart label breaks every other consumer of
+that query and every field reference in the spec — change the display, never the result column.
+
+**On the DOM tier the only persisted state is display.** `VizSourceTable` and `VizSourcePivot`
+store `columnFormats`, `conditionalFormats`, the scoped `css`, and (for pivot) the `config`
+structure. Sorting, filtering and column visibility are deliberately ephemeral UI state and are
+never written back to the file — a reader's transient sort must not become part of the document.
+
+**The V1 image gate's exclusions are a judgement about what an image adds**, not a gap in the
+renderer. `table` and `pivot` are excluded because the data is the visualization — the LLM already
+receives the full query result as rows and can read pivoted values off them, so a picture of a
+table is strictly less useful than the table. `trend` and `single_value` are excluded because they
+are textual KPI cards: the model already has the number and the delta, and an image of
+"8,801 +12.3%" carries no information the numbers do not. The geo types are excluded for a
+different reason — the server path is SVG and cannot draw map tiles.
+
+**Four `VizEnvelope` fields are RESERVED — not yet implemented, omit them**: `dataBindings`
+(query-param bindings that re-execute), `viewParams` (presentation-only signals), `interactions`
+(typed interaction outputs) and `assets` (envelope-level named-asset refs; the *live* asset map is
+`VizSourceVega.assets`). They are schema-present so a saved envelope never needs a shape migration
+when they land, and they are deliberately four namespaces rather than one `params` grab-bag —
+re-executing a query, moving a presentation signal and emitting a selection event have three
+different lifecycles.
 
 ## Key files
 
@@ -348,27 +462,13 @@ ESLint (`frontend/eslint.config.mjs`) bans Chakra imports under `components/plot
 | Change agent-facing validation | `lib/viz/validate.ts`, `lib/viz/types.ts`, `lib/viz/validate-remote.ts` |
 | Change server chart images | `lib/chart/render-viz-image.ts`, `lib/chart/svg-to-jpeg.ts`, `lib/chart/ChartImageRenderer.server.ts` |
 | Change browser chart images / download | `lib/chart/VizImageRenderer.client.ts`, `lib/chart/render-chart-client.ts`, `components/viz/ChartDownloadMenu.tsx` |
-| Change the table | `components/plotx/TableV2.tsx`, `components/viz/VizTableView.tsx`, `components/plotx/table-v2-utils.ts` |
+| Change the table | `components/plotx/TableV2.tsx` (shell/`<col>`), `components/plotx/TableBody.tsx` (rows/cells), `components/plotx/TableHeaderCell.tsx` (headers), `components/viz/VizTableView.tsx`, `components/plotx/table-v2-utils.ts` |
+| Change the `.mx-*` class contract | the emitting component **and** the `css` descriptions in `lib/validation/atlas-schemas.ts` **and** the help text in `components/viz/VegaVizPanel.tsx` |
 | Change which charts count as interactive | `lib/viz/interactive-map.ts` (both `VegaChart` and the dashboard tile read it) |
 | Change the pivot | `lib/chart/pivot-utils.ts` (aggregation), `lib/chart/pivot-grid.ts` (layout), `components/plotx/PivotTable.tsx` |
 | Add a boundary map | `lib/viz/geo-assets.ts` + a file under `public/geojson/` |
 | Change number/date formatting | `lib/chart/chart-format.ts` (d3 presets, `formatLargeNumber`, `formatDateValue`) |
 | Change the palette or theme tokens | `lib/chart/chart-theme.ts`, `lib/viz/chart-tokens.ts` |
-
-The V1 image gate's exclusions are a judgement about what an image *adds*, not a gap in the renderer. `table` and `pivot` are excluded because the data is the visualization — the LLM already receives the full query result as rows and can read pivoted values off them, so a picture of a table is strictly less useful than the table. `trend` and `single_value` are excluded because they are textual KPI cards: the model already has the number and the delta, and an image of "8,801 +12.3%" carries no information the numbers do not. The geo types are excluded for a different reason — the server path is SVG and cannot draw map tiles.
-
-Chart types are **data**, not components. MinusX owns the envelope, the data binding, the theme, validation and security; visualization *semantics* live in the Vega/Vega-Lite grammar and in versioned recipes. Adding a chart shape therefore normally adds no rendering code: a new spec shape needs none at all, and a new recipe is one entry in `lib/viz/viz-templates.ts`. `trend` and `single_value` ship as recipes (`minusx/trend@1`, `minusx/single-value@1`) specifically so they add no DOM leaf renderer, and the editor's controls are generated from envelope metadata — binding zones from `getEnvelopeZones`, per-recipe controls from a recipe's declared `params` — rather than written per chart type. A per-type React renderer or a per-type settings panel is the anti-pattern this design exists to prevent.
-
-**Grammar versions are pinned as a correctness contract.** `grammar` is a literal on every grammar-bearing source — `vega-lite@6` on `VizSourceVegaLite`, `vega@6` on `VizSourceVega` (`VIZ_GRAMMAR_VEGA_LITE` / `VIZ_GRAMMAR_VEGA` in `lib/validation/atlas-schemas.ts`) — recorded separately from the envelope's `version`. Specs validate against the schema exported by the *installed* Vega-Lite package; `$schema` is never fetched from the network. Bumping Vega or Vega-Lite to a new major is therefore an explicit migration with visual regression checks, not a dependency update: a saved spec must never be silently reinterpreted by a newer grammar.
-
-- **CSP-safe rendering needs both halves.** `parse(spec, config, { ast: true })` and `new View(runtime, { expr: expressionInterpreter })` are one mechanism in `lib/viz/render-vega.ts`. `ast: true` only changes how expressions are *stored*; the interpreter is what evaluates them without `new Function`. Drop either half and rendering keeps working wherever no CSP is enforced, then breaks only in the environments that matter. Interpreter mode is CSP *compatibility*, not a boundary against untrusted specs — that boundary is `lib/viz/validate.ts` (external `data.url` rejected, `main` the only bound dataset, boundaries only from the named-asset allowlist). Every mounted view is `finalize()`d when it is torn down.
-
-**Where a transformation belongs.** Business semantics — joins, governed metrics, expensive calculations, the major aggregation — belong in SQL. Presentation-oriented reshaping — `fold`, `window`, `stack`, ranking, regression, binning — belongs in the grammar, because that is what lets one recipe work across datasets. Display naming and number/date formatting belong in neither: they are `columnFormats` (`alias` plus a d3 `format`, carried on every source kind and applied at materialization). Renaming a column in SQL to change a chart label breaks every other consumer of that query and every field reference in the spec — change the display, never the result column.
-
-- **A wrong field name is not a Vega-Lite error.** Vega-Lite compiles and renders a spec that references a column the query result does not have — as an empty chart, with no warning anywhere. That is why `lib/viz/validate.ts` walks every field reference against the actual result columns as its own stage (`E_FIELD_NOT_FOUND`, with candidate suggestions) rather than trusting the package schema, which cannot see the data.
-
-- **On the DOM tier the only persisted state is display.** `VizSourceTable` and `VizSourcePivot` store `columnFormats`, `conditionalFormats`, the scoped `css`, and (for pivot) the `config` structure. Sorting, filtering and column visibility are deliberately ephemeral UI state and are never written back to the file — a reader's transient sort must not become part of the document.
-
-`VizEnvelope` carries four fields marked *RESERVED — not yet implemented, omit*: `dataBindings` (query-param bindings that re-execute), `viewParams` (presentation-only signals), `interactions` (typed interaction outputs) and `assets` (envelope-level named-asset refs; the *live* asset map is `VizSourceVega.assets`). They are schema-present so a saved envelope never needs a shape migration when they land, and they are deliberately four namespaces rather than one `params` grab-bag — re-executing a query, moving a presentation signal and emitting a selection event have three different lifecycles.
+| Change how a SQL type becomes a viz column kind | `lib/viz/query-data.ts` |
 
 ---

@@ -1,17 +1,17 @@
 # Chat serving — the turn pipeline
 
-What happens between an HTTP request and a streamed answer: turn orchestration, the registrables
-hub, agent-args resolution, conversation storage and the streaming bus. The engine it drives is
-`frontend/orchestrator/` and the agents it selects are in `frontend/agents/`.
+How a chat turn is actually served: request → orchestrator → durable rows → resumable SSE. This doc
+covers `lib/chat` (turn orchestration, the registrables hub, agent-args resolution, remote agent
+sessions, the headless report/eval/micro-task runners), `lib/llm` (provider config and per-call
+model resolution) and `lib/projection` (the LLM-facing facet projection) — plus the
+`lib/chat-translator`, `lib/convo-debug` and `lib/evals` leaves that nothing else documents. The
+engine it drives is `frontend/orchestrator/`; the agents it selects are in `frontend/agents/`.
+
+Conversations are rows, not files: they live in dedicated `conversations` + `messages` tables and
+stream over Postgres LISTEN/NOTIFY (see "Decisions not to re-litigate").
 
 > Part of the MinusX project documentation. The root `CLAUDE.md` carries the system
 > overview, the module map and the development principles that apply everywhere.
-
-## Chat serving
-
-How a chat turn is actually served: request → orchestrator → durable rows → resumable SSE, plus the
-LLM provider/model resolution, the LLM-facing app-state projection, remote agent sessions, and the
-headless runners (report / eval / micro-task).
 
 ## The turn pipeline
 
@@ -115,7 +115,10 @@ hides the per-grade pickers while a `minusx` provider is configured (omitted, no
 picker advertises a decision the admin does not get to make), but a mapping stored *before* MinusX was
 added would otherwise still be honoured at plan time, which is what the ordering prevents. The full
 ladder is: `minusx` provider → `llm.grades[grade]` → the workspace's sole bring-your-own-key provider
-run as "Auto" → a hard error naming the unmapped grade.
+run as "Auto" → a hard error naming the unmapped grade. That ladder runs only when
+`hasLlmEndpoints(llm)`; a workspace with no configured endpoint never reaches it and gets the managed
+gateway on the `mx-unconfigured` key sentinel, so the failure is one clear auth error pointing at
+Settings → Models rather than a silent fallback to some other vendor's model.
 
 **Two routing headers ride every managed call.** `minusxCallOptions(grade, agent, extraHeaders)` emits
 `X-MX-Use-Case` (the capability grade) and `X-MX-Agent` (the task kind, an `LlmAgentKey`). The gateway
@@ -169,8 +172,10 @@ tests in the browser through `lib/file-state/file-state.ts` but POSTs *llm* test
 Unrelated, and routinely confused:
 
 - **`frontend/lib/projection/`** projects *toward the model*: rich append-only log state →
-  cross-turn-deduped LLM content. Consumers: `frontend/agents/analyst/analyst-agent.ts` and
-  `frontend/lib/tools/handlers/{read-files,edit-file,create-file}.ts`.
+  cross-turn-deduped LLM content. Consumers: `frontend/agents/analyst/analyst-agent.ts`,
+  `frontend/lib/tools/handlers/{read-files,edit-file,create-file}.ts`,
+  `frontend/lib/chat-translator/index.ts`, `frontend/lib/screenshot/app-state-screenshot.ts` and
+  `frontend/components/explore/ChatInterface.tsx` (the `large_file` size probe).
 - The **display-vs-full wire projection** projects *toward the browser*: `parseConversationView` /
   `projectLogEntryForDisplay` in `frontend/lib/data/conversation-projection.ts` (not in this area).
   The stream route display-projects every catch-up row unless the client passes `?view=full`.
@@ -195,12 +200,18 @@ Unrelated, and routinely confused:
 | `frontend/lib/modules/auth/index.ts` | `registerCompanyWithGateway` | at workspace registration, and only when no installer-supplied `llm` config was passed |
 | `frontend/lib/mcp/session-logger.ts`, `frontend/lib/data/migrate-conversations-v3.server.ts` | `legacyLogToPi` | |
 | `frontend/app/benchmark/page.tsx`, `frontend/lib/conversations-utils.ts` | `piLogToLegacy` | `parsePiConversation` reuses it for render structs |
-| ~32 modules across `frontend/agents/**` and `frontend/components/connection-wizard/**` | `compress-augmented.ts` | see below |
+| 27 non-test modules, repo-wide (see the note below) | `compress-augmented.ts` | shared file→model compression contract |
 
 `frontend/lib/chat/compress-augmented.ts` looks like a chat-internal helper and is not one: it is the
 shared file→model compression contract (`compressAugmentedFile`, `compressQueryResult`,
-`dbFileToFileState`, the `AGENT_DRAIN_MAX_BYTES`/`*_LIMIT_CHARS` budgets). Almost every DB tool in
-`frontend/agents/**` imports it. Changing its output shape changes what every agent sees.
+`dbFileToFileState`, `boundContextAppState`, the `AGENT_DRAIN_MAX_BYTES`/`*_LIMIT_CHARS` budgets).
+Its blast radius is not "agents": the 27 non-test importers span `frontend/agents/**` (every DB
+tool), `frontend/lib/tools/handlers/**`, `frontend/lib/appState.ts`, `frontend/store/filesSlice.ts`
+and `frontend/store/appStateSelector.ts`, `frontend/lib/mcp/server.ts`,
+`frontend/lib/file-state/file-state.server.ts`, `frontend/lib/connections/execute-query.server.ts`,
+`frontend/components/connection-wizard/**`, `frontend/components/share/SharePageClient.tsx` and the
+`turns` / `remote-session` conversation routes. Changing its output shape changes what every agent
+sees *and* what Redux stores.
 
 **What this area calls out to**
 
@@ -240,8 +251,14 @@ shared file→model compression contract (`compressAugmentedFile`, `compressQuer
   retries, and allows exactly one write: `appendRemoteToolCompletions`, which is append-only (map to
   pi toolResults, thread to the owning assistant entry, dedupe already-resolved ids) — no orchestrator,
   no LLM.
-- **`REMOTE_REGISTRABLES` filters out `type === 'Agent'`** so an external agent can never dispatch a
-  name that would start a nested LLM loop. `tool-inspector.server.ts` applies the same guard.
+- **`REGISTRABLES` has derived registries, so one array edit lands in four surfaces.**
+  `HEADLESS_REGISTRABLES` is `withSwaps(REGISTRABLES, HEADLESS_TOOL_SWAPS)` — Slack, report and eval
+  pick a new tool up for free. `REMOTE_REGISTRABLES` is `REGISTRABLES` minus `type === 'Agent'`, plus
+  `RemoteSessionAgent`, so an external agent can never *dispatch* a name that would start a nested
+  LLM loop; `tool-inspector.server.ts` applies the same leaf-only guard against `REGISTRABLES`
+  directly. What a remote agent may *call* is a separate, narrower gate: `REMOTE_TOOL_NAMES` is
+  `RemoteSessionAgent.tools` (WebAnalystAgent's leaf tools minus `ClarifyFrontend`), checked before
+  dispatch — so registering a tool does not by itself expose it over `/s/<code>/tool`.
 - **A stale bridged remote call is closed on the agent's NEXT call, never by a poll.**
   `getRemoteToolResult` only flags `browserMaybeUnreachable` — a pending human confirmation
   (Navigate/PublishAll) must not be force-closed.
@@ -257,8 +274,11 @@ shared file→model compression contract (`compressAugmentedFile`, `compressQuer
 - **V1 vs V2 benchmark conversations share `schema.name = 'DoubleCheckBenchmarkAgent'`**, so
   `isV2BenchmarkConversation` scans the saved log for V2-only markers (`V2BenchmarkAnalystAgent`,
   `Explore`, `fetchHandle`) instead of trusting the root name.
-- **`resolveLlmPlan` returns `null` under `E2E_MODE` and in test envs**, so agents keep their faux
-  static models and the suite stays network-free. A DB config must not win there.
+- **`resolveLlmPlan` returns `null` unconditionally under `E2E_MODE`, but under vitest only for an
+  UNCONFIGURED workspace.** The E2E short-circuit is the first line of the function, so a DB config
+  can never override an agent's faux static model there. The plain-test `null` is the *last* line
+  (`isTestEnv()`), reached only after `hasLlmEndpoints(llm)` fails — a test that writes an `llm`
+  section resolves a real plan and will try to reach a real provider.
 - **An `llm` section carrying neither providers nor grades is treated as unconfigured** (`hasLlmEndpoints`)
   and routes to the managed gateway — that empty section is what Settings → Models leaves behind when
   the last provider is deleted, and the page offers no way to remove it.
@@ -270,10 +290,15 @@ shared file→model compression contract (`compressAugmentedFile`, `compressQuer
   credentials.
 - **`setLlmCallRecorder` is an import side effect** of `orchestration-core.server.ts`. Runners that do
   not import that module (the benchmark CLI) write no `llm_logs` request rows.
-- **`FacetMemo` is forward-only.** A turn may be slimmed relative to earlier turns, never the reverse,
-  so re-projecting the whole log leaves earlier messages byte-identical and the provider prompt-cache
-  prefix holds. `projectMessages` creates a fresh memo per pass for exactly this reason.
-- **Images diff on `key`, never on the payload** (`file:<id>:image`, `qr:<id>:image`), so base64 is
+- **`FacetMemo` is forward-only, with exactly one exception.** A turn may be slimmed relative to
+  earlier turns, never the reverse, so re-projecting the whole log leaves earlier messages
+  byte-identical and the provider prompt-cache prefix holds; `projectMessages` creates a fresh memo
+  per pass for exactly this reason. The exception is the superseded-screenshot pre-scan: only the
+  LAST screenshot per file id keeps its image, and every earlier one is rewritten to
+  `SUPERSEDED_SCREENSHOT_STUB`. That is bounded on purpose — in an edit loop the previous
+  screenshot-bearing edit sits near the tail, so only a short cache suffix is clipped. Any *new*
+  backward rewrite is not bounded that way and will invalidate the whole prefix.
+- **Images diff on `key`, never on the payload** (`file:<id>:image`, `qr:<queryResultId>:image`), so base64 is
   never hashed. A `data:` URL placed in `ImageContent.url` is the bug that shipped once (the provider
   reported an undefined MIME type) — `imageContentFromUrl` and `assertValidProviderImages` exist to
   keep it from recurring.
@@ -282,10 +307,11 @@ shared file→model compression contract (`compressAugmentedFile`, `compressQuer
   byte-for-byte untouched; it is defense against a stale client shipping a multi-MB schema cache.
 - **`ChatRequest.log_index`, `.source` and `.resume` are read by no route.** Fork takes `atSeq`,
   reconnect is `GET …/stream?since=<cursor>`, and the LLM-call `trigger` is derived from
-  `agent_args.app_state` (`getPageType`), not from `source`. `agent_args` is also far wider at runtime
-  than the declared type: `setupOrchestration` reads `context_file_id`, `context_version`,
-  `connection_id`, `grade_override`, `allowed_viz_types`, `agent_name`, `unrestricted_mode`, `city`,
-  `viewport` and `attachments` off an untyped cast.
+  `agent_args.app_state` (`getPageType`), not from `source`. `agent_args` is also wider at runtime
+  than its declared type: `setupOrchestration` reads every field off an untyped cast, and
+  `allowed_viz_types`, `agent_name`, `unrestricted_mode`, `city`, `viewport` and `attachments`
+  appear nowhere in `ChatRequest` — the interface is not a reliable inventory of what the server
+  actually reads, so grep `setupOrchestration` before assuming a field is unused.
 - **The client sends only pointers.** `context_file_id` / `context_version` / `connection_id` are
   resolved server-side by `buildServerAgentArgs`; schema and context docs are never taken from the
   request body, so the browser cannot inject context it did not earn.
@@ -311,6 +337,8 @@ shared file→model compression contract (`compressAugmentedFile`, `compressQuer
 | Change the `/debug` cost model | `frontend/lib/convo-debug/costs.ts`, `frontend/lib/convo-debug/turns.ts` |
 | Change chat error → "Try again" vs "new chat" | `frontend/lib/chat/error-retryability.ts` |
 
+## Decisions not to re-litigate
+
 **Error rows live in `messages` with `seq = NULL`, and that is load-bearing.** A `kind='error'` row carries `{source, message, details}` in `content` and never consumes a log index. NULLs are distinct under a UNIQUE constraint, so `UNIQUE(conversation_id, seq)` still guards the append-only log while permitting many error rows against the same turn; `MAX(seq)`, `loadLog` (`WHERE seq IS NOT NULL ORDER BY seq`) and `truncateMessagesFrom` all skip them, so errors can never leak into the reconstructed `ConversationLog` or the orchestrator's context. `loadErrors` reads the parallel stream by `created_at, id`. Any new message kind must pick a side: sequenced and visible to the model, or `seq = NULL` and invisible to it.
 
 **Never NOTIFY per token.** Sub-message deltas are batched to `DELTA_FLUSH_MS` (50 ms, with an immediate flush on a thinking↔text kind switch) before a single wakeup goes out. A per-token NOTIFY floods Postgres and, worse, saturates PGLite's single serialized connection — every `query`/`exec`/`notify` funnels through one promise chain there, so a token-rate notify stream starves real queries behind it. Losing a delta is harmless: the finalized message is committed durably and a reconnect replays it from the cursor.
@@ -321,7 +349,7 @@ shared file→model compression contract (`compressAugmentedFile`, `compressQuer
 
 **The display wire view shrinks entries; it never drops them.** `projectLogEntryForDisplay` (`lib/data/conversation-projection.ts`) leaves entry count, order, ids, `parent_id` and timestamps byte-identical to the full log, because the client derives positions from the log it holds (`piLog.length`) and matches pending frontend-tool calls by toolCall block id — a removed entry would shift every later position and silently corrupt fork and resume rather than failing loudly. `display` vs `full` (`?view=`) is a **bandwidth knob, not a security boundary**: it is the requester's own conversation either way, and the client asks for `full` only when `ui.devMode` is on.
 
-Three named sets drive the per-entry rules, and the sets are the pointer — the code is the list. `DETAILS_ONLY_TOOLS` (EditFile, ReviewFile, Screenshot, ExecuteQuery) drop `content` entirely and keep `details` capped at `DISPLAY_DETAILS_CAP_CHARS` (32 K chars). `DERIVE_DETAILS_TOOLS` (the search/read family, whose tools never populate `details`) have `details` **derived from `content` at read time**, then `content` dropped — which is why the projection works retroactively on conversations written before it existed, with no write-path change. An unknown tool is treated conservatively: keep `details`, cap `content` at `DISPLAY_UNKNOWN_CONTENT_CAP_CHARS` (8 K chars). Error rows pass through untouched, and projecting an already-projected entry is a no-op. `parseToolContent` (`components/explore/tools/DetailCarousel.tsx`) falls back to `msg.details` whenever `content` is empty or unparseable, which is what lets every existing tool display keep working across both views and both eras of stored log.
+Three named sets drive the per-entry rules, and the sets are the pointer — the code is the list. `DETAILS_ONLY_TOOLS` (EditFile, ReviewFile, Screenshot, ExecuteQuery) drop `content` entirely and keep `details` capped at `DISPLAY_DETAILS_CAP_CHARS` (32 K chars). `DERIVE_DETAILS_TOOLS` (twelve tools whose displays parse the result *text* because the tools never populate `details` — the search/read family plus `PublishAll`, `Navigate`, `Clarify`, `LoadSkill`, `LoadContext`) have `details` **derived from `content` at read time**, then `content` dropped — which is why the projection works retroactively on conversations written before it existed, with no write-path change. An unknown tool is treated conservatively: keep `details`, cap `content` at `DISPLAY_UNKNOWN_CONTENT_CAP_CHARS` (8 K chars). Error rows pass through untouched, and projecting an already-projected entry is a no-op. `parseToolContent` (`components/explore/tools/DetailCarousel.tsx`) falls back to `msg.details` whenever `content` is empty or unparseable, which is what lets every existing tool display keep working across both views and both eras of stored log.
 
 **The lazy screenshot endpoint contains no tool names.** The display view rewrites any `details.screenshotUrl` holding an inline `data:` URI to `GET /api/conversations/:id/screenshots/:callId`; that route addresses the tool call by `toolCallId` and serves the *first inline image block in that call's response `content`* (`extractToolResultImage`) — content is the source of truth and `details` is never inspected for serving. It reuses the conversation's owner+mode gate and answers `Cache-Control: private, max-age=31536000, immutable`, safe precisely because a committed log entry never changes; remote (non-`data:`) URLs pass through untouched. The consequence — a screenshot stored twice, once as an image content block and once as `details.screenshotUrl` — is an accepted tradeoff, not an oversight: jsonb is compressed at rest and some deployments mandate base64 over an object-store URL. The live stream applies the same projection in `flushCatchup` unless `view=full`, but the browser deliberately never requests `full` there: streamed rows are ephemeral (finalize re-reads from the GET) and live tool cards render from `details`, which the slim view already carries.
 

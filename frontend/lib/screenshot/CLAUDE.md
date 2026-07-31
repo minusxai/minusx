@@ -1,11 +1,19 @@
 # Capture — surface to image
 
 `lib/screenshot` (which path, and when) and `lib/headless-capture` (server-side story capture).
-Every path is SERIALIZATION capture, not a screenshot API.
+Every path is SERIALIZATION capture, not a screenshot API: the live DOM is cloned into an
+`<svg><foreignObject>`, made self-contained, and rasterized by the browser through an `<img>`.
+Nothing here re-derives styles or re-implements layout.
 
 This is general infrastructure, not a story concern: `lib/screenshot` has ten consumers across
-explore, views, agents and tools. The surfaces it captures are documented in
-`frontend/lib/story-surface/CLAUDE.md`, which also carries the shared gotchas.
+explore, views, agents and tools.
+
+The three tiers, in order: authoring → mounting → **capture (here)**. A **surface** is the
+`<svg><foreignObject><div data-mx-story-root>` a story or dashboard mounts into inside its
+same-origin iframe; it is documented in `frontend/lib/story-surface/CLAUDE.md`, which also owns the
+clone-fixup and rasterize primitives this module calls (`applyScrollOffsets`, `stampFormValues`,
+`svgToImage`) and the gotchas about them. The tree that gets mounted is
+`frontend/lib/story-ui/CLAUDE.md`.
 
 > Part of the MinusX project documentation. The root `CLAUDE.md` carries the system
 > overview, the module map and the development principles that apply everywhere.
@@ -39,8 +47,9 @@ the view, including inside same-origin iframes (one nested level), plus an ifram
 still `loading`. Each poll re-broadcasts `FORCE_MOUNT_TILES_EVENT` on `document`, so windowed
 dashboard tiles (`components/views/dashboard/WindowedTile.tsx`) mount their real content and their
 own busy markers then gate the settle; re-broadcasting every poll matters because the view can
-remount mid-settle. The wait always resolves by `timeoutMs` and returns `{ settled, busyCount }` —
-degrading to a screenshot of a spinner is correct, hanging the tool is not.
+remount mid-settle. The wait always resolves by `timeoutMs` (default 10 s, `settleMs` 250) and
+returns `{ settled, busyCount }` — degrading to a screenshot of a spinner is correct, hanging the
+tool is not.
 
 `app-state-screenshot.ts` is the send-path attachment. Capture happens **only on send**, never
 speculatively on view change (speculative warming froze the main thread for seconds while the user
@@ -59,38 +68,106 @@ looking at, plus per-element scroll offsets — is emitted as a tiny separate `<
 `markersEnabledForAppState` gates both off one declared property, `FILE_TYPE_METADATA[type].markers`.
 
 `constants.ts` is the single source for agent-image numbers (`AGENT_IMAGE_MAX_PX = 512`,
-`DISPLAY_IMAGE_MAX_PX = 1536`, `AGENT_IMAGE_PIXEL_RATIO = 2`, `AGENT_IMAGE_JPEG_QUALITY = 0.85`,
-chart watermark geometry) and is dependency-free so the browser capture path, the client chart
-renderer and the server Sharp/Resvg renderer can all import it.
+`AGENT_IMAGE_MAX_H_PX = 2560` — the height cap that downscales a full-height review capture instead
+of cropping it, `DISPLAY_IMAGE_MAX_PX = 1536`, `AGENT_IMAGE_PIXEL_RATIO = 2`,
+`AGENT_IMAGE_JPEG_QUALITY = 0.85`, chart watermark geometry) and is dependency-free so the browser
+capture path, the client chart renderer and the server Sharp/Resvg renderer can all import it.
 
 ## `lib/headless-capture` — server-side story capture
 
 `renderStoryToImage(input)` is the only seam; callers never import a backend. `manager.ts` owns the
 lifecycle: lazy singleton backend (zero cost if unused, a failed launch clears the slot so a later
-render retries), a `Semaphore` bounding concurrency (default 2), an idle shutdown (default 60s,
-`unref`'d), and **it never throws** — disabled or unlaunchable ⇒ `{ ok:false, reason:'unavailable' }`,
-a failed capture ⇒ `reason:'error'`. `playwright-backend.server.ts` launches headless Chromium in the
-same container, loads `/f/<id>` exactly as a browser user would, waits for
-`[data-file-id] iframe >>> svg[data-mx-story-svg]` and `fonts.ready`, and screenshots that element.
-It renders at `STORY_CANVAS_WIDTH`, not a thumbnail viewport, because the surface tracks its
+render retries), a `Semaphore` bounding concurrency (`DEFAULT_CAPTURE_CONCURRENCY = 2`), an idle
+shutdown (`DEFAULT_IDLE_SHUTDOWN_MS = 60_000`, on an `unref`'d timer so it never holds a script
+process open), and **it never throws** — disabled or unlaunchable ⇒
+`{ ok:false, reason:'unavailable' }`, a failed capture ⇒ `reason:'error'`.
+`playwright-backend.server.ts` launches headless Chromium in the same container, loads `/f/<id>`
+exactly as a browser user would, waits via
+`page.frameLocator('[data-file-id="<id>"] iframe').locator('svg[data-mx-story-svg]')` plus
+`fonts.ready` and a 300 ms settle, and screenshots that element with `locator.screenshot()`. It
+renders at `STORY_CANVAS_WIDTH`, not a thumbnail viewport, because the surface tracks its
 container — viewport width is a **layout input**, and a narrower one collapses container-query bands
 so the agent would review a layout no reader sees. `session-cookie.server.ts` mints a short-lived
-NextAuth session JWT (same secret and salt NextAuth uses, carrying `tokenVersion` so the
-outdated-token guard passes) rather than driving the login form. Enabled by `HEADLESS_CAPTURE=1`,
-default off.
+NextAuth session JWT (same secret and salt NextAuth uses — salt = cookie name, secret =
+`NEXTAUTH_SECRET` — carrying `tokenVersion` so the outdated-token guard passes) rather than driving
+the login form. Enabled by `HEADLESS_CAPTURE=1`, default off.
+`story-image-blocks.server.ts` wraps that into `renderStoryImageBlocks` (at most
+`MAX_STORY_IMAGE_BLOCKS = 2` image blocks) for headless agent turns.
 
-## `lib/og` — share cards
+## Interactions with other areas
 
-`capture-story-preview.ts` runs in the browser when a story is made public: it finds
-`[data-story-capture="<id>"]`, serializes the live surface (falling back to the generic element
-serializer), crops the **top band** to the 1200×630 OG aspect, and POSTs a JPEG data URL to
-`/api/files/[id]/preview`. `og-image.tsx` (server) pre-blurs that screenshot with sharp — satori
-cannot do CSS blur — and composes the final card via `og-cards.tsx` (`next/og` + JetBrains Mono from
-`public/fonts`, org branding from `getConfigsForMode`). The composed PNG is stored in the object
-store and streamed back verbatim by `app/l/[shareId]/og/route.ts` — **a story card is never rendered
-at crawl time**. Only the *generic* fallback (no capture yet, revoked share, root) can render on
-demand, and even that serves the committed `public/ogs/generic.png` unless the org has a custom
-expanded logo. That route is a plain handler rather than Next's `opengraph-image` convention because
-the convention only ever emits the dev localhost host. `og-helpers.ts`'s `ogCacheKey` embeds
-`updated_at` (normalized — `pg` returns `Date`, PGLite returns ISO strings) so the cache self-busts
-on every edit.
+**Agent tooling.** `lib/tools/handlers/file-review.ts` and `components/explore/ChatInterface.tsx`
+call into `lib/screenshot`; `agents/analyst/file-tools.ts` calls `renderStoryImageBlocks` for
+headless turns, where Slack's app state has no `fileState` to hang an image on. **Contract:**
+LLM-facing callers MUST branch on `readiness.settled` — an un-annotated mid-load capture reads as
+broken content and triggers destructive "fixes".
+
+**Region capture.** `components/screenshot/RegionCaptureButton.tsx` /
+`ImageAnnotatorDialog.tsx` call `captureRegionBlob`, passing a `filter` that excludes the selection
+overlay and a `targetBox` snapshotted at drag time (reading the box *after* the async render lets
+layout drift slide the crop).
+
+**Charts.** `components/viz/VegaChart.tsx` forces Vega's SVG renderer precisely because captures
+serialize live DOM — canvas content serializes empty (`stampCanvases` is the fallback, and a tainted
+canvas is skipped entirely).
+
+**Share cards.** `lib/og` (documented in `frontend/lib/CLAUDE.md`) is a consumer, not a sibling:
+`lib/og/capture-story-preview.ts` reuses `findStorySvg`/`serializeStorySvg`/`svgToImage`, falling back
+to `serialize-element.ts`, then crops the top band to the 1200×630 OG aspect.
+
+**CI / scripts.** `scripts/capture-matrix.ts` (+ `scripts/b2-surface-matrix.ts`,
+`scripts/story-width-matrix.ts`, `scripts/b2-surface-drivers.tsx`) drives the real modules across
+Chromium/WebKit/Firefox; `scripts/headless-capture-fidelity.ts` pixel-diffs the Playwright screenshot
+against the client serialize path under an explicit threshold — that diff is what keeps the two
+capture mechanisms from forking, because the Playwright backend uses `locator.screenshot()` rather
+than calling `serializeStorySvg` in-page (the app bundle does not expose it on `window`).
+
+## Gotchas
+
+- **`headless-capture` never throws.** Distinguish `unavailable` (flag off / no Chromium — degrade
+  silently) from `error` (a real capture failure).
+- **A surface svg's own `getBoundingClientRect` is frame-relative.** `svgBoxInTopViewport`
+  (`capture.ts`) walks up the frame chain adding each `frameElement`'s offset, because a
+  region-capture selection is expressed in TOP-viewport coordinates. Comparing the two spaces
+  directly crops against the wrong origin: the containment pre-gate then rejects a selection that
+  really is on the surface — falling through to the generic path, which renders an iframe clone
+  black — or crops the wrong band. The walk stops at the first cross-origin ancestor and keeps the
+  composition it has. A selection that only *straddles* the surface edge is still cropped here and
+  its margin filled with the background; only a fully off-surface selection falls through.
+- **The marker gutter is an overlay and never changes canvas geometry.** `drawMarkerGutter`
+  (`draw-markers.ts`) paints the badges and dashed band lines onto the already-rasterized content
+  canvas at content scale, and a contract test asserts the output canvas is exactly the input's
+  width. Widening the image would hand the agent a picture whose geometry differs from the page — the
+  opposite of what numbered markers exist for. Badges live inside `MARKER_GUTTER_CSS_PX` (40,
+  Tailwind `pl-10`), the left padding every marker-flagged main-document view reserves; **stories
+  reserve nothing on purpose** and rely on their authored margins, because injecting structural
+  padding would shift every curated story. Badge height carries a 14-output-pixel floor: at the
+  roughly 0.45× agent scale the live overlay's 22px badge would render unreadable numerals, and the
+  floored badge still fits the 40px gutter, so it never crosses into content.
+- **Scale the raster, never the element.** `fitScale` picks whichever of `maxWidth`/`maxHeight` binds
+  tightest (falling back to `pixelRatio`, default 0.75) and the whole element is downscaled, never
+  cropped — re-laying-out the element at a target width would change what is being captured.
+- **Surface-level serialization gotchas live in `frontend/lib/story-surface/CLAUDE.md`** — Blob-URL
+  canvas tainting, styles injected into `<head>` being lost, and DOM state (scroll, form values,
+  canvas pixels) not being markup. They apply to both paths here.
+
+## Key files
+
+| Task | File |
+|---|---|
+| Change which capture path a view takes | `frontend/lib/screenshot/capture.ts` |
+| Fix a capture that loses styles/fonts/images (main document) | `frontend/lib/screenshot/serialize-element.ts` |
+| Fix the same on a story/dashboard surface | `frontend/lib/story-surface/serialize.ts` |
+| A capture rasterizes spinners or blank tiles | `frontend/lib/screenshot/readiness.ts` |
+| Change what the agent sees on send | `frontend/lib/screenshot/app-state-screenshot.ts` |
+| Change marker cadence / the `<Viewport>` pointer | `frontend/lib/screenshot/page-markers.ts`, `frontend/lib/screenshot/read-viewport.ts`, `frontend/lib/screenshot/draw-markers.ts` |
+| Agent image size/quality constants | `frontend/lib/screenshot/constants.ts` |
+| Server-side story image (Slack, reports, eval) | `frontend/lib/headless-capture/index.server.ts`, `frontend/lib/headless-capture/playwright-backend.server.ts` |
+| Share-card look or caching | `frontend/lib/og/og-cards.tsx`, `frontend/lib/og/og-image.tsx`, `frontend/lib/og/og-helpers.ts` (docs: `frontend/lib/CLAUDE.md`) |
+
+## Design decisions
+
+**Headless capture needs a real browser — that is the problem, not a missing library.** Node-side SVG
+rasterizers ignore `foreignObject` entirely, and Satori implements a flexbox-only subset that cannot
+express story markup, so neither can stand in for the Playwright backend. The swappable-backend seam
+exists to allow a *different browser*, not a pure-Node renderer.

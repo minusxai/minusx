@@ -1,29 +1,22 @@
-# Tools, jobs, integrations and telemetry
+# Jobs, integrations and telemetry
 
 Scheduled and manual job runs, the Slack/MCP surfaces, message transports and analytics:
-`lib/jobs`, `lib/integrations`, `lib/messaging`, `lib/analytics`.
+`lib/jobs`, `lib/integrations`, `lib/messaging`, `lib/analytics` — plus the four leaves these
+four drive: `lib/app-event-registry` (the bus everything publishes into), `lib/mcp`, `lib/search`
+and `lib/spreadsheet`.
 
 The browser-side tool bridge has its own doc: `frontend/lib/tools/CLAUDE.md`.
 
 > Part of the MinusX project documentation. The root `CLAUDE.md` carries the system
 > overview, the module map and the development principles that apply everywhere.
 
-## Tools, Jobs, Integrations & Telemetry
+## Jobs, Integrations & Telemetry
 
-Nine modules under `frontend/lib/` that sit at the app's edges: the browser half of the
-agent's tool calls, the scheduled-job runner, the Slack and MCP surfaces, outbound
-messaging, and the event/analytics pipeline every other module publishes into.
+Eight modules under `frontend/lib/` that sit at the app's edges: the scheduled-job runner,
+the Slack and MCP surfaces, outbound messaging, search/spreadsheet leaves, and the
+event/analytics pipeline every other module publishes into.
 
 ### What each module owns
-
-**`lib/tools/`** — the browser-side execution of *frontend-bridged* tool calls. When a
-server tool needs Redux or the DOM it throws `UserInputException` / `FrontendToolException`,
-the orchestrator returns the call as pending, and `executeToolCall` (`lib/tools/tool-handlers.ts`)
-runs it here before resuming the server run. The barrel owns registration and the
-`ToolCall → ToolMessage` shape; each handler body lives in its own module under
-`lib/tools/handlers/`. It does **not** own the LLM-facing arg schemas — those are TypeBox
-objects colocated with the tool class in `agents/web-analyst/web-tools.ts`. It does not own
-file mutation either: every handler goes through `lib/file-state/file-state.ts`.
 
 **`lib/jobs/`** — scheduled and manual runs of `alert` / `context` / `report` / `sheets_sync`
 job files: cron evaluation, run-file creation, handler dispatch, and message delivery
@@ -134,10 +127,6 @@ appEventRegistry.publish(AppEvents.X, payload)          registry.ts (never await
 
 | Boundary | Contract |
 |---|---|
-| `store/chatListener.ts` → `lib/tools/tool-handlers.ts` | Calls `executeToolCall`; catches `UserInputException` (`lib/tools/user-input-exception.ts`) to raise a `UserInputComponent` prompt and re-invoke with `userInputs` filled. Handlers must be re-entrant: the second call sees `userInputs[0].result`. |
-| `agents/web-analyst/web-tools.ts` ⇄ `lib/tools/handlers/*` | The TypeBox schema and the handler are two halves of one contract, enforced in CI by `lib/tools/__tests__/tool-schema-sync.test.ts`: it parses each handler's *source text* and fails if the handler reads an `args` key the schema doesn't declare, or the schema declares a param the handler never reads. |
-| `lib/tools/handlers/*` → `lib/file-state/file-state.ts` | Every read/edit/create/query goes through `readFiles`, `editFileStr`, `editFile`, `createDraftFile`, `getQueryResult`. Nothing here talks to `/api/files` directly. |
-| `components/explore/*` → `lib/tools/tool-config.ts` | `getToolConfig(name)` returns `{displayComponent, chipLabel, chipLabelPlural, chipIcon, timelineVerb}`, with a `DefaultToolDisplay` fallback for unknown tools — a new tool renders without touching this file. |
 | `app/api/jobs/{cron,run}/route.ts` → `lib/jobs/` | Routes are thin: auth (`withCronAuth` / `withAuth`), `JobRunsDB.ensureTable()`, then `runForOrg` / `runJob`. Outcomes are returned as a discriminated union (`RunJobOutcome`), never thrown. |
 | `lib/jobs/handlers/*` → other areas | `alert`/`context` → `createServerRunner` (`lib/evals/server`); `report` → `runReportV2` + `buildServerAgentArgs`; `sheets_sync` → `lib/csv-processor` + `mergeReimportedSheetFiles`. All four return `{output, messages, status?}` — a handler reports failure by returning `status:'failure'`, it does not have to throw. |
 | `lib/jobs/deliver-messages.ts` → `lib/messaging` + Slack | Resolves `config.messaging.webhooks` through `resolveWebhook`, then dispatches per `msg.type`. `slack_app_alert` bypasses webhooks entirely and posts via the installed bot token (resolved from its `@SECRETS/…` ref by `resolveConfigSecrets`). Mutates each `RunMessageRecord` in place and never throws. |
@@ -189,29 +178,23 @@ appEventRegistry.publish(AppEvents.X, payload)          registry.ts (never await
   `runSlackChatTurn` always sends a fresh `user_message` turn and `setupOrchestration` swaps in
   `HEADLESS_REGISTRABLES` for `SlackAgent`. `extractSlackReply` reads only *this turn's* new
   rows (captured via `startSeq` before the turn) so an old answer can't be re-posted.
-- **`SlackAgent` is the only agent with `TalkToUser`.** Every other agent replies via
-  `stopReason: 'stop'` with plain content.
-- **`Screenshot` is a live registration, not dead code.** The class still exists
-  (`agents/web-analyst/web-tools.ts`, sharing `ReviewFileParams`) and is in `REGISTRABLES`, and
-  the handler re-exports `reviewFileHandler` — so a saved log with a pending `Screenshot` call
-  still resumes. It is not in any agent's advertised `tools` array.
-- **A mid-load screenshot suppresses the visual judge.** When `readiness.settled` is false,
-  `reviewFile` returns the deterministic rubric plus a `renderPending` note; grading spinner
-  pixels previously drove agents to delete healthy embeds.
-- **`CreateFile` never renders a chart image** (a created file is always a background draft) and
-  refuses `dashboard`/`story` in the background unless `selectUnrestrictedMode` is on — those
-  must go through `Navigate` with `newFileType`.
-- **`CreateFile`'s `content` arg is `Type.Unknown`,** so the model often sends a JSON *string*;
-  the handler parses it explicitly, because spreading a string into content produced
-  `{"0":"{","1":"\n",…}` while still returning `success: true`.
+- **`SlackAgent` declares no tools of its own** — it extends `RemoteAnalystAgent` and inherits its
+  DB + file toolset, overriding only the system prompt (`slack_addendum`) and `llmAgent = 'slack'`.
+  What it *does* own is which log rows count as a reply: `AGENT_TOOL_NAMES` in `slack/messages.ts`
+  is `['TalkToUser', 'AnalystAgent', 'AtlasAnalystAgent', 'SlackAgent']`, scanned backwards from
+  the newest `task_result`. `TalkToUser` is in that list for old logs only — no agent registers
+  such a tool today.
 - **Credit windows are named twice.** `credit-policy.ts` resolves `daily` and `weekly`; the
   aggregation maps `weekly → billing` and `daily → reset` (`credit-usage.server.ts`). A manual or
   automatic `CREDIT_RESET` app event moves the window start forward via `resetFloorExpr` — usage
   is floored at `GREATEST(calendar-start, latest applicable reset)`, so the reset feature is
   implemented as a *query* over `app_events`, not a mutation of stored usage.
-- **`resolveCreditConfig` and the six allowance fields in `credit-budgets.ts` are test-only.**
-  Production reads `weights`, `defaultBillingCycle` and `maxBillingCycleDays`; limits come from
-  the org config document.
+- **`resolveCreditConfig` and the allowance fields in `credit-budgets.ts` are test-only.**
+  Production reads exactly three of `CreditConfig`'s fields — `weights`, `defaultBillingCycle`,
+  `maxBillingCycleDays`; the rest are consumed only by `resolveCreditConfig`, whose only importer
+  is `lib/analytics/__tests__/credits.test.ts`. Real limits come from the `credits` section of the
+  org config document, resolved per user by `credit-policy.ts` (user → role → company → built-in
+  `DEFAULT_DAILY_LIMIT` 1000 / `DEFAULT_WEEKLY_LIMIT` 5000).
 - **Managed-gateway calls bill from a cost the *provider* reports, not from local rates.** pi-ai
   normally computes `local_rate × wire_tokens`, which cannot work for the gateway: it picks the model
   server-side per request, so the client has no rate to multiply and `buildCustomModel` zeroes them.
@@ -224,9 +207,12 @@ appEventRegistry.publish(AppEvents.X, payload)          registry.ts (never await
   re-implementation of it; it pins that a malformed cost is ignored rather than corrupting the total,
   and that a reported `0` is a real value and not a fallback trigger. **Dropping the patch on a pi-ai
   bump silently zeroes managed-workspace billing.**
-- **`SEARCH_CONFIGS` in `lib/search/file-search.ts` covers only `question`, `dashboard`, `folder`,
-  `connection`, `context`.** A file of any other type is skipped silently (`if (!config) continue`),
-  so stories, notebooks, reports and alerts are unfindable via `SearchFiles`.
+- **`SEARCH_CONFIGS` in `lib/search/file-search.ts` is an allow-list, and a missing entry fails
+  silently** (`if (!config) continue`). It covers nine types today — `question`, `dashboard`,
+  `story`, `notebook`, `connection`, `context`, `report`, `alert`, `folder`. The system types
+  (`config`, `styles`, `session`, `users`, `explore`, and the `*_run` outputs) are deliberately
+  absent, so they are unfindable via `SearchFiles`. **Adding a searchable file type means adding a
+  row here** — nothing fails or warns if you forget.
 - **`capSchemaResult` exists because one schema can exhaust the context window.** A wide
   warehouse serializes to millions of characters and the whole conversation is re-sent every
   turn; the cap keeps whole tables in order up to `SCHEMA_RESULT_MAX_CHARS` (60k) and annotates
@@ -249,12 +235,6 @@ appEventRegistry.publish(AppEvents.X, payload)          registry.ts (never await
 
 | Task | File |
 |---|---|
-| Register / route a frontend-bridged tool | `frontend/lib/tools/tool-handlers.ts` |
-| Handler signature + `content` vs `details` contract | `frontend/lib/tools/handlers/types.ts` |
-| Pause a tool for user input | `frontend/lib/tools/user-input-exception.ts` |
-| Edit pipeline, validation gates, auto-execute | `frontend/lib/tools/handlers/edit-file.ts` |
-| Screenshot + rubric core | `frontend/lib/tools/handlers/file-review.ts` |
-| Chat UI chip/timeline config per tool | `frontend/lib/tools/tool-config.ts` |
 | Add a job type | `frontend/lib/jobs/job-definitions.ts` + `frontend/lib/jobs/job-registry.ts` |
 | Cron scan / dedup / run-file lifecycle | `frontend/lib/jobs/cron-scan.ts` |
 | Manual run (`/api/jobs/run`) | `frontend/lib/jobs/run-job.ts` |
@@ -276,6 +256,5 @@ appEventRegistry.publish(AppEvents.X, payload)          registry.ts (never await
 | File / schema search ranking | `frontend/lib/search/file-search.ts`, `frontend/lib/search/schema-search.ts` |
 | Direct-data question validation + cache key | `frontend/lib/spreadsheet/materialize.ts` |
 
-**Why file edits go through markup at all.** A June-2026 investigation measured a ~42% `EditFile` tool-call failure rate, and all three failure modes shared one cause: the model hand-authoring exact-match edits over escaped, minified JSON-inside-JSON — `changes` arriving as a stringified array, an `oldMatch` that does not appear in the minified target, and edits that produce invalid JSON. The worst case, a story stored as HTML, escaped into a JSON string, inside a JSON tool argument, was three layers of escaping. The fix was to hand the agent one JSX-shaped document of raw text in which structured config is a JSON literal inside `{}` — JSX props are not strings, so nothing needs escaping. Do not add a tool that asks the model to edit escaped JSON, whatever the convenience.
 
 ---

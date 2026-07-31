@@ -4,76 +4,41 @@ MinusX is an open-source agentic business intelligence platform: a file-system-s
 whose questions, dashboards, stories, reports and alerts are documents an AI agent can read and
 write directly.
 
-This file is the authoritative description of the project — architecture, every module, how modules
-interact, and the development philosophy that governs how work is done here. It documents the code
-**as it is today**. There is no plan narrative, no migration history, and no changelog; that is what
-git is for.
+This file is the **hub**. It carries the system shape, the map of where everything lives, and the
+development philosophy that governs every task — the things that apply no matter what you are
+editing. Twenty module docs carry the detail.
 
-**This file is a hub.** It carries the system shape, the module map, and the development philosophy
-that governs every task — the things that apply no matter what you are editing. Twenty module docs
-carry the detail.
+It documents the code **as it is today**: no plan narrative, no migration history, no changelog.
+That is what git is for.
 
-A nested `CLAUDE.md` is loaded lazily, when files in its directory are read, so its cost is paid only
-by work that needs it. This file keeps an orientation paragraph and a link for each, so nothing is
-invisible to someone reading top-down. Keep this file small: everything here is loaded into **every**
-session.
+Everything here is loaded into **every** session, so keep it small. A module doc is loaded lazily —
+when files in its directory are read — so its cost is paid only by work that needs it. Directories
+covered by a sibling's doc carry a one-line pointer file, so the right doc loads wherever you land.
 
-| Doc | Covers |
-|---|---|
-| `frontend/orchestrator/CLAUDE.md` | The `MXTool`/`MXAgent` contract and the registration rule |
-| `frontend/agents/CLAUDE.md` | The agent hierarchy — and why `benchmark-analyst` is production, not benchmarks |
-| `frontend/lib/chat/CLAUDE.md` | The turn pipeline, conversation storage, the registrables hub |
-| `frontend/lib/sql/CLAUDE.md` | SQL ↔ IR. The subtlest correctness traps in the repo |
-| `frontend/lib/connections/CLAUDE.md` | The nine connectors behind one interface |
-| `frontend/lib/query-cache/CLAUDE.md` | The execution pipeline and the durable SWR/lease/blob cache |
-| `frontend/lib/database/CLAUDE.md` | The document DB: schema-as-data, adapters, migrations, the version gate |
-| `frontend/lib/semantic/CLAUDE.md` | Semantic models, contexts, views, Atlas content schemas |
-| `frontend/lib/viz/CLAUDE.md` | Vega rendering, the V1→V2 bridge, the editing surface |
-| `frontend/lib/story-ui/CLAUDE.md` | Story authoring: static JSX as inert data, registry, interpreter |
-| `frontend/lib/story-surface/CLAUDE.md` | Mounting a self-contained document surface (+ shared render gotchas) |
-| `frontend/lib/screenshot/CLAUDE.md` | Capture: serialization to image, client and headless |
-| `frontend/lib/auth/CLAUDE.md` | Sessions, access rules, mode and namespace isolation, the rubric |
-| `frontend/lib/tools/CLAUDE.md` | The browser-side tool bridge |
-| `frontend/lib/jobs/CLAUDE.md` | Scheduled jobs, Slack/MCP, messaging, telemetry |
-| `frontend/lib/CLAUDE.md` | The small shared `lib/` modules that need no doc of their own |
-| `frontend/store/CLAUDE.md` | Redux, the listener middleware, browser file/query operations |
-| `frontend/components/CLAUDE.md` | Container/View separation, the kit/Chakra split, chat UI |
-| `frontend/app/CLAUDE.md` | Every API endpoint and page; the `handleApiError` contract |
-| `frontend/test/CLAUDE.md` | npm scripts, Vitest layout, the test DB harness, Playwright, CI |
+## Module docs
 
-## Where a directory is documented
-
-Module docs load lazily — when files in their own directory are read. Several docs cover sibling
-directories, so this table is the routing map. If you are editing something and want its doc, find
-the directory here.
-
-| You are editing | Read |
-|---|---|
-| `orchestrator/**` | `frontend/orchestrator/CLAUDE.md` |
-| `agents/**` | `frontend/agents/CLAUDE.md` |
-| `lib/chat`, `lib/llm`, `lib/projection` | `frontend/lib/chat/CLAUDE.md` |
-| `lib/sql` | `frontend/lib/sql/CLAUDE.md` |
-| `lib/connections` | `frontend/lib/connections/CLAUDE.md` |
-| `lib/query-cache` | `frontend/lib/query-cache/CLAUDE.md` |
-| **`lib/data`**, `lib/database`, `lib/object-store`, `lib/secrets` | `frontend/lib/database/CLAUDE.md` |
-| `lib/semantic`, `lib/context`, `lib/views`, `lib/validation` | `frontend/lib/semantic/CLAUDE.md` |
-| `lib/viz`, `lib/chart` | `frontend/lib/viz/CLAUDE.md` |
-| `lib/story-ui`, `lib/jsx` | `frontend/lib/story-ui/CLAUDE.md` |
-| `lib/story-surface`, `lib/dashboard-surface`, `lib/html` | `frontend/lib/story-surface/CLAUDE.md` |
-| `lib/screenshot`, `lib/headless-capture` | `frontend/lib/screenshot/CLAUDE.md` |
-| `lib/auth`, `lib/http`, `lib/mode`, `lib/namespace`, `lib/rubric` | `frontend/lib/auth/CLAUDE.md` |
-| `lib/tools` | `frontend/lib/tools/CLAUDE.md` |
-| `lib/jobs`, `lib/integrations`, `lib/messaging`, `lib/analytics` | `frontend/lib/jobs/CLAUDE.md` |
-| `lib/file-state`, `lib/hooks`, `store/**` | `frontend/store/CLAUDE.md` |
-| any other small `lib/*` module | `frontend/lib/CLAUDE.md` |
-| `components/**` | `frontend/components/CLAUDE.md` |
-| `app/**` | `frontend/app/CLAUDE.md` |
-| `test/**`, `scripts/**`, `.github/**` | `frontend/test/CLAUDE.md` |
-
-**Which modules get their own doc is measured, not guessed.** Depth is implementation size over the
-number of exports anything outside actually imports; grouping is by shared consumers, not by topic.
-`lib/og` sits with the small shared modules rather than under render surfaces because it has no
-consumer in common with any of them — it was only ever grouped there because it also produces an image.
+| Editing | Read | It covers |
+|---|---|---|
+| `orchestrator/**` | `frontend/orchestrator/CLAUDE.md` | The `MXTool`/`MXAgent` contract, the step loop, the registration rule |
+| `agents/**` | `frontend/agents/CLAUDE.md` | The agent hierarchy — and why `benchmark-analyst` is production, not benchmarks |
+| `lib/chat`, `lib/llm`, `lib/projection` | `frontend/lib/chat/CLAUDE.md` | The turn pipeline, conversation storage, the registrables hub |
+| `lib/sql` | `frontend/lib/sql/CLAUDE.md` | SQL ↔ IR. The subtlest correctness traps in the repo |
+| `lib/connections` | `frontend/lib/connections/CLAUDE.md` | Every connector behind one interface |
+| `lib/query-cache` | `frontend/lib/query-cache/CLAUDE.md` | The execution pipeline and the durable SWR/lease/blob cache |
+| `lib/data`, `lib/database`, `lib/object-store`, `lib/secrets` | `frontend/lib/database/CLAUDE.md` | The document plane: `FilesAPI`, schema-as-data, adapters, migrations, the version gate |
+| `lib/semantic`, `lib/context`, `lib/views`, `lib/validation` | `frontend/lib/semantic/CLAUDE.md` | Semantic models, the context tree, saved views, Atlas content schemas |
+| `lib/viz`, `lib/chart` | `frontend/lib/viz/CLAUDE.md` | Vega rendering, the V1→V2 bridge, the editing surface |
+| `lib/story-ui`, `lib/jsx` | `frontend/lib/story-ui/CLAUDE.md` | Story authoring: static JSX as inert data, registry, interpreter |
+| `lib/story-surface`, `lib/dashboard-surface`, `lib/html` | `frontend/lib/story-surface/CLAUDE.md` | Mounting a self-contained document surface, plus the shared render gotchas |
+| `lib/screenshot`, `lib/headless-capture` | `frontend/lib/screenshot/CLAUDE.md` | Capture: serialization to image, client and headless |
+| `lib/auth`, `lib/http`, `lib/mode`, `lib/middleware`, `lib/oauth`, `lib/namespace`, `lib/rubric` | `frontend/lib/auth/CLAUDE.md` | Sessions, access rules, mode and namespace isolation, file-health scoring |
+| `lib/tools` | `frontend/lib/tools/CLAUDE.md` | The browser-side tool bridge |
+| `lib/jobs`, `lib/integrations`, `lib/messaging`, `lib/analytics`, `lib/mcp`, `lib/search`, `lib/spreadsheet`, `lib/app-event-registry` | `frontend/lib/jobs/CLAUDE.md` | Scheduled jobs, Slack/MCP, message transports, telemetry, file search, the event bus |
+| `store/**`, `lib/file-state`, `lib/hooks` | `frontend/store/CLAUDE.md` | Redux, the listener middleware, browser file/query operations |
+| `components/**` | `frontend/components/CLAUDE.md` | Container/View separation, the kit/Chakra split, chat UI |
+| `app/**` | `frontend/app/CLAUDE.md` | Every API endpoint and page; the `handleApiError` contract |
+| `test/**`, `scripts/**`, `.github/**` | `frontend/test/CLAUDE.md` | npm scripts, Vitest layout, the test DB harness, Playwright, CI |
+| any other `lib/*` | `frontend/lib/CLAUDE.md` | The small shared modules: file-type registry, config vs constants, branding, `lib/og` |
 
 ## Shape of the system
 

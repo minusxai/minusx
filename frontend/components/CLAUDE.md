@@ -1,25 +1,22 @@
 # UI components
 
-Everything under `frontend/components`: the Container/View separation, the kit/Chakra split, the
-chat UI and the rendered-document surfaces.
+Everything under `frontend/components` — everything the browser renders except the chart engine
+itself: the Container/View separation, the kit/Chakra split, the chat UI, and the
+rendered-document surfaces. `components/viz/` (Vega) and `components/plotx/` (DOM-tier tables, viz
+config panels, download helpers) are a separate area; this tree consumes them and never
+reimplements them.
 
 > Part of the MinusX project documentation. The root `CLAUDE.md` carries the system
 > overview, the module map and the development principles that apply everywhere.
 
-## UI Components (`frontend/components`)
-
-Everything the browser renders except the chart engine itself. `components/viz/` (Vega) and
-`components/plotx/` (DOM-tier tables, viz config panels, download helpers) are a separate area;
-this tree consumes them and never reimplements them.
-
-### What each module owns
+## What each module owns
 
 | Module | Owns | Does NOT own |
 |---|---|---|
 | `containers/` | All Redux reads/writes for a file page; derives props for its view | Any presentation |
 | `views/` | Pure presentation of one file type | Redux, fetching, save/publish |
 | `kit/` | Vendored shadcn primitives (Radix + Tailwind + `cva`) | App state, Chakra, data |
-| `ui/` | The surviving Chakra wrappers (`toaster`, `select`, `checkbox`, `close-button`, `color-mode`, `resizable-panel`, `ImageLightbox`, `GenerateButton`) plus the Chakra-free `Link`/`Dither` | Anything on the kit stack |
+| `ui/` | The surviving Chakra wrappers (`toaster`, `select`, `checkbox`, `close-button`, `color-mode`, `ImageLightbox`, `GenerateButton`) plus the Chakra-free `Link`/`Dither` | Anything on the kit stack |
 | `file-browser/` | The file page shell: `FileLayout` → `FileView` → `FileHeader` + type container; folder/list/grid browsing, drag-move, bulk select | File-type rendering (delegated) |
 | `explore/` | The whole chat surface: composer, transcript, timeline/carousel, per-tool displays, debug modals | Tool *config* (`lib/tools/tool-config.ts`) and tool *execution* (`lib/tools/handlers/*`) |
 | `app-shell/` | Providers, sidebars, create menu, mobile chrome, localStorage→Redux flag hydration (`DataLoader`) | Page content |
@@ -31,7 +28,7 @@ Direction of dependency on the chart area: `views/QuestionViewV2.tsx` and
 `views/notebook/NotebookSqlCell.tsx` import `components/plotx/` config panels and
 `components/viz/` renderers directly. Views compose plotx/viz; plotx/viz never import views.
 
-### Container / View separation
+## Container / View separation
 
 Enforced by convention *and* by ESLint. `frontend/eslint.config.mjs` defines `RESTRICT_VIEW_REDUX`
 (bans `@/store/hooks` and `react-redux`) and applies it to a hardcoded list of view files. The
@@ -60,23 +57,26 @@ Two generic bridges let a view push chrome up into the shared header without a c
 `useFileToolbar()` in `FileHeader`) and `file-toolbar/PresentationContext.tsx` (native Fullscreen
 API via `useSyncExternalStore`; `FileHeader` offers the toggle for `PRESENTABLE_TYPES`).
 
-### The kit / Chakra split
+## The kit / Chakra split
 
 Two design systems coexist. `components/kit/` is the Tailwind v4 + vendored-shadcn stack; app
 shell, admin and form surfaces are Chakra v3. The boundary is not "new vs old" — it is a
-**per-file allowlist** in `eslint.config.mjs` that bans `@chakra-ui/*` imports (and the Chakra
-wrappers under `components/ui/`) in named files and whole trees. Inside this area the ban covers
-`components/kit/**`, `components/question/**`, `components/params/**`, `components/query-builder/**`,
-`components/lexical/**`, the rendered-document views (`QuestionViewV2`, `DashboardView`,
-`NotebookView`, `ReportView`, `AlertView`, `CodeView`, `views/notebook/**`, `views/dashboard/**`,
-`views/shared/empty-states.tsx`, `views/story/StoryParamControl.tsx`), the embed containers, and
-a handful of named `shared/` and `selectors/` files. Everything else may still use Chakra.
+**per-file allowlist** in `eslint.config.mjs` that bans `@chakra-ui/*` imports (plus five of the
+Chakra wrappers under `components/ui/` — `checkbox`, `select`, `close-button`, `color-mode`,
+`ImageLightbox`; `toaster` and `GenerateButton` and the Chakra-free `Link`/`Dither` stay allowed) in
+named files and whole trees. Inside this area the ban covers `components/kit/**`,
+`components/plotx/**`, `components/viz/**`, `components/question/**`, `components/params/**`,
+`components/query-builder/**`, `components/lexical/**`, the rendered-document views
+(`QuestionViewV2`, `DashboardView`, `NotebookView`, `ReportView`, `AlertView`, `CodeView`,
+`views/notebook/**`, `views/dashboard/**`, `views/shared/empty-states.tsx`,
+`views/story/StoryParamControl.tsx`), the embed containers, and a handful of named `shared/` and
+`selectors/` files. Everything else may still use Chakra.
 
 The reason is not taste: rendered documents mount inside an iframe surface where Chakra/emotion
 rules from the top document never reach. A Chakra style prop on a component that renders inside a
 story or dashboard resolves to nothing.
 
-### Chat UI
+## Chat UI
 
 `explore/ChatInterface.tsx` is the single chat component; `app-shell/RightSidebar.tsx` mounts it
 with `container="sidebar"` and `app/explore/[[...id]]/page.tsx` with `container="page"`.
@@ -136,7 +136,7 @@ HTTP; the chat middleware resumes the turn. Clarify answers are additionally sta
 `remote/RemoteSessionPrompts.tsx` is the sole renderer — a floating card stack on every page,
 because a remote agent routinely navigates the user away from the session's chat view.
 
-### Rendered-document surfaces
+## Rendered-document surfaces
 
 Stories and dashboards both render inside a **same-origin iframe** whose body contains an
 `<svg><foreignObject>` surface (`lib/story-surface`, attribute `data-mx-story-svg`). React mounts
@@ -170,7 +170,7 @@ frame rect (the content-height iframe never scrolls, so every tile would read vi
 observer is bound to the top realm and goes deaf inside the surface iframe. Width arrives via
 `SurfaceWidthContext` (`lib/dashboard-surface/surface-width`), falling back to 1280px.
 
-### Interactions with other areas
+## Interactions with other areas
 
 **Inbound — who renders this tree**
 
@@ -209,13 +209,15 @@ observer is bound to the top realm and goes deaf inside the surface iframe. Widt
   A control without an `aria-label` is untestable by policy — add the label rather than working
   around it.
 
-### Gotchas
+## Gotchas
 
 - **The two ESLint guards are hardcoded file lists.** A newly added view is born *unguarded* by
   `RESTRICT_VIEW_REDUX`, and a newly added file outside the listed trees is born *outside* the
-  Chakra ban. Both lists also name files that no longer exist — TransformationView.tsx and
-  SvgPageSurface.tsx were deleted but never removed from the lists — so a name's presence in
-  either list proves nothing about coverage.
+  Chakra ban. Both lists also name things that no longer exist: TransformationView.tsx (in
+  `RESTRICT_VIEW_REDUX`), plus SvgPageSurface.tsx and the ui/resizable-panel wrapper (both in the
+  Chakra ban) were deleted but never removed from the config. A name's presence in either list
+  proves nothing about coverage — and `check-docs` will not catch these, since they are ESLint
+  config strings, not doc pointers.
 - **Tailwind classes in the kit or in embed chrome need a codegen run.** Story CSS is compiled
   per-story from the story markup only; component chrome classes are pre-extracted into
   `lib/story-ui/recipe-classes.ts` from `components/kit/**` plus the explicit `EMBED_CHROME_FILES`
@@ -247,10 +249,16 @@ observer is bound to the top realm and goes deaf inside the surface iframe. Widt
 - **`getFileComponent` is a partial map.** `lib/ui/fileComponents.tsx` has no entry for
   `context_run`; `views/ContextRunView.tsx` is mounted directly by `context/EvalsTabContent.tsx`.
   A file type with no entry renders the "Unsupported file type" branch of `FileView`.
-- **UI tests query by `aria-label` only** (`getByLabelText`/`findByLabelText`). This is enforced by
-  convention, not lint, and QA flows depend on it.
+- **`aria-label` is the query strategy for anything interactive** — `*ByLabelText` accounts for
+  roughly 1,800 of the ~2,000 queries across the `*.ui.test.tsx` suite, and the Playwright suites use
+  `getByLabel` almost exclusively. The convention is enforced by review, not lint. A control you
+  cannot reach by label is a **missing `aria-label` on the component**, not a reason to reach for
+  `getByRole`/`getByTestId`; add the label. The legitimate exceptions are narrow: `getByText` for
+  asserting *rendered content* (as opposed to locating a control), and CSS selectors over the
+  `data-*` DOM contract (`[data-file-id]`, `svg[data-mx-story-svg]`) where the thing being located is
+  a surface rather than a control.
 
-### Key files
+## Key files
 
 | Task | File |
 |---|---|

@@ -1,16 +1,22 @@
 # Small shared lib modules
 
-The `frontend/lib` modules that are small enough not to warrant their own doc: the file-type
-registry, config-vs-constants, the published compatibility contract, branding/white-label, the
-utils that carry a contract, and the test/benchmark support.
+> Part of the MinusX project documentation. The root `CLAUDE.md` carries the system
+> overview, the module map and the development principles that apply everywhere.
 
-The deep modules under `lib/` have their own `CLAUDE.md` — see the root doc's map.
+This doc auto-loads for **any** file under `frontend/lib/**`, so it opens with the routing table
+that names the doc actually covering the directory you are in. The rest covers the leaf modules
+with no owning subsystem: the file-type registry, the server/client config split, the managed
+gateway, the published compatibility contract, white-label branding, the utils that carry a real
+invariant, a few small modules with a sharp rule, the test/benchmark support, and `lib/og`.
+
+Those leaves are leaves by design — almost all of them are imported by many areas and import
+almost nothing themselves, so a change here has wide blast radius and no local test to catch it.
 
 ## Where a directory is documented
 
 Module docs load lazily — when files in their own directory are read. Several docs cover sibling
-directories, so this table is the routing map. If you are editing something and want its doc, find
-the directory here.
+directories, and each such directory carries a short pointer-stub `CLAUDE.md` naming its owner.
+This table is the same routing map in one place.
 
 | You are editing | Read |
 |---|---|
@@ -26,34 +32,25 @@ the directory here.
 | `lib/story-ui`, `lib/jsx` | `frontend/lib/story-ui/CLAUDE.md` |
 | `lib/story-surface`, `lib/dashboard-surface`, `lib/html` | `frontend/lib/story-surface/CLAUDE.md` |
 | `lib/screenshot`, `lib/headless-capture` | `frontend/lib/screenshot/CLAUDE.md` |
-| `lib/auth`, `lib/http`, `lib/mode`, `lib/namespace`, `lib/rubric` | `frontend/lib/auth/CLAUDE.md` |
+| `lib/auth`, `lib/http`, `lib/middleware`, `lib/mode`, `lib/namespace`, `lib/oauth`, `lib/rubric` | `frontend/lib/auth/CLAUDE.md` |
 | `lib/tools` | `frontend/lib/tools/CLAUDE.md` |
-| `lib/jobs`, `lib/integrations`, `lib/messaging`, `lib/analytics` | `frontend/lib/jobs/CLAUDE.md` |
-| `lib/file-state`, `lib/hooks`, `store/**` | `frontend/store/CLAUDE.md` |
+| `lib/jobs`, `lib/integrations`, `lib/messaging`, `lib/analytics`, `lib/app-event-registry`, `lib/mcp`, `lib/search`, `lib/spreadsheet` | `frontend/lib/jobs/CLAUDE.md` |
+| `lib/file-state`, `lib/hooks`, `lib/navigation`, `store/**` | `frontend/store/CLAUDE.md` |
 | any other small `lib/*` module | `frontend/lib/CLAUDE.md` |
 | `components/**` | `frontend/components/CLAUDE.md` |
 | `app/**` | `frontend/app/CLAUDE.md` |
 | `test/**`, `scripts/**`, `.github/**` | `frontend/test/CLAUDE.md` |
 
+`lib/navigation` is the one entry with no stub of its own — it has no `CLAUDE.md`, so nothing
+auto-loads when you edit it. Read `frontend/store/CLAUDE.md`.
 
-> Part of the MinusX project documentation. The root `CLAUDE.md` carries the system
-> overview, the module map and the development principles that apply everywhere.
-
-## Small shared lib modules
-
-A cluster of leaf modules with no owning subsystem: the file-type registry, the server/client
-config split, the published support contract, white-label branding, and the handful of utils that
-carry a real invariant. They are leaves by design — almost all of them are imported by many areas
-and import almost nothing themselves, so a change here has wide blast radius and no local test to
-catch it.
-
-### The file-type registry
+## The file-type registry
 
 `frontend/lib/ui/file-metadata.ts` is the single table every other area derives file-type facts
 from. `FILE_TYPE_METADATA` is a `const satisfies Record<string, FileTypeMetadata>` object; the
 `FileType` union is `keyof typeof FILE_TYPE_METADATA`, so adding a key adds a type everywhere.
-`frontend/lib/types.ts` line 1 imports `FileType` from here and re-exports it — this file, not
-`atlas-schemas.ts`, is where the type union originates.
+`frontend/lib/types.ts` imports `FileType` from here and re-exports it — this file, not
+`frontend/lib/validation/atlas-schemas.ts`, is where the type union originates.
 
 Everything else in the module is derived, not declared:
 
@@ -89,7 +86,7 @@ from the registry.
 entry renders the "Unsupported file type" message rather than failing. Today that is `users`,
 `folder`, `explore` and `context_run`.
 
-### Config vs constants: the server/client split
+## Config vs constants: the server/client split
 
 Two files, deliberately disjoint:
 
@@ -130,23 +127,10 @@ root layout stamps `data-mx-telemetry` on `<html>` and `instrumentation-client.t
 `SEND_ERRORS_IN_DEV` and `IS_DEV`/`IS_TEST` come from `constants.ts` so the three Sentry init files
 (server / edge / client) can share one gate.
 
-**The gateway is addressed by two exports in `config.ts`, and only one of them is normally set.**
-`MX_GATEWAY_ORIGIN` is the origin of the managed MinusX gateway — one service, two planes: the
-control plane (orgs, credits, status) at its root, inference at its `/v1`. `MX_GATEWAY_URL_PROXY` is
-the full inference URL and *derives* from the origin, so staging is one variable: two that can
-disagree eventually do, and the disagreement surfaces as an auth failure against a gateway that never
-minted the key, a long way from its cause. The proxy is overridable anyway, because the single origin
-is a property of the reverse proxy rather than of the gateway — behind it the control plane and the
-inference proxy are separate services on separate ports, so an install sharing a network with the
-gateway cannot reach both through one address. Setting it says "these are genuinely two places",
-deliberately, rather than by forgetting to keep a second variable in step. Both live in
-`frontend/lib/config.ts` (`server-only`), never `constants.ts` — the browser never calls the gateway,
-so a client import is now a build error rather than a silently-inlined default.
-`frontend/lib/llm/__tests__/gateway-url.test.ts` pins the derivation, the trailing-slash trim, and
-that an override already carrying `/v1` is not suffixed again. The predecessor `MINUSX_GATEWAY_URL`
-is gone and has no effect anywhere.
+The three gateway env vars (`MX_GATEWAY_ORIGIN`, `MX_GATEWAY_URL_PROXY`, `MX_GATEWAY_SHARED_SECRET`)
+all live here rather than in `constants.ts` — see the `lib/gateway` section below.
 
-### `compatibility.json` — the published support contract
+## `compatibility.json` — the published support contract
 
 `frontend/compatibility.json` is a static JSON contract with **three consumers that cannot import
 each other**:
@@ -176,7 +160,7 @@ default per `LLM_GRADES`; and that retired keys (`models`, `recommended`, and th
 (`components/shared/ConnectionTypePicker.tsx`). Its `description` strings contain `{{agentName}}`
 placeholders substituted from branding at render time.
 
-### `lib/gateway` — the managed MinusX gateway
+## `lib/gateway` — the managed MinusX gateway
 
 `frontend/lib/gateway/` is the whole client surface onto the hosted service that provides model
 access for MinusX-operated workspaces. It holds no billing logic of its own: how plans, balances and
@@ -184,13 +168,27 @@ expiry work is the service's business, and `frontend/lib/gateway/gateway-types.t
 shape that comes back (money is integer micro-USD throughout; `microToUsd` is the only conversion).
 Self-hosted installs never use any of it.
 
+**Three env vars address it, all in `config.ts` (`server-only`), never `constants.ts`** — the browser
+never calls the gateway, so a client import is a build error rather than a silently-inlined default.
+`MX_GATEWAY_ORIGIN` is the origin: one service, two planes — control plane (orgs, credits, status) at
+its root, inference at its `/v1`. `MX_GATEWAY_URL_PROXY` is the full inference URL and *derives* from
+the origin (`MX_GATEWAY_ORIGIN + '/v1'`), so staging is normally one variable: two that can disagree
+eventually do, and the disagreement surfaces as an auth failure against a gateway that never minted
+the key, a long way from its cause. It stays overridable because the single origin is a property of
+the reverse proxy rather than of the gateway — behind it the two planes are separate services on
+separate ports, so an install sharing a network with the gateway cannot reach both through one
+address. Setting it says "these are genuinely two places", deliberately, rather than by forgetting to
+keep a second variable in step. `frontend/lib/llm/__tests__/gateway-url.test.ts` pins the derivation,
+the trailing-slash trim, and that an override already carrying `/v1` is not suffixed again. The
+predecessor `MINUSX_GATEWAY_URL` is gone and has no effect anywhere.
+
 **The switch is `MX_GATEWAY_SHARED_SECRET`, not the URL.** `gatewayEnabled()`
-(`frontend/lib/gateway/gateway-client.server.ts`) checks `baseUrl()` too,
-but that reads `MX_GATEWAY_ORIGIN`, which carries a production default and is therefore never empty —
-so the predicate reduces to the secret alone, and
-`frontend/lib/gateway/__tests__/gateway-client.test.ts` pins exactly that. The URL cannot be the gate
-because every install addresses that origin for inference; the secret is issued by MinusX and a
-self-hosted install cannot obtain one. Naming the gateway has to stay harmless on its own.
+(`frontend/lib/gateway/gateway-client.server.ts`) checks `baseUrl()` too, but that returns
+`MX_GATEWAY_ORIGIN`, which carries a production default and is therefore never empty — so the
+predicate reduces to the secret alone, and `frontend/lib/gateway/__tests__/gateway-client.test.ts`
+pins exactly that. The URL cannot be the gate because every install addresses that origin for
+inference; the secret is issued by MinusX and a self-hosted install cannot obtain one. Naming the
+gateway has to stay harmless on its own.
 
 **Everything here is best-effort, and that is the design.** `registerCompanyWithGateway`
 (`frontend/lib/gateway/gateway-register.server.ts`) runs at the tail of `AuthModule.register`, after
@@ -223,7 +221,7 @@ absent key would read as an older client.
 a workspace with stored credentials keeps its settings panel working on a host that carries no shared
 secret in its environment.
 
-### Branding / white-label
+## Branding / white-label
 
 `frontend/lib/branding/whitelabel.ts` owns the `OrgConfig` shape (branding, links, messaging
 webhooks, `accessRules`, `supportedFileTypes`, `allowedVizTypes`, `chartColorPalette`, `setupWizard`,
@@ -247,6 +245,11 @@ Merge semantics, and they differ per field:
 drop (`lib/secrets/__tests__/config-secrets-e2e.test.ts` — "mergeConfig must not drop llm"). When
 adding an `OrgConfig` field, update `mergeConfig` in the same edit.
 
+**`gateway` is currently one of those drops.** `OrgConfig` declares it; `mergeConfig` does not
+enumerate it, so any merged config loses it. This is latent rather than broken only because the one
+reader — `app/api/gateway/status/route.ts` — uses `getRawConfig`, which returns the stored document
+without merging. Route anything new that needs `gateway` the same way, or fix `mergeConfig` first.
+
 `story-theme-options.ts` and `story-template-options.ts` are pure *projections* of registries owned
 elsewhere (`lib/data/story/story-themes.ts`, `lib/data/story/story-templates.ts`) into the option
 cards the frontend Clarify handler shows for `type: 'design'` / `type: 'template'`. They add only
@@ -263,7 +266,7 @@ does not resolve) yet has an `ACCENT_HEX.info` entry. `ACCENT_HEX` exists becaus
 nodes style with raw hex, not Chakra tokens; `ACCENT_TOKEN_HEX` is the `'accent.*' → hex` map that
 `components/chat/MentionChip.tsx` and `components/lexical/MentionNode.tsx` both read.
 
-### Utils that carry a contract
+## Utils that carry a contract
 
 - **`utils/semaphore.ts`** — counting semaphore whose limit may be a **getter**, re-read on every
   acquire, so a Redux-hydrated runtime cap changes concurrency without recreating the instance. The
@@ -311,7 +314,7 @@ nodes style with raw hex, not Chakra tokens; `ACCENT_TOKEN_HEX` is the `'accent.
   keyframe strings) and `ui/sidebar-sections.ts` (right-sidebar section titles/icons) have no
   contract beyond their signature.
 
-### Small modules with a sharp rule
+## Small modules with a sharp rule
 
 - **`frontend/lib/view/view-types.ts`** — `view` is a top-level URL param, preserved across
   navigation like `mode`. It is an **ordered** enum (`full → file → content → contentonly`), each
@@ -335,7 +338,7 @@ nodes style with raw hex, not Chakra tokens; `ACCENT_TOKEN_HEX` is the `'accent.
   staleness window for `useFile` / `useFolder` / `useQueryResult`. Note the import specifier is
   `@/lib/constants/cache`, distinct from the client-env module `@/lib/constants`.
 
-### Test and benchmark support
+## Test and benchmark support
 
 `frontend/lib/test/faux-llm-channel.server.ts` lets an out-of-process Playwright test drive the
 real in-process orchestrator's LLM. It installs a content-keyed matcher on the faux providers of the
@@ -368,7 +371,23 @@ unhandled-rejection router and the chat-runtime warm, which live here rather tha
 (`scripts/heal-stories.ts`, `scripts/migrate-conversations-to-v3.ts`) so they get the same wiring as
 the app.
 
-### Key files
+## `lib/og` — share cards
+
+`frontend/lib/og/capture-story-preview.ts` runs in the browser when a story is made public: it finds
+`[data-story-capture="<id>"]`, serializes the live surface (falling back to the generic element
+serializer), crops the **top band** to the 1200×630 OG aspect, and POSTs a JPEG data URL to
+`/api/files/[id]/preview`. `og-image.tsx` (server) pre-blurs that screenshot with sharp — satori
+cannot do CSS blur — and composes the final card via `og-cards.tsx` (`next/og` + JetBrains Mono from
+`public/fonts`, org branding from `getConfigsForMode`). The composed PNG is stored in the object
+store and streamed back verbatim by `app/l/[shareId]/og/route.ts` — **a story card is never rendered
+at crawl time**. Only the *generic* fallback (no capture yet, revoked share, root) can render on
+demand, and even that serves the committed `public/ogs/generic.png` unless the org has a custom
+expanded logo. That route is a plain handler rather than Next's `opengraph-image` convention because
+the convention only ever emits the dev localhost host. `og-helpers.ts`'s `ogCacheKey` embeds
+`updated_at` (normalized — `pg` returns `Date`, PGLite returns ISO strings) so the cache self-busts
+on every edit.
+
+## Key files
 
 | Task | File |
 |---|---|
@@ -387,23 +406,4 @@ the app.
 | Change dashboard parameter precedence | `frontend/lib/dashboard/effective-params.ts` |
 | Drive the LLM from a Playwright test | `frontend/lib/test/faux-llm-channel.server.ts` |
 | Change server bootstrap wiring | `frontend/lib/instrumentation/register-modules.ts` |
-
-**`lib/sql/sql-params.ts` must stay React-free.** The per-type icon and colour helpers live in `lib/sql/param-type-display.ts` (`getTypeIcon`, `getTypeColor`) purely so server, script and test code can import the parameter logic without pulling `react-icons` in behind it. `getTypeColor` returns a raw hex string rather than a theme token on purpose: consumers interpolate it into plain CSS (`border-left`, `color-mix(...)`), where a token name is invalid and silently drops the declaration.
-
----
-
-### `lib/og` — share cards
-
-`capture-story-preview.ts` runs in the browser when a story is made public: it finds
-`[data-story-capture="<id>"]`, serializes the live surface (falling back to the generic element
-serializer), crops the **top band** to the 1200×630 OG aspect, and POSTs a JPEG data URL to
-`/api/files/[id]/preview`. `og-image.tsx` (server) pre-blurs that screenshot with sharp — satori
-cannot do CSS blur — and composes the final card via `og-cards.tsx` (`next/og` + JetBrains Mono from
-`public/fonts`, org branding from `getConfigsForMode`). The composed PNG is stored in the object
-store and streamed back verbatim by `app/l/[shareId]/og/route.ts` — **a story card is never rendered
-at crawl time**. Only the *generic* fallback (no capture yet, revoked share, root) can render on
-demand, and even that serves the committed `public/ogs/generic.png` unless the org has a custom
-expanded logo. That route is a plain handler rather than Next's `opengraph-image` convention because
-the convention only ever emits the dev localhost host. `og-helpers.ts`'s `ogCacheKey` embeds
-`updated_at` (normalized — `pg` returns `Date`, PGLite returns ISO strings) so the cache self-busts
-on every edit.
+| Change the public share card | `frontend/lib/og/og-image.tsx` · `og-cards.tsx` · `capture-story-preview.ts` |

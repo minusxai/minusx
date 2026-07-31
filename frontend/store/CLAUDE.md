@@ -1,16 +1,15 @@
 # Client state — Redux, file-state, hooks, navigation
 
-The browser's source of truth: the Redux store, the listener middleware, and every browser-side
-file and query operation (`lib/file-state`, `lib/hooks`).
+The browser's source of truth: the Redux store and its two listener middlewares, every browser-side
+file and query operation (`lib/file-state`), the React surface over them (`lib/hooks`), and the
+routing/guard layer (`lib/navigation`). Those three `lib/` directories have no doc of their own —
+`lib/file-state` and `lib/hooks` carry pointer stubs back to this file, `lib/navigation` carries
+nothing at all.
 
 > Part of the MinusX project documentation. The root `CLAUDE.md` carries the system
 > overview, the module map and the development principles that apply everywhere.
 
-## Client State: Redux store, file-state, hooks, navigation
-
-Four directories own everything the browser knows: `frontend/store/` (the Redux store, its slices and two listener middlewares), `frontend/lib/file-state/` (the only place file and query I/O logic lives), `frontend/lib/hooks/` (the React surface over both), and `frontend/lib/navigation/` (route params, the unsaved-changes guard, and the navigation-churn deferral queue).
-
-### What each module owns
+## What each module owns
 
 **`store/`** owns the shape of client state and the *reactions* to it. `store/store.ts` composes ten reducers (`auth`, `ui`, `files`, `queryResults`, `configs`, `chat`, `recordings`, `jobRuns`, `navigation`, `users`) plus three middlewares — `navigationListenerMiddleware` and `chatListenerMiddleware` prepended, `analyticsMiddleware` (`lib/analytics/middleware.ts`) concatenated. It exports a per-request store on the server and a module singleton in the browser; `getStore()` is the non-React accessor that `lib/file-state/*` and tool handlers use.
 
@@ -22,7 +21,9 @@ It does **not** own network calls. No slice fetches anything: every reducer is a
 - `chatListener.ts` — the engine of chat: it runs v3 turns, executes frontend-bridged tools, observes remote agent sessions, flushes the message queue, and re-renders from the durable log.
 - `uiSlice.ts` — everything view-local and mostly localStorage-mirrored (sidebars, colour mode, dev mode, per-file edit/view mode, the question view stack, chat attachments).
 - `appStateSelector.ts` — derives the `AppState` blob sent to the LLM from `navigation` + `files` + `queryResults` + `ui.viewStack`. It exists as its own file purely to break the cycle `navigationSlice → file-state → store → navigationSlice`.
-- `conversation-log-cache.ts`, `conversation-stream-client.ts`, `tool-watchdog.ts`, `api-url.ts`, `id-generator.ts`, `color-mode-override.ts` — transport and plumbing described below.
+- `conversation-log-cache.ts`, `conversation-stream-client.ts`, `tool-watchdog.ts`, `color-mode-override.ts` — chat transport and plumbing, covered under "Chat path" and "Gotchas".
+- `api-url.ts` — `API_BASE_URL` (`http://localhost:3000` under Node, `''` in the browser) plus `patchApiUrl`, which re-appends `as_user`/`mode` by hand. It exists because the SSE client uses XHR, which **bypasses the global fetch patch** that normally forwards those params; drop it and a stream request silently loses its mode.
+- `id-generator.ts` — `generateUniqueId()`, the `mxgen_`-prefixed hex tool-call id, shared by client and server.
 
 **`lib/file-state/`** owns every file and query operation in the browser. `file-state.ts` is a pure barrel; the implementation is split by verb: `file-read.ts` (`loadFiles`, `loadFileByPath`, `readFiles`, `readFilesByCriteria`, `readFolder`), `file-edit.ts` (`editFile`, `editFileStr`, `replaceFileState`, `applyJsonContentEdit`, `applyStoryHtmlEdit`, `buildCurrentFileStr`), `file-publish.ts` (`publishFile`, `publishAll`), `file-mutations.ts` (delete/move/reload/discard/draft-create/duplicate/dry-run/create-folder), `query-results.ts` (`getQueryResult`), `notebook-results.ts` (per-cell result capture and rehydration), `shared.ts` (`hashString`, `deepMerge`, `generateDiff`, `PromiseManager`).
 
@@ -30,11 +31,11 @@ It does **not** own the HTTP layer — every call goes through `FilesAPI` (`lib/
 
 `file-state.server.ts` is the server twin (`readFilesServer`, `getAppStateServer`) for tool handlers and cron jobs: it reads through `FilesAPI` from `lib/data/files.server.ts`, takes an explicit `EffectiveUser`, and touches no Redux. `file-state-interface.ts` holds the option/result types both sides share.
 
-**`lib/hooks/`** owns the React surface. `file-state-hooks.ts` is the CORE set (`useFile`, `useFilesByCriteria`, `useFileByPath`, `useFolder`, `useQueryResult`, `useAppState`, `useDirtyFiles`, `useSaveDecision`). Every one is the same two-part shape: an effect that calls the imperative `lib/file-state` function, plus a `useAppSelector` with a custom equality function so it re-renders only on a real change. Domain hooks (`useConnections`, `useContext`, `useContexts`, `useConversation`, `useConversationsList`, `useConfigs`, `useUsers`, `job-runs-hooks`) compose those or their own `lib/data` clients; the leaf utilities (`use-deep-stable`, `use-stable-callback`, `use-table-columns`, `use-story-preview-css`, `use-semantic-*`, `use-spreadsheet-result`, `useScreenshot`) are render-identity and lazy-fetch helpers with no Redux writes.
+**`lib/hooks/`** owns the React surface. `file-state-hooks.ts` is the CORE set (`useFile`, `useFilesByCriteria`, `useFileByPath`, `useFolder`, `useQueryResult`, `useAppState`, `useDirtyFiles`, `useSaveDecision`). Every one is the same two-part shape: an effect that calls the imperative `lib/file-state` function, plus a `useAppSelector` with a custom equality function so it re-renders only on a real change. Domain hooks (`useConnections`, `useContext`, `useContexts`, `useConversation`, `useConversationsList`, `useConfigs`, `useUsers`, `useExplainQuestion`, `job-runs-hooks`, and the recording pair `useRecordingManager`/`useRecordingContext`) compose those or their own `lib/data` clients; the leaf utilities (`use-deep-stable`, `use-stable-callback`, `use-table-columns`, `use-story-preview-css`, `use-story-rebuild-stability`, `use-semantic-compat`, `use-semantic-models`, `use-spreadsheet-result`, `useScreenshot`) are render-identity, layout-stability and lazy-fetch helpers with no Redux writes.
 
 **`lib/navigation/`** owns URL-parameter preservation (`url-utils.ts`: `as_user`, `mode`, `view` — defaults `org`/`full` are deliberately not written back into URLs), the patched router (`use-navigation.ts`), the unsaved-changes/agent-running interception (`NavigationGuardProvider.tsx`), and the navigation-churn queue (`nav-progress.ts`). It does **not** own route→data loading; that is `store/navigationListener.ts`.
 
-### Architecture
+## Architecture
 
 **Read path.**
 
@@ -100,7 +101,7 @@ dispatch(createConversation | sendMessage | retryConversationTurn | editAndForkM
 
 **Navigation.** `LayoutWrapper` dispatches `setNavigation`; `navigationListener.ts` maps `/f/{id}` → `readFiles([id])` and `/p/{path}` → `readFolder(path)`; `appStateSelector.ts` recomputes `AppState` from the same Redux state. Independently, `useRouter().push/replace` calls `beginNavigation()`, and `LayoutWrapper`'s pathname effect calls `endNavigation()` to flush whatever `runOrDefer` queued.
 
-### Interactions with other areas
+## Interactions with other areas
 
 | Boundary | Direction | Contract |
 |---|---|---|
@@ -116,7 +117,7 @@ dispatch(createConversation | sendMessage | retryConversationTurn | editAndForkM
 | `orchestrator/` + `agents/` | via HTTP | The listener never imports the orchestrator. Its only contract is the v3 route pair (`POST /api/conversations/[id]/turns`, `GET …/stream`) plus `/interrupt`, `/fork`, `/api/chat/log-error`. |
 | `lib/navigation/nav-progress.ts` | us ↔ components | `runOrDefer` is called from `query-results.ts` and `components/containers/SmartEmbeddedQuestionContainer.tsx`; `endNavigation` only from `components/app-shell/LayoutWrapper.tsx`. |
 
-### Gotchas
+## Gotchas
 
 - **A same-version refetch preserves unsaved edits.** `fileStateFromServer` (`filesSlice.ts`) keeps `persistableChanges`/`ephemeralChanges`/`metadataChanges` unless the incoming `version` is strictly greater, or `overwriteEdits: true` is passed. Only `reloadFile` passes it. Without this an agent's staged dashboard edit was wiped by the very next `readFiles`; `store/__tests__/refetch-preserves-edits.test.ts` guards both directions.
 - **`contentReplaced` changes save semantics.** `setFullContent` makes `persistableChanges` the *entire* content and flags the file, so `persistableContentOf` returns it verbatim instead of merging — that is the only way a key deletion survives a save. Later `setEdit` merges preserve the invariant (merging onto full content is still full content).
@@ -128,7 +129,7 @@ dispatch(createConversation | sendMessage | retryConversationTurn | editAndForkM
 - **Query concurrency is capped and time-boxed.** `querySemaphore`'s limit is a *getter* over `selectMaxConcurrentQueries`, so a runtime config change applies without recreating it (`lib/file-state/__tests__/query-concurrency-cap.test.ts`). Each fetch races an internal timeout against the caller's optional `signal`; an abort is normalised into "Query timed out after Ns" or "Query cancelled" so the UI and the agent never see a bare `DOMException`. Only timeouts and network/5xx failures are reported via `captureError`; 4xx SQL errors and user cancellations are not.
 - **`forceLoad` must reach the server.** `getQueryResult({…}, { forceLoad: true })` both skips the client cache and sets `forceRefresh: true` in the request body; a normal load must not (`query-force-refresh.test.ts`).
 - **Redux writes during navigation are deferred.** `setQueryResult`/`setQueryError` go through `runOrDefer`, because urgent updates preempt and restart Next's low-priority navigation transition — clicking a dashboard tile while queries streamed felt dead. `beginNavigation` arms a 5 s safety timer so deferred work is never stranded if a navigation is cancelled.
-- **`editFileStr` replaces ALL occurrences by default.** `replaceAll` defaults to `true`; passing `false` turns a non-unique `oldMatch` into an error. The edit surface is MARKUP (`fileToMarkup`/`markupToContent`), not JSON, and the `id`/`name`/`path` wrapper is not part of it. A parse failure is the only hard error — schema and story-param problems come back as non-blocking `validation` strings, and Publish is the real gate. There is a deliberate *truthful no-op guard*: if the replacement changed the string but produced identical content, it returns `success: false` so the agent retries instead of believing a phantom edit.
+- **`editFileStr` requires a UNIQUE match by default.** `replaceAll` defaults to **`false`**, so a non-unique `oldMatch` is an error telling the caller to either extend `oldMatch` with more context or pass `replaceAll: true` deliberately; only then is every occurrence replaced, and the result reports the count via `occurrences`. The edit surface is the MARKUP projection (`fileToMarkup`/`markupToContent`), **not** the file JSON, and the `id`/`name`/`path` wrapper is not part of the search space. A parse failure is the only hard error — schema and story-param problems come back as non-blocking `validation` strings, and Publish is the real gate. There is a deliberate *truthful no-op guard*: if the replacement changed the string but produced identical content, it returns `success: false` so the agent retries instead of believing a phantom edit.
 - **The echoed diff is canonical, not the agent's text.** `editFileStr` diffs against the markup re-derived from Redux after staging, so the agent's next `oldMatch` (built from memory of its own `newMatch`) matches what is actually stored. `generateDiff` uses a Myers shortest-edit-script over lines, not a positional compare — a positional cascade turned one-line story edits into 100 KB payloads that compounded every turn (`lib/file-state/__tests__/generate-diff.test.ts`).
 - **`selectDirtyFiles` excludes only `connection`, `config`, `styles`.** That set is narrower than `SYSTEM_FILE_TYPES` in `lib/ui/file-metadata.ts`, which also lists `context` — so context files *do* appear dirty and *are* published by `publishAll`.
 - **Tool execution is guarded three ways.** `inFlightToolCalls` is populated synchronously before any `await`, so a re-fired listener cannot double-execute (`store/__tests__/chat-listener-inflight.test.ts`); calls are grouped by `arguments.fileId` — same file serial, different files parallel; and each is raced against `withToolWatchdog` at 6 minutes, which does *not* cancel the underlying work but swallows a late settlement so `completeToolCall` fires exactly once.
@@ -152,7 +153,7 @@ dispatch(createConversation | sendMessage | retryConversationTurn | editAndForkM
 - **`useAppStore` is not `useAppSelector`.** `store/hooks.ts` exports it for reading state inside callbacks without subscribing — use it for values only needed at click/submit time (`queryResultsMap`, colour mode at send) so an unrelated slice update doesn't tear through the parent.
 - **`withColorModeOverride`** (`store/color-mode-override.ts`) proxies only `getState`, memoised per underlying state reference; `dispatch`/`subscribe` pass through. It is how a story declaring `colorMode: "light"` themes its embedded charts inside a dark app without any chart component learning about it.
 
-### Key files
+## Key files
 
 | Task | File |
 |---|---|
@@ -170,7 +171,7 @@ dispatch(createConversation | sendMessage | retryConversationTurn | editAndForkM
 | Preserve `as_user` / `mode` / `view` across a navigation | `frontend/lib/navigation/url-utils.ts` · `use-navigation.ts` |
 | Block navigation on unsaved changes | `frontend/lib/navigation/NavigationGuardProvider.tsx` |
 
-**One extraction produces a story's embed runs for every consumer.** `storyEmbedRuns` (`lib/data/helpers/param-resolution.ts`) is the single place that walks a story body for inline `<Question>` and `<Number>` embeds and resolves each one's params. Four independent callers depend on it agreeing with itself — the client augmentation that fills `queryResults`, the server-side `executeQueriesForFile`, EditFile's post-edit auto-execute, and the renderer (`views/story/InlineNumber.tsx`) — because each computes `getQueryHash(query, params, connection)` and a divergence does not throw: the embed simply renders unbound, with no cached result to find. A fifth consumer must route through `storyEmbedRuns` / `bindReferencedParams` rather than re-deriving the set.
+**One extraction produces a story's embed runs for every consumer.** `storyEmbedRuns` (`lib/data/helpers/param-resolution.ts`) is the single place that walks a story body for inline `<Question>` and `<Number>` embeds and resolves each one's params. Four independent callers depend on it agreeing with itself — the client augmentation that fills `queryResults`, the server-side `executeQueriesForFile`, EditFile's post-edit auto-execute, and the renderer (`components/views/story/InlineNumber.tsx`) — because each computes `getQueryHash(query, params, connection)` and a divergence does not throw: the embed simply renders unbound, with no cached result to find. A fifth consumer must route through `storyEmbedRuns` / `bindReferencedParams` rather than re-deriving the set.
 
 **Edit-time parameter lints are advisory, and there are exactly three.** `collectEditValidation` (`lib/file-state/file-edit.ts`) runs on every edit, always applies the edit, and returns `validation: string[]` as text the agent can self-correct from. `lintStoryParams` flags a `:name` an embedded question needs with no `<Param>` declared, a declared/used type mismatch, and a declared-but-unused param. `lintStoryParamSources` flags a `<Param id={N}>` importing from a file that does not exist or is not a question. `lintDashboardParams` flags one `:name` used at two different types across questions — auto-derive then silently produces two separate filters instead of one shared one. All three live in `lib/data/story/story-params.ts`; save/publish, not the edit, is the hard gate. `lintStoryParamSources` covers a second source kind: a `<Param query={…}>` whose `connection` is
 missing. That is not cosmetic — `extractInlineFileQueries` and `storyEmbedRuns` both require

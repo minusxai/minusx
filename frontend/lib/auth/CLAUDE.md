@@ -1,18 +1,38 @@
 # Auth, access control, mode isolation and the rubric
 
-Who the user is, what they may touch, and how one workspace's data is kept out of another's:
-`lib/auth` (sessions), `lib/http` (route wrappers), `lib/mode` (path-prefix isolation),
-`lib/namespace` (the coarser seam) and `lib/rubric` (file-health scoring).
+Who the user is, what they may touch, and how one workspace's data is kept out of another's.
+Seven directories, all routed here: `lib/auth` (sessions), `lib/middleware` (the request gate),
+`lib/http` (route wrappers + the client fetch layer), `lib/mode` (path-prefix isolation),
+`lib/namespace` (the coarser prefix algebra), `lib/oauth` (MCP bearer tokens) and `lib/rubric`
+(file-health scoring).
 
 > Part of the MinusX project documentation. The root `CLAUDE.md` carries the system
 > overview, the module map and the development principles that apply everywhere.
 
 ## Auth, Access Control, Mode Isolation, HTTP Helpers, and the File-Health Rubric
 
-Six small, deep modules under `frontend/lib/`: `auth/` (identity), `mode/` (file-system
-isolation), `middleware/` (the one place request identity is normalized), `http/` (route
-wrappers + response shapes + the client fetch layer), `oauth/` (MCP bearer tokens), and
-`rubric/` (file health scoring).
+### The three authorization stages
+
+Every request that touches workspace data passes three independent gates. Knowing which one a
+route skips is the fastest way to reason about a security question here.
+
+1. **Middleware** (`lib/middleware/create-middleware.ts`) — session present, `tokenVersion`
+   current, namespace resolves, and the identity headers are rewritten from scratch. **The
+   public-route list at the top of `routeRequest` skips this wholesale**: `/login`, `/register`,
+   `/l/…` shares, `/s/…` remote sessions, `/api/mcp`, `/oauth`, `/.well-known/oauth`, the Slack
+   webhooks, `/api/orgs/register`, `/api/health`, `/api/jobs/cron`, `/api/admin/min-data-version`
+   and a valid `mx-guest` cookie on a share path.
+2. **The route wrapper.** `withAuth` (`lib/http/with-auth.ts`) resolves `getEffectiveUser()`
+   (`null` ⇒ `401`) **and then runs the data-version gate** — `checkDataVersion()` per request,
+   `503` when this build cannot correctly read the workspace's data. Alternatives:
+   `withCronAuth` (bearer `CRON_SECRET` only), `withRemoteSessionAuth` (`/s/<code>`), and
+   `withAuthSkippingDataVersionGate`, which exists for exactly one route —
+   `/api/admin/migrate-db`, the call that clears the gate, and which would otherwise be blocked
+   by the thing it exists to unblock. Routes that build their own `EffectiveUser` (MCP, Slack,
+   the cron scan) use none of these.
+3. **Per-file access** — `canAccessFile` in `lib/data/helpers/permissions.ts`, called from
+   `lib/data/files.server.ts` and `lib/data/shares/shares.server.ts` below every route. Not
+   skippable: it is the layer that makes the public branch of stage 1 safe.
 
 ### What each module owns
 
@@ -27,9 +47,10 @@ anonymous public-share identity. `embed.ts` owns iframe-embedding cookie/CSP con
 runtime E2E opt-in gate.
 
 It does **not** own per-file ACL. Whether *this* user may touch *this* file is
-`lib/data/helpers/permissions.ts` (`checkFileAccess`), which composes `isAdmin`,
-`canAccessFileType`/`canViewFileType`, and the mode path helpers. It also does not own the user
-table (`lib/database/user-db.ts`) nor the org-level rule overrides (`AccessRulesOverride` in
+`lib/data/helpers/permissions.ts` (`canAccessFile`), which composes `canAccessFileType`,
+`isAdmin` and the mode path helpers; `canViewFileInUI` wraps it with the extra `canViewFileType`
+check used for listings and search. It also does not own the user table
+(`lib/database/user-db.ts`) nor the org-level rule overrides (`AccessRulesOverride` in
 `lib/branding/whitelabel.ts`, delivered via the config document).
 
 **`lib/mode/`** owns the *path algebra* of mode isolation: `Mode = 'org' | 'tutorial' |
@@ -55,6 +76,17 @@ abort), `useFetch.ts`, `declarations.ts` (endpoint catalog), `fetch-patch.ts` (g
 that is `FilesAPI` (`lib/data/files.ts`), which does its own fetching; only a subset of
 `declarations.ts` is actually referenced (see Gotchas).
 
+**`lib/namespace/types.ts`** is the whole of `lib/namespace`: the *vocabulary* of the coarser
+isolation axis, with no behaviour. `NAMESPACE_HEADER` (`x-namespace-context`) is named once here
+so middleware and handlers cannot disagree; `DEFAULT_ISOLATION` (`'mx'`) is the single-workspace
+root, non-empty on purpose so `${isolation}/${key}` never emits a leading separator;
+`buildNamespace({isolation, mode, userId})` joins the three levels **coarse to fine** —
+`isolation` (durable: object store, channels; deliberately mode-independent), `mode`
+(`isolation` + mode), `user` (`mode` + user id) — and `namespaced(level, key)` /
+`namespacedChannel(isolation, channel)` are the only sanctioned joins, the latter because a
+NOTIFY channel is a SQL identifier and cannot carry `/` or start with a digit. The *behaviour*
+behind the seam is `INamespaceModule` — see "Architecture — the namespace seam".
+
 **`lib/oauth/db.ts`** owns OAuth 2.1 credentials for the MCP endpoint. Despite the filename it
 owns **no database tables**: PKCE authorization codes live in a `globalThis`-backed in-memory
 `Map` (5-minute TTL), and access (1h) / refresh (30d) tokens are stateless JWTs signed with
@@ -77,7 +109,8 @@ call (`runMicroTask` → `MicroAgent`, prompts in `micro.rubric_llm` of
                  │
                  ▼
   middleware.ts → createMiddleware()          ← auth() wraps it; req.auth = NextAuth session
-    · public / share / remote-session / guest branch → set x-request-id, x-request-path only
+    · public / share / remote-session / guest branch → x-request-id, x-request-path,
+                              x-namespace-context; every other inbound header passes through
     · no session            → 302 /login?callbackUrl=…
     · tokenVersion < CURRENT_TOKEN_VERSION → 302 /login   (auth-constants.ts)
     · authenticated branch  → x-user-id, x-mode (admin-gated for 'internals'),
@@ -93,7 +126,7 @@ call (`runMicroTask` → `MicroAgent`, prompts in `micro.rubric_llm` of
                  │
      ┌───────────┴────────────────────────────────┐
      ▼                                            ▼
-  resolvePath(mode, '/…')                 checkFileAccess(file, user)
+  resolvePath(mode, '/…')                 canAccessFile(file, user, overrides)
   resolveHomeFolderSync(mode, home_folder)   (lib/data/helpers/permissions.ts)
                  │                                │
                  └──────────► every DocumentDB query is mode-prefixed
@@ -101,7 +134,30 @@ call (`runMicroTask` → `MicroAgent`, prompts in `micro.rubric_llm` of
 
 `home_folder` is stored **relative** (`'sales/team1'`) and resolved against the live mode at
 access time, which is what makes one user row work in `/org` and `/tutorial` simultaneously.
-`checkFileAccess` enforces mode first — even an admin sees nothing outside `/{mode}/…`.
+
+**Mode isolation is a path-prefix convention, and `canAccessFile` is where it is enforced.**
+There is no mode column: a file is in a mode because its `path` starts with `/org`, `/tutorial`
+or `/internals`. The checks run in a fixed order, and a non-admin can be admitted by any of
+three separate grants — miss one and a whole class of file silently disappears from the UI:
+
+1. **Type** — `canAccessFileType(user.role, file.type, overrides)`. This runs *before* the mode
+   check, so a role denied a file type is refused regardless of where the file lives.
+2. **Mode** — `file.path === '/{mode}'` or starts with `/{mode}/`. Applies to admins too: an
+   admin in tutorial mode sees nothing under `/org`.
+3. **Admin short-circuit** — `isAdmin(user.role)` returns `true` here; steps 4–6 are non-admin
+   only.
+4. **Home folder** — at or under `resolveHomeFolderSync(mode, home_folder)`, *minus* anything
+   `isUnderSystemFolder` matches (system subtrees are carved out and re-granted selectively by
+   step 5).
+5. **`isAccessibleSystemPath`** — re-grants exactly three subtrees: `/{mode}/database`
+   (connections, read for everyone), `/{mode}/logs/conversations/{userId}` (own conversations),
+   `/{mode}/logs/runs` (job run outputs).
+6. **`isAncestorContext`** — a `context` file whose directory is an ancestor of the user's home
+   folder, so hierarchical schema filtering can read `/org/context` from `/org/sales`.
+
+`checkFileAccess` in the same file is a *legacy* export with no production callers (only
+`lib/__tests__/lib-unit.test.ts`). It runs mode first and has no type check — do not copy its
+order.
 
 Background callers with no HTTP request build the user directly and pass mode explicitly:
 `getUserEffectiveUser(email, mode)` (Slack), `lib/mcp/auth.ts` (bearer token → `DEFAULT_MODE`),
@@ -110,16 +166,25 @@ Background callers with no HTTP request build the user directly and pass mode ex
 ### Architecture — the namespace seam
 
 Mode is one isolation axis; `INamespaceModule` (`lib/modules/types.ts`, default implementation
-`lib/modules/namespace/index.ts`) is the seam a deployment implements to add a coarser one. It has
-four verbs. `resolve(req, hints)` maps a request to its namespace, or returns `null` to reject it —
-there is no safe default. `seal(namespace)` makes that value safe to travel as the
-`x-namespace-context` request header, because middleware writes it and handlers would otherwise trust
-an attacker-supplied copy. `with(namespace, fn)` establishes one where there is no request to read it
-from, scoped to `fn` and deliberately not `enterWith`-style: an ambient value cannot be unset and
-leaks onto whatever runs next on the same async context, which on a pooled server is an unrelated
-request. `isolation()` returns the current request's coarse prefix. The single-workspace
-implementation answers a constant for all of them, `bindExternalId`/`unbindExternalId` are no-ops, and
-`provision()` is the ordinary first-run `AuthModule.register`.
+`lib/modules/namespace/index.ts`) is the seam a deployment implements to add a coarser one. Nine
+members, four of them the hot path. `resolve(req, hints)` maps a request to its namespace, or
+returns `null` to reject it — there is no safe default. `seal(namespace)` makes that value safe to
+travel as the `x-namespace-context` request header, because middleware writes it and handlers would
+otherwise trust an attacker-supplied copy; the sealed *form* is opaque to every caller.
+`with(namespace, fn)` establishes one where there is no request to read it from, scoped to `fn` and
+deliberately not `enterWith`-style: an ambient value cannot be unset and leaks onto whatever runs
+next on the same async context, which on a pooled server is an unrelated request. `isolation()`
+returns the current request's coarse prefix.
+
+The other five are lifecycle, not request handling: `provision(input)` creates and seeds a
+namespace (one workspace ⇒ the ordinary first-run `AuthModule.register`);
+`bindExternalId`/`unbindExternalId` record which namespace owns a third-party id (`slack_team` is
+the only `ExternalIdKind` today); `installFinishUrl(returnUrl)` redirects an OAuth install that
+landed on the wrong host, `null` to finish where it arrived; and `minDataVersion()` reports the
+OLDEST data version across every namespace served, which is what makes "is it safe to raise
+`MINIMUM_SUPPORTED_DATA_VERSION`?" answerable *before* a deploy. The single-workspace
+implementation answers a constant for the first four, no-ops both bind verbs, returns `null` from
+`installFinishUrl`, and reads its own version for `minDataVersion`.
 
 Three entry points cannot go through middleware and resolve for themselves, each because the
 namespace is not in the URL: `app/api/mcp/route.ts` (it is in a bearer token), the Slack events
@@ -190,9 +255,9 @@ The constants live beside the rules (`scoring.ts`: weights `0.3/0.3/0.4` for vis
 
 | Boundary | Contract |
 |---|---|
-| **API routes → `withAuth`** (~75 files) | Handler receives `(request, user: EffectiveUser, context)`. `null` user ⇒ `401` before the handler runs. Thrown errors are rethrown; non-abort errors also publish `AppEvents.ERROR` with `source: server:<pathname>`. |
+| **API routes → `withAuth`** (~73 files) | Handler receives `(request, user: EffectiveUser, context)`. `null` user ⇒ `401` before the handler runs; a failed `checkDataVersion()` ⇒ `503` before it runs. Thrown errors are rethrown; non-abort errors also publish `AppEvents.ERROR` with `source: server:<pathname>`. |
 | **API routes → `api-responses`** | `successResponse(data)` ⇒ `{success:true,data,request_id?}`; `handleApiError(e)` ⇒ `{success:false,error:{code,message,type?}}` with status from the `UserFacingError` subclass. ESLint (`eslint.config.mjs`, `app/api/**`) rejects a bare `NextResponse.json(…, {status:500})`. |
-| **`lib/data/*` → `lib/auth` + `lib/mode`** | `files.server.ts` calls `canAccessFileType`, `canCreateFileType`, `canCreateFileByRole`, `canDeleteFileType`, `validateFileLocation`; `helpers/permissions.ts` calls `checkFileAccess`. All take `EffectiveUser` and are the only enforcement layer below the routes. |
+| **`lib/data/*` → `lib/auth` + `lib/mode`** | `files.server.ts` calls `canCreateFileType`, `canCreateFileByRole`, `canDeleteFileType`, `validateFileLocation` for mutations, `canAccessFile` for every read, and, for the references of a *non-folder* parent, only `canAccessFileType` + the mode prefix — a dashboard's embedded questions are authorized by the parent, so path rules are not re-applied; `shares/shares.server.ts` calls `canAccessFile`; `lib/search/file-search.ts` calls `canViewFileInUI`. All take `EffectiveUser` and are the only enforcement layer below the routes. |
 | **Chat / orchestration → `EffectiveUser`** | `lib/chat/*.server.ts` and every server tool thread `EffectiveUser` for file access and mode. Guest chat is additionally gated by `guestChatDenialReason(user, SHARE_GUEST_CHAT_ENABLED)`, enforced in both chat routes. |
 | **`lib/modules/registry` → namespace** | `attachNamespace` runs `getModules().namespace.resolve(req)` then `.seal()` into `x-namespace-context` in *both* middleware branches, deleting any inbound copy first. Only the authenticated branch acts on a `null` result (session cookies cleared, redirect to `/login`); the public branch discards it and proceeds with no namespace attached. |
 | **`lib/modules/registry` → auth** | `AuthConfigOptions` (`auth-config-options.ts`) lets a module override user lookup, JWT refresh, and extra session fields without touching `auth-factory.ts`. `getContextRunner()` and `getExtraTokenPayload()` are the two hooks that carry the namespace past the end of a request. |
@@ -213,6 +278,15 @@ The constants live beside the rules (`scoring.ts`: weights `0.3/0.3/0.4` for vis
   trusting those headers: MCP uses `DEFAULT_MODE`, Slack passes mode explicitly, and the guest
   branch of `getEffectiveUser` derives everything from the signed cookie. Any new public route
   that calls `getEffectiveUser` breaks that invariant.
+- **`getUserKey` is MODE-scoped, not user-scoped — the name lies.** `AuthModule.getUserKey`
+  (`lib/modules/auth/index.ts`) returns `buildNamespace({isolation, mode, userId: 0}).mode`, i.e.
+  `mx/org`; the only thing it is handed is `{ mode }`, so it *cannot* identify a user. Its one
+  caller is the query-result cache in `app/api/query/route.ts`, and two users in the same mode
+  therefore share cache keys deliberately — the same SQL against the same connection is the same
+  result. What stops a user replaying a query they may no longer run is that
+  `getWhitelistForPath` + `validateQueryTables` run **before** the cache is consulted; the key
+  carries no `filePath`, so validating after a hit would be too late. Never treat this key as an
+  authorization boundary.
 - **The `internals` admin gate lives on the header, not on the URL.** `x-mode` downgrades a
   non-admin's `?mode=internals` to `org`, but `effectiveMode` — used only for the bare
   `/p` → `/p/{mode}` redirect — does not. A non-admin can land on `/p/internals` while their
@@ -278,9 +352,11 @@ The constants live beside the rules (`scoring.ts`: weights `0.3/0.3/0.4` for vis
   caller-supplied merged content so the score matches the screenshot. A fresh unsaved draft
   therefore scores 0/5 through the tool.
 - **The live thresholds, stated plainly** because they are easy to misremember: `visual-count`
-  warns above `MAX_VISUALS = 15`; `JUDGE_VOTES = 1`; `too-much-text` has a warn tier AND an error
-  tier at 800 tokens; `typed-number` triggers at 5+ digits; and the judge's model comes from the
-  code-owned grade override `rubric_llm: task('rubric_llm', 'core')` in
+  warns above `MAX_VISUALS = 15`; `JUDGE_VOTES = 1`; `too-much-text` warns above 400 tokens and
+  errors above 800; `typed-number` fires on any of four shapes in prose (`findFactualNumbers`,
+  `deterministic/shared.ts`) — a `$`-prefixed figure, a `%`-suffixed one, a comma-grouped
+  thousands value, *or* a bare run of 5+ digits, so `$12` and `7%` trip it too; and the judge's
+  model comes from the code-owned grade override `rubric_llm: task('rubric_llm', 'core')` in
   `agents/micro/micro-tasks.ts`.
 
 ### Key files
@@ -293,6 +369,8 @@ The constants live beside the rules (`scoring.ts`: weights `0.3/0.3/0.4` for vis
 | Change role → file-type permissions | `frontend/rules.json` + both `lib/auth/access-rules*.ts` |
 | Add a mode, or change mode path layout / system folders | `lib/mode/mode-types.ts`, `lib/mode/path-resolver.ts` |
 | Add an authenticated API route | `lib/http/with-auth.ts` + `lib/http/api-responses.ts` |
+| Change the namespace prefix shape, or add a level | `lib/namespace/types.ts` (`buildNamespace`) |
+| Change the namespace seam's contract | `lib/modules/types.ts` (`INamespaceModule`) + `lib/modules/namespace/index.ts` |
 | Change an API error's status or shape | `lib/http/api-responses.ts` (+ `lib/errors.ts` for the class) |
 | Client caching / dedup / abort behaviour | `lib/http/fetch-wrapper.ts` |
 | Preserve `as_user` / `mode` on a new client transport | `lib/http/fetch-patch.ts`, `store/api-url.ts` |
