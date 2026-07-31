@@ -28,6 +28,9 @@ import { envelopeVizType } from '@/lib/viz/viz-templates';
 import { numberFromEl } from '@/lib/data/story/story-number';
 import type { EditWithAgentSource } from '@/lib/chat/edit-with-agent';
 
+/** Selected prose parents keep typography controls even when a nested embed locks text editing. */
+const TEXT_FORMATTING_PARENT_TAGS = ['div', 'p', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'blockquote', 'pre', 'code'];
+
 interface AgentHtmlProps {
   html: string;
   /**
@@ -595,7 +598,9 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       {isJsx && (
         <StoryTypographyToolbar
           target={selectedEl ?? textHost}
-          targetKind={selectedEl ? 'element' : 'text'}
+          targetKind={selectedEl
+            ? (TEXT_FORMATTING_PARENT_TAGS.includes(selectedEl.el.tagName.toLowerCase()) ? 'text-element' : 'element')
+            : 'text'}
           active={editable && !readOnly}
           onApply={onApplyTypography}
           onSelectAncestor={onSelectAncestor}

@@ -57,6 +57,80 @@ describe('AgentHtml format="jsx" — scoped contenteditable', () => {
     await waitFor(() => expect(within(doc.body).getByLabelText('para')).toBeTruthy());
     expect(doc.querySelectorAll('[contenteditable="true"]').length).toBe(0);
   });
+
+  it('formats a locked heading parent without making its nested embed editable', async () => {
+    const onChange = vi.fn();
+    render(
+      <AgentHtml
+        html='<div><h1 aria-label="metric-heading">Total <Number id={5} /></h1></div>'
+        format="jsx"
+        editable
+        width={800}
+        colorMode="light"
+        onChange={onChange}
+      />,
+    );
+    const doc = iframeDoc();
+    const heading = await within(doc.body).findByLabelText('metric-heading');
+    expect(heading.getAttribute('contenteditable')).not.toBe('true');
+
+    fireEvent.click(heading);
+    fireEvent.click(await screen.findByLabelText('Increase font size'));
+
+    expect(heading.className).toBe('text-lg');
+    expect(onChange).toHaveBeenLastCalledWith(
+      '<div><h1 aria-label="metric-heading" className="text-lg">Total <Number id={5} /></h1></div>',
+    );
+  });
+
+  it('gives a locked span parent the full typography controls', async () => {
+    const onChange = vi.fn();
+    render(
+      <AgentHtml
+        html='<div><span aria-label="metric-span">Total <Number id={5} /></span></div>'
+        format="jsx"
+        editable
+        width={800}
+        colorMode="light"
+        onChange={onChange}
+      />,
+    );
+    const doc = iframeDoc();
+    const span = await within(doc.body).findByLabelText('metric-span');
+    expect(span.getAttribute('contenteditable')).not.toBe('true');
+
+    fireEvent.click(span);
+    fireEvent.click(await screen.findByLabelText('Toggle bold'));
+
+    expect(span.className).toBe('font-bold');
+    expect(onChange).toHaveBeenLastCalledWith(
+      '<div><span aria-label="metric-span" className="font-bold">Total <Number id={5} /></span></div>',
+    );
+  });
+
+  it('gives a selected div full typography controls for its subtree', async () => {
+    const onChange = vi.fn();
+    render(
+      <AgentHtml
+        html='<div><div aria-label="text-group"><p>First</p><p>Second</p></div></div>'
+        format="jsx"
+        editable
+        width={800}
+        colorMode="light"
+        onChange={onChange}
+      />,
+    );
+    const doc = iframeDoc();
+    const div = await within(doc.body).findByLabelText('text-group');
+
+    fireEvent.click(div);
+    fireEvent.click(await screen.findByLabelText('Toggle italic'));
+
+    expect(div.className).toBe('italic');
+    expect(onChange).toHaveBeenLastCalledWith(
+      '<div><div aria-label="text-group" className="italic"><p>First</p><p>Second</p></div></div>',
+    );
+  });
 });
 
 describe('AgentHtml format="jsx" — blur commits by AST write-back', () => {

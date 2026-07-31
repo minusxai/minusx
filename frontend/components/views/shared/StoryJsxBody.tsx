@@ -118,7 +118,7 @@ export const STORY_SELECTION_CSS = [
   `[${HOVER_DOM_ATTR}]:not([${SELECTED_DOM_ATTR}]) { outline: 1px dashed rgba(20, 184, 166, 0.45); outline-offset: 2px; }`,
 ].join('\n');
 
-/** One ancestor in a selection's breadcrumb: enough to label a crumb and re-anchor to it. */
+/** One ancestor in the universal toolbar breadcrumb: enough to label and re-anchor to it. */
 export interface StoryAncestorCrumb {
   astPath: string;
   tag: string;
@@ -126,11 +126,11 @@ export interface StoryAncestorCrumb {
   hint: string;
 }
 
-/** The focused editable text host (typography-toolbar anchor). `el` lives in the iframe DOM. */
+/** A focused or selected typography-toolbar target. `el` lives in the iframe DOM. */
 export interface StoryTextHostTarget {
   astPath: string;
   el: HTMLElement;
-  /** Click-selected targets only: the selectable ancestor chain, OUTERMOST first (breadcrumb). */
+  /** The selectable ancestor chain, OUTERMOST first (universal toolbar breadcrumb). */
   ancestors?: StoryAncestorCrumb[];
 }
 
@@ -454,11 +454,38 @@ function collectStoryParams(nodes: JsxNode[]): StoryParam[] {
 
 const NO_NODES: JsxNode[] = [];
 
+/** A breadcrumb destination: plain HTML, not a text host (focus owns those), never the root. */
+function isSelectableFormatTarget(
+  path: string,
+  node: ReturnType<typeof resolveJsxNodeAtPath>,
+): node is JsxElement {
+  return !!node
+    && node.type === 'element'
+    && !node.isComponent
+    && !isEditableTextHost(node)
+    && path.includes('.');
+}
+
+/** Build the toolbar's ancestor hierarchy from the rendered DOM and validate it against source. */
+function buildAncestorCrumbs(el: HTMLElement, parsedNodes: JsxNode[]): StoryAncestorCrumb[] {
+  const out: StoryAncestorCrumb[] = [];
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    const path = p.getAttribute?.(AST_PATH_ATTR);
+    if (!path) continue;
+    const node = resolveJsxNodeAtPath(parsedNodes, path);
+    if (isSelectableFormatTarget(path, node)) {
+      out.push({ astPath: path, tag: node.tag, hint: crumbHint(p.className) });
+    }
+  }
+  return out.reverse();
+}
+
 export default function StoryJsxBody({
   doc, jsx, readOnly, paramValues, onParamValuesChange, filePath, colorMode, editable, onChange,
   onEditQuestion, onEditNumber, onEditParamQuery, editApiRef, onTextHostFocusChange, onElementSelectChange,
 }: StoryJsxBodyProps) {
   const parsed = useMemo(() => parseJsx(jsx), [jsx]);
+  const parsedNodes = parsed.ok ? parsed.nodes : NO_NODES;
 
   // ── WYSIWYG edit session ─────────────────────────────────────────────────────────────────
   // One stable session per body; the latest source/callback are synced in (post-commit, before
@@ -466,8 +493,13 @@ export default function StoryJsxBody({
   // against the current props.
   const session = useMemo(() => createEditSession(), []);
   useEffect(() => {
-    session.setProps(jsx, onChange, onTextHostFocusChange);
-  }, [session, jsx, onChange, onTextHostFocusChange]);
+    const reportTextHostFocus = onTextHostFocusChange
+      ? (target: StoryTextHostTarget | null) => onTextHostFocusChange(
+          target ? { ...target, ancestors: buildAncestorCrumbs(target.el, parsedNodes) } : null,
+        )
+      : undefined;
+    session.setProps(jsx, onChange, reportTextHostFocus);
+  }, [session, jsx, onChange, onTextHostFocusChange, parsedNodes]);
 
   // Breadcrumb navigation (toolbar crumbs) needs to re-anchor the selection from OUTSIDE the
   // effect closure — the effect publishes its select-by-path entry point into this slot
@@ -489,25 +521,10 @@ export default function StoryJsxBody({
   // heuristics): plain non-text-host elements select; text hosts clear (focus owns them);
   // component chrome is ignored (interactive embeds must keep working); the ROOT (a top-level
   // path with no '.') is excluded — its gutter/cap is the page-level design contract.
-  const parsedNodes = parsed.ok ? parsed.nodes : NO_NODES;
   useEffect(() => {
     if (!editable || readOnly || !onElementSelectChange) return;
     let selected: HTMLElement | null = null;
     let hovered: HTMLElement | null = null;
-    /** A format target: plain HTML, not a text host (focus owns those), never the root. */
-    const isSelectable = (path: string, node: ReturnType<typeof resolveJsxNodeAtPath>): node is JsxElement =>
-      !!node && node.type === 'element' && !node.isComponent && !isEditableTextHost(node) && path.includes('.');
-    /** The selectable ancestor chain for the breadcrumb, OUTERMOST first. */
-    const buildAncestors = (el: HTMLElement) => {
-      const out: StoryAncestorCrumb[] = [];
-      for (let p = el.parentElement; p; p = p.parentElement) {
-        const path = p.getAttribute?.(AST_PATH_ATTR);
-        if (!path) continue;
-        const node = resolveJsxNodeAtPath(parsedNodes, path);
-        if (isSelectable(path, node)) out.push({ astPath: path, tag: node.tag, hint: crumbHint(p.className) });
-      }
-      return out.reverse();
-    };
     const clear = () => {
       if (!selected) return;
       selected.removeAttribute(SELECTED_DOM_ATTR);
@@ -523,7 +540,7 @@ export default function StoryJsxBody({
       selected?.removeAttribute(SELECTED_DOM_ATTR);
       selected = el;
       el.setAttribute(SELECTED_DOM_ATTR, '');
-      onElementSelectChange({ astPath: path, el, ancestors: buildAncestors(el) });
+      onElementSelectChange({ astPath: path, el, ancestors: buildAncestorCrumbs(el, parsedNodes) });
     };
     /** The element a click at `target` would select, or null. */
     const resolveTarget = (target: HTMLElement | null): { path: string; el: HTMLElement } | 'embed' | null => {
@@ -534,7 +551,7 @@ export default function StoryJsxBody({
       const path = stamped.getAttribute(AST_PATH_ATTR) ?? '';
       const node = resolveJsxNodeAtPath(parsedNodes, path);
       if (node && node.type === 'element' && node.isComponent) return 'embed';
-      return isSelectable(path, node) ? { path, el: stamped } : null;
+      return isSelectableFormatTarget(path, node) ? { path, el: stamped } : null;
     };
     const onClick = (e: Event) => {
       const hit = resolveTarget(e.target as HTMLElement | null);
@@ -561,7 +578,7 @@ export default function StoryJsxBody({
       // NO instanceof: `el` belongs to the IFRAME realm, whose HTMLElement is a different
       // constructor — a parent-realm instanceof is always false for it. querySelector already
       // guarantees an Element; the AST predicate guarantees it's a plain HTML tag.
-      if (el && isSelectable(astPath, node)) select(astPath, el as HTMLElement);
+      if (el && isSelectableFormatTarget(astPath, node)) select(astPath, el as HTMLElement);
     });
     doc.addEventListener('click', onClick);
     doc.addEventListener('mousemove', onMove);

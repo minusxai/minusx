@@ -25,7 +25,7 @@ function renderToolbar(initialClassName = '', overrides: Partial<React.Component
 }
 
 afterEach(() => {
-  document.body.querySelectorAll('p').forEach(p => p.remove());
+  document.body.querySelectorAll('p, h1').forEach(el => el.remove());
 });
 
 describe('StoryTypographyToolbar', () => {
@@ -192,6 +192,40 @@ describe('StoryTypographyToolbar', () => {
     fireEvent.click(screen.getByLabelText('More formatting'));
     expect(screen.getByLabelText('Increase inner padding')).toBeTruthy();
     expect(screen.getByLabelText('Toggle full bleed')).toBeTruthy();
+  });
+
+  it('selected text parents keep text controls and their ancestor breadcrumb', () => {
+    const el = document.createElement('h1');
+    document.body.appendChild(el);
+    const target = {
+      astPath: '0.0.1',
+      el,
+      ancestors: [{ astPath: '0.0', tag: 'header', hint: 'max-w-4xl' }],
+    };
+    const onSelectAncestor = vi.fn();
+    renderToolbar('text-6xl', { targetKind: 'text-element', target, onSelectAncestor });
+
+    for (const label of ['Increase font size', 'Toggle bold', 'Toggle italic', 'Toggle underline', 'Text color']) {
+      expect(screen.getByLabelText(label)).toBeTruthy();
+    }
+    fireEvent.click(screen.getByLabelText('Select ancestor 0.0'));
+    expect(onSelectAncestor).toHaveBeenCalledWith('0.0');
+  });
+
+  it('focused text hosts also show their hierarchy breadcrumb', () => {
+    const el = document.createElement('p');
+    document.body.appendChild(el);
+    const target = {
+      astPath: '0.0.1',
+      el,
+      ancestors: [{ astPath: '0.0', tag: 'section', hint: 'max-w-2xl' }],
+    };
+    const onSelectAncestor = vi.fn();
+    renderToolbar('', { targetKind: 'text', target, onSelectAncestor });
+
+    expect(screen.getByText('p')).toBeTruthy();
+    fireEvent.click(screen.getByLabelText('Select ancestor 0.0'));
+    expect(onSelectAncestor).toHaveBeenCalledWith('0.0');
   });
 
   it('element targets show a clickable ancestor breadcrumb', () => {
