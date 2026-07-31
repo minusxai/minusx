@@ -40,7 +40,7 @@ export interface StoryTypographyToolbarProps {
   /**
    * What kind of target is anchored:
    *  - 'text': a contenteditable text host; full typography controls.
-   *  - 'text-element': a click-selected p/heading/span with a locked nested component; full
+   *  - 'text-element': a click-selected div/p/heading/span parent; full
    *    typography controls apply to the parent and inherit into children.
    *  - 'element': a click-selected container; hides font size, B/I/U, and text color.
    */

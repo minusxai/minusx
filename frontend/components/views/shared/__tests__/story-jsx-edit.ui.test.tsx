@@ -107,6 +107,30 @@ describe('AgentHtml format="jsx" — scoped contenteditable', () => {
       '<div><span aria-label="metric-span" className="font-bold">Total <Number id={5} /></span></div>',
     );
   });
+
+  it('gives a selected div full typography controls for its subtree', async () => {
+    const onChange = vi.fn();
+    render(
+      <AgentHtml
+        html='<div><div aria-label="text-group"><p>First</p><p>Second</p></div></div>'
+        format="jsx"
+        editable
+        width={800}
+        colorMode="light"
+        onChange={onChange}
+      />,
+    );
+    const doc = iframeDoc();
+    const div = await within(doc.body).findByLabelText('text-group');
+
+    fireEvent.click(div);
+    fireEvent.click(await screen.findByLabelText('Toggle italic'));
+
+    expect(div.className).toBe('italic');
+    expect(onChange).toHaveBeenLastCalledWith(
+      '<div><div aria-label="text-group" className="italic"><p>First</p><p>Second</p></div></div>',
+    );
+  });
 });
 
 describe('AgentHtml format="jsx" — blur commits by AST write-back', () => {

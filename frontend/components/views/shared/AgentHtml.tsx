@@ -29,7 +29,7 @@ import { numberFromEl } from '@/lib/data/story/story-number';
 import type { EditWithAgentSource } from '@/lib/chat/edit-with-agent';
 
 /** Selected prose parents keep typography controls even when a nested embed locks text editing. */
-const TEXT_FORMATTING_PARENT_TAGS = ['p', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'];
+const TEXT_FORMATTING_PARENT_TAGS = ['div', 'p', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'blockquote', 'pre', 'code'];
 
 interface AgentHtmlProps {
   html: string;
