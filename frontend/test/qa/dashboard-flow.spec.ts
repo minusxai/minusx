@@ -4,8 +4,7 @@
  * executed and returned rows in Redux. Skips if the deployment has no
  * dashboards. Stays in tutorial mode throughout.
  */
-import { test } from '@playwright/test';
-import { findFile, openFileByClick, assertDashboardRendered } from './flows';
+import { test, findFile, openFileByClick, assertDashboardRendered } from './flows';
 
 test('open an existing dashboard by clicking it, its questions render with data', async ({ page, request }) => {
   const file = await findFile(request, 'dashboard');

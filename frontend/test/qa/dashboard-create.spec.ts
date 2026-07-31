@@ -4,8 +4,8 @@
  * then assert it persisted under /tutorial with the question. Stays entirely in
  * tutorial mode (asserted before mutating; created path hard-checked after).
  */
-import { test } from '@playwright/test';
 import {
+  test,
   gotoTutorialHome,
   assertTutorialMode,
   createDashboard,

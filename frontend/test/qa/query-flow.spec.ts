@@ -4,8 +4,7 @@
  * assert rows land in Redux. Exercises the connector/query path end-to-end.
  * Skips if the deployment has no questions. Stays in tutorial mode throughout.
  */
-import { test } from '@playwright/test';
-import { findFile, openFileByClick, runQuery, assertSomeQueryHasRows } from './flows';
+import { test, findFile, openFileByClick, runQuery, assertSomeQueryHasRows } from './flows';
 
 test('open an existing question by clicking it, run it, results land in Redux', async ({ page, request }) => {
   const file = await findFile(request, 'question');

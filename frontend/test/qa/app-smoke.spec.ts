@@ -7,9 +7,8 @@
  * Uses the runtime opt-in (`?e2e=<secret>`) for Redux assertions; falls back to
  * DOM-only where the store isn't available.
  */
-import { test, expect } from '@playwright/test';
 import { getState } from '@/test/flows/e2e';
-import { e2eUrl } from './flows';
+import { test, expect, e2eUrl } from './flows';
 
 test('deployment is healthy: authenticated, store hydrated, chat surface present', async ({ page }) => {
   // Opt into store exposure for this session (tutorial mode).

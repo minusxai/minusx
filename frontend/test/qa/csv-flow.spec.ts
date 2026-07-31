@@ -8,9 +8,9 @@
  * Tutorial mode only; unique dataset per run so it is rerun-safe even where the
  * tutorial reset is skipped (non-admin QA account).
  */
-import { test, expect } from '@playwright/test';
 import path from 'node:path';
 import {
+  test, expect,
   QA_MODE,
   findConnection,
   openFileByClick,

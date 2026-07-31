@@ -9,8 +9,8 @@
  * exposes no selectable database for new questions), and query execution is
  * already covered end-to-end by query-flow.spec.ts against an existing question.
  */
-import { test } from '@playwright/test';
 import {
+  test,
   gotoTutorialHome,
   assertTutorialMode,
   createQuestion,

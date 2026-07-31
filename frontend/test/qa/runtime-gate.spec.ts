@@ -6,8 +6,7 @@
  * then persists via cookie). Runs locally against the prod-ish server and against
  * a real deployment.
  */
-import { test, expect } from '@playwright/test';
-import { e2eUrl, modeUrl } from './flows';
+import { test, expect, e2eUrl, modeUrl } from './flows';
 
 const storeExposed = (page: import('@playwright/test').Page) =>
   page.evaluate(() => typeof (window as unknown as { __MX_STORE__?: { getState?: unknown } }).__MX_STORE__?.getState === 'function');

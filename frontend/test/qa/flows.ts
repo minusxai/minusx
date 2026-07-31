@@ -6,10 +6,34 @@
  * portable across deployments with different data. They drive the question/dashboard
  * surfaces with the runtime `?e2e` opt-in and assert against the exposed Redux store.
  */
-import { expect, type Page, type APIRequestContext } from '@playwright/test';
+import { expect, test as base, type Page, type APIRequestContext } from '@playwright/test';
 import { assertRedux, getState } from '@/test/flows/e2e';
+import { installConsoleGuard } from './console-guard';
 
 const E2E_SECRET = process.env.QA_E2E_SECRET || 'local-qa-secret';
+
+/**
+ * The QA `test` — plain Playwright plus an always-on console guard.
+ *
+ * Specs import `test` from HERE, not from `@playwright/test`, so the guard cannot
+ * be forgotten when a spec is added. See `console-guard.ts` for what it tolerates.
+ *
+ * The guard only asserts when the test would otherwise have passed: a flow that
+ * fails its own assertion should report that failure, not a console line that
+ * happened to be logged on the way there.
+ */
+export const test = base.extend<{ consoleGuard: void }>({
+  consoleGuard: [
+    async ({ page }, use, testInfo) => {
+      const assertNoConsoleErrors = installConsoleGuard(page);
+      await use();
+      if (testInfo.status === testInfo.expectedStatus) assertNoConsoleErrors();
+    },
+    { auto: true },
+  ],
+});
+
+export { expect } from '@playwright/test';
 
 /**
  * QA flows operate EXCLUSIVELY on tutorial mode — never production (org) files.

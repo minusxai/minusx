@@ -208,6 +208,23 @@ assertions (`assertQuestionSaved`, `assertDashboardSavedWithQuestion`) hard-requ
 `path.startsWith('/tutorial')`. `resetTutorial()` by contrast is best-effort — a non-admin QA
 account gets a `console.warn` and the read-only flows continue.
 
+**QA specs import `test` from `test/qa/flows.ts`, not from `@playwright/test`.** That re-export is
+`base.extend` with one always-on fixture: a console guard (`test/qa/console-guard.ts`) that collects
+`console.error` and uncaught `pageerror` events and fails the flow on anything not explicitly
+allowlisted. It exists because the QA assertions are all Redux + DOM, so a page that throws while
+still rendering the elements a flow clicks passed silently — a React hydration mismatch on the
+tutorial home page (`Minified React error #418`) lived there unnoticed, visible only with devtools
+open. Importing `test` from `@playwright/test` in a new spec silently opts out of the guard.
+
+Two things keep it from becoming noise. It asserts **only when the test would otherwise have
+passed** (`testInfo.status === testInfo.expectedStatus`), so a flow that fails its own assertion
+reports that, not a console line logged on the way. And the allowlist requires a stated reason per
+entry — it currently tolerates the hydration mismatch above (pre-existing on main:
+`components/ui/Link.tsx` calls `preserveParams()`, which no-ops on the server and appends
+`?mode=`/`?as_user=`/`?view=` on the client, so the first client render disagrees with the SSR HTML),
+navigation-cancelled fetches, and devtools advisories. Its hydration entry delegates to the app's own
+`isHydrationError` (`lib/utils/error-utils.ts`), so tightening the classifier tightens the gate.
+
 Both suites locate controls by `aria-label` via `getByLabel` — 55 of the ~67 locators across
 `test/e2e`, `test/qa` and `test/flows`. A control without one is a missing `aria-label` on the
 component, not a reason to use a different query. The three standing exceptions are structural, not
@@ -367,7 +384,8 @@ built from the repository root**, not from `docs/`.
 | Render a component with providers | `frontend/test/helpers/render-with-providers.tsx` |
 | Assert on Redux without polling | `frontend/test/helpers/redux-wait.ts` |
 | Add a faux-LLM browser E2E spec | `frontend/test/e2e/` (+ `frontend/test/flows/e2e-faux.ts`) |
-| Add a real-LLM QA flow | `frontend/test/qa/flows.ts` |
+| Add a real-LLM QA flow | `frontend/test/qa/flows.ts` (import `test` from here, not `@playwright/test`) |
+| Allow a known-benign console error in QA | `frontend/test/qa/console-guard.ts` |
 | Change E2E server env / ports | `frontend/playwright.config.ts` |
 | Change QA server env / workers | `frontend/playwright.qa.config.ts` |
 | Add/rename a CI job or required check | `.github/workflows/test.yml`, `.github/workflows/qa.yml` |

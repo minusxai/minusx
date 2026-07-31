@@ -6,8 +6,8 @@
  * token set (chart palette departs from the app default), and renders inside the live-svg
  * surface (Option B2). Stays entirely in tutorial mode.
  */
-import { test, expect } from '@playwright/test';
 import {
+  test, expect,
   gotoTutorialHome,
   assertTutorialMode,
   createDashboard,

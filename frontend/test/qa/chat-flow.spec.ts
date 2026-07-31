@@ -22,8 +22,8 @@
  * pays the cold prod-build connection/context load directly — absorbed by the
  * generous Send-enable wait in sendChat and the describe timeout below.
  */
-import { test, expect } from '@playwright/test';
 import {
+  test, expect,
   e2eUrl, findFile, openFileByClick,
   hasLlm, waitForStore, openSideChat, sendChat,
   assertChatReplied, assertWebSearchRan, firstLlmCallId,

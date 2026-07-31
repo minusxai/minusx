@@ -9,8 +9,8 @@
  * tabs: "Companies 1" / "Companies 2"). If this flow fails with "not publicly
  * accessible" / "not found", check the sheet's sharing settings first.
  */
-import { test, expect } from '@playwright/test';
 import {
+  test, expect,
   QA_MODE,
   findConnection,
   openFileByClick,
