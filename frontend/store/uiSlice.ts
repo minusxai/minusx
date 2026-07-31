@@ -3,6 +3,18 @@ import type { RootState } from './store';
 import type { Attachment } from '@/lib/types';
 import type { LlmGrade } from '@/lib/llm/llm-config-types';
 
+const LEFT_SIDEBAR_COLLAPSED_KEY = 'leftSidebarCollapsed';
+const RIGHT_SIDEBAR_COLLAPSED_KEY = 'rightSidebarCollapsed';
+
+function persistBooleanPreference(key: string, value: boolean) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(key, String(value));
+  } catch {
+    // localStorage can be unavailable in private/locked-down browser contexts.
+  }
+}
+
 export type ViewStackItem =
   | { type: 'question'; fileId: number; dashboardId?: number; dashboardParamValues?: Record<string, any> }
   | { type: 'create-question'; folderPath: string; dashboardId: number; fileId: number };
@@ -58,7 +70,9 @@ interface UIState {
 }
 
 const initialState: UIState = {
-  leftSidebarCollapsed: false,
+  // Start closed so hydration never flashes the expanded sidebar. DataLoader
+  // opens it after mount only when the user's persisted preference says to.
+  leftSidebarCollapsed: true,
   rightSidebarCollapsed: true,
   rightSidebarWidth: 400,
   colorMode: 'dark',
@@ -105,15 +119,19 @@ const uiSlice = createSlice({
   reducers: {
     setLeftSidebarCollapsed: (state, action: PayloadAction<boolean>) => {
       state.leftSidebarCollapsed = action.payload;
+      persistBooleanPreference(LEFT_SIDEBAR_COLLAPSED_KEY, action.payload);
     },
     toggleLeftSidebar: (state) => {
       state.leftSidebarCollapsed = !state.leftSidebarCollapsed;
+      persistBooleanPreference(LEFT_SIDEBAR_COLLAPSED_KEY, state.leftSidebarCollapsed);
     },
     setRightSidebarCollapsed: (state, action: PayloadAction<boolean>) => {
       if (!action.payload) {
         state.leftSidebarCollapsed = true;
+        persistBooleanPreference(LEFT_SIDEBAR_COLLAPSED_KEY, true);
       }
-        state.rightSidebarCollapsed = action.payload;
+      state.rightSidebarCollapsed = action.payload;
+      persistBooleanPreference(RIGHT_SIDEBAR_COLLAPSED_KEY, action.payload);
     },
     setRightSidebarWidth: (state, action: PayloadAction<number>) => {
       state.rightSidebarWidth = action.payload;
@@ -263,8 +281,10 @@ const uiSlice = createSlice({
         try { localStorage.setItem('homePage', JSON.stringify(state.homePage)); } catch { /* ignore */ }
       }
     },
-    setBulkUiFlags: (state, action: PayloadAction<{ devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; vizV2?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; showExpandedMessages?: boolean; enableCustomAgents?: boolean; homePage?: Partial<UIState['homePage']> }>) => {
-      const { devMode, askForConfirmation, showAdvanced, vizV2, allowChatQueue, queueStrategy, showSuggestedQuestions, showTrustScore, unrestrictedMode, showExpandedMessages, enableCustomAgents, homePage } = action.payload;
+    setBulkUiFlags: (state, action: PayloadAction<{ leftSidebarCollapsed?: boolean; rightSidebarCollapsed?: boolean; devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; vizV2?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; showExpandedMessages?: boolean; enableCustomAgents?: boolean; homePage?: Partial<UIState['homePage']> }>) => {
+      const { leftSidebarCollapsed, rightSidebarCollapsed, devMode, askForConfirmation, showAdvanced, vizV2, allowChatQueue, queueStrategy, showSuggestedQuestions, showTrustScore, unrestrictedMode, showExpandedMessages, enableCustomAgents, homePage } = action.payload;
+      if (leftSidebarCollapsed !== undefined) state.leftSidebarCollapsed = leftSidebarCollapsed;
+      if (rightSidebarCollapsed !== undefined) state.rightSidebarCollapsed = rightSidebarCollapsed;
       if (devMode !== undefined) state.devMode = devMode;
       if (askForConfirmation !== undefined) state.askForConfirmation = askForConfirmation;
       if (showAdvanced !== undefined) state.showAdvanced = showAdvanced;
