@@ -1040,26 +1040,58 @@ template, blob storage, the module registry that owns the DB handle, and secret 
 
 ### Module ownership
 
-**`lib/modules/`** — the process-wide capability registry. `ModuleSet` = `{ auth, db, store, cache }`,
-stashed on `global.__minusx_modules__` (not a module-level `let`: Turbopack evaluates the
+**`lib/modules/`** — the process-wide capability registry. `ModuleSet` = `{ auth, db, store, cache,
+namespace }`, stashed on `global.__minusx_modules__` (not a module-level `let`: Turbopack evaluates the
 instrumentation bundle separately from request-handler bundles, and two PGLite instances on one data
 directory corrupt the wire protocol). `lib/instrumentation/register-modules.ts` builds the set —
 `DBModule` (PGLite) or `AdapterBackedDBModule` (Postgres) chosen by `getDbType()` — then calls
-`db.init()` and `db.runMigrations()`. Tests register their own set in `test/setup/vitest.setup.ts`.
-In practice only two slots are live: 172 call sites use `getModules().db`, 14 use `.auth`.
-`getModules().store` and `.cache` have **zero** callers — `ObjectStoreModule`'s methods all throw and
-`InMemoryCacheModule` is dead code. `AuthModule.handleRequest()` also throws; middleware uses
-`addHeaders` only.
+`db.init()` and `runBootTasks()`. The boot tasks (the unhandled-rejection router, the chat runtime
+warm) live there rather than in `frontend/instrumentation.ts` because that file returns early for a
+deployment supplying its own module set: anything after the branch had to be re-implemented verbatim,
+and silently missed whatever was added later. Tests register their own set in
+`test/setup/vitest.setup.ts`. Three slots carry the traffic — counting non-test call sites,
+`getModules().db` has 81, `.namespace` 19, `.auth` 6 — while `.store` and `.cache` remain
+effectively unused: `ObjectStoreModule`'s methods throw and `InMemoryCacheModule` is dead code, and
+object-store callers go through `lib/object-store/index.ts` directly.
 
 **`lib/database/`** — SQL and schema. `documents-db.ts` (`DocumentDB`) is the only SQL surface for the
 `files` table; `user-db.ts` for `users`; `job-runs-db.ts` for `job_runs`; `config-store.ts` for the
-`configs` key/value table (data/schema version stamps). `postgres-schema.ts` holds the entire DDL as
-one idempotent string — tables, partial indexes, triggers, and `ALTER … IF NOT EXISTS` self-heal
-guards — replayed on every boot by both adapters. It does **not** own row-level access control (that
+`configs` key/value table (data/schema version stamps). The DDL is still one idempotent string —
+tables, partial indexes, triggers, and `ALTER … IF NOT EXISTS` self-heal guards, replayed on every
+boot by both adapters — but it is now *generated*: `postgres-schema.ts` is only
+`renderSchema(TABLES, { schemaName })`. It does **not** own row-level access control (that
 is `lib/data/helpers/permissions.ts`) and it does **not** own analytics query logic (only the analytics
 table definitions live here; queries are in `lib/analytics/`).
 `lib/database/duckdb.ts` is unrelated to the document DB: it is a browser DuckDB-WASM helper used by
 `components/plotx/TableV2.tsx` for column stats and by `lib/chart/histogram.ts`.
+
+**`lib/database/schema/`** — the schema, declared as data rather than as SQL text. `schema/tables.ts`
+declares all 16 tables as typed `Table` objects: columns, primary key, uniques, partial and
+expression indexes, and a `touchUpdatedAt` flag standing in for the four identical `updated_at`
+triggers. `schema/render.ts` turns that into the DDL string. The point is that a deployment needing a
+*variant* maps over the declaration instead of restating every table — two copies of a schema drift,
+and `IF NOT EXISTS` hides the drift because it matches on NAME rather than definition.
+`schema/types.ts` deliberately offers **no raw-SQL escape hatch**: anything held as an opaque string
+is invisible to a consumer that rewrites the schema, so it can neither be transformed nor checked.
+When something cannot be expressed, widen `ColumnType` or `IndexColumn` rather than smuggling a
+string through — the one expression index in the real schema (`(meta -> 'shares') jsonb_path_ops`) is
+first-class for exactly this reason. Every column is emitted twice, once inside
+`CREATE TABLE IF NOT EXISTS` and once as `ALTER TABLE … ADD COLUMN IF NOT EXISTS`, so a database
+built from an older declaration gains newly-declared columns on the next boot with no migration step.
+
+**`lib/namespace/`** — the prefixes that keep one workspace's effects out of another's. A `Namespace`
+is three already-joined levels, coarse to fine: `isolation` (the boundary everything durable is keyed
+by), `mode` (`isolation` + `org`/`tutorial`/`internals`), and `user` (`mode` + the user id). Call
+sites name the level they want and never concatenate, which is the whole point — a deployment that
+inserts a coarser level ahead of `mode` changes no consumer, because no consumer builds a path.
+`namespaced()` does the join, stripping a leading `/` so a stray separator cannot silently re-root a
+store; `namespacedChannel()` does the identifier-safe join for LISTEN/NOTIFY, scrubbing
+`[^a-zA-Z0-9_]` and prefixing `ns` because a channel name is a SQL identifier and a numeric isolation
+value would emit `1_conv_7`, which Postgres reads as a malformed numeric literal — `LISTEN` throws
+and the stream silently never subscribes. `DEFAULT_ISOLATION` is `'mx'` and is non-empty on purpose:
+an empty root would emit a leading separator on every key, so every call site would need its own
+emptiness check. It is pure string algebra and performs no I/O; the *value* of `isolation` comes from
+`getModules().namespace`.
 
 **`lib/data/`** — the data layer proper. `files.server.ts` / `files.ts` are the two `IFilesDataLayer`
 implementations; `connections.server.ts`, `configs.server.ts`, `shares/shares.server.ts`,
@@ -1068,9 +1100,18 @@ concerns. `loaders/` holds per-type read-time transforms. It owns *what a file m
 write*; it does not own SQL string construction (that is `DocumentDB`) nor HTTP shapes (that is
 `app/api/files/**`).
 
-**`lib/object-store/`** — binary blobs. `createObjectStore()` returns `S3Adapter` when both
-`OBJECT_STORE_BUCKET` and `OBJECT_STORE_ACCESS_KEY_ID` are set, else `LocalFsAdapter`
-(`LOCAL_UPLOAD_PATH/{key}`, served through auth-gated routes under `app/api/object-store/`). It stores
+**`lib/object-store/`** — binary blobs. `createObjectStore()` is **async** and always returns a
+`NamespacedObjectStore` (`namespaced.ts`) wrapping `S3Adapter` when both `OBJECT_STORE_BUCKET` and
+`OBJECT_STORE_ACCESS_KEY_ID` are set, else `LocalFsAdapter`
+(`LOCAL_UPLOAD_PATH/{key}`, served through auth-gated routes under `app/api/object-store/`). The
+namespace prefix is applied at the **factory**, not behind a module a caller may or may not use: an
+earlier attempt put it behind the injectable `getModules().store`, which no call site ever asked for,
+so the prefixing silently never happened. Wrapping what everyone already calls is what makes it
+unbypassable — `copyObject` prefixes *both* keys, so a copy cannot cross the boundary. There are
+deliberately no shared keys: the mxfood sample parquets, once server-side-copied from a single
+`seeds/mxfood/` prefix, are now generated into a `tmpdir()` cache (`local-seed.ts`) and written into
+each namespace's own keyspace, because reading a shared prefix would need an exemption from the
+prefix and an exemption is the hole. It stores
 uploads, chart images, CSV/Parquet warehouse files, the mxfood tutorial seed, and — via
 `lib/query-cache/blob-store.ts` — every cached query result blob. It does not know about files rows.
 
@@ -1180,11 +1221,39 @@ path; `DocumentDB.update` flips `draft = false` and can therefore fail the index
 **Migrations.** Version stamps live in `configs` (`data_version`, `schema_version`);
 `LATEST_DATA_VERSION` / `MINIMUM_SUPPORTED_DATA_VERSION` in `constants.ts`. Each `MigrationEntry` in
 `migrations.ts` may declare a whole-DB `dataMigration` and/or a streaming `rowMigration`
-(`{ types, migrateContent }`). `runMigrationsIfNeeded` (called at boot from
-`registerWithModules`) takes the row path when **every** pending migration has a `rowMigration` —
-keyset-paginated batches of 200, `UPDATE`-in-place, bounded memory — and only otherwise falls back to
-`exportDatabase → applyMigrations → atomicImport`, which materialises the whole `files` table and
-OOMs at production size. It no-ops on an empty DB (fresh installs import at the latest version).
+(`{ types, migrateContent }`).
+
+**Boot applies the schema and does not migrate.** `registerWithModules` calls `db.init()` and
+nothing else; `runMigrationsIfNeeded` in `run-migrations.ts` has no caller outside tests, so its row
+path — keyset-paginated batches of 200, `UPDATE`-in-place, bounded memory — is dormant rather than
+preferred. Migrating at boot cannot be made correct for a deployment serving more than one workspace:
+there is no request, so no workspace to be in, and every replica races to rewrite the same rows.
+`lib/instrumentation/__tests__/boot-does-not-migrate.test.ts` asserts this at the seam — no migrate
+call, `init()` still happens, and no `runMigrations` hook exists for a deployment to implement —
+rather than by reading the source. The only production migration path is now
+`POST /api/admin/migrate-db`, which runs `exportDatabase → applyMigrations → atomicImport`
+unconditionally, materialising the whole `files` table.
+
+**The data-version gate replaces boot migration.** A build declares the oldest data version it can
+READ (`MINIMUM_SUPPORTED_DATA_VERSION`) and the version it WRITES (`LATEST_DATA_VERSION`);
+`data-version-gate.ts` refuses anything outside that range **per request**, because a workspace can be
+migrated — or a build rolled back — while the process is running. Both bounds fail silently without
+it: data below the minimum is *misread* rather than rejected (`upgrade-pending`), and data above the
+maximum means an older build is about to write v38 shapes over v39 rows (`build-too-old`). Version
+`0` passes: it means the `configs` row does not exist yet, i.e. a workspace mid-provision, and
+refusing there would break registration itself. `withAuth` turns a failing verdict into a 503 carrying
+`code`, and `app/layout.tsx` renders `components/banners/UpgradePendingGate.tsx` instead of the app —
+a banner would be decoration when every API call 503s. `build-too-old` gets no Migrate button on
+purpose: the fix is redeploying the newer build, not rewriting newer rows with older shapes.
+
+**The one escape.** `POST /api/admin/migrate-db` is wrapped in `withAuthSkippingDataVersionGate`
+(`lib/http/with-auth.ts`), a separate named export rather than a flag, so exempting a route is a
+visible decision at its definition. Gating the route that CLEARS the gate makes the refusal
+unescapable — every request 503s including the fix, and the Migrate button reports the gate's own
+message back forever. That shipped, and
+`lib/http/__tests__/data-version-gate-escape.test.ts` now pins the pairing from both sides, plus that
+skipping the version gate does not skip authentication. Nothing else may use that wrapper: an exempt
+route is a route allowed to read data this build may misread.
 
 **Seeding.** `AuthModule.register` reads `lib/database/workspace-template.json` (a static import,
 so a dev server must be restarted to pick up template edits), substitutes `{{ORG_NAME}}`,
@@ -1217,11 +1286,15 @@ config and creates a first connection. After adding a migration, `npm run update
   `lib/data/*.server.ts` / `lib/data/*/*.server.ts` and `lib/database/**`. A sibling rule
   (`RESTRICT_ADAPTER_FACTORY`) bans `getAdapter()` outside `lib/modules/db/**` and `lib/database/**`
   — direct adapter construction creates an isolated instance that silently loses writes.
-- **`export → import` loses `draft` and `meta`.** `exportDatabase` maps neither column and
-  `importToDatabase`'s INSERT column list omits both, so the whole-DB migration path (and the admin
-  export/import round-trip) resets every row to `draft = false, meta = NULL` — destroying public
-  share links, and collapsing coexisting same-path drafts into published rows that violate the partial
-  unique index. This is a second reason `runMigrationsIfNeeded` prefers the row path.
+- **`export → import` used to lose `draft` and `meta`, and now must not.** `exportDatabase` mapped
+  neither column and `importToDatabase`'s INSERT list omitted both, so the whole-DB migration path
+  (and the admin export/import round-trip) reset every row to `draft = false, meta = NULL` —
+  destroying public share links, and collapsing coexisting same-path drafts into published rows that
+  violate the partial unique index. Both are carried now, and
+  `lib/database/__tests__/export-import-round-trip.test.ts` pins the whole row surviving as well as
+  an older export written without those keys still importing onto the column defaults. Since
+  `migrate-db` is the *only* production migration path, this path has no row-wise alternative to fall
+  back to.
 - **`applyMigrations` clamps, it does not reject.** Anything below `MINIMUM_SUPPORTED_DATA_VERSION`
   (including `0` for unversioned DBs) is treated as if it were at the minimum.
 - **Two connection write paths disagree about secrets.** `FilesAPI.createFile`/`saveFile` run
@@ -1247,8 +1320,37 @@ config and creates a first connection. After adding a migration, `npm run update
 - **NUL bytes.** `stripNulChars` runs on every content/meta/append write; Postgres `jsonb` cannot
   represent `U+0000` and a single one aborts the write. It returns the same reference when a subtree
   is already clean, and skips non-plain objects (Date, Buffer).
-- **Comments in `postgres-schema.ts` must not contain semicolons** — `splitSQLStatements` is
-  comment-unaware (it only understands dollar-quoting). Existing comments there say so.
+- **A semicolon inside a rendered SQL fragment splits the statement.** `splitSQLStatements` (still in
+  `postgres-schema.ts`) is comment-unaware and only understands dollar-quoting. There is no
+  hand-written SQL left to put a comment in, so the live hazard is a `default` / `check` / `where` or
+  expression-index string in `lib/database/schema/tables.ts` — nothing tests this.
+- **`scope` fails open on both axes.** Every `Table` must declare `scope`
+  (`shared` / `per-namespace` / `public`) and every `Unique` must declare `scope`
+  (`scoped` / `global`). `lib/database/schema/__tests__/equivalence.test.ts` asserts both are present
+  precisely because forgetting either produces the permissive answer silently: an unscoped table reads
+  as shared across the whole deployment, an unscoped unique as a global invariant.
+- **Primary keys must stay auto-named `<table>_pkey`.** `renderTable` always emits the PK as a
+  table-level constraint, never inline, and `equivalence.test.ts` checks every one. Upserts target the
+  constraint by name rather than by column list, which is what lets one statement keep working against
+  a schema variant that adds scoping columns; an explicit `CONSTRAINT` clause would break all of them
+  at once.
+- **The golden snapshot is the evidence, not the tests.**
+  `lib/database/__tests__/schema-shape.test.ts` records the introspected catalog — columns,
+  constraints, index definitions, normalised trigger bodies — via `test/harness/schema-introspect.ts`,
+  which plays the role `pg_dump --schema-only | diff` plays against real Postgres but runs against
+  PGLite in the ordinary suite. It was recorded from the original hand-written SQL and still matches,
+  which is the proof that generating the DDL builds the same database. Any deliberate change makes it
+  red until re-recorded.
+- **A logical key is not a physical key, and DuckDB only sees the physical one.** The store prefixes
+  every key with the namespace, but DuckDB is handed an `s3://` URL or a filesystem path and reads it
+  itself, and `lib/csv-processor.ts` reads bytes directly for xlsx expansion. Both must call
+  `resolveObjectKey()` on the stored `s3_key` first. Joining the logical key looks correct and reads
+  the directory one level up: the parquet exists, the query does not find it, and DuckDB reports "No
+  files found that match the pattern" — which reads like a lost upload rather than a path bug. The
+  same applies to `allowed_directories`: `csv-connector.ts` takes `.split('/')[0]` of the **physical**
+  key, because allow-listing the logical prefix (`csvs`) refuses every read once
+  `enable_external_access` is off. `lib/connections/__tests__/csv-connector-physical-key.test.ts` pins
+  both halves.
 - **`getByIds` filters non-positive ids** before building the `IN (…)` list: virtual/placeholder file
   ids are negative and can exceed `int4`, which would throw `22003`.
 - **`getFiles` pre-fetches folder children in one query** (`resolveChildIdsCached`) — the N+1 fix for
@@ -1270,14 +1372,19 @@ config and creates a first connection. After adding a migration, `npm run update
 | Change what a file type looks like on read | `lib/data/loaders/registry.ts` + the loader (guard `content === null`) |
 | Change permission semantics | `lib/data/helpers/permissions.ts` (`canAccessFile`, `canViewFileInUI`) |
 | Add SQL against `files` | `lib/database/documents-db.ts` (nowhere else) |
-| Add a table/column/index | `lib/database/postgres-schema.ts` + a `MigrationEntry` + `npm run update-workspace-template` |
-| Add a migration | `lib/database/migrations.ts` + bump `LATEST_DATA_VERSION` in `constants.ts`; prefer a `rowMigration` |
-| Change how migrations run at boot | `lib/database/run-migrations.ts` |
+| Add a table/column/index | `lib/database/schema/tables.ts` (declare `scope`), then re-record `lib/database/__tests__/__snapshots__/schema-shape.test.ts.snap` |
+| Widen what the schema can express | `lib/database/schema/types.ts` + `schema/render.ts` — never a raw-SQL string |
+| Add a migration | `lib/database/migrations.ts` + bump `LATEST_DATA_VERSION` in `constants.ts` — only for changes to existing row *content* |
+| Change the data-version range this build serves | `lib/database/constants.ts`, then run `scripts/check-min-data-version.ts` against the deployment |
+| Understand what the gate blocks, and how migrate-db escapes it | `lib/http/__tests__/data-version-gate-escape.test.ts` |
 | Change seed data | `lib/database/workspace-template.json` (static import — restart dev) |
-| Change registration/bootstrap | `lib/modules/auth/index.ts` |
+| Change registration/bootstrap | `getModules().namespace.provision()` (`app/api/orgs/register/route.ts`) → `lib/modules/auth/index.ts` |
 | Swap the DB backend | `lib/database/adapter/factory.ts`, `adapter/pglite-adapter.ts`, `adapter/postgres-adapter.ts` |
 | Register a capability at boot | `lib/instrumentation/register-modules.ts`, `lib/modules/types.ts` |
-| Store or serve a blob | `lib/object-store/index.ts` (`createObjectStore`), `s3-adapter.ts`, `local-fs-adapter.ts` |
+| Store or serve a blob | `lib/object-store/index.ts` (`createObjectStore`), `namespaced.ts`, `s3-adapter.ts`, `local-fs-adapter.ts` |
+| Read a stored object without going through the store (DuckDB, direct fs) | `resolveObjectKey()` in `lib/object-store/index.ts` |
+| Change what isolates one workspace from another | `lib/modules/types.ts` (`INamespaceModule`) + `lib/modules/namespace/index.ts` |
+| Add a namespace level, or change how a level is joined | `lib/namespace/types.ts` |
 | Add a credential-bearing config field | `lib/secrets/config-secret-specs.ts` (`CONFIG_SECRET_SPECS`) |
 | Resolve a credential server-side | `lib/secrets/connection-secrets.server.ts`, `config-secrets.server.ts` |
 | Public share links | `lib/data/shares/shares.server.ts` + `files.meta.shares[]` + `idx_files_meta_shares` |
@@ -3772,7 +3879,7 @@ E2E   next build with NEXT_PUBLIC_E2E=true   →  E2E_MODE permanently on
       /api/test/faux live · window.__MX_STORE__ always exposed · SVG charts
       specs may script the LLM: setFauxLLM / resetFauxLLM  (test/flows/e2e-faux.ts)
       port 3100 · distDir .next-e2e · PGLITE_DATA_DIR data/pglite-e2e
-      workers: 1, fullyParallel: false   (tutorial reset is global-per-company)
+      workers: 1, fullyParallel: false   (tutorial reset is workspace-wide)
 
 QA    next build with NEXT_PUBLIC_E2E deliberately UNSET
       faux channel 404s · store exposed only after ?e2e=<E2E_RUNTIME_SECRET> (cookie-persisted)
@@ -4213,9 +4320,22 @@ registry by `schema.name` when resuming or reconstructing a saved conversation l
 
 ### Database schema changes
 
-Update the Postgres schema definition (PGLite uses the same schema), update the shared types, add a
-migration entry, then run `npm run update-workspace-template` to refresh the seed template. **Any
-schema change must be accompanied by the appropriate migration entry.**
+Declare the change in `frontend/lib/database/schema/tables.ts` (PGLite and Postgres share it),
+update the shared types, then re-record `frontend/lib/database/__tests__/__snapshots__/schema-shape.test.ts.snap`.
+Run `npm run update-workspace-template` if the seed template is affected.
+
+**Additive DDL needs no migration entry.** `frontend/lib/database/schema/render.ts` emits every
+declared column as `ALTER TABLE … ADD COLUMN IF NOT EXISTS` alongside the `CREATE TABLE`, so a
+database built from an older declaration gains new columns, tables and indexes on the next boot by
+itself. A `MigrationEntry` and a `LATEST_DATA_VERSION` bump are for changes to the shape of existing
+**row content** — bumping the version for a bare column add strands every unmigrated workspace
+behind the data-version gate for no reason.
+
+Two fields fail open, so declare them deliberately: a `Table` without `scope` reads as shared across
+the whole deployment, and a `Unique` without `scope` reads as a global invariant.
+`frontend/lib/database/schema/__tests__/equivalence.test.ts` asserts both are present precisely
+because forgetting either is silent. Never smuggle raw SQL through the declaration — see
+`frontend/lib/database/schema/types.ts` for why there is no such field.
 
 ### Debugging async orchestration
 

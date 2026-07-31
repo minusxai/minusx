@@ -55,9 +55,9 @@ export interface InitData {
 
 /**
  * Export the users and files tables to InitData format.
- * The `draft` and `meta` columns are NOT exported (and `importToDatabase` does not
- * write them), so a round-trip through export → import resets every row to
- * draft = false, meta = NULL.
+ * `draft` and `meta` ARE exported and re-imported. They were not, and the round-trip
+ * silently published every draft and discarded `meta` — which carries share grants.
+ * An older export written without those keys still imports, onto the column defaults.
  * _dbPath is accepted for API compat but ignored.
  */
 export async function exportDatabase(_dbPath: string = ''): Promise<InitData> {

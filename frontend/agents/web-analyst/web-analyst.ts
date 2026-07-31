@@ -46,7 +46,10 @@ const FAUX_MODEL = fauxRegistration.getModel();
  * ReviewFile, ClarifyFrontend, PublishAll), which pause the orchestrator via
  * UserInputException. The Redux listener middleware calls `executeToolCall()`
  * for them and resumes. LoadContext runs server-side; LoadSkill resolves system
- * skills server-side and only bridges for user-defined Knowledge Base skills.
+ * skills server-side AND any user-defined Knowledge Base skill whose body the
+ * server-built catalog already carries, bridging to the browser only for a
+ * catalog name it could not resolve — which is why the headless paths (Slack,
+ * reports, cron), where no browser can answer, still work.
  */
 export class WebAnalystAgent extends RemoteAnalystAgent {
   static readonly schema: Tool<typeof RemoteAnalystAgent.schema.parameters> = {
