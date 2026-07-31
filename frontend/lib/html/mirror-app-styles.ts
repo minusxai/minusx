@@ -81,6 +81,7 @@ export function mirrorAppStyles(root: ShadowRoot | Document) {
     const owner = sheet.ownerNode;
     // Skip our own hoisted story-font tag (would duplicate the fonts) and anything not rooted
     // in the document proper (jsdom surfaces shadow styles here).
+    // eslint-disable-next-line no-restricted-syntax -- parent-document-only: iterating the TOP document's styleSheets, so ownerNode is always parent-realm
     if (owner instanceof Element && (owner.hasAttribute('data-mx-story-fonts') || owner.getRootNode() !== document)) continue;
     const sheetBase = sheet.href || document.baseURI;
     try {

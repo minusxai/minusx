@@ -179,6 +179,39 @@ describe('StoryTypographyToolbar', () => {
     expect(el.className).toBe('bg-primary px-6'); // authored px-6 survives
   });
 
+  it('element targets (click-selected containers) hide the text-only controls', () => {
+    renderToolbar('py-14', { targetKind: 'element' });
+    for (const label of ['Increase font size', 'Decrease font size', 'Toggle bold', 'Toggle italic',
+      'Toggle underline', 'Text color', 'Default text color']) {
+      expect(screen.queryByLabelText(label)).toBeNull();
+    }
+    // Container-relevant controls stay.
+    for (const label of ['Align center', 'Fill color', 'Toggle full width', 'More formatting']) {
+      expect(screen.getByLabelText(label)).toBeTruthy();
+    }
+    fireEvent.click(screen.getByLabelText('More formatting'));
+    expect(screen.getByLabelText('Increase inner padding')).toBeTruthy();
+    expect(screen.getByLabelText('Toggle full bleed')).toBeTruthy();
+  });
+
+  it('element targets show a clickable ancestor breadcrumb', () => {
+    const { el } = renderToolbar('py-14', { targetKind: 'element' });
+    const target = {
+      astPath: '0.0.1',
+      el,
+      ancestors: [
+        { astPath: '0.0', tag: 'section', hint: '' },
+        { astPath: '0.0.2', tag: 'div', hint: 'max-w-2xl' },
+      ],
+    };
+    const onSelectAncestor = vi.fn();
+    renderToolbar('py-14', { targetKind: 'element', target, onSelectAncestor });
+    fireEvent.click(screen.getByLabelText('Select ancestor 0.0.2'));
+    expect(onSelectAncestor).toHaveBeenCalledWith('0.0.2');
+    fireEvent.click(screen.getByLabelText('Select ancestor 0.0'));
+    expect(onSelectAncestor).toHaveBeenCalledWith('0.0');
+  });
+
   it('buttons preventDefault on mousedown so the host never loses focus', () => {
     renderToolbar();
     // fireEvent returns false when preventDefault was called.

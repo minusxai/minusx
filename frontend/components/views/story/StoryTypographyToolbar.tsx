@@ -35,12 +35,20 @@ import {
 } from '@/lib/data/story/typography';
 
 export interface StoryTypographyToolbarProps {
-  /** The focused editable text host, or null (renders nothing). */
+  /** The focused editable text host or click-selected element, or null (renders nothing). */
   target: StoryTextHostTarget | null;
+  /**
+   * What kind of target is anchored: 'text' (contenteditable focus) shows the full toolbar;
+   * 'element' (click-selected container/heading) hides the text-only controls — font size,
+   * B/I/U, text color — keeping alignment, fill, width, spacing, padding and bleed.
+   */
+  targetKind?: 'text' | 'element';
   /** Only render while the story is in edit mode. */
   active: boolean;
   /** Commit: the target's full new attr values (already applied to the live DOM element). */
   onApply: (astPath: string, edit: StoryFormatEdit) => void;
+  /** Breadcrumb click: re-anchor the selection to this ancestor (element targets only). */
+  onSelectAncestor?: (astPath: string) => void;
 }
 
 /** Inline-style color ('rgb(r, g, b)' or hex) → '#rrggbb' for a color input; null when unset/odd. */
@@ -93,7 +101,7 @@ function ColorSwatchControl({ label, icon, value, onPick }: {
 
 const TOOLBAR_H = 40;
 
-export default function StoryTypographyToolbar({ target, active, onApply }: StoryTypographyToolbarProps) {
+export default function StoryTypographyToolbar({ target, targetKind = 'text', active, onApply, onSelectAncestor }: StoryTypographyToolbarProps) {
   // The live element's className + rects ARE the display state — measured fresh each render;
   // this counter just forces a re-render after applies and on scroll/resize.
   const [, setVersion] = useState(0);
@@ -146,7 +154,8 @@ export default function StoryTypographyToolbar({ target, active, onApply }: Stor
   // iframe is derived from the host element itself — no ref reads during render.
   const rect = target.el.getBoundingClientRect();
   const box = target.el.ownerDocument.defaultView?.frameElement?.getBoundingClientRect();
-  const toolbarH = showAdvanced ? TOOLBAR_H * 2 : TOOLBAR_H;
+  const crumbs = targetKind === 'element' ? (target.ancestors ?? []) : [];
+  const toolbarH = TOOLBAR_H * (1 + (showAdvanced ? 1 : 0) + (crumbs.length > 0 ? 0.7 : 0));
   const maxX = measuredW > 0 ? window.innerWidth - measuredW - 8 : Number.MAX_SAFE_INTEGER;
   const pos = {
     x: Math.max(8, Math.min((box?.left ?? 0) + rect.left, maxX)),
@@ -244,29 +253,61 @@ export default function StoryTypographyToolbar({ target, active, onApply }: Stor
         onMouseDown={(e: MouseEvent) => e.preventDefault()}
       >
         <TooltipProvider>
+        {crumbs.length > 0 && (
+          <HStack gap={1} mb={0.5} pb={0.5} px={0.5} borderBottomWidth="1px" borderColor="border.muted">
+            {crumbs.map(c => (
+              <HStack key={c.astPath} gap={1}>
+                <Box
+                  as="button"
+                  aria-label={`Select ancestor ${c.astPath}`}
+                  onClick={() => onSelectAncestor?.(c.astPath)}
+                  fontSize="2xs"
+                  fontFamily="mono"
+                  color="fg.muted"
+                  cursor="pointer"
+                  _hover={{ color: 'fg', textDecoration: 'underline' }}
+                >
+                  {c.tag}{c.hint ? `·${c.hint}` : ''}
+                </Box>
+                <Text fontSize="2xs" color="fg.muted">›</Text>
+              </HStack>
+            ))}
+            <Text fontSize="2xs" fontFamily="mono" fontWeight="semibold">
+              {hostEl.tagName.toLowerCase()}
+            </Text>
+          </HStack>
+        )}
         <HStack gap={0.5}>
-          {stepButton('Decrease font size', <LuAArrowDown />, () => apply(c => stepSizeClass(c, -1)))}
-          <Text fontSize="2xs" color="fg.muted" minW="24px" textAlign="center" fontFamily="mono">
-            {sizeLabel}
-          </Text>
-          {stepButton('Increase font size', <LuAArrowUp />, () => apply(c => stepSizeClass(c, 1)))}
-          {divider}
-          {toggleButton('weight', 'font-bold', 'Toggle bold', <LuBold />)}
-          {toggleButton('fontStyle', 'italic', 'Toggle italic', <LuItalic />)}
-          {toggleButton('decoration', 'underline', 'Toggle underline', <LuUnderline />)}
-          {divider}
+          {targetKind === 'text' && (
+            <>
+              {stepButton('Decrease font size', <LuAArrowDown />, () => apply(c => stepSizeClass(c, -1)))}
+              <Text fontSize="2xs" color="fg.muted" minW="24px" textAlign="center" fontFamily="mono">
+                {sizeLabel}
+              </Text>
+              {stepButton('Increase font size', <LuAArrowUp />, () => apply(c => stepSizeClass(c, 1)))}
+              {divider}
+              {toggleButton('weight', 'font-bold', 'Toggle bold', <LuBold />)}
+              {toggleButton('fontStyle', 'italic', 'Toggle italic', <LuItalic />)}
+              {toggleButton('decoration', 'underline', 'Toggle underline', <LuUnderline />)}
+              {divider}
+            </>
+          )}
           {toggleButton('align', 'text-left', 'Align left', <LuAlignLeft />)}
           {toggleButton('align', 'text-center', 'Align center', <LuAlignCenter />)}
           {toggleButton('align', 'text-right', 'Align right', <LuAlignRight />)}
           {toggleButton('align', 'text-justify', 'Align justify', <LuAlignJustify />)}
           {divider}
-          <ColorSwatchControl
-            label="Text color"
-            icon={<LuBaseline />}
-            value={cssColorToHex(hostEl.style.color)}
-            onPick={hex => applyStyleProp('color', hex)}
-          />
-          {stepButton('Default text color', <LuCircleSlash2 />, () => applyStyleProp('color', null))}
+          {targetKind === 'text' && (
+            <>
+              <ColorSwatchControl
+                label="Text color"
+                icon={<LuBaseline />}
+                value={cssColorToHex(hostEl.style.color)}
+                onPick={hex => applyStyleProp('color', hex)}
+              />
+              {stepButton('Default text color', <LuCircleSlash2 />, () => applyStyleProp('color', null))}
+            </>
+          )}
           <ColorSwatchControl
             label="Fill color"
             icon={<LuPaintBucket />}

@@ -22,6 +22,7 @@ import {
   hasMaxWidth,
   stripMaxWidth,
   hasFullBleed,
+  crumbHint,
   applyFullBleed,
   removeClassTokens,
   FULL_BLEED_CLASSES,
@@ -257,5 +258,15 @@ describe('full-bleed toggle algebra', () => {
   it('removeClassTokens removes exactly the listed tokens', () => {
     expect(removeClassTokens('px-6 bg-primary -mx-6 @2xl:-mx-12 @2xl:px-12', ['-mx-6', '@2xl:-mx-12', '@2xl:px-12']))
       .toBe('px-6 bg-primary');
+  });
+});
+
+describe('crumbHint', () => {
+  it('surfaces the most decision-relevant class for a breadcrumb: width first, then layout', () => {
+    expect(crumbHint('mt-4 max-w-2xl text-lg')).toBe('max-w-2xl');
+    expect(crumbHint('grid gap-8 @2xl:grid-cols-3')).toBe('grid');
+    expect(crumbHint('flex flex-col py-14')).toBe('flex');
+    expect(crumbHint('bg-primary py-14')).toBe('bg-primary');
+    expect(crumbHint('py-14 border-b')).toBe('');
   });
 });

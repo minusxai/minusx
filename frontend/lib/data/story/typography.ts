@@ -228,6 +228,20 @@ export function removeClassTokens(className: string, remove: readonly string[]):
   return tokens(className).filter(t => !remove.includes(t)).join(' ');
 }
 
+/**
+ * The most decision-relevant class for a selection breadcrumb crumb: the width constraint
+ * first (`max-w-*` — exactly what "why isn't this full width" needs to see), then the layout
+ * role (`grid`/`flex`), then a background. Empty when nothing salient.
+ */
+export function crumbHint(className: string): string {
+  const ts = tokens(className);
+  return ts.find(t => t.startsWith('max-w-'))
+    ?? (ts.includes('grid') ? 'grid' : undefined)
+    ?? (ts.includes('flex') ? 'flex' : undefined)
+    ?? ts.find(t => t.startsWith('bg-'))
+    ?? '';
+}
+
 const isMaxWidthToken = (token: string): boolean => variantTail(token).startsWith('max-w-');
 
 /** Whether the class string constrains width (`max-w-*`, bare or variant-prefixed). */

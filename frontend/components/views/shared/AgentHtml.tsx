@@ -166,6 +166,9 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
   const onApplyTypography = useCallback((astPath: string, edit: StoryFormatEdit) => {
     jsxEditApiRef.current?.applyFormatEdit(astPath, edit);
   }, []);
+  const onSelectAncestor = useCallback((astPath: string) => {
+    jsxEditApiRef.current?.selectElement(astPath);
+  }, []);
 
   const isJsx = format === 'jsx';
   // Legacy path: sanitize + innerHTML-inject. Jsx path: the raw source IS the body input — it is
@@ -592,8 +595,10 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       {isJsx && (
         <StoryTypographyToolbar
           target={selectedEl ?? textHost}
+          targetKind={selectedEl ? 'element' : 'text'}
           active={editable && !readOnly}
           onApply={onApplyTypography}
+          onSelectAncestor={onSelectAncestor}
         />
       )}
     </>

@@ -52,7 +52,7 @@ describe('StoryJsxBody — element selection (format targets)', () => {
     const { onElementSelectChange, at } = renderBody();
     const section = at('0.0');
     fireEvent.click(section);
-    expect(onElementSelectChange).toHaveBeenLastCalledWith({ astPath: '0.0', el: section });
+    expect(onElementSelectChange).toHaveBeenLastCalledWith({ astPath: '0.0', el: section, ancestors: [] });
     expect(section.hasAttribute('data-mx-selected')).toBe(true);
   });
 
@@ -61,7 +61,9 @@ describe('StoryJsxBody — element selection (format targets)', () => {
     const h2 = at('0.0.1');
     expect(h2.getAttribute('contenteditable')).not.toBe('true'); // component descendant → no text editing
     fireEvent.click(h2);
-    expect(onElementSelectChange).toHaveBeenLastCalledWith({ astPath: '0.0.1', el: h2 });
+    expect(onElementSelectChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ astPath: '0.0.1', el: h2 }),
+    );
   });
 
   it('clicking a text host clears the selection (focus owns text hosts)', () => {
@@ -107,5 +109,41 @@ describe('StoryJsxBody — element selection (format targets)', () => {
     const { onElementSelectChange, at } = renderBody({ editable: false });
     fireEvent.click(at('0.0'));
     expect(onElementSelectChange).not.toHaveBeenCalled();
+  });
+});
+
+describe('StoryJsxBody — selection context (breadcrumb + hover preview)', () => {
+  it('a selection reports its selectable ancestor chain, outermost first', () => {
+    const { onElementSelectChange, at } = renderBody();
+    const h2 = at('0.0.1');
+    fireEvent.click(h2);
+    expect(onElementSelectChange).toHaveBeenLastCalledWith({
+      astPath: '0.0.1',
+      el: h2,
+      // The root div (path '0') is excluded — page-level contract; the section qualifies.
+      ancestors: [{ astPath: '0.0', tag: 'section', hint: '' }],
+    });
+  });
+
+  it('editApi.selectElement re-anchors the selection to an ancestor (breadcrumb click)', () => {
+    const editApiRef = { current: null } as React.RefObject<import('../StoryJsxBody').StoryJsxEditApi | null>;
+    const { onElementSelectChange, at } = renderBody({ editApiRef });
+    fireEvent.click(at('0.0.1'));
+    editApiRef.current!.selectElement('0.0');
+    const section = at('0.0');
+    expect(onElementSelectChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ astPath: '0.0', el: section }),
+    );
+    expect(section.hasAttribute('data-mx-selected')).toBe(true);
+    expect(at('0.0.1').hasAttribute('data-mx-selected')).toBe(false);
+  });
+
+  it('hovering stamps a preview of what a click would select; text hosts clear it', () => {
+    const { at } = renderBody();
+    const section = at('0.0');
+    fireEvent.mouseMove(section);
+    expect(section.hasAttribute('data-mx-hover')).toBe(true);
+    fireEvent.mouseMove(at('0.0.0')); // contenteditable <p> — click would focus, not select
+    expect(section.hasAttribute('data-mx-hover')).toBe(false);
   });
 });
