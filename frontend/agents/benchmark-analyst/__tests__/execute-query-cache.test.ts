@@ -1,6 +1,6 @@
 /**
  * The agent's production ExecuteQuery shares the durable query cache with
- * /api/query (arch doc §5): a second identical execution is served from the
+ * /api/query (MinusX.md "Query data plane"): a second identical execution is served from the
  * cached blob WITHOUT re-running the connector.
  */
 

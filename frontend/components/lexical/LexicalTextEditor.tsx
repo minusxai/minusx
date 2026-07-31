@@ -114,7 +114,7 @@ const editorTheme = {
 /**
  * Shared CSS for the Lexical editor content — used in both edit and read-only
  * modes. Scoped under `.mx-lexical-content` and injected via a `<style>` tag
- * (the Chakra `css` prop is gone — Renderer_v2 Phase 5 Chakra exit). Colors
+ * (the Chakra `css` prop is gone — removed by the Chakra exit). Colors
  * come from the Tailwind theme tokens (`--muted`, `--border`, ...).
  */
 const LEXICAL_CONTENT_CSS = `

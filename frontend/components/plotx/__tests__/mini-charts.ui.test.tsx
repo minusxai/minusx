@@ -1,5 +1,5 @@
 /**
- * Column-stat mini charts (Renderer_v2 Phase 2): the table-header histogram/top-values sparks
+ * Column-stat mini charts: the table-header histogram/top-values sparks
  * were the last LIVE ECharts consumers outside the deleted rollback path. They are plain
  * hand-rendered SVG now — same props, no chart engine, no canvas, native <title> tooltips.
  */

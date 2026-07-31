@@ -67,7 +67,7 @@ export const createFileHandler: FrontendToolHandler = async (args, context) => {
     content = { ...((content as Record<string, unknown>) ?? {}), ...parsed.content };
   }
 
-  // Inline viz validation (RFC §11, compiler model): a new question carrying a V2
+  // Inline viz validation (compiler model): a new question carrying a V2
   // envelope is validated BEFORE creation. Columns are unknown (the query hasn't
   // run), so field checks are skipped — schema/policy/recipe/css errors reject.
   const createViz = (content as { viz?: unknown } | undefined)?.viz;

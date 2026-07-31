@@ -192,11 +192,11 @@ function QuestionVisualizationInner({
     }
   };
 
-  // V1→V2 render bridge (Viz Arch V2 §21 item 1): a chart whose truth is `vizSettings` renders
+  // V1→V2 render bridge: a chart whose truth is `vizSettings` renders
   // through <VegaChart> via just-in-time conversion — render-only, nothing is ever written back;
   // table/pivot keep their DOM renderers. Vega is the ONLY engine (Renderer_v2 Phase 2 — the
   // ECharts rollback path is deleted).
-  // Memoized (Renderer_v2 Phase 7, §1.3 lever 2), and ABOVE the early return (rules-of-hooks):
+  // Memoized (Renderer_v2 Phase 7), and ABOVE the early return (rules-of-hooks):
   // VegaChart's build effect keys on envelope IDENTITY — a fresh object here on every legitimate
   // re-render (loading flips, new callbacks) would finalize + re-parse + re-render the whole
   // Vega view mid-interaction.
@@ -221,7 +221,7 @@ function QuestionVisualizationInner({
   // the truth and saved `viz` envelopes are ignored (the JIT bridge below renders them);
   // on (V2) → a saved envelope is the truth and renders directly.
   const hasVizV2 = vizV2Enabled && currentState?.viz != null;
-  // table/pivot kinds render on the DOM tier, never through vega (RFC §10).
+  // table/pivot kinds render on the DOM tier, never through vega.
   const vizV2Kind = hasVizV2 ? (currentState.viz!.source as unknown as { kind: string }).kind : null;
   const isVizV2Table = vizV2Kind === 'table';
   const isVizV2Pivot = vizV2Kind === 'pivot';

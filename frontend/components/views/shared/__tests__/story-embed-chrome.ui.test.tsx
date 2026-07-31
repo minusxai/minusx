@@ -2,7 +2,7 @@
  * Story embed wrapper chrome — SELF-CONTAINED styling contract (staging regression, Jul 2026).
  *
  * The story iframe's only style sources are the compiled story CSS + the @font-face mirror —
- * Chakra/emotion rules live in the TOP document and never reach it (the Renderer_v2 §6a mirror
+ * Chakra/emotion rules live in the TOP document and never reach it (the app-CSS mirror
  * shrink). The embed WRAPPERS in StoryJsxBody/StoryEmbeds were still Chakra `Box`es, so their
  * height/bg/border resolved to NOTHING inside the iframe: every chart collapsed to a shallow
  * strip no matter what `height` the agent wrote, clipping content ("the renderer is still

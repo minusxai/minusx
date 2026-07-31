@@ -421,7 +421,7 @@ describe('DashboardView via DashboardContainerV2', () => {
     });
   });
 
-  // Dashboard themes (Renderer_v2 Phase 3, §9 Q2): content.theme stamps [data-theme] on the
+  // Dashboard themes (Renderer_v2 Phase 3): content.theme stamps [data-theme] on the
   // dashboard root so the six story design-token sets restyle it; absent → no attribute (the
   // neutral app look).
   describe('design theme stamp', () => {

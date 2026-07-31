@@ -1,6 +1,6 @@
 /**
  * executeQueryCached — the ONE chokepoint for cached query execution, now fully
- * STREAMING write-through (arch doc §1, §3–5).
+ * STREAMING write-through (MinusX.md, "Query data plane").
  *
  *   fresh   → serve blob (cache stream, no execution)
  *   stale   → serve blob NOW + fire-and-forget background revalidation (lease)
