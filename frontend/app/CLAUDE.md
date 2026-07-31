@@ -57,10 +57,10 @@ Routes that do not use `withAuth` fall into four groups, all verified:
 
 | Gate | Routes |
 |---|---|
-| `getEffectiveUser()` inline | `api/files/search`, `api/conversations`, `api/recordings/**`, `api/micro-task`, `api/llm-logs`, `api/capture-error`, `api/benchmark/import`, `api/jobs/test`, `api/chat/debug-context`, `api/viz/backfill`, `api/gateway/status`, `api/object-store/{upload-url,local-upload}`, `api/conversations/[id]/{stream,llm-calls}` |
+| `getEffectiveUser()` inline | `api/files/search`, `api/conversations`, `api/recordings/**`, `api/micro-task`, `api/llm-logs`, `api/capture-error`, `api/benchmark/import`, `api/jobs/test`, `api/chat/debug-context`, `api/viz/backfill`, `api/gateway/status`, `api/object-store/{upload-url,local-upload}`, `api/conversations/[id]/{stream,llm-calls}`, `api/llm-calls/[callId]` |
 | NextAuth `auth()` session | `api/users`, `api/users/[id]`, `oauth/authorize/approve` |
 | bespoke credential | `s/[code]/*` (bearer code via `lib/http/with-remote-session-auth.ts`), `api/mcp` (OAuth bearer via `lib/mcp/auth.ts`), `api/integrations/slack/{events,interact}` (HMAC signature), `api/integrations/slack/oauth-callback` (signed state), `api/test/faux/*` (`E2E_MODE` flag) |
-| middleware session only, no in-route identity | `api/sql-to-ir`, `api/ir-to-sql`, `api/llm-calls/[callId]`, `api/object-store/serve/[...key]` |
+| middleware session only, no in-route identity | `api/sql-to-ir`, `api/ir-to-sql`, `api/object-store/serve/[...key]` |
 | public by design | `api/health`, `api/auth/*`, `api/orgs/register`, `api/share/guest-session`, `l/[shareId]/og`, `s/[code]`, `oauth/{token,register}`, `.well-known/oauth-*` |
 
 **Every route in that table also escapes the data-version gate**, since the gate lives inside
@@ -119,7 +119,7 @@ lease and NOTIFYs *synchronously*, then fires `runConversationTurn` **detached**
 runInContext(...)`) and returns immediately; `GET api/conversations/[id]/stream` is the resumable SSE
 tail. Supporting routes: `interrupt` (Stop), `fork` (edit-and-fork at `atSeq`), `title` (cheap
 post-first-turn poll), `screenshots/[callId]` (lazy image extraction from the stored full log),
-`llm-calls` (admin-only debug), `remote-session` (mint/stop/status). `api/conversations` itself is
+`llm-calls` (admin-only debug; the single-call sibling `api/llm-calls/[callId]` is too), `remote-session` (mint/stop/status). `api/conversations` itself is
 keyset-paginated metadata only. Aux: `api/chat/{feedback,log-error,mentions,debug-context}`.
 
 ```
@@ -298,9 +298,12 @@ server-renders metadata, body is client-only), `settings`, `conversations`, `rec
   admin by direct id; `ownsConversation` (DELETE/PATCH) and the inline owner+mode checks
   (turns/interrupt/fork/screenshots/remote-session) do not. Verified by
   `api/conversations/[id]/__tests__/admin-read-access.test.ts`.
-- **`api/llm-calls/[callId]` has no role check** while its sibling `api/conversations/[id]/llm-calls` is
-  admin-only — yet both serve raw pi-format request blobs containing full system prompts and
-  conversation content. Any logged-in user can read any call by id.
+- **Both LLM-log routes are admin-only, and must stay that way.** `api/llm-calls/[callId]` and
+  `api/conversations/[id]/llm-calls` serve raw pi-format blobs containing full system prompts and
+  conversation content. The single-call route shipped with NO role check — middleware requires a
+  session, so any logged-in role could read any call by id, since a call id is the only input.
+  Gated now, with `app/api/llm-calls/[callId]/__tests__/route.test.ts` pinning viewer, editor and
+  unauthenticated all to 403.
 - **`api/files/batch` intentionally bypasses `appEventRegistry.publish(FILE_VIEWED)`** in favour of one
   batched `trackFileEvents` insert. Per-file event publish (and its webhook fan-out) is dropped on
   purpose for bulk loads; restoring it reintroduces the N+1 insert storm.
