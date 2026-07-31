@@ -156,6 +156,29 @@ describe('StoryTypographyToolbar', () => {
     expect(el.style.color).toBe('rgb(255, 0, 0)'); // text color untouched
   });
 
+  it('inner padding steps on the advanced row', () => {
+    const { el, onApply } = renderToolbar('bg-muted');
+    fireEvent.click(screen.getByLabelText('More formatting'));
+    fireEvent.click(screen.getByLabelText('Increase inner padding'));
+    expect(el.className).toBe('bg-muted p-1');
+    fireEvent.click(screen.getByLabelText('Increase inner padding'));
+    expect(el.className).toBe('bg-muted p-2');
+    fireEvent.click(screen.getByLabelText('Decrease inner padding'));
+    expect(onApply).toHaveBeenLastCalledWith('0.0', { className: 'bg-muted p-1' });
+  });
+
+  it('full-bleed toggle applies the bleed recipe and untoggle removes only what it added', () => {
+    const { el } = renderToolbar('bg-primary px-6');
+    fireEvent.click(screen.getByLabelText('More formatting'));
+    const bleed = () => fireEvent.click(screen.getByLabelText('Toggle full bleed'));
+    expect(screen.getByLabelText('Toggle full bleed').getAttribute('aria-pressed')).toBe('false');
+    bleed();
+    expect(el.className).toBe('bg-primary px-6 -mx-6 @2xl:-mx-12 @2xl:px-12');
+    expect(screen.getByLabelText('Toggle full bleed').getAttribute('aria-pressed')).toBe('true');
+    bleed();
+    expect(el.className).toBe('bg-primary px-6'); // authored px-6 survives
+  });
+
   it('buttons preventDefault on mousedown so the host never loses focus', () => {
     renderToolbar();
     // fireEvent returns false when preventDefault was called.

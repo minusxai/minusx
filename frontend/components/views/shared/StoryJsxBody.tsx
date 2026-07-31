@@ -48,7 +48,7 @@ import { numberFromJsxAttrs } from '@/lib/data/story/story-number';
 import {
   isStorySqlParamSource, paramFromJsxAttrs, storyParamToQuestionParameter, type StoryParam,
 } from '@/lib/data/story/story-params';
-import { applyDomEditsToJsx, applyFormatEditsToJsx, type JsxFormatEdit, isEditableTextHost } from '@/lib/data/story/jsx-edit';
+import { applyDomEditsToJsx, applyFormatEditsToJsx, resolveJsxNodeAtPath, type JsxFormatEdit, isEditableTextHost } from '@/lib/data/story/jsx-edit';
 import { envelopeVizType } from '@/lib/viz/viz-templates';
 import type { QuestionParameter } from '@/lib/types';
 
@@ -97,7 +97,20 @@ export interface StoryJsxBodyProps {
    * toolbar. `null` on blur / session teardown.
    */
   onTextHostFocusChange?: (target: StoryTextHostTarget | null) => void;
+  /**
+   * Edit mode: fired when a plain, non-text-host element (section, wrapper div, embed-carrying
+   * heading) is click-selected as a FORMAT target (Phase 2) — same shape as the focus anchor.
+   * `null` when the selection clears (text-host click, Escape, empty click, teardown).
+   */
+  onElementSelectChange?: (target: StoryTextHostTarget | null) => void;
 }
+
+/** Render artifact marking the click-selected format target (outline via STORY_SELECTION_CSS;
+ *  stripped by the DOM→JSX sanitizer, so it can never persist into source). */
+export const SELECTED_DOM_ATTR = 'data-mx-selected';
+
+/** Outline rule for the selected format target — injected into the iframe head by AgentHtml. */
+export const STORY_SELECTION_CSS = `[${SELECTED_DOM_ATTR}] { outline: 2px dashed #14b8a6; outline-offset: 2px; }`;
 
 /** The focused editable text host (typography-toolbar anchor). `el` lives in the iframe DOM. */
 export interface StoryTextHostTarget {
@@ -335,18 +348,22 @@ function NumberEmbedAdapter(props: Record<string, unknown>) {
   // Jsx path: the edit request carries the AST path — the story view owns the source
   // write-back (updateNumberQueryInJsx), unlike the legacy path's DOM-attribute apply.
   const canEdit = ctx.editable && !!ctx.onEditNumber && !!embed.query && typeof astPath === 'string';
+  // The stamped wrapper marks the COMPONENT BOUNDARY in the DOM (click-to-select ignores clicks
+  // inside it; the innerHTML write-back splices it from the AST). display:contents = no layout box.
   return (
-    <InlineNumber
-      embed={embed}
-      externalParamValues={extValues}
-      editable={ctx.editable}
-      filePath={ctx.filePath}
-      onRequestEdit={canEdit ? () => ctx.onEditNumber!({
-        query: embed.query!,
-        connection: embed.connection,
-        astPath: astPath as string,
-      }) : undefined}
-    />
+    <span {...{ [AST_PATH_ATTR]: astPath }} style={{ display: 'contents' }}>
+      <InlineNumber
+        embed={embed}
+        externalParamValues={extValues}
+        editable={ctx.editable}
+        filePath={ctx.filePath}
+        onRequestEdit={canEdit ? () => ctx.onEditNumber!({
+          query: embed.query!,
+          connection: embed.connection,
+          astPath: astPath as string,
+        }) : undefined}
+      />
+    </span>
   );
 }
 
@@ -357,21 +374,24 @@ function ParamControlAdapter(props: Record<string, unknown>) {
   if (!param) return null;
   const source = param.source && isStorySqlParamSource(param.source) ? param.source : undefined;
   const astPath = props[AST_PATH_ATTR];
+  // Stamped component-boundary wrapper — see NumberEmbedAdapter.
   return (
-    <StoryParamControl
-      param={param}
-      value={ctx.values[param.name]}
-      filePath={ctx.filePath}
-      onRequestEdit={(ctx.editable && ctx.onEditParamQuery && source && typeof astPath === 'string')
-        ? () => ctx.onEditParamQuery!({
-            name: param.name,
-            query: source.query,
-            connection: source.connection,
-            ref: { format: 'jsx', astPath },
-          })
-        : undefined}
-      onChange={(v) => ctx.setParamValue(param.name, v)}
-    />
+    <span {...{ [AST_PATH_ATTR]: astPath }} style={{ display: 'contents' }}>
+      <StoryParamControl
+        param={param}
+        value={ctx.values[param.name]}
+        filePath={ctx.filePath}
+        onRequestEdit={(ctx.editable && ctx.onEditParamQuery && source && typeof astPath === 'string')
+          ? () => ctx.onEditParamQuery!({
+              name: param.name,
+              query: source.query,
+              connection: source.connection,
+              ref: { format: 'jsx', astPath },
+            })
+          : undefined}
+        onChange={(v) => ctx.setParamValue(param.name, v)}
+      />
+    </span>
   );
 }
 
@@ -406,7 +426,7 @@ const NO_NODES: JsxNode[] = [];
 
 export default function StoryJsxBody({
   doc, jsx, readOnly, paramValues, onParamValuesChange, filePath, colorMode, editable, onChange,
-  onEditQuestion, onEditNumber, onEditParamQuery, editApiRef, onTextHostFocusChange,
+  onEditQuestion, onEditNumber, onEditParamQuery, editApiRef, onTextHostFocusChange, onElementSelectChange,
 }: StoryJsxBodyProps) {
   const parsed = useMemo(() => parseJsx(jsx), [jsx]);
 
@@ -428,6 +448,50 @@ export default function StoryJsxBody({
     return () => { editApiRef.current = null; };
   }, [editApiRef, session]);
 
+  // ── Click-to-select format targets (Phase 2) ─────────────────────────────────────────────
+  // ONE doc-level listener, classifying the clicked element against the SOURCE AST (never DOM
+  // heuristics): plain non-text-host elements select; text hosts clear (focus owns them);
+  // component chrome is ignored (interactive embeds must keep working); the ROOT (a top-level
+  // path with no '.') is excluded — its gutter/cap is the page-level design contract.
+  const parsedNodes = parsed.ok ? parsed.nodes : NO_NODES;
+  useEffect(() => {
+    if (!editable || readOnly || !onElementSelectChange) return;
+    let selected: HTMLElement | null = null;
+    const clear = () => {
+      if (!selected) return;
+      selected.removeAttribute(SELECTED_DOM_ATTR);
+      selected = null;
+      onElementSelectChange(null);
+    };
+    const onClick = (e: Event) => {
+      const target = e.target as HTMLElement | null;
+      if (!target || typeof target.closest !== 'function') return;
+      if (target.closest('[contenteditable="true"]')) { clear(); return; }
+      const stamped = target.closest(`[${AST_PATH_ATTR}]`) as HTMLElement | null;
+      if (!stamped) { clear(); return; }
+      const path = stamped.getAttribute(AST_PATH_ATTR) ?? '';
+      const node = resolveJsxNodeAtPath(parsedNodes, path);
+      if (!node || node.type !== 'element') { clear(); return; }
+      if (node.isComponent) return; // interacting with an embed — leave any selection alone
+      if (isEditableTextHost(node) || !path.includes('.')) { clear(); return; }
+      if (selected === stamped) return;
+      selected?.removeAttribute(SELECTED_DOM_ATTR);
+      selected = stamped;
+      stamped.setAttribute(SELECTED_DOM_ATTR, '');
+      onElementSelectChange({ astPath: path, el: stamped });
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') clear();
+    };
+    doc.addEventListener('click', onClick);
+    doc.addEventListener('keydown', onKeyDown);
+    return () => {
+      doc.removeEventListener('click', onClick);
+      doc.removeEventListener('keydown', onKeyDown);
+      clear();
+    };
+  }, [editable, readOnly, onElementSelectChange, doc, parsedNodes]);
+
   // Text hosts get contenteditable + the render-during-edit freeze; everything else is locked
   // by default (only decorated hosts ever carry contentEditable under the interpreter).
   const decorateElement = editable
@@ -436,7 +500,7 @@ export default function StoryJsxBody({
           ? <EditableTextHost key={path} path={path} session={session}>{element as ReactElement<Record<string, unknown>>}</EditableTextHost>
           : element
     : undefined;
-  const nodes = parsed.ok ? parsed.nodes : NO_NODES;
+  const nodes = parsedNodes;
   const storyParams = useMemo(() => collectStoryParams(nodes), [nodes]);
   const externalParameters = useMemo(
     () => storyParams.map(storyParamToQuestionParameter),

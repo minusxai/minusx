@@ -123,6 +123,15 @@ function hasComponentDescendant(node: JsxElement): boolean {
 // AST path resolution (mirrors the interpreter's indexing: ALL JsxNodes count)
 // ---------------------------------------------------------------------------
 
+/**
+ * Resolve the node at an interpreter AST path (`data-mx-ast`) — public for the click-to-select
+ * layer, which must classify a clicked element (plain / component / text host) in the SOURCE
+ * before treating it as a format target.
+ */
+export function resolveJsxNodeAtPath(roots: JsxNode[], path: string): JsxNode | null {
+  return resolveByPath(roots, path);
+}
+
 function resolveByPath(roots: JsxNode[], path: string): JsxNode | null {
   const parts = path.split('.').map(Number);
   if (parts.length === 0 || parts.some(n => !Number.isInteger(n) || n < 0)) return null;

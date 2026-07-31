@@ -24,12 +24,14 @@ import {
   LuAlignLeft, LuAlignCenter, LuAlignRight, LuAlignJustify, LuCircleSlash2,
   LuBaseline, LuPaintBucket, LuArrowUpToLine, LuArrowUpFromLine,
   LuArrowDownToLine, LuArrowDownFromLine, LuMoveHorizontal, LuEllipsis,
+  LuChevronsLeftRight, LuSquareSquare,
 } from 'react-icons/lu';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/kit/tooltip';
 import type { StoryTextHostTarget, StoryFormatEdit } from '@/components/views/shared/StoryJsxBody';
 import {
   applyTypographyChoice, currentChoice, stepSizeClass, stepSpacingClass, currentSpacingStep,
-  hasMaxWidth, stripMaxWidth, MAX_WIDTH_DEFAULT, type TypographyGroup,
+  stepPaddingClass, currentPaddingStep, hasMaxWidth, stripMaxWidth, MAX_WIDTH_DEFAULT,
+  hasFullBleed, applyFullBleed, removeClassTokens, FULL_BLEED_CLASSES, type TypographyGroup,
 } from '@/lib/data/story/typography';
 
 export interface StoryTypographyToolbarProps {
@@ -98,8 +100,23 @@ export default function StoryTypographyToolbar({ target, active, onApply }: Stor
   // Basic/advanced split: the advanced row (spacing, width) reveals on demand and stays open
   // across target changes within the session.
   const [showAdvanced, setShowAdvanced] = useState(false);
+  // Measured toolbar width (ResizeObserver) — clamps the anchor inside the viewport, so a
+  // target near the page's right edge can't push the toolbar off-screen.
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const [measuredW, setMeasuredW] = useState(0);
+  useEffect(() => {
+    if (!target || !active) return;
+    const el = boxRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => setMeasuredW(el.offsetWidth));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [target, active]);
   // Full-width toggle memory: the max-w-* tokens stripped per element, restored on untoggle.
   const removedWidthsRef = useRef(new Map<string, string[]>());
+  // Full-bleed toggle memory: the recipe tokens ADDED per element, removed on untoggle (an
+  // authored px-6 survives the round trip).
+  const bleedAddedRef = useRef(new Map<string, string[]>());
 
   // Re-render (rAF-throttled) on scroll/resize in BOTH documents so the anchored position
   // tracks the host instead of drifting.
@@ -130,8 +147,9 @@ export default function StoryTypographyToolbar({ target, active, onApply }: Stor
   const rect = target.el.getBoundingClientRect();
   const box = target.el.ownerDocument.defaultView?.frameElement?.getBoundingClientRect();
   const toolbarH = showAdvanced ? TOOLBAR_H * 2 : TOOLBAR_H;
+  const maxX = measuredW > 0 ? window.innerWidth - measuredW - 8 : Number.MAX_SAFE_INTEGER;
   const pos = {
-    x: Math.max(8, (box?.left ?? 0) + rect.left),
+    x: Math.max(8, Math.min((box?.left ?? 0) + rect.left, maxX)),
     y: Math.max(8, (box?.top ?? 0) + rect.top - toolbarH - 8),
   };
 
@@ -163,6 +181,17 @@ export default function StoryTypographyToolbar({ target, active, onApply }: Stor
   // so mt-4 = 16px. No bare token reads as 0 (one step takes over from arbitrary/variant forms).
   const spacingLabel = (edge: 'above' | 'below') =>
     `${Number(currentSpacingStep(cls, edge) ?? '0') * 4}px`;
+  const paddingLabel = `${Number(currentPaddingStep(cls) ?? '0') * 4}px`;
+  const isBleeding = hasFullBleed(cls);
+  const toggleFullBleed = () => apply(c => {
+    if (hasFullBleed(c)) {
+      const added = bleedAddedRef.current.get(target.astPath) ?? [...FULL_BLEED_CLASSES];
+      return removeClassTokens(c, added);
+    }
+    const { className, added } = applyFullBleed(c);
+    bleedAddedRef.current.set(target.astPath, added);
+    return className;
+  });
   const isFullWidth = !hasMaxWidth(cls);
   const toggleFullWidth = () => apply(c => {
     if (hasMaxWidth(c)) {
@@ -199,6 +228,7 @@ export default function StoryTypographyToolbar({ target, active, onApply }: Stor
   return (
     <Portal>
       <Box
+        ref={boxRef}
         aria-label="Typography toolbar"
         position="fixed"
         left={`${pos.x}px`}
@@ -281,6 +311,24 @@ export default function StoryTypographyToolbar({ target, active, onApply }: Stor
               {spacingLabel('below')}
             </Text>
             {stepButton('Increase space below', <LuArrowDownFromLine />, () => apply(c => stepSpacingClass(c, 'below', 1)))}
+            {divider}
+            {stepButton('Decrease inner padding', <LuChevronsLeftRight />, () => apply(c => stepPaddingClass(c, -1)))}
+            <Text fontSize="2xs" color="fg.muted" minW="30px" textAlign="center" fontFamily="mono">
+              {paddingLabel}
+            </Text>
+            {stepButton('Increase inner padding', <LuSquareSquare />, () => apply(c => stepPaddingClass(c, 1)))}
+            {divider}
+            <Tip label="Toggle full bleed">
+              <IconButton
+                aria-label="Toggle full bleed"
+                aria-pressed={isBleeding}
+                size="2xs"
+                variant={isBleeding ? 'subtle' : 'ghost'}
+                onClick={toggleFullBleed}
+              >
+                <LuChevronsLeftRight />
+              </IconButton>
+            </Tip>
           </HStack>
         )}
         </TooltipProvider>

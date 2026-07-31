@@ -17,8 +17,15 @@ import {
   stepSizeClass,
   stepSpacingClass,
   currentSpacingStep,
+  stepPaddingClass,
+  currentPaddingStep,
   hasMaxWidth,
   stripMaxWidth,
+  hasFullBleed,
+  applyFullBleed,
+  removeClassTokens,
+  FULL_BLEED_CLASSES,
+  INNER_PADDING_SCALE,
 } from '@/lib/data/story/typography';
 
 describe('typography vocabulary', () => {
@@ -26,7 +33,8 @@ describe('typography vocabulary', () => {
     for (const classes of Object.values(TYPOGRAPHY_GROUPS)) {
       for (const cls of classes) expect(STORY_WYSIWYG_CLASSES).toContain(cls);
     }
-    for (const cls of [...SPACE_ABOVE_SCALE, ...SPACE_BELOW_SCALE, MAX_WIDTH_DEFAULT]) {
+    for (const cls of [...SPACE_ABOVE_SCALE, ...SPACE_BELOW_SCALE, MAX_WIDTH_DEFAULT,
+      ...INNER_PADDING_SCALE, ...FULL_BLEED_CLASSES]) {
       expect(STORY_WYSIWYG_CLASSES).toContain(cls);
     }
     // No duplicates — the CSS compile unions by Set, but the contract should be clean anyway.
@@ -206,5 +214,48 @@ describe('full-width toggle algebra', () => {
       removed: ['max-w-sm', '@2xl:max-w-4xl'],
     });
     expect(stripMaxWidth('text-lg')).toEqual({ className: 'text-lg', removed: [] });
+  });
+});
+
+describe('stepPaddingClass / currentPaddingStep', () => {
+  it('steps inner padding on the p-* scale with the shared relative semantics', () => {
+    expect(stepPaddingClass('bg-muted', 1)).toBe('bg-muted p-1');
+    expect(stepPaddingClass('p-4 bg-muted', 1)).toBe('p-6 bg-muted');
+    expect(stepPaddingClass('p-1', -1)).toBe('p-0');
+    expect(stepPaddingClass('text-lg', -1)).toBe('text-lg'); // none → no p-0 written
+  });
+
+  it('does not disturb axis paddings (px/py belong to the band grammar)', () => {
+    expect(stepPaddingClass('py-14 px-6', 1)).toBe('py-14 px-6 p-1');
+  });
+
+  it('reads the bare step', () => {
+    expect(currentPaddingStep('p-6 py-14')).toBe('6');
+    expect(currentPaddingStep('py-14')).toBeNull();
+  });
+});
+
+describe('full-bleed toggle algebra', () => {
+  it('hasFullBleed detects any negative horizontal margin', () => {
+    expect(hasFullBleed('-mx-6 px-6')).toBe(true);
+    expect(hasFullBleed('@2xl:-mx-12')).toBe(true);
+    expect(hasFullBleed('mx-auto px-6')).toBe(false);
+  });
+
+  it('applyFullBleed adds the missing bleed recipe (negative margins + re-added gutter) and reports what it added', () => {
+    expect(applyFullBleed('bg-primary')).toEqual({
+      className: 'bg-primary -mx-6 @2xl:-mx-12 px-6 @2xl:px-12',
+      added: ['-mx-6', '@2xl:-mx-12', 'px-6', '@2xl:px-12'],
+    });
+    // Tokens the author already had are not re-added (and so not reported — untoggle keeps them).
+    expect(applyFullBleed('px-6 bg-primary')).toEqual({
+      className: 'px-6 bg-primary -mx-6 @2xl:-mx-12 @2xl:px-12',
+      added: ['-mx-6', '@2xl:-mx-12', '@2xl:px-12'],
+    });
+  });
+
+  it('removeClassTokens removes exactly the listed tokens', () => {
+    expect(removeClassTokens('px-6 bg-primary -mx-6 @2xl:-mx-12 @2xl:px-12', ['-mx-6', '@2xl:-mx-12', '@2xl:px-12']))
+      .toBe('px-6 bg-primary');
   });
 });

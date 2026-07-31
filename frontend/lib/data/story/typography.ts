@@ -48,12 +48,23 @@ export const SPACE_BELOW_SCALE: readonly string[] = SPACING_STEPS.map(s => `mb-$
 /** What the full-width toggle re-applies when un-toggling an element that never had a max-width. */
 export const MAX_WIDTH_DEFAULT = 'max-w-prose';
 
+/** Inner-padding scale (all sides — axis paddings like `py-14` belong to the band grammar). */
+export const INNER_PADDING_SCALE: readonly string[] = SPACING_STEPS.map(s => `p-${s}`);
+
+/**
+ * The full-bleed recipe (the story skill's own idiom): escape the page gutter with negative
+ * margins and re-add it as inner padding so content stays aligned with the rest of the page.
+ */
+export const FULL_BLEED_CLASSES = ['-mx-6', '@2xl:-mx-12', 'px-6', '@2xl:px-12'] as const;
+
 /** Every class the toolbar can apply — unioned into the story CSS compile (recipe union). */
 export const STORY_WYSIWYG_CLASSES: readonly string[] = [
   ...Object.values(TYPOGRAPHY_GROUPS).flat(),
   ...SPACE_ABOVE_SCALE,
   ...SPACE_BELOW_SCALE,
   MAX_WIDTH_DEFAULT,
+  ...INNER_PADDING_SCALE,
+  ...FULL_BLEED_CLASSES,
 ];
 
 const tokens = (className: string): string[] => className.split(/\s+/).filter(Boolean);
@@ -177,6 +188,44 @@ export function currentSpacingStep(className: string, edge: 'above' | 'below'): 
   const spec = SPACING_SPECS[edge];
   const token = tokens(className).find(t => (spec.tokens as readonly string[]).includes(t));
   return token ? token.slice(token.indexOf('-') + 1) : null;
+}
+
+const PADDING_SPEC: ClassScaleSpec = {
+  tokens: INNER_PADDING_SCALE,
+  defaultToken: 'p-0',
+  arbitraryRe: /^p-\[/,
+};
+
+/** Step the element's all-sides inner padding (`p-*`) — shared relative semantics. */
+export function stepPaddingClass(className: string, direction: 1 | -1): string {
+  return stepScaleClass(className, PADDING_SPEC, direction);
+}
+
+/** The BARE `p-*` step ('6' for `p-6`), or null when none — the toolbar's readout. */
+export function currentPaddingStep(className: string): string | null {
+  const token = tokens(className).find(t => (INNER_PADDING_SCALE as readonly string[]).includes(t));
+  return token ? token.slice(token.indexOf('-') + 1) : null;
+}
+
+/** Whether the element escapes the page gutter (any negative horizontal margin, any variant). */
+export function hasFullBleed(className: string): boolean {
+  return tokens(className).some(t => variantTail(t).startsWith('-mx-'));
+}
+
+/**
+ * Apply the full-bleed recipe: append whichever of {@link FULL_BLEED_CLASSES} are missing and
+ * report exactly what was added — the toggle removes only those on untoggle, so an authored
+ * `px-6` survives the round-trip.
+ */
+export function applyFullBleed(className: string): { className: string; added: string[] } {
+  const present = tokens(className);
+  const added = FULL_BLEED_CLASSES.filter(c => !present.includes(c));
+  return { className: [...present, ...added].join(' '), added: [...added] };
+}
+
+/** Remove exactly the listed tokens from a class string (untoggle path). */
+export function removeClassTokens(className: string, remove: readonly string[]): string {
+  return tokens(className).filter(t => !remove.includes(t)).join(' ');
 }
 
 const isMaxWidthToken = (token: string): boolean => variantTail(token).startsWith('max-w-');
