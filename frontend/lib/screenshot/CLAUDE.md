@@ -10,7 +10,7 @@ explore, views, agents and tools. The surfaces it captures are documented in
 > Part of the MinusX project documentation. The root `CLAUDE.md` carries the system
 > overview, the module map and the development principles that apply everywhere.
 
-### `lib/screenshot` — which path, and when
+## `lib/screenshot` — which path, and when
 
 ```
 captureFileViewWithReadiness(fileId, opts)
@@ -63,7 +63,7 @@ looking at, plus per-element scroll offsets — is emitted as a tiny separate `<
 chart watermark geometry) and is dependency-free so the browser capture path, the client chart
 renderer and the server Sharp/Resvg renderer can all import it.
 
-### `lib/headless-capture` — server-side story capture
+## `lib/headless-capture` — server-side story capture
 
 `renderStoryToImage(input)` is the only seam; callers never import a backend. `manager.ts` owns the
 lifecycle: lazy singleton backend (zero cost if unused, a failed launch clears the slot so a later
@@ -79,7 +79,7 @@ NextAuth session JWT (same secret and salt NextAuth uses, carrying `tokenVersion
 outdated-token guard passes) rather than driving the login form. Enabled by `HEADLESS_CAPTURE=1`,
 default off.
 
-### `lib/og` — share cards
+## `lib/og` — share cards
 
 `capture-story-preview.ts` runs in the browser when a story is made public: it finds
 `[data-story-capture="<id>"]`, serializes the live surface (falling back to the generic element

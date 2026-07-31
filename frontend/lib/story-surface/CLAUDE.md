@@ -11,7 +11,7 @@ three docs — they were written as one chapter and the cross-references matter.
 > Part of the MinusX project documentation. The root `CLAUDE.md` carries the system
 > overview, the module map and the development principles that apply everywhere.
 
-### `lib/story-surface` — mount, size, serialize
+## `lib/story-surface` — mount, size, serialize
 
 `index.ts` hides the DOM-vs-SVG difference behind one interface so `AgentHtml` stays a thin
 composition. Two implementations exist; **`'svg'` is the only one app code ever mounts** —
@@ -65,7 +65,7 @@ resolving, which is the main defense against blank captures.
 `DashboardSurface` mounts the same surface, dashboards are picked up by this path with no
 dashboard-specific code.
 
-### `lib/dashboard-surface` — the dashboard's closed style universe
+## `lib/dashboard-surface` — the dashboard's closed style universe
 
 Dashboards have **no authored classes**: every class inside the surface comes from our own
 components, a closed set. So one static stylesheet covers every dashboard —
@@ -83,7 +83,7 @@ headers are our code, not authored CSS.
 iframe realm — it measures once and goes deaf. The surface already tracks width authoritatively, so
 `DashboardView` consumes `useSurfaceWidth()` instead of re-deriving it.
 
-### `lib/html` — iframe document plumbing
+## `lib/html` — iframe document plumbing
 
 - `sanitize-agent-html.ts` — DOMPurify for legacy HTML stories. Wraps input in
   `<div data-mx-story-root>` *before* sanitizing, because the parser would otherwise hoist a leading
@@ -114,7 +114,7 @@ iframe realm — it measures once and goes deaf. The surface already tracks widt
   serializer over a stored string; short-circuits unless the string carries `data-mx-story-root` or
   `data-scope`, so clean stories are never rewritten for incidental reformatting.
 
-### Interactions with other areas
+## Interactions with other areas
 
 **Story render path.** `components/views/story/StoryView.tsx` → `components/views/shared/AgentHtml.tsx`
 builds the iframe document, mounts the surface, injects styles, and portals the body in.
@@ -161,7 +161,7 @@ canvas is skipped entirely).
 serialize path under an explicit threshold — that diff is what keeps the two capture mechanisms from
 forking.
 
-### Gotchas
+## Gotchas
 
 - **A Blob URL for the rasterizing `<img>` taints the canvas** in Chromium and WebKit. `svgToImage`
   uses a percent-encoded `data:` URL; never "optimize" this.
@@ -194,7 +194,7 @@ any edit here.
   the sanitizer/validator is the primary defense and the CSP is the backstop, but the iframe is
   same-origin, so this is defense in depth, not isolation.
 
-### Key files
+## Key files
 
 | Task | File |
 |---|---|

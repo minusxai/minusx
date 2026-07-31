@@ -41,6 +41,35 @@ session.
 | `frontend/app/CLAUDE.md` | Every API endpoint and page; the `handleApiError` contract |
 | `frontend/test/CLAUDE.md` | npm scripts, Vitest layout, the test DB harness, Playwright, CI |
 
+## Where a directory is documented
+
+Module docs load lazily — when files in their own directory are read. Several docs cover sibling
+directories, so this table is the routing map. If you are editing something and want its doc, find
+the directory here.
+
+| You are editing | Read |
+|---|---|
+| `orchestrator/**` | `frontend/orchestrator/CLAUDE.md` |
+| `agents/**` | `frontend/agents/CLAUDE.md` |
+| `lib/chat`, `lib/llm`, `lib/projection` | `frontend/lib/chat/CLAUDE.md` |
+| `lib/sql` | `frontend/lib/sql/CLAUDE.md` |
+| `lib/connections` | `frontend/lib/connections/CLAUDE.md` |
+| `lib/query-cache` | `frontend/lib/query-cache/CLAUDE.md` |
+| **`lib/data`**, `lib/database`, `lib/object-store`, `lib/secrets` | `frontend/lib/database/CLAUDE.md` |
+| `lib/semantic`, `lib/context`, `lib/views`, `lib/validation` | `frontend/lib/semantic/CLAUDE.md` |
+| `lib/viz`, `lib/chart` | `frontend/lib/viz/CLAUDE.md` |
+| `lib/story-ui`, `lib/jsx` | `frontend/lib/story-ui/CLAUDE.md` |
+| `lib/story-surface`, `lib/dashboard-surface`, `lib/html` | `frontend/lib/story-surface/CLAUDE.md` |
+| `lib/screenshot`, `lib/headless-capture` | `frontend/lib/screenshot/CLAUDE.md` |
+| `lib/auth`, `lib/http`, `lib/mode`, `lib/namespace`, `lib/rubric` | `frontend/lib/auth/CLAUDE.md` |
+| `lib/tools` | `frontend/lib/tools/CLAUDE.md` |
+| `lib/jobs`, `lib/integrations`, `lib/messaging`, `lib/analytics` | `frontend/lib/jobs/CLAUDE.md` |
+| `lib/file-state`, `lib/hooks`, `store/**` | `frontend/store/CLAUDE.md` |
+| any other small `lib/*` module | `frontend/lib/CLAUDE.md` |
+| `components/**` | `frontend/components/CLAUDE.md` |
+| `app/**` | `frontend/app/CLAUDE.md` |
+| `test/**`, `scripts/**`, `.github/**` | `frontend/test/CLAUDE.md` |
+
 **Which modules get their own doc is measured, not guessed.** Depth is implementation size over the
 number of exports anything outside actually imports; grouping is by shared consumers, not by topic.
 `lib/og` sits with the small shared modules rather than under render surfaces because it has no

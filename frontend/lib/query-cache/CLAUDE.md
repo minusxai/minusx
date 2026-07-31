@@ -139,7 +139,7 @@ identifier-shaped are dropped.
 
 | Task | File |
 |---|---|
-| Add a connector | `lib/connections/base.ts` + the ten registration points listed above |
+| Add a connector | `lib/connections/base.ts` + the ten enumerated registration points |
 | The connector contract, streaming + bounded drains | `lib/connections/base.ts` |
 | Connection resolution, secrets, row cap, timeout | `lib/connections/run-query.ts` |
 | DuckDB sandboxing / instance reuse | `lib/connections/duckdb-registry.ts` |

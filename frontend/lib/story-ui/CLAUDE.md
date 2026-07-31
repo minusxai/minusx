@@ -9,7 +9,7 @@ These two are grouped because they share consumers — `components/views`, `lib/
 > Part of the MinusX project documentation. The root `CLAUDE.md` carries the system
 > overview, the module map and the development principles that apply everywhere.
 
-### `lib/jsx` — static JSX as inert data
+## `lib/jsx` — static JSX as inert data
 
 `parseJsx` (acorn + acorn-jsx, isomorphic) wraps the source in `<>…</>` so multiple roots are legal,
 offset-corrects positions back, and normalizes to `JsxElement | JsxText | JsxExpression`. Attribute
@@ -42,7 +42,7 @@ invented design components in `lib/data/story/story-components.ts`) and
 `JSX_STORY_COMPONENT_NAMES` (new `format:'jsx'` stories: embeds + `STORY_UI_COMPONENT_NAME_LIST`).
 Names only — no React import — so server-side save validation stays headless.
 
-### `lib/story-ui` — registry and interpreter
+## `lib/story-ui` — registry and interpreter
 
 `registry.ts` maps ~60 tag names to the vendored shadcn components in `components/kit/*`.
 `component-names.ts` is the same list as data only (`STORY_UI_COMPONENT_NAME_LIST`) plus
