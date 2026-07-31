@@ -57,6 +57,24 @@ function escapeIdent(name: string): string {
   return `"${name.replace(/"/g, '""')}"`;
 }
 
+/**
+ * Escape a SQL identifier for BACKTICK quoting (BigQuery, and the generic
+ * substring path's backtick mode).
+ *
+ * Backtick-quoting engines spell an inner backtick as `` \` `` rather than by
+ * doubling it, which means the backslash is itself significant — so it has to be
+ * doubled FIRST. Escaping only the backticks leaves a name ending in a backslash
+ * consuming the closing quote, and the rest of the statement is parsed as SQL.
+ *
+ * This matters because these names are not developer constants: `table`, `columns`
+ * and `schema` arrive on the agent's FuzzyMatch tool call, so they are model-supplied
+ * and reachable by prompt injection. `escapeIdent` (double-quote style) needs no
+ * equivalent — there a quote is escaped by doubling and a backslash is inert.
+ */
+export function escapeBacktickIdent(name: string): string {
+  return `\`${name.replace(/\\/g, '\\\\').replace(/`/g, '\\`')}\``;
+}
+
 /** Build a qualified table reference, omitting schema if not provided. */
 function qualifiedTable(schema: string | undefined, table: string, quoteFn: (name: string) => string = escapeIdent): string {
   return schema ? `${quoteFn(schema)}.${quoteFn(table)}` : quoteFn(table);
@@ -74,11 +92,14 @@ export const FUZZY_TERM_MAX = 200;
  * open and the rest of the statement is parsed as SQL. Capping the raw value means
  * escaping always emits whole pairs.
  *
- * Doubling quotes alone is not enough. On engines that process backslash escapes
- * (ClickHouse, BigQuery, MySQL) a term ending `\'` consumes the quote that was
- * meant to close the literal. Both the `bigquery` branch and the `default:` branch
- * of `fuzzyMatch` — which is where ClickHouse and MySQL land, since neither is
- * dispatched by name — reach such an engine, so this cannot be left to the caller.
+ * Doubling quotes alone is not enough. On engines that process backslash escapes a
+ * term ending `\'` consumes the quote that was meant to close the literal. Two paths
+ * reach such an engine, and neither is hypothetical: the `bigquery` branch, and the
+ * `default:` branch of `fuzzyMatch` — where **ClickHouse** lands. ClickHouse is a
+ * shipped connector (`clickhouse-connector.ts`) with no `case` of its own in that
+ * switch, so it falls through to the generic substring path. (MySQL is in the same
+ * camp in `sql-literal.ts`, but no MySQL connector exists yet.)
+ *
  * The camps come from `lib/sql/sql-literal.ts` so there is one definition of them.
  *
  * Returns the escaped BODY, without the surrounding quotes: callers splice it into
@@ -254,9 +275,7 @@ type QuoteStyle = 'double' | 'backtick';
  * like 'duckdb' here would silently reinstate the injection.
  */
 async function fuzzySubstring(queryFn: QueryFn, p: ResolvedParams, dialect: string, quoteStyle: QuoteStyle = 'double'): Promise<FuzzyMatchResultEntry> {
-  const q = quoteStyle === 'backtick'
-    ? (name: string) => `\`${name.replace(/`/g, '\\`')}\``
-    : escapeIdent;
+  const q = quoteStyle === 'backtick' ? escapeBacktickIdent : escapeIdent;
 
   // Lowercasing after escaping is safe: it changes neither quotes nor backslashes.
   const term = escapeFuzzyTerm(p.searchTerm, dialect).toLowerCase();
@@ -341,7 +360,7 @@ async function fuzzyMongo(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzzy
 
 async function fuzzyBigQuery(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzzyMatchResult> {
   const term = escapeFuzzyTerm(p.searchTerm, 'bigquery');
-  const q = (name: string) => `\`${name.replace(/`/g, '\\`')}\``;
+  const q = escapeBacktickIdent;
   const extra = extraSelectCols(p.returnColumns, q);
   const searched = searchedSelectCols(p.columns, q);
   const fromTable = qualifiedTable(p.schema, p.table, q);

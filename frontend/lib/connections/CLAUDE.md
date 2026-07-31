@@ -169,13 +169,19 @@ wrongly — extend the function rather than accepting the default.
   hand-builds it.** `fuzzyMatch` splices the caller's search term into `LIKE '%…%'` and
   `CONTAINS_SUBSTR(col, '…')` text rather than binding it, so `escapeFuzzyTerm(term, dialect)`
   takes the dialect and doubles backslashes on the engines that process them. Two paths reach such
-  an engine: the explicit `bigquery` branch, and the `default:` branch — where ClickHouse and MySQL
-  land, since neither is dispatched by name. It returns the escaped *body*, without quotes, because
+  an engine: the explicit `bigquery` branch, and the `default:` branch — where **ClickHouse** lands,
+  a shipped connector with no `case` of its own in that switch. It returns the escaped *body*, without quotes, because
   callers own the surrounding `'%…%'`. The dialect camps live in `lib/sql/sql-literal.ts`
   (`dialectProcessesBackslashEscapes`) so there is a single definition; an unknown dialect is
   assumed to process escapes. Pinned by `lib/connections/__tests__/fuzzy-escape-dialect.test.ts`
   (dialect split) and `fuzzy-escape-truncation.test.ts` (the length cap must be applied to the raw
   value, or truncation splits an escape pair and reopens the literal).
+  The same file's **identifier** quoting has the mirror-image rule: backtick engines spell an inner
+  backtick as `` \` `` rather than doubling it, so the backslash is significant and
+  `escapeBacktickIdent` doubles backslashes *first* — otherwise a name ending in one eats the
+  closing backtick. That path matters because `table`/`columns`/`schema` arrive on the agent's
+  FuzzyMatch tool call, so they are model-supplied. `escapeIdent` (double-quote style) needs no
+  equivalent: there a quote is escaped by doubling and a backslash is inert.
 - **`ConnectionsAPI.getRawByName` is the hot-path lookup**, not `FilesAPI.loadFile`: it returns raw
   config including credential refs and never triggers schema profiling. Guarded by
   `app/api/query/__tests__/query-route-no-profiling.test.ts`.

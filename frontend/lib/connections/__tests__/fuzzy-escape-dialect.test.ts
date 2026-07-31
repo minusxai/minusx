@@ -12,14 +12,16 @@
  *
  * Two call paths reach such an engine. `fuzzyBigQuery` is dispatched explicitly for
  * `bigquery`, and the `default:` branch of `fuzzyMatch` sends every UNRECOGNISED
- * connector — ClickHouse and MySQL among them — to `fuzzySubstring`. So the unsafe
- * camp is reached both by name and by falling through.
+ * connector to `fuzzySubstring` — which is where ClickHouse, a shipped connector with
+ * no `case` of its own, lands. So the unsafe camp is reached both by name and by
+ * falling through. (`mysql` is in the same camp in sql-literal.ts, but no MySQL
+ * connector exists yet; it is covered here so one cannot arrive unprotected.)
  *
  * Sibling of `fuzzy-escape-truncation.test.ts`: that one pins truncate-before-escape,
  * this one pins dialect-correct escaping. Both are about the same literal staying closed.
  */
 import { describe, it, expect } from 'vitest';
-import { escapeFuzzyTerm, FUZZY_TERM_MAX } from '@/lib/connections/fuzzy-search';
+import { escapeFuzzyTerm, escapeBacktickIdent, FUZZY_TERM_MAX } from '@/lib/connections/fuzzy-search';
 
 /**
  * Walk the literal body the way the engine would: where backslashes escape, a
@@ -94,5 +96,56 @@ describe('escapeFuzzyTerm — dialect-correct escaping', () => {
       const value = 'x'.repeat(n) + '\\' + "'";
       expect(terminatesEarly(escapeFuzzyTerm(value, 'bigquery'), true), `backslash at ${n}`).toBe(false);
     }
+  });
+});
+
+/**
+ * The IDENTIFIER quoting has the same defect the term escaping had.
+ *
+ * BigQuery (and the generic backtick path) quote table/column/schema names with
+ * backticks, escaping an inner backtick as `` \` ``. That spelling only works
+ * because the engine processes backslash escapes — and the escaper did not double
+ * backslashes, so a name ending in one consumed the closing backtick and the rest
+ * of the statement was parsed as SQL.
+ *
+ * These names are not developer constants: they arrive as `table` / `columns` /
+ * `schema` on the agent's FuzzyMatch tool call, so they are model-supplied and
+ * reachable by prompt injection.
+ */
+describe('escapeBacktickIdent', () => {
+  /** True when the quoted identifier is closed by something other than its final backtick. */
+  function closesEarly(quoted: string): boolean {
+    const inner = quoted.slice(1, -1);
+    for (let i = 0; i < inner.length; i++) {
+      if (inner[i] === '\\') { i++; continue; }   // escapes the next char
+      if (inner[i] === '`') return true;          // an unescaped backtick closes it
+    }
+    return false;
+  }
+
+  const HOSTILE_IDENTS = [
+    'col\\',                                     // trailing backslash eats the closing backtick
+    '`',
+    'a\\',
+    'a`b',
+    'x\\` , (SELECT password FROM users) AS p, ', // the breakout, spelled out
+    'normal_col',
+  ];
+
+  for (const name of HOSTILE_IDENTS) {
+    it(`${JSON.stringify(name)} cannot close its own identifier`, () => {
+      const quoted = escapeBacktickIdent(name);
+      expect(quoted.startsWith('`')).toBe(true);
+      expect(quoted.endsWith('`')).toBe(true);
+      expect(closesEarly(quoted)).toBe(false);
+    });
+  }
+
+  it('leaves an ordinary name untouched apart from its quotes', () => {
+    expect(escapeBacktickIdent('user_id')).toBe('`user_id`');
+  });
+
+  it('escapes backslashes before backticks, so neither pass doubles the other', () => {
+    expect(escapeBacktickIdent('a\\b')).toBe('`a\\\\b`');
   });
 });
