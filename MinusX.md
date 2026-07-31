@@ -51,7 +51,7 @@ stores their data except as cached query results.
 | Client state | `frontend/store`, `frontend/lib/file-state`, `lib/hooks` | Redux, the listener middleware, and all browser file/query operations |
 | Visualization | `frontend/lib/viz`, `lib/chart`, `components/viz`, `components/plotx` | Vega rendering, the DOM table/pivot tier, chart config |
 | Render surfaces | `frontend/lib/story-ui`, `lib/story-surface`, `lib/screenshot` | Rendered documents and serialization-based capture |
-| Auth & access | `frontend/lib/auth`, `lib/http`, `lib/mode`, `lib/rubric` | Sessions, permissions, mode isolation, file-health scoring |
+| Auth & access | `frontend/lib/auth`, `lib/http`, `lib/mode`, `lib/namespace`, `lib/rubric` | Sessions, permissions, mode and namespace isolation, file-health scoring |
 | Tools & integrations | `frontend/lib/tools`, `lib/jobs`, `lib/integrations`, `lib/analytics` | Browser-bridged tools, scheduled jobs, Slack/MCP, telemetry |
 | Routes | `frontend/app` | Every API endpoint and page |
 | Components | `frontend/components` | The UI |
@@ -176,6 +176,46 @@ sanctioned skill loader: it augments the prompt tree with `SCHEMA_TEMPLATE_VARS`
 `lib/validation/atlas-json-schemas` so a skill's `{schema_question}` placeholder renders the **live**
 TypeBox content schema. Never call `getSkill` from `prompt-loader` directly.
 
+**Custom agents.** A custom agent is not a class. It is an `AgentEntry` (`lib/types/context.ts`)
+stored on a Knowledge Base context's *content* — beside `skills` and `evals`, not inside a version —
+authored in the context editor's Agents tab and inherited down the context tree as `fullAgents`
+(`lib/data/loaders/context-loader-utils.ts`, nearest wins by name). The definition carries a persona
+`prompt`, a `promptMode`, `preloadSkills` / `includeSkills`, an optional `gradeOverride` and
+`enabled`. It changes nothing about *authority*: the turn still runs as the requesting user, so a
+definition can never widen data access.
+
+`agents/custom/custom-agent.ts` is the one registered class that serves every definition. It extends
+`WebAnalystAgent` unchanged — same toolset, same `maxSteps` — and overrides only `getSystemPrompt()`.
+The per-turn definition rides on `context.customAgent`, frozen into the saved root context, so a
+mid-turn resume reconstructs the same behaviour from `REGISTRABLES` by schema name without re-reading
+the context file. A **new user message** re-resolves it, so an edited definition applies from the next
+message on. Registering a class per definition would instead make every saved log unresumable the
+moment the user renamed or deleted an agent.
+
+Selection is a server-resolved pointer, never a client-supplied class. The browser sends
+`agent_args.custom_agent` = an `AgentEntry.name`; `resolveCustomAgentFromContext`
+(`lib/chat/agent-args.server.ts`) looks it up in the resolved context, and the whole path is
+fallback-not-fail — a missing, disabled or empty-prompt entry, or a context that fails to load at
+all, degrades the turn to the default analyst with a `console.warn`. An agent deleted from under a
+stale browser tab must not brick the chat.
+
+Prompt assembly has two modes, and both substitute the author's prompt as a **value**, never through
+`resolveTemplates`, so braces the author typed stay literal. `append` renders the normal
+`default.system` with `{agent_persona}` filled. `replace` renders `custom_agent_replace.system`, which
+drops `{intro}` and `{guidelines}` and keeps everything an author cannot hand-write and the tools
+depend on: app structure, schema, context docs, tools, file-state schema, preloaded skills,
+connection, home folder.
+
+Skill exposure is exact, and this is the counterintuitive part. `resolveCustomAgentFromContext` always
+emits `skillAllowlist = [...includeSkills, ...preloadSkills]`, so on the real server path it is never
+`undefined`. A present allowlist means `getPreloadedSkillNames` runs with `includePageDefaults: false`,
+so `PAGE_SKILL_MAP` contributes nothing and an agent that lists no skills is told "No additional
+skills are available for this turn." A custom agent's skills are what its author chose, plus nothing.
+The allowlist is enforced **twice** — the `LoadSkill` catalog omits non-allowed names, and
+`LoadSkill.run()` returns an `isError` before resolving anything — because a model that never saw a
+name can still guess it. `gradeOverride` is a **default**, not a lock: an explicit grade picked in the
+composer always wins.
+
 ### Interactions with other areas
 
 | Boundary | Direction | Contract |
@@ -290,6 +330,8 @@ every tool — must be in the registry, including legacy names that appear only 
 | Fix arg coercion / validation / user-turn content assembly | `orchestrator/utils.ts` |
 | Change the production analyst prompt or context wiring | `agents/analyst/analyst-agent.ts`, `agents/analyst/types.ts` |
 | Change which skills preload for a page type | `agents/analyst/skills.ts` |
+| Change how a user-defined agent's prompt is assembled | `agents/custom/custom-agent.ts` (+ `custom_agent_replace.system` in `prompts.yaml`) |
+| Change how a custom-agent definition is resolved from a context | `lib/chat/agent-args.server.ts` (`resolveCustomAgentFromContext`) |
 | Load a skill with live content schemas | `agents/skill-content.ts` |
 | Add/modify a frontend-bridged tool schema | `agents/web-analyst/web-tools.ts` (pair with `lib/tools/handlers/*`) |
 | Change the browser agent's toolset or call options | `agents/web-analyst/web-analyst.ts` |
@@ -421,6 +463,14 @@ seeding path — `ANALYST_AGENT_MODEL_CONFIG` survives only as a runner-side hin
 image content), `frontend/lib/projection/messages.ts` (`projectMessages` — the single pass over an
 assembled `Message[]`), `frontend/lib/projection/image-validate.ts` (`imageContentFromUrl`,
 `assertValidProviderImages`).
+`frontend/lib/projection/app-state-size.ts` measures the *projected* size of an app state, which is
+what the chat client uses to decide whether to inject the `large_file` system skill.
+`JSON.stringify(appState).length` is wrong by an order of magnitude here — the projection pass strips
+query-result ROWS and never emits reference markup, yet both dominate the raw Redux object — so the
+threshold is measured by actually rendering: `projectedAppStateChars` runs `renderAppState` through a
+**fresh** `FacetMemo` (a shared one collapses repeats to `{unchanged:true}` and reports ~0 on the
+second call) and sums the text blocks only. Image blocks count zero: they are screenshots, and the
+skill is about markup the model must read and rewrite.
 
 **`frontend/lib/convo-debug/`** — the `/debug` conversation visualization model:
 `frontend/lib/convo-debug/actual.ts` (recorded calls + `requestJsonToInput` for the "Raw" source),
@@ -525,6 +575,10 @@ shared file→model compression contract (`compressAugmentedFile`, `compressQuer
   (Navigate/PublishAll) must not be force-closed.
 - **`ROOT_AGENT_BY_NAME` is a `Map`, not an object literal**, specifically so a user-controlled
   `body.agent` cannot reach `constructor` / `__proto__`. Unknown names fall back to `WebAnalystAgent`.
+- **A resolved custom-agent pointer outranks `body.agent`.** `agent_args.custom_agent` is a NAME on the
+  resolved context, not a class name, and `setupOrchestration` picks `CustomAgent` whenever it resolves.
+  `ROOT_AGENT_BY_NAME` still carries a `'CustomAgent'` entry so a client that echoes back
+  `agent: 'CustomAgent'` on a later turn stays stable rather than silently reverting to the analyst.
 - **`HEADLESS_TOOL_SWAPS` exists because the default `ReadFiles` is the frontend-bridged variant.**
   With no browser it throws `UserInputException`, dangles as a pending tool, and the agent can never
   finish — so Slack/report/eval swap in the server-side `ReadFiles`.
@@ -576,6 +630,7 @@ shared file→model compression contract (`compressAugmentedFile`, `compressQuer
 | Change the wakeup bus or channel naming | `frontend/lib/chat/conversation-stream.server.ts` |
 | Change what the server resolves from a chat request | `frontend/lib/chat/agent-args.server.ts` |
 | Change grade → provider/model resolution | `frontend/lib/llm/llm-plan.server.ts` |
+| Change gateway registration, status or billing | `frontend/lib/gateway/` (+ `frontend/app/api/gateway/status/route.ts`) |
 | Add a provider or change grade policy defaults | `frontend/lib/llm/llm-config-types.ts`, `frontend/compatibility.json` |
 | Change what the model sees for a file page | `frontend/lib/projection/project.ts`, `frontend/lib/projection/render.ts` |
 | Change file→model compression budgets | `frontend/lib/chat/compress-augmented.ts` |
@@ -920,7 +975,13 @@ Four cooperating modules under `frontend/lib/`: `validation/` (TypeBox schemas �
 
 **`lib/validation/`** owns the shape of Atlas file content. `atlas-schemas.ts` is authored in TypeBox: each `export const X = Type.Object(...)` is simultaneously a runtime JSON Schema and a static type via the colocated `export type X = Static<typeof X>`. `atlas-json-schemas.ts` rebuilds the plain-JSON artifacts at module load (`JSON.parse(JSON.stringify(...))` strips TypeBox's `Symbol(Kind)` metadata so Ajv accepts them) and additionally renders per-file-type schema text for skill prompts (`SCHEMA_TEMPLATE_VARS` → `{schema_question}`, `{schema_context}`, …). `content-validators.ts` compiles four Ajv validators at module load. It does **not** own: viz spec grammars (Vega-Lite/Vega bodies are opaque `Type.Record`s here and validated in `lib/viz/validate.ts`), context content (see gotchas), or form-input validation (`validators.ts` is unrelated workspace-name/email/password helpers).
 
-**`lib/context/`** owns everything about a context *document* except its schema resolution: whitelist merging and legacy-format coercion (`context-utils.ts`), nearest-context lookup, published-version selection, the name whitelist for inherited views/models (`name-whitelist.ts`), the editor's version fold (`version-edit.ts`), the agent's flattened read/write projection (`context-agent-view.ts`), memory bounding of computed schemas (`schema-bounding.ts`), and every prompt/UI char budget (`context-budgets.ts`). It does **not** own schema *computation* or inheritance — that is `lib/data/loaders/context-loader.ts` + `context-loader-utils.ts`, which import from here.
+**`lib/context/`** owns everything about a context *document* except its schema resolution: whitelist merging and legacy-format coercion (`context-utils.ts`), nearest-context lookup, published-version selection, the name whitelist for inherited views/models (`name-whitelist.ts`), the editor's version fold (`version-edit.ts`), the agent's flattened read/write projection (`context-agent-view.ts`), memory bounding of computed schemas (`schema-bounding.ts`), and every prompt/UI char budget (`context-budgets.ts`).
+`skill-utils.ts` and `agent-utils.ts` are the naming pair for user-authored skills and custom agents: a
+canonical key (`canonicalizeUserSkillName` / `canonicalizeUserAgentName` — lowercase, non-`[a-z0-9_]`
+collapsed to `_`), a collision-free variant (`unique*Name`), and a `get*DisplayName` that humanizes the
+key for entries predating `displayName`. The key is what prompts, `LoadSkill` and the `custom_agent`
+pointer address; the display name is UI-only, so renaming the label can never break a saved
+reference. It does **not** own schema *computation* or inheritance — that is `lib/data/loaders/context-loader.ts` + `context-loader-utils.ts`, which import from here.
 
 **`lib/views/`** owns virtual views end to end: SQL→IR→CTE inlining (`resolve.ts`), the dependency/security graph (`integrity.ts`), the context-save gate (`save-gate.server.ts`), and column snapshotting/promotion (`prepare.server.ts`). It does **not** own where views are stored (a `ContextVersion.views` array) or how they reach a child context (the context loader).
 
@@ -1538,6 +1599,17 @@ dispatch(createConversation | sendMessage | retryConversationTurn | editAndForkM
 - **Tool execution is guarded three ways.** `inFlightToolCalls` is populated synchronously before any `await`, so a re-fired listener cannot double-execute (`store/__tests__/chat-listener-inflight.test.ts`); calls are grouped by `arguments.fileId` — same file serial, different files parallel; and each is raced against `withToolWatchdog` at 6 minutes, which does *not* cancel the underlying work but swallows a late settlement so `completeToolCall` fires exactly once.
 - **Chat tests do not stream.** `runV3TurnInListener` branches on `IS_TEST`: jsdom has no usable XHR/SSE, so it POSTs the turn and polls `ConversationsAPI.get` up to 600×10 ms until `runStatus !== 'running'`. The remote-session observer returns immediately under `IS_TEST`. Node tests drive `updateConversation` directly.
 - **The message queue lives only in the live store.** `loadConversation` re-reads `queuedMessages` from the existing conversation and ignores the snapshot in its payload — turn-finalize dispatches carry a conversation captured at turn *start*, which would otherwise wipe anything queued mid-turn or resurrect flushed messages.
+- **Both sidebars start collapsed, and only the restore pass opens them.** `uiSlice`'s initial
+  `leftSidebarCollapsed` is `true` — not the user's preference — because SSR has no localStorage and any
+  other default flashes the wrong chrome on hydration. `components/app-shell/DataLoader.tsx` reads the
+  stored flags after mount and folds them into the same single `setBulkUiFlags` dispatch as `devMode`,
+  so restoring N flags costs one re-render, and a key that is absent (not `'true'`/`'false'`) leaves the
+  reducer default alone rather than writing `false`.
+- **Opening the right sidebar overwrites the remembered left-sidebar preference.**
+  `setRightSidebarCollapsed(false)` force-collapses the left sidebar *and persists that*, so the two are
+  not independent memories: reopening the chat panel is a durable write to `leftSidebarCollapsed`.
+  `persistBooleanPreference` swallows its own throw, because localStorage is unavailable in
+  private/locked-down browsers and a preference write must never break a toggle.
 - **Dev mode changes the wire format.** `viewFor(state)` selects `'full'` vs `'display'`; toggling it invalidates the whole conversation-log cache, because slim and full entries must never mix in one log, and re-renders settled conversations so the inspector has data without a reload. The listener watches both `setDevMode` and `setBulkUiFlags` (localStorage restore at boot races the page-level fetch).
 - **Incremental conversation loads have two guards.** `loadConversationDetail` only accepts a `?since` response when the returned seqs are contiguous with the cached prefix *and* the merged length matches the server's `maxSeq` — the second guard catches a truncate-and-replay retry that removed rows the client still holds. An errored turn skips the incremental path entirely.
 - **Sanctioned module-level state.** `chatListener.ts` (`abortControllers`, `observingConversations`, `inFlightToolCalls`), `conversation-log-cache.ts` (`cache`), and `use-story-preview-css.ts` (`cache`) each carry an explicit `eslint-disable-next-line no-restricted-syntax` with a reason: they are per-browser-tab, never server-side, so there is no cross-request leakage.
@@ -1565,7 +1637,12 @@ dispatch(createConversation | sendMessage | retryConversationTurn | editAndForkM
 
 **One extraction produces a story's embed runs for every consumer.** `storyEmbedRuns` (`lib/data/helpers/param-resolution.ts`) is the single place that walks a story body for inline `<Question>` and `<Number>` embeds and resolves each one's params. Four independent callers depend on it agreeing with itself — the client augmentation that fills `queryResults`, the server-side `executeQueriesForFile`, EditFile's post-edit auto-execute, and the renderer (`views/story/InlineNumber.tsx`) — because each computes `getQueryHash(query, params, connection)` and a divergence does not throw: the embed simply renders unbound, with no cached result to find. A fifth consumer must route through `storyEmbedRuns` / `bindReferencedParams` rather than re-deriving the set.
 
-**Edit-time parameter lints are advisory, and there are exactly three.** `collectEditValidation` (`lib/file-state/file-edit.ts`) runs on every edit, always applies the edit, and returns `validation: string[]` as text the agent can self-correct from. `lintStoryParams` flags a `:name` an embedded question needs with no `<Param>` declared, a declared/used type mismatch, and a declared-but-unused param. `lintStoryParamSources` flags a `<Param id={N}>` importing from a file that does not exist or is not a question. `lintDashboardParams` flags one `:name` used at two different types across questions — auto-derive then silently produces two separate filters instead of one shared one. All three live in `lib/data/story/story-params.ts`; save/publish, not the edit, is the hard gate.
+**Edit-time parameter lints are advisory, and there are exactly three.** `collectEditValidation` (`lib/file-state/file-edit.ts`) runs on every edit, always applies the edit, and returns `validation: string[]` as text the agent can self-correct from. `lintStoryParams` flags a `:name` an embedded question needs with no `<Param>` declared, a declared/used type mismatch, and a declared-but-unused param. `lintStoryParamSources` flags a `<Param id={N}>` importing from a file that does not exist or is not a question. `lintDashboardParams` flags one `:name` used at two different types across questions — auto-derive then silently produces two separate filters instead of one shared one. All three live in `lib/data/story/story-params.ts`; save/publish, not the edit, is the hard gate. `lintStoryParamSources` covers a second source kind: a `<Param query={…}>` whose `connection` is
+missing. That is not cosmetic — `extractInlineFileQueries` and `storyEmbedRuns` both require
+`query && connection` before admitting a param source, so a connection-less inline source is silently
+absent from the executed set *and* from the public-share allowlist: the control renders with no
+options and a guest's fetch is denied outright. The lint is the only place that failure is visible
+before a reader hits it.
 
 ---
 
@@ -1733,6 +1810,25 @@ background). `components/plotx/PivotTable.tsx` uses both. `lib/chart/conditional
 `components/plotx/MiniBarChart.tsx` and `components/plotx/MiniHistogram.tsx` are hand-rolled plain-SVG column-stat widgets in the
 table header — no chart library at all.
 
+**Structural table declarations live in a zero-specificity sheet, never inline.** `TABLE_BASE_CSS` in
+`components/plotx/TableV2.tsx` wraps every default in `:where()` (0-0-0) so the envelope's scoped `css`
+wins without `!important`. Widths, the accent and cell padding are therefore *tokens*, not literals: a
+dragged or supplied column width is written as `--mx-column-width` on the `<col>` element and read back
+by `.mx-column`/`.mx-th`/`.mx-cell`. An inline `style="width:…"` would beat every author rule and
+silently void the documented contract, which is the failure this shape exists to prevent
+(`components/plotx/__tests__/table-style-contract.ui.test.tsx` asserts both halves, plus that
+column-resize drags bind to the *owning* document — inside a story iframe, TanStack's
+`getResizeHandler()` handed the module-global `document` never sees the move or the up).
+
+**Text wrapping is a source field, not CSS, because the virtualizer must know.** `wrapColumns` on
+`VizSourceTable` lists result columns whose cells wrap. Wrapping changes row GEOMETRY: `TableV2` only
+wires `measureElement` into `useVirtualizer` when the set is non-empty, and drops the cached
+measurements whenever wrapping is toggled, so unwrapped rows fall back to the fixed `ROW_HEIGHT`.
+Styling `white-space` through the `css` field alone leaves the virtualizer measuring the old height and
+the rows overlap. `lib/viz/validate.ts` field-checks every `wrapColumns` entry against the real result
+columns (`E_FIELD_NOT_FOUND`) for the same reason it checks `columnFormats` — a typo'd column is
+otherwise a silent no-op.
+
 ### Geo
 
 Vega may not fetch geometry: the validator rejects `data.url` and `data.values`, and the only
@@ -1833,8 +1929,34 @@ ESLint (`frontend/eslint.config.mjs`) bans Chakra imports under `components/plot
 - **Legend/tooltip injections are additive-only.** `injectLegendToggle` bails on composite marks
   (`boxplot`/`errorbar`/`errorband`), because Vega-Lite silently drops the selection param but
   still compiles the opacity condition, leaving a dangling `Unrecognized signal name` at runtime.
-- **Interactive maps are detected by capability, not recipe id.** `VegaChart` looks for an
-  `mxViewParams` signal, so a *detached* map keeps its pan/zoom and persistence.
+- **Interactive maps are detected by capability, not recipe id — and by one shared predicate.**
+  `lib/viz/interactive-map.ts` looks for an `mxViewParams` signal (the recipe ids
+  `minusx/point-map@1` / `minusx/choropleth@1` are only a fast path), so a *detached* map keeps its
+  pan/zoom and persistence. It exports two entry points because the two callers hold different things:
+  `isInteractiveMapEnvelope` (an envelope — `components/viz/VegaChart.tsx`) and
+  `isInteractiveMapContent` (question content — `components/containers/SmartEmbeddedQuestionContainer.tsx`).
+  The content form checks `viz` **before** legacy `vizSettings` and never both; reversing that
+  misclassifies every file carrying both.
+- **The dashboard tile's edit-mode drag surface must not cover an interactive chart.** In edit mode
+  `SmartEmbeddedQuestionContainer` lays a `.drag-handle` over the card so the whole tile is grabbable —
+  correct for a static chart, fatal for a map: the overlay is what the browser hit-tests, so Vega never
+  receives the wheel, the drag or the hover, and pan, zoom and tooltips are all dead on precisely the
+  charts that have them. Interactive tiles get a header-height strip instead; static ones keep the
+  full-card overlay with a clip-path notch sparing the bottom-right 24px so the zoom buttons stay
+  clickable. Both sides read `lib/viz/interactive-map.ts`, so they cannot drift apart again.
+- **Vega binds `window:` event sources to its own realm, so drag-pan is dead inside an iframe.** Every
+  pan stream ends in `[pointerdown, window:pointerup] > window:pointermove`, and vega-view resolves
+  `window` to the realm its CODE runs in — the parent. Story and dashboard charts render into an iframe
+  document, so their moves and ups fire on the IFRAME window and never arrive: element-level click and
+  wheel work, pan does not. `bridgeIframeDragEvents` (`lib/viz/iframe-event-bridge.ts`, installed by
+  `VegaChart`, a no-op in the main document) re-dispatches the iframe window's move/end events onto the
+  parent, but ONLY between a down on the chart container and the matching end, so nothing leaks into
+  parent listeners outside a chart-initiated drag. Three details are load-bearing: cloning detects by
+  TYPE STRING because cross-realm `instanceof PointerEvent` is always false; listeners attach in the
+  CAPTURE phase because chart-stack handlers `stopPropagation` mid-path; and a 150ms grace window after
+  the first end event forwards the compatibility sibling (`pointerup` then `mouseup`), since a
+  mouse-stream spec closes its pan gate only on `window:mouseup` and a dropped sibling leaves the chart
+  panning on bare hovers.
 - **The chart-image gate and the render gate disagree by design.** `RENDERABLE_CHART_TYPES`
   (V1, 10 types) excludes `trend`, `single_value` and the geo types, but `isEnvelopeImageViz`
   (V2) includes every non-DOM kind. A legacy `trend` question renders on screen but produces no
@@ -1861,6 +1983,7 @@ ESLint (`frontend/eslint.config.mjs`) bans Chakra imports under `components/plot
 | Change server chart images | `lib/chart/render-viz-image.ts`, `lib/chart/svg-to-jpeg.ts`, `lib/chart/ChartImageRenderer.server.ts` |
 | Change browser chart images / download | `lib/chart/VizImageRenderer.client.ts`, `lib/chart/render-chart-client.ts`, `components/viz/ChartDownloadMenu.tsx` |
 | Change the table | `components/plotx/TableV2.tsx`, `components/viz/VizTableView.tsx`, `components/plotx/table-v2-utils.ts` |
+| Change which charts count as interactive | `lib/viz/interactive-map.ts` (both `VegaChart` and the dashboard tile read it) |
 | Change the pivot | `lib/chart/pivot-utils.ts` (aggregation), `lib/chart/pivot-grid.ts` (layout), `components/plotx/PivotTable.tsx` |
 | Add a boundary map | `lib/viz/geo-assets.ts` + a file under `public/geojson/` |
 | Change number/date formatting | `lib/chart/chart-format.ts` (d3 presets, `formatLargeNumber`, `formatDateValue`) |
@@ -1978,6 +2101,19 @@ sources (`npm run generate-story-ui-classes`), unioned with per-story candidates
 that union is also the hash source for `storyCssCompileVersion()` — so growing the format toolbar's
 palette flips the version and every previously-saved story recompiles at read time
 (`lib/data/story/__tests__/story-css-typography.test.ts`).
+
+`lib/data/story/typography.ts` is that second half and the single source of truth for the WYSIWYG
+format toolbar: which Tailwind classes it may apply (a curated, token-based palette — the `text-*`
+size scale, `font-bold`/`italic`/`underline`, the four alignments, curated `mt-*`/`mb-*`/`p-*` steps,
+`max-w-prose`, and the full-bleed recipe) plus the pure class-string algebra that the live DOM
+mutation and the AST write-back both call, so instant feedback and persisted source can never
+diverge. It is curated rather than free-form for two reasons: `story-css.server.ts` pre-bakes the
+whole palette into every story's sheet, so applying a class is a DOM attribute change with zero
+recompile latency, and a bounded palette can never author a declaration the banned-CSS guard would
+strip. Stepping is **relative and in place** — every size/spacing token shifts one step including
+variant-prefixed ones (`text-3xl @2xl:text-5xl` → `text-4xl @2xl:text-6xl`), because the story skill
+mandates responsive type and a stepper that only rewrote the base token would leave the `@2xl:`
+variant winning the cascade and masking the click.
 
 ### `lib/story-surface` — mount, size, serialize
 
@@ -2262,6 +2398,7 @@ any edit here.
 | Agent image size/quality constants | `frontend/lib/screenshot/constants.ts` |
 | Dashboard iframe missing a style | `frontend/lib/dashboard-surface/chrome-css.gen.ts` → `npm run generate-dashboard-chrome-css` |
 | Story CSS candidate list is short a class | `frontend/lib/story-ui/recipe-classes.ts` → `npm run generate-story-ui-classes` |
+| Add a class the format toolbar can apply | `frontend/lib/data/story/typography.ts` (auto-unions into the compile and flips the CSS version) |
 | Saved story grows / re-nests on every save | `frontend/lib/html/serialize-story.ts` |
 | Server-side story image (Slack, reports, eval) | `frontend/lib/headless-capture/index.server.ts`, `playwright-backend.server.ts` |
 | Share-card look or caching | `frontend/lib/og/og-cards.tsx`, `og-image.tsx`, `og-helpers.ts` |
@@ -2646,11 +2783,24 @@ an external scheduler POSTs `/api/jobs/cron` once a minute; nothing here holds a
 config persisted in the org config document, event dedup, Slack Web API calls, markdown→mrkdwn
 and Block Kit rendering, and the thread↔conversation mapping. It does not own the agent — it
 calls the same `runConversationTurn` the browser uses.
+It also owns one thing that is not obviously Slack's: recording which namespace a `team_id` belongs to.
+A Slack event webhook arrives with no session and no identifying host — only the team id — so resolving
+it has to happen *before* any request context exists, which means it cannot read namespace-scoped
+storage. Install time is the one moment both values are known, so `upsertSlackBotConfig` /
+`removeSlackBotConfig` call `syncTeamBinding`, which is `bindExternalId('slack_team', …)` /
+`unbindExternalId`. The bind is best-effort and re-runs on re-install: the config write is what the
+user asked for, so a binding failure is logged and swallowed rather than failing the install. The
+events route then passes `hints: { slack_team: teamId }` to `resolve()`; a known team runs inside
+`with()`, a team id that resolves to nothing is acked `{ok: true}` and dropped (guessing is worse than
+losing an event), and a payload with no team id at all proceeds with no namespace established.
+`lib/integrations/slack/__tests__/namespace-binding.test.ts` pins all five behaviours.
 
 **`lib/messaging/`** — outbound message transports (config-declared HTTP webhooks with
 `{{VAR}}` substitution, plus email/OTP HTML builders), client-side error reporting, and the
-server-side unhandled-rejection router (`unhandled-rejection-logger.ts`, wired from
-`instrumentation.ts`'s `process.on('unhandledRejection')`). It does not own *who* to notify
+server-side unhandled-rejection router (`unhandled-rejection-logger.ts`, wired from `runBootTasks()`
+in `lib/instrumentation/register-modules.ts`, not from `instrumentation.ts` — that file returns early
+for a deployment supplying its own module set, so anything wired after the branch had to be
+re-implemented verbatim). It does not own *who* to notify
 (job handlers build recipient lists) and does not own the event bus.
 
 **`lib/app-event-registry/`** — a synchronous-publish / fire-and-forget in-process pub/sub. It
@@ -3049,6 +3199,24 @@ wipes `/tutorial` and `/internals` back to `workspace-template.json` and deliber
 (additionally `IS_DEV`-gated, 404 in prod), and the Slack management routes
 `api/integrations/slack/{oauth-start,oauth-configured,manifest,manual-install,test-message,bots/[teamId]}`.
 
+Two admin routes break the `isAdmin`-behind-`withAuth` pattern, both because of the data-version gate.
+`api/admin/migrate-db` uses `withAuthSkippingDataVersionGate` — it is the route that clears a failing
+gate, so gating it would make the refusal unescapable. `api/admin/min-data-version` uses `withCronAuth`
+(shared secret, no session) and sits in the middleware's session-exempt list; it reports the oldest
+data version this deployment serves, for deploy tooling that has no session. It is distinct from
+`api/admin/db-version`, which is session-gated and reports the version of the workspace making the
+request. It returns only the minimum — anything richer is a database query away for whoever
+legitimately needs it, and this endpoint is reachable with a shared secret.
+
+`api/gateway/status` backs the plan-and-balance panel, and its **guard order is deliberate**: it
+returns `{enabled: false}` for a workspace with no stored `gateway.orgSecret` *before* the admin check,
+because such a workspace is not in a broken state and has no spend to protect; the `role !== 'admin'`
+403 sits after it, since spend is org-wide. The org secret is resolved server-side and only the
+resulting numbers come back (`app/api/gateway/__tests__/status.test.ts` asserts neither the raw secret
+nor its `@SECRETS/…` ref appears in the response). A gateway outage returns
+`{enabled: true, reachable: false}` rather than an error, so the panel can say "temporarily
+unavailable" instead of rendering a stale zero.
+
 **Remote agent sessions.** Public bearer surface under `s/[code]/`: the skill-doc markdown page
 (`s/[code]/route.ts` — assembled per request from live connections + `RemoteSessionAgent.tools`),
 `context`, `tool`, `result/[toolCallId]`, `end`. All but the doc page use `withRemoteSessionAuth`, which
@@ -3215,7 +3383,7 @@ this tree consumes them and never reimplements them.
 | `app-shell/` | Providers, sidebars, create menu, mobile chrome, localStorage→Redux flag hydration (`DataLoader`) | Page content |
 | `question/`, `params/`, `query-builder/`, `lexical/` | Question workbench pieces: viz dispatch, parameter widgets, Monaco SQL + semantic explorer, the Lexical rich-text editor with `@`-mentions | Chart rendering |
 | `modals/`, `selectors/`, `schema-browser/`, `screenshot/`, `banners/`, `share/`, `dev/`, `Markdown/` | Cross-cutting leaf surfaces | — |
-| `settings/`, `context/`, `connection-wizard/`, `evals/`, `config/` | Admin/authoring surfaces (users, LLM models, integrations, context + semantic-model editing, onboarding wizard, eval authoring). All still Chakra. | — |
+| `settings/`, `context/`, `connection-wizard/`, `evals/`, `config/` | Admin/authoring surfaces (users, LLM models, integrations, context + semantic-model editing, onboarding wizard, eval authoring, the custom-agent builder). All still Chakra. | — |
 
 Direction of dependency on the chart area: `views/QuestionViewV2.tsx` and
 `views/notebook/NotebookSqlCell.tsx` import `components/plotx/` config panels and
@@ -3465,9 +3633,29 @@ observer is bound to the top realm and goes deaf inside the surface iframe. Widt
 
 **The inline `<Number>` query editor is a light-DOM dialog on purpose.** The story body renders inside the surface iframe, where Monaco's floating widgets (suggest, hover) mis-anchor, so `views/story/NumberQueryEditor.tsx` mounts the shared `query-builder/SqlEditor.tsx` in a Chakra `Dialog` at the `StoryView` level and hands the edited query back through the request's `apply` callback. Reuse rather than a hand-rolled `<textarea>` is the point: `SqlEditor` is a deep module (Monaco plus schema and `@`-reference autocomplete plus validation, behind `value`/`onChange`/`schemaData`), and the modal is the constraint the iframe imposes, not a styling choice.
 
-**A parameter's declaration and its value are stored separately, and each file type declares differently.** A question declares in `QuestionContent.parameters` (`{ name, type: 'text'|'number'|'date', label, source }`) and holds values in `parameterValues`. A dashboard *auto-derives* its declarations by merging its questions' params on name+type. A story has no `params` field at all: its declarations are derived from the `<div data-param-name=…>` placeholders inside `content.story`, so the control lives exactly where the author placed it — values again in `parameterValues`. Because values are a separate name-keyed dict, a control can be moved or re-themed without touching them.
+**A parameter's declaration and its value are stored separately, and each file type declares differently.** A question declares in `QuestionContent.parameters` (`{ name, type: 'text'|'number'|'date', label, source }`) and holds values in `parameterValues`. A dashboard *auto-derives* its declarations by merging its questions' params on name+type. A story has no `params` field at all — but it has **two** storage shapes. A legacy story derives its declarations from `<div data-param-name=…>` placeholders inside `content.story` (inline-SQL sources ride along as a JSON `data-param-source-sql` attribute); a `format:'jsx'` story stores the `<Param/>` element **verbatim** in the body and has no placeholders anywhere. `markupToContent` picks the codec from the file's *stored* content, never from the incoming markup. Anything reading a story's params must therefore go through `extractStoryParams` (`lib/data/story/story-params.ts`), which scans placeholders *and* parses `<Param>` nodes out of JSX — a placeholder-only regex silently returns zero params for every new-format story. Either way the control lives exactly where the author placed it — values again in `parameterValues`. Because values are a separate name-keyed dict, a control can be moved or re-themed without touching them.
 
 **One story `<Param>` drives every embed that uses it.** `views/shared/AgentHtml.tsx` scans the body for `[data-param-name]` into `paramTargets` (`paramFromPlaceholderEl`), holds the values in React state seeded from `content.parameterValues`, portals a `StoryParamControl` per param, and passes every embed `externalParameters` (`paramTargets.map(storyParamToQuestionParameter)`, wired in `views/shared/StoryEmbeds.tsx`) plus `externalParamValues`. Changing one control re-renders the story and re-executes each affected embed. Dashboards reach `SmartEmbeddedQuestionContainer` through the *identical* `externalParameters`/`externalParamValues` props from `DashboardView` — only the derivation of the controls differs.
+
+**A `<Param>` names its SQL binding, and everything else about it is presentation.** `name` is always
+the stable `:name` binding. Autocomplete comes from one of two sources: `<Param id={N} column="c">`
+imports question N's column, and `<Param query={`SELECT DISTINCT city FROM customers ORDER BY city`}
+connection="warehouse">` runs story-local SQL and uses its first result column
+(`components/params/InlineSqlDropdownWidget.tsx`). With no `label` the control humanizes the binding —
+`generateLabel` turns `immediate_parent` into "Immediate Parent" — and a custom `label` changes
+**only** the reader-facing text, never the binding; `labelStyle={{…}}` styles that text. When
+`nullable` is true (**the default** — it is opt-out) the control grows a separate **Any** pill in its
+label row that stores `null`, which `applyNoneParams` turns into predicate removal downstream. Any is
+a sibling of the control, not an entry inside the dropdown, and that is deliberate: an in-list option
+is unreachable the moment the source query errors or returns no rows, and it can collide with a real
+value in the data.
+
+A query-backed `<Param>` is an embed run too, contributing its own run with **empty params** — a
+suggestion query populates the control rather than consuming its value, so binding the story's current
+values into it would re-execute the dropdown on every keystroke and key its cache against a moving
+target. The same extraction feeds `extractInlineFileQueries`, which is what puts the source query on
+the guest allowlist in `lib/query-cache/guest-query.server.ts`, so an anonymous share viewer can
+populate the dropdown without gaining the ability to run anything else.
 
 - **A portal must target the anchor's document, not `document.body`.** `DrillDownCard` takes the `Document` the drill click happened in (`DrillDownState.doc`) and portals there, because its `position` is in *that* document's viewport space — inside the dashboard surface iframe the top `document.body` is the wrong coordinate space, and a `position: fixed` backdrop is broken inside `foreignObject` anyway. Anything floating that a dashboard tile can open follows the same rule, and must also carry `data-mx-theme-host` so shadcn token classes resolve in the document it lands in.
 
@@ -3610,6 +3798,52 @@ default per `LLM_GRADES`; and that retired keys (`models`, `recommended`, and th
 (`components/shared/ConnectionTypePicker.tsx`). Its `description` strings contain `{{agentName}}`
 placeholders substituted from branding at render time.
 
+### `lib/gateway` — the managed MinusX gateway
+
+`frontend/lib/gateway/` is the whole client surface onto the hosted service that provides model
+access for MinusX-operated workspaces. It holds no billing logic of its own: how plans, balances and
+expiry work is the service's business, and `frontend/lib/gateway/gateway-types.ts` only describes the
+shape that comes back (money is integer micro-USD throughout; `microToUsd` is the only conversion).
+Self-hosted installs never use any of it.
+
+**The switch is `MX_GATEWAY_SHARED_SECRET`, not the URL.** `gatewayEnabled()` checks `baseUrl()` too,
+but that reads `MX_GATEWAY_ORIGIN`, which carries a production default and is therefore never empty —
+so the predicate reduces to the secret alone, and
+`frontend/lib/gateway/__tests__/gateway-client.test.ts` pins exactly that. The URL cannot be the gate
+because every install addresses that origin for inference; the secret is issued by MinusX and a
+self-hosted install cannot obtain one. Naming the gateway has to stay harmless on its own.
+
+**Everything here is best-effort, and that is the design.** `registerCompanyWithGateway`
+(`frontend/lib/gateway/gateway-register.server.ts`) runs at the tail of `AuthModule.register`, after
+registration has already committed, so nothing in it may throw: an outage must leave a working
+workspace whose admin configures a provider by hand, not a half-registered one that can never be
+registered again. A refusal is `console.warn`ed loudly at both layers, because everything downstream
+of a failure is a non-event — no gateway config is written, the plan resolver falls back to whatever
+else is configured, the settings panel renders nothing — which reads as "the feature is broken"
+unless the reason is in the log.
+
+**The credentials are returned exactly once.** `createGatewayOrg` yields `orgId` / `keyId` (public
+ids) plus `orgSecret` (manages the account) and `key` (the inference credential); neither secret can
+be read back, which is why registration persists them in the same step. They land under the `gateway`
+key of the workspace config document, and extract-on-write moves both into the secrets store as
+`@SECRETS/…` refs. The `llm` section written alongside points **every** grade at the provider —
+wiring only `core` would leave a new workspace on "no model configured" for the other two — and
+deliberately writes **no** `baseUrl`: that document is persisted forever, so a pinned URL (an internal
+container hostname, say) would outlive every later change of address. Inference resolves from
+`MX_GATEWAY_URL_PROXY` instead, derived from the same origin the client registered against.
+
+**The service's vocabulary crosses the wire unchanged.** `createGatewayOrg`, `POST /orgs`, `org_id` /
+`org_secret`, the `x-mx-org-secret` and `x-mx-shared-secret` headers, the config key `gateway.orgId`
+and the entry point `registerCompanyWithGateway` are the *gateway's* names, not rename debt — do not
+"fix" them. The app's own vocabulary is workspace, and that is what the props carry: `workspace_name`,
+`app_url` and `app_commit` are sent on every registration, always all three, because support has an
+org id and nothing else to go on. The `localhost` / `unknown` defaults are themselves the signal — an
+absent key would read as an older client.
+
+`fetchOrgStatus` / `fetchOrgUsage` gate on `baseUrl() && orgSecret` rather than `gatewayEnabled()`, so
+a workspace with stored credentials keeps its settings panel working on a host that carries no shared
+secret in its environment.
+
 ### Branding / white-label
 
 `frontend/lib/branding/whitelabel.ts` owns the `OrgConfig` shape (branding, links, messaging
@@ -3748,7 +3982,9 @@ chat UI. The `connections` array is load-bearing — it is persisted on the conv
 
 `frontend/lib/instrumentation/register-modules.ts` is the module-registry bootstrap:
 `registerWithModules()` picks the PGLite or adapter-backed DB module from `getDbType()`, registers
-auth / db / object-store / cache, then runs `init()` + `runMigrations()`. It is called by
+auth / db / object-store / cache / namespace, runs `db.init()`, then `runBootTasks()` — the
+unhandled-rejection router and the chat-runtime warm, which live here rather than in
+`instrumentation.ts` so that registering modules is enough to get them. It is called by
 `frontend/instrumentation.ts` at server start and by the standalone scripts
 (`scripts/heal-stories.ts`, `scripts/migrate-conversations-to-v3.ts`) so they get the same wiring as
 the app.
@@ -3857,6 +4093,17 @@ Everything runs from `frontend/`. Names that mean what they say are omitted.
 | `benchmark:dab` | Requires `DAB_BENCH_BASE_DIR`; throws immediately without it. |
 | `knip` | Dead-export detection. `knip.json` declares `scripts/*`, `benchmarks/dataanalystbench.ts` and the Playwright `*.setup.ts` files as entry points so they are not reported unused. |
 | `generate-og:generic` | Regenerates the committed `public/ogs/generic.png`. |
+
+`frontend/scripts/check-min-data-version.ts` is deliberately **not** an npm script and is wired to no
+workflow in this repo. It refuses to ship a build that cannot read data still in service: raising
+`MINIMUM_SUPPORTED_DATA_VERSION` is safe only once everything the deployment serves has been migrated
+past it, and a workspace left behind is served by code that MISREADS its data — wrong content, not an
+error. The comparison needs two numbers from two different builds (only the candidate knows its own
+minimum, only the running deployment knows what it serves), which is why it is a script rather than
+something the endpoint could answer alone. Run it with
+`MIN_DATA_VERSION_URL=https://<host>/api/admin/min-data-version` and `CRON_SECRET` set. Exit `2`
+("could not determine") is fatal on purpose: `withCronAuth` answers a wrong secret with
+`200 {ok: true}`, so a missing `min` in the response must never read the same as a pass.
 
 Most of these (`generate-app-theme-css`, `generate-dashboard-chrome-css`,
 `generate-theme-previews`, `update-workspace-template`, `capture-fidelity`, `prompt-visualizer`,
@@ -4008,6 +4255,14 @@ Non-obvious CI facts:
 - No Turbopack build cache is restored anywhere: measured warm ≈ cold, so caching was pure overhead.
   `node_modules` and the Playwright browser binaries *are* cached, on a key shared by all three
   workflows.
+- **Node 22 everywhere the app runs, stated in three places that must agree.** `actions/setup-node`
+  pins `'22'` in `test.yml`, `e2e.yml` and both `qa.yml` jobs; `frontend/Dockerfile` builds and runs on
+  `node:22-slim`; `frontend/package.json` declares `engines.node: ">=22.19.0"`. There is no `.nvmrc`
+  and no `engine-strict`, so the `engines` field warns rather than blocks — the real gates are the
+  workflow pin and the image. Bumping one without the others is the failure this triple exists to make
+  visible: CI green on a runtime the image does not ship. `docs/Dockerfile` is deliberately still
+  `node:20` — the docs site is a separate app with its own `package.json` and shares nothing with the
+  frontend build.
 
 ### The docs site
 
@@ -4376,10 +4631,21 @@ and add an entry to `frontend/package.json`.
    tools register a handler in the tool-handler registry.
 4. Keep the TypeBox param schema and the handler behaviour in sync — the schema is the single source
    of truth for the arguments the LLM is told it may pass.
+5. A **root** agent needs a second registration: `ROOT_AGENT_BY_NAME` in the same file. `REGISTRABLES`
+   only makes a class instantiable on resume; without the map entry no request can select it.
+6. Adding a `{slot}` to a shared prompt is a breaking change to every other renderer of that id.
+   `pyFormat` throws `Missing variable '<name>'` — it does not render the literal — so a turn dies at
+   prompt assembly, not at review. Grep every `renderPrompt('<id>', …)` call site and give each the new
+   slot (usually `''`).
 
 **Tool registration is not optional.** When a tool spawns another tool, or an agent dispatches a
 sub-agent, the spawned class MUST be in `REGISTRABLES` — the orchestrator instantiates it from that
 registry by `schema.name` when resuming or reconstructing a saved conversation log.
+
+**Prefer one registered class over one class per configuration.** When behaviour varies by
+user-authored data rather than by code — custom agents are the case in hand — put the resolved
+definition on the per-turn context and register a single class. A class per definition makes every
+saved log unresumable as soon as the underlying definition is renamed or deleted.
 
 ### Database schema changes
 

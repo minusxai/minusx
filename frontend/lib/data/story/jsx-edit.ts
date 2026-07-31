@@ -315,7 +315,8 @@ function sanitizeAttrs(el: TmpElement, errors: ValidationError[]): JsxAttribute[
   const out: JsxAttribute[] = [];
   for (const a of el.attrs) {
     const lower = a.name.toLowerCase();
-    // Render/edit artifacts (data-mx-ast, data-mx-busy, contenteditable) never belong in source.
+    // Render/edit artifacts never belong in source. Matched by PREFIX, so every data-mx-*
+    // the interpreter adds later (busy, selected, hover) is covered without editing this.
     if (lower.startsWith('data-mx-') || lower === 'contenteditable') continue;
     if (lower.startsWith('on') || DENIED_ATTRS.has(lower)) {
       errors.push({ message: `Dropped attribute "${a.name}" on pasted <${el.tag}>`, attr: a.name, tag: el.tag });
