@@ -180,7 +180,7 @@ TypeBox content schema. Never call `getSkill` from `prompt-loader` directly.
 
 | Boundary | Direction | Contract |
 |---|---|---|
-| `lib/chat/orchestration-core.server.ts` | calls in | The registrables hub. Builds `REGISTRABLES` / `HEADLESS_REGISTRABLES`, picks the root agent class by `body.agent`, assembles `RemoteAnalystContext` from server-resolved pointers, installs `beforeLlmCall` (credits) and `resolveLlmPlan` (DB model config), and calls `orch.run()` / `orch.resume()`. |
+| `lib/chat/orchestration-core.server.ts` | calls in | The registrables hub. Builds `REGISTRABLES` / `HEADLESS_REGISTRABLES`, picks the root agent class — a resolved `agent_args.custom_agent` pointer first, then `body.agent`, else `WebAnalystAgent` — assembles `RemoteAnalystContext` from server-resolved pointers, installs `beforeLlmCall` (credits) and `resolveLlmPlan` (DB model config), and calls `orch.run()` / `orch.resume()`. |
 | `lib/chat/conversation-turn.server.ts`, `app/api/conversations/[id]/{turns,stream}` | calls in | The v3 turn runner. Consumes the `EventStream<StreamEvent, AssistantMessage \| null>` and persists the log diff. |
 | `lib/integrations/slack/run-turn.server.ts` | calls in | Same `setupOrchestration` path in-process, `agent: 'SlackAgent'` (server-controlled, never client input) → headless registrables. |
 | `lib/chat/run-report.server.ts`, `run-eval.server.ts`, `run-micro-task.server.ts`, `remote-session-engine.server.ts` | call in | Construct an `Orchestrator` directly, each with its own registry — no HTTP route involved. Report = `HEADLESS_REGISTRABLES + ReportAgent`; eval = its own `EVAL_REGISTRABLES`; micro = `[MicroAgent]`; remote session = `REGISTRABLES` filtered to `type !== 'Agent'` (an external driver may invoke leaf tools only, never start an LLM loop). |
@@ -350,7 +350,7 @@ GET /api/conversations/:id/stream?since=N  (app/api/conversations/[id]/stream/ro
 
 The turn runner never writes to the HTTP response. `messages` rows are the source of truth; NOTIFY is
 only a wakeup pointer. `lib/chat/conversation-stream.server.ts` is the bus: one Postgres `LISTEN` per
-conversation channel (`conv_<id>`, optionally namespaced via `setConversationChannelNamespace`),
+conversation channel (`namespacedChannel(isolation, 'conv_<id>')` — `nsmx_conv_5` by default),
 fanned out to in-process subscribers from a module-global `Map`.
 
 ### What each module owns
@@ -470,7 +470,7 @@ Unrelated, and routinely confused:
 | `frontend/app/api/micro-task/route.ts` | `runMicroTask` | |
 | `frontend/lib/jobs/handlers/{alert-handler,context-handler}.ts`, `frontend/app/api/jobs/test/route.ts` | `createServerRunner` → `runEvalV2` | |
 | `frontend/app/api/llm/{test,chat-models,registry}/route.ts`, `frontend/scripts/setup-cli/{validate-llm,list-models}.ts` | `testLlmEntry`, `buildChatGradeCatalog`, `mergedListModels` | |
-| `frontend/lib/modules/auth/index.ts` | `seedLlmConfigFromEnv` | runs at workspace registration |
+| `frontend/lib/modules/auth/index.ts` | `registerCompanyWithGateway` | at workspace registration, and only when no installer-supplied `llm` config was passed |
 | `frontend/lib/mcp/session-logger.ts`, `frontend/lib/data/migrate-conversations-v3.server.ts` | `legacyLogToPi` | |
 | `frontend/app/benchmark/page.tsx`, `frontend/lib/conversations-utils.ts` | `piLogToLegacy` | `parsePiConversation` reuses it for render structs |
 | ~32 modules across `frontend/agents/**` and `frontend/components/connection-wizard/**` | `compress-augmented.ts` | see below |
@@ -742,8 +742,7 @@ CTE bodies (stored as raw SQL), `GROUP BY` ordinals (resolved to names), aggrega
 
 | Input | Output | Consequence |
 |---|---|---|
-| `WHERE x = 1 AND (y = 2 OR z = 3)` | `WHERE x = 1` | **the parenthesized group vanishes** |
-| `WHERE (x = 1 AND y = 2)` | *(no WHERE at all)* | query returns every row |
+| `WHERE (x = 1 AND y = 2)` | `WHERE x = 1 AND y = 2` | redundant parens normalized away (harmless) |
 | `SELECT "Weird Col" FROM "My Table"` | `SELECT Weird Col FROM My Table` | quoting lost → invalid SQL |
 | `WHERE c IN (:s)` | `WHERE c IN (':s')` | placeholder becomes a string literal |
 | `FROM db.sch.t` | `FROM sch.t` | catalog qualifier lost |
@@ -752,12 +751,14 @@ CTE bodies (stored as raw SQL), `GROUP BY` ordinals (resolved to names), aggrega
 | `… UNION ALL … ORDER BY 1 LIMIT 3` | `… UNION ALL … LIMIT 3` | ordinal `ORDER BY` dropped |
 | comments, trailing `;`, original formatting | normalized | cosmetic only |
 
-The paren drop is the dangerous one because it is silent — `validateSqlForGui` does not check for the
-`paren` AST node, so the parse *succeeds*. `parseFilterExpression` switches on the first AST key; a
-`paren` node is neither `and` nor `or`, falls to `parseSingleCondition`, which returns `null`, and the
-condition is discarded. End to end:
-`applyNoneParams("SELECT a FROM t WHERE COALESCE(:s,'')='' OR c = :s", {s: null})` yields
-`WHERE COALESCE(NULL, '') = ''` — the `OR c = :s` arm is gone.
+**Parenthesized groups used to be dropped, and the failure mode is worth remembering.** It was
+silent: `validateSqlForGui` does not check for the `paren` AST node, so the parse *succeeded*;
+`parseFilterExpression` switched on the first AST key, a `paren` node was neither `and` nor `or`, it
+fell to `parseSingleCondition`, which returned `null`, and the condition was discarded. A filter
+silently *widening* — more rows, no error — is the worst thing this layer can do. `unwrapParen` now
+unwraps before dispatch and refuses to flatten a same-operator parenthesized child (which would
+rebind precedence), so `WHERE (x = 1 OR y = 2) AND c = 3` survives byte-identical.
+`lib/sql/__tests__/where-paren-groups.test.ts` pins it, including through `applyNoneParams`.
 
 #### Param semantics
 
@@ -769,9 +770,25 @@ values beat the question's saved values, a missing number defaults to `null` and
 number so `:p * INTERVAL '1 week'` does not blow up. `bindReferencedParams` is the type-agnostic
 variant for inline `<Number query>` story embeds, which declare no parameter list.
 
-`applyNoneParams` then implements None: prune WHERE/HAVING conditions whose `param_name` is None via the
-IR round-trip, replace any surviving `:p` with `NULL` by regex, and strip None entries from the values
-dict. Param names are validated as identifiers *before* any `RegExp` is built — guests control param
+`applyNoneParams` then implements None in **two prune passes, then a regex**. First the editable-`QueryIR`
+round-trip, which it skips outright for a compound (UNION) query. Then
+`removeNoneParamConditionsFromSqlAst` (`lib/sql/sql-to-ir.ts`) over the parser's *native* AST, walking
+every `select` node's `where_clause` and `having` — inside CTEs, inside each UNION branch, inside
+scalar subqueries — dropping any predicate leaf that mentions a None param and collapsing the
+enclosing AND/OR; it regenerates only when it actually changed something, so it is a no-op for what
+the IR pass already handled. Only then are surviving `:p` occurrences replaced with `NULL` by regex
+and None entries stripped from the values dict. The second pass exists because a None param inside a
+CTE or a UNION branch used to fall through to the regex and become `WHERE c = NULL` — never true, so
+the embed returned **zero** rows instead of all of them, the exact inverse of what None means. Both
+passes are individually `try`-wrapped: a parse or generation failure degrades to plain `NULL`
+substitution rather than failing the query.
+
+So None means *the predicate is removed*, not *the predicate compares against NULL*. Taken to its
+conclusion, `applyNoneParams("SELECT a FROM t WHERE COALESCE(:s,'')='' OR c = :s", {s: null})` yields
+`SELECT a FROM t` with an empty params dict — every arm referenced `:s`, so the whole WHERE goes and
+the query returns every row. That is the intended reading of "no filter".
+
+Param names are validated as identifiers *before* any `RegExp` is built — guests control param
 names on public pages, so a metacharacter name is a ReDoS/injection vector (pinned by
 `lib/sql/__tests__/none-params-safety.test.ts`).
 
@@ -797,7 +814,7 @@ to apply unconditionally in `runQueryStream`.
 | `lib/views/resolve.ts` | calls in | Round-trips SQL through the IR to rewrite `_views.x` into CTEs. Runs after whitelist validation and before the cache key. |
 | `lib/semantic/{compile,save-gate,detect-sql}.ts` | calls in | The semantic compiler emits `QueryIR` directly (including `FilterCondition.raw_sql` for correlated `EXISTS`), then `irToSqlLocal`. |
 | `lib/chat/agent-args.server.ts`, `lib/hooks/useContext.ts` | call in | `getWhitelistedSchemaForUser` (`schema-filter.ts`) and `resolveContextDocs` / `formatContextDocsSection` (`context-docs.ts`) build the schema + Schema-Notes blocks handed to agents and the right sidebar. |
-| `lib/object-store` | called by | `blob-store.ts` streams gzipped JSONL through `putStream`/`getStream`. `setQueryCacheObjectStoreFactory` lets a deployment namespace blob keys. |
+| `lib/object-store` | called by | `blob-store.ts` streams gzipped JSONL through `putStream`/`getStream`. `createQueryCacheBlobStore()` is async and defaults to `await createObjectStore()`, so blob keys are namespaced by construction — the injectable factory that used to let one deployment opt in is gone. |
 | `lib/app-event-registry` | called by route | Exactly one `AppEvents.QUERY_EXECUTED` per request, built from `CachedMeta` so hits and misses are both recorded. |
 
 ### Gotchas
@@ -809,7 +826,8 @@ to apply unconditionally in `runQueryStream`.
   SQL and therefore the key, invalidating stale results for free. Non-view queries take a byte-identical
   fast path and are never parsed.
 - **The client's `getQueryHash` and the server's cache key are not the same key.** The client hashes the
-  raw query; the server hashes the post-view-resolution query and adds the mode prefix and a
+  raw query; the server hashes the post-view-resolution query and adds `getUserKey(user)` — the
+  namespace's mode level, `mx/org`, not the bare mode — and a
   `parameterTypes` fold. `getQueryHash` uses `JSON.stringify(params)`, so the key is param-insertion-
   order-sensitive by construction — in practice `buildQueryParamValues` emits keys in declaration
   order, which is what keeps it stable.
@@ -1181,7 +1199,7 @@ each with a targeted `no-restricted-syntax` eslint-disable.
   known-good schema). Persists through `ConnectionsAPI.updateCachedSchema`, then redacts the config
   via `getSafeConfig`.
 - `context-loader.ts` — resolves the user's published version, computes `fullSchema` / `parentSchema`
-  / `fullDocs` / `fullMetrics` / `fullSkills` / `fullSemanticModels`, injects views as tables under the
+  / `fullDocs` / `fullMetrics` / `fullSkills` / `fullAgents` / `fullSemanticModels`, injects views as tables under the
   `_views` schema (fail-closed: a view whose reads are no longer available leaves the schema and is
   reported in `viewProblems`), then bounds the schema (`boundFullSchema` keeps every table but may drop
   columns; `boundSchema` may also cap tables) to stop a multi-thousand-table connection from putting
@@ -1195,7 +1213,7 @@ each with a targeted `no-restricted-syntax` eslint-disable.
 canAccessFile → canCreateFileByRole → PROTECTED_FILE_PATHS
   ├ connection: strip client `schema`, mergeExistingSecretRefs, extractConnectionSecrets,
   │             pruneConnectionSchemaToFiles (static CSV/Sheets)
-  ├ context:    strip fullSchema/parentSchema/fullDocs/fullSkills, normalise version whitelists
+  ├ context:    strip fullSchema/parentSchema/fullDocs/fullSkills/fullAgents, normalise version whitelists
   ├ config:     restoreRedactedConfigSecrets → extractConfigSecrets
   └ story:      withCompiledStoryCss (client copy always discarded)
 validateFileStateServer            (Ajv against lib/validation/atlas-json-schemas)
@@ -1700,7 +1718,7 @@ the spec as `kind: 'vega'` (or `'vega-lite'` for VL recipes), keeping `detachedF
 `table` and `pivot` never route through Vega. `components/plotx/TableV2.tsx` (tanstack-table + tanstack-virtual,
 column stats, faceted filters, drilldown, header format editor) and `components/plotx/PivotTable.tsx` are the real
 renderers; `components/viz/VizTableView.tsx` and `components/viz/VizPivotView.tsx` are thin envelope adapters
-over them, unpacking `columnFormats` / `conditionalFormats` / `config` / `css` via
+over them, unpacking `columnFormats` / `conditionalFormats` / `wrapColumns` / `config` / `css` via
 `encoding-edit` getters. The `css` field is scoped to the instance with native CSS nesting under
 a per-mount class and is written against the stable class contract
 (`.mx-table`, `.mx-header-row`, `.mx-th`, `.mx-row`, `.mx-row-odd/-even`, `.mx-cell`,
@@ -1955,7 +1973,11 @@ hosts — implementations must preserve the element's `key`, which carries the s
 (`[data-radix-popper-content-wrapper]`) is forced to `absolute`. `cn.ts` re-exports
 `components/kit/cn.ts`. `recipe-classes.ts` is a generated Tailwind-candidate union extracted from kit
 sources (`npm run generate-story-ui-classes`), unioned with per-story candidates when
-`lib/data/story/story-css.server.ts` compiles a story's CSS.
+`lib/data/story/story-css.server.ts` compiles a story's CSS. The compile candidate set is actually
+`STORY_RECIPE_UNION` = these classes ∪ `STORY_WYSIWYG_CLASSES` (`lib/data/story/typography.ts`), and
+that union is also the hash source for `storyCssCompileVersion()` — so growing the format toolbar's
+palette flips the version and every previously-saved story recompiles at read time
+(`lib/data/story/__tests__/story-css-typography.test.ts`).
 
 ### `lib/story-surface` — mount, size, serialize
 
@@ -2212,7 +2234,9 @@ forking.
 - **`format:'jsx'` story bodies are stored as jsx TEXT**, not as a stored AST. The AST is a transient
   in every edit path.
 - **The interpreter's `data-mx-ast` stamps are render output only.** Nothing that carries them may be
-  written back to source; `jsx-edit.ts` strips them (plus `data-mx-busy` and `contenteditable`).
+  written back to source; `jsx-edit.ts` strips **any** `data-mx-*`-prefixed attribute plus `contenteditable`, so a new render
+artifact (`data-mx-busy`, `data-mx-selected`, `data-mx-hover`) is covered by the prefix rule without
+any edit here.
 - **`applyWidth` rounds down, `applyHeight` rounds up.** They are not symmetric, on purpose.
 - **`'dom'` surface is unreachable from app code.** `AgentHtml` defaults to `'svg'`, nothing passes
   otherwise, so the DOM-surface branches (and `capture-story-preview.ts`'s "DOM-rendered story"
@@ -2252,7 +2276,7 @@ forking.
 
 **Prop filtering has to be a deny list, and that is forced by the component library.** Every one of the 20 vendored kit components spreads `{...props}` onto its root element and enumerates nothing, so there is no allow list of props that could be expressed — an unknown attribute reaches the DOM by construction. Hence the global denials: `on*` handlers, `ref`, `key`, `dangerouslySetInnerHTML`, `srcdoc`, `is`, style sanitized to string/number values, and scheme filtering on every URL-bearing attribute (`href`, `src`, `srcset`, `xlinkHref`, `formAction`/`formaction`, `ping`). This matters because `content.story` is editable by any org user and rendered to other viewers including anonymous guests — it is a real XSS boundary, not a lint.
 
-**Legacy-ness is derived from stored content only.** `isLegacyStoredStory` decides via an attribute-level match for `data-c` on the *existing stored* HTML (plus a non-empty legacy body), never from incoming markup — a story cannot be declared legacy by what the agent or the editor sends. That matters because the legacy flag relaxes `validateJsxSource` to accept the retired component vocabulary; accepting it from input would turn it into a validation bypass. Legacy stories are frozen rather than migrated: they keep the old compile path and their live `@import` fonts, and the banned-CSS sanitizer is wired only into the jsx-story save path.
+**Legacy-ness is derived from stored content only.** `isLegacyStoryContent` (`lib/data/story/file-markup.ts`) decides via an attribute-level match for `data-c` on the *existing stored* HTML (plus a non-empty legacy body), never from incoming markup — a story cannot be declared legacy by what the agent or the editor sends. That matters because the legacy flag relaxes `validateJsxSource` to accept the retired component vocabulary; accepting it from input would turn it into a validation bypass. Legacy stories are frozen rather than migrated: they keep the old compile path and their live `@import` fonts, and the banned-CSS sanitizer is wired only into the jsx-story save path.
 
 **Headless capture needs a real browser — that is the problem, not a missing library.** Node-side SVG rasterizers ignore `foreignObject` entirely, and Satori implements a flexbox-only subset that cannot express story markup, so neither can stand in for the Playwright backend. The swappable-backend seam exists to allow a *different browser*, not a pure-Node renderer.
 
@@ -2382,6 +2406,32 @@ Background callers with no HTTP request build the user directly and pass mode ex
 `getUserEffectiveUser(email, mode)` (Slack), `lib/mcp/auth.ts` (bearer token → `DEFAULT_MODE`),
 `resolveRemoteSession` (owner of the `/s/<code>` session).
 
+### Architecture — the namespace seam
+
+Mode is one isolation axis; `INamespaceModule` (`lib/modules/types.ts`, default implementation
+`lib/modules/namespace/index.ts`) is the seam a deployment implements to add a coarser one. It has
+four verbs. `resolve(req, hints)` maps a request to its namespace, or returns `null` to reject it —
+there is no safe default. `seal(namespace)` makes that value safe to travel as the
+`x-namespace-context` request header, because middleware writes it and handlers would otherwise trust
+an attacker-supplied copy. `with(namespace, fn)` establishes one where there is no request to read it
+from, scoped to `fn` and deliberately not `enterWith`-style: an ambient value cannot be unset and
+leaks onto whatever runs next on the same async context, which on a pooled server is an unrelated
+request. `isolation()` returns the current request's coarse prefix. The single-workspace
+implementation answers a constant for all of them, `bindExternalId`/`unbindExternalId` are no-ops, and
+`provision()` is the ordinary first-run `AuthModule.register`.
+
+Three entry points cannot go through middleware and resolve for themselves, each because the
+namespace is not in the URL: `app/api/mcp/route.ts` (it is in a bearer token), the Slack events
+webhook (it is a `team_id`), and `app/oauth/authorize/approve/route.ts`. Each wraps its handler in
+`with()`. Work that outlives its request — a detached chat turn, an `after()` callback — re-enters
+via `getModules().auth.getContextRunner()`, which must be awaited **while the request is still
+alive**, since that is when it captures the namespace. A JWT refresh has no request at all, so
+`auth-factory.ts` stamps the namespace onto the token at login (`getExtraTokenPayload`, and the
+`namespace` claim in `types/next-auth.d.ts`) and re-enters it around the `UserDB.getById` read. In
+this repo `resolve()` ignores the session entirely, so nothing compares the session's namespace
+against the request's — that comparison is what an implementing deployment adds, and the claim exists
+so it can.
+
 ### Architecture — role rules
 
 `frontend/rules.json` (`version: 3`) is the data. Three rule kinds matter: `fileTypeAccess` (per
@@ -2443,7 +2493,8 @@ The constants live beside the rules (`scoring.ts`: weights `0.3/0.3/0.4` for vis
 | **API routes → `api-responses`** | `successResponse(data)` ⇒ `{success:true,data,request_id?}`; `handleApiError(e)` ⇒ `{success:false,error:{code,message,type?}}` with status from the `UserFacingError` subclass. ESLint (`eslint.config.mjs`, `app/api/**`) rejects a bare `NextResponse.json(…, {status:500})`. |
 | **`lib/data/*` → `lib/auth` + `lib/mode`** | `files.server.ts` calls `canAccessFileType`, `canCreateFileType`, `canCreateFileByRole`, `canDeleteFileType`, `validateFileLocation`; `helpers/permissions.ts` calls `checkFileAccess`. All take `EffectiveUser` and are the only enforcement layer below the routes. |
 | **Chat / orchestration → `EffectiveUser`** | `lib/chat/*.server.ts` and every server tool thread `EffectiveUser` for file access and mode. Guest chat is additionally gated by `guestChatDenialReason(user, SHARE_GUEST_CHAT_ENABLED)`, enforced in both chat routes. |
-| **`lib/modules/registry` → auth** | `getModules().auth.addHeaders(req, headers)` runs in *both* middleware branches and returns `false` to force a logout (session cookies cleared, redirect to `/login`). `AuthConfigOptions` (`auth-config-options.ts`) lets a module override user lookup, JWT refresh, and extra session fields without touching `auth-factory.ts`. |
+| **`lib/modules/registry` → namespace** | `attachNamespace` runs `getModules().namespace.resolve(req)` then `.seal()` into `x-namespace-context` in *both* middleware branches, deleting any inbound copy first. Only the authenticated branch acts on a `null` result (session cookies cleared, redirect to `/login`); the public branch discards it and proceeds with no namespace attached. |
+| **`lib/modules/registry` → auth** | `AuthConfigOptions` (`auth-config-options.ts`) lets a module override user lookup, JWT refresh, and extra session fields without touching `auth-factory.ts`. `getContextRunner()` and `getExtraTokenPayload()` are the two hooks that carry the namespace past the end of a request. |
 | **Client → server identity** | `fetch-patch.ts` monkey-patches `window.fetch` at import (`components/app-shell/Providers.tsx`) to re-append `as_user` and non-default `mode` to any `/api/` URL. XHR-based SSE bypasses it, so `store/api-url.ts` re-implements the same append for the chat stream. |
 | **MCP → `lib/oauth`** | `app/api/mcp/route.ts` → `lib/mcp/auth.ts` → `OAuthTokenDB.validateAccessToken` → `UserDB.getById`, constructing its own `EffectiveUser` at `DEFAULT_MODE`. Middleware treats `/api/mcp`, `/oauth`, `/.well-known/oauth` as public. |
 | **Remote agent sessions → `withRemoteSessionAuth`** | `/s/<code>/*`; the unguessable code is the only credential. Resolution is `resolveRemoteSession` (`lib/chat/remote-session.server.ts`); the wrapper adds a per-conversation 60-calls/60s in-memory limiter and yields `{conversation, user: <owner>, code, params}`. |
@@ -2454,8 +2505,10 @@ The constants live beside the rules (`scoring.ts`: weights `0.3/0.3/0.4` for vis
 
 - **Header normalization only happens on the authenticated branch.** The public / share /
   remote-session / guest branches of `routeRequest` copy `req.headers` verbatim and set only
-  `x-request-id` + `x-request-path` — a client-supplied `x-mode` or `x-impersonate-user`
-  survives. Safety rests entirely on each of those consumers building its own identity without
+  `x-request-id`, `x-request-path` and `x-namespace-context` — a client-supplied `x-mode` or
+  `x-impersonate-user` survives. `x-namespace-context` is the exception: `attachNamespace` deletes any
+  inbound copy before setting its own on every branch, so a client-supplied one never reaches a
+  handler. Safety rests entirely on each of those consumers building its own identity without
   trusting those headers: MCP uses `DEFAULT_MODE`, Slack passes mode explicitly, and the guest
   branch of `getEffectiveUser` derives everything from the signed cookie. Any new public route
   that calls `getEffectiveUser` breaks that invariant.
@@ -3511,11 +3564,21 @@ root layout stamps `data-mx-telemetry` on `<html>` and `instrumentation-client.t
 `SEND_ERRORS_IN_DEV` and `IS_DEV`/`IS_TEST` come from `constants.ts` so the three Sentry init files
 (server / edge / client) can share one gate.
 
-**`MINUSX_GATEWAY_URL` lives in `constants.ts` but is not a `NEXT_PUBLIC_` var.** On the server it
-reads the runtime env; in a client bundle the reference compiles away and the literal default
-(`https://llm.minusx.ai/v1`) is what ships. That is intentional — only
-`frontend/lib/llm/minusx-default.ts` (server side) consumes it — but it means a per-deploy override
-is invisible to any browser code that might later import it.
+**The gateway is addressed by two exports in `config.ts`, and only one of them is normally set.**
+`MX_GATEWAY_ORIGIN` is the origin of the managed MinusX gateway — one service, two planes: the
+control plane (orgs, credits, status) at its root, inference at its `/v1`. `MX_GATEWAY_URL_PROXY` is
+the full inference URL and *derives* from the origin, so staging is one variable: two that can
+disagree eventually do, and the disagreement surfaces as an auth failure against a gateway that never
+minted the key, a long way from its cause. The proxy is overridable anyway, because the single origin
+is a property of the reverse proxy rather than of the gateway — behind it the control plane and the
+inference proxy are separate services on separate ports, so an install sharing a network with the
+gateway cannot reach both through one address. Setting it says "these are genuinely two places",
+deliberately, rather than by forgetting to keep a second variable in step. Both live in
+`frontend/lib/config.ts` (`server-only`), never `constants.ts` — the browser never calls the gateway,
+so a client import is now a build error rather than a silently-inlined default.
+`frontend/lib/llm/__tests__/gateway-url.test.ts` pins the derivation, the trailing-slash trim, and
+that an override already carrying `/v1` is not suffixed again. The predecessor `MINUSX_GATEWAY_URL`
+is gone and has no effect anywhere.
 
 ### `compatibility.json` — the published support contract
 
@@ -3551,7 +3614,7 @@ placeholders substituted from branding at render time.
 
 `frontend/lib/branding/whitelabel.ts` owns the `OrgConfig` shape (branding, links, messaging
 webhooks, `accessRules`, `supportedFileTypes`, `allowedVizTypes`, `chartColorPalette`, `setupWizard`,
-`bots`, `credits`, `llm`, `remoteAgentsEnabled`), the `DEFAULT_CONFIG` fallback, the `DEFAULT_STYLES`
+`bots`, `credits`, `llm`, `gateway`, `remoteAgentsEnabled`), the `DEFAULT_CONFIG` fallback, the `DEFAULT_STYLES`
 CSS, and `mergeConfig`. It owns *no* loading and *no* Redux: `frontend/lib/data/configs.server.ts`
 reads the org config document, validates it, and calls `mergeConfig(DEFAULT_CONFIG, dbContent)`;
 `app/layout.tsx` and `app/login/page.tsx` fall back to `DEFAULT_CONFIG` when there is no document;
@@ -3581,11 +3644,11 @@ never travels through picker props or the clarify stash.
 `frontend/lib/ui/theme.ts` is the Chakra design system (`system`), consumed by
 `components/app-shell/Providers.tsx`, `app/global-error.tsx`, `components/views/shared/StoryEmbeds.tsx`
 and the test render helper. It covers the app-shell/admin surfaces only — rendered documents are on
-the Tailwind kit. Two asymmetries live between it and `ACCENT_HEX` in `file-metadata.ts`:
+the Tailwind kit. One asymmetry lives between it and `ACCENT_HEX` in `file-metadata.ts`:
 `accent.info` exists as a raw *light-mode* token with **no semantic token** (so `color="accent.info"`
-does not resolve) yet has an `ACCENT_HEX.info` entry; `accent.sun` has a semantic token but no
-`ACCENT_HEX` entry. `ACCENT_HEX` exists because Lexical mention nodes style with raw hex, not Chakra
-tokens.
+does not resolve) yet has an `ACCENT_HEX.info` entry. `ACCENT_HEX` exists because Lexical mention
+nodes style with raw hex, not Chakra tokens; `ACCENT_TOKEN_HEX` is the `'accent.*' → hex` map that
+`components/chat/MentionChip.tsx` and `components/lexical/MentionNode.tsx` both read.
 
 ### Utils that carry a contract
 
