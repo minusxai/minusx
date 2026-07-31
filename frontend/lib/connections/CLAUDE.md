@@ -160,9 +160,22 @@ wrongly — extend the function rather than accepting the default.
   (`agents/benchmark-analyst/db-tools.ts`, `explore-dataset.ts`) call it themselves before dispatch —
   applying it twice is harmless — and skip it for Mongo, since it is a SQL parser.
 - **`QueryResult.finalQuery` is for display only.** It comes from `inlineSqlParams`
-  (`lib/sql/inline-params.ts`); the engine received a prepared statement plus bound values. The
-  inlined string can drift on edge cases — backslashes are deliberately left as-is because
-  Postgres/DuckDB/SQLite/BigQuery all treat them literally in single-quoted strings.
+  (`lib/sql/inline-params.ts`); the engine received a prepared statement plus bound values. It
+  doubles quotes and leaves backslashes alone, which is faithful on Postgres/DuckDB/SQLite/Athena
+  but **not** on ClickHouse/BigQuery/MySQL, where a backslash escapes the next character. Harmless
+  only because the string is never executed — anything building SQL to *run* must use
+  `escapeSqlLiteral` (`lib/sql/sql-literal.ts`).
+- **Hand-built SQL must escape per dialect, and `fuzzy-search.ts` is the one place that still
+  hand-builds it.** `fuzzyMatch` splices the caller's search term into `LIKE '%…%'` and
+  `CONTAINS_SUBSTR(col, '…')` text rather than binding it, so `escapeFuzzyTerm(term, dialect)`
+  takes the dialect and doubles backslashes on the engines that process them. Two paths reach such
+  an engine: the explicit `bigquery` branch, and the `default:` branch — where ClickHouse and MySQL
+  land, since neither is dispatched by name. It returns the escaped *body*, without quotes, because
+  callers own the surrounding `'%…%'`. The dialect camps live in `lib/sql/sql-literal.ts`
+  (`dialectProcessesBackslashEscapes`) so there is a single definition; an unknown dialect is
+  assumed to process escapes. Pinned by `lib/connections/__tests__/fuzzy-escape-dialect.test.ts`
+  (dialect split) and `fuzzy-escape-truncation.test.ts` (the length cap must be applied to the raw
+  value, or truncation splits an escape pair and reopens the literal).
 - **`ConnectionsAPI.getRawByName` is the hot-path lookup**, not `FilesAPI.loadFile`: it returns raw
   config including credential refs and never triggers schema profiling. Guarded by
   `app/api/query/__tests__/query-route-no-profiling.test.ts`.

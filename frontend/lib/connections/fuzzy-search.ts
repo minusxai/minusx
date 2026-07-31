@@ -1,6 +1,7 @@
 import 'server-only';
 
 import type { QueryResult } from './base';
+import { dialectProcessesBackslashEscapes } from '@/lib/sql/sql-literal';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -61,20 +62,34 @@ function qualifiedTable(schema: string | undefined, table: string, quoteFn: (nam
   return schema ? `${quoteFn(schema)}.${quoteFn(table)}` : quoteFn(table);
 }
 
-/** Escape a SQL string literal (single-quoted value). */
 /** Longest search term accepted; applied to the RAW value, before escaping. */
 export const FUZZY_TERM_MAX = 200;
 
 /**
- * Cap a search term and escape it for inclusion in a single-quoted literal.
+ * Cap a search term and escape it for inclusion in a single-quoted literal on
+ * `dialect`.
  *
- * Truncate FIRST. Escaping first and slicing second can cut a doubled `''` in
- * half when the pair straddles the cap — the literal is then left open and the
- * rest of the statement is parsed as SQL. Capping the raw value means escaping
- * always emits whole pairs.
+ * Truncate FIRST. Escaping first and slicing second can cut a doubled `''` (or a
+ * doubled `\\`) in half when the pair straddles the cap — the literal is then left
+ * open and the rest of the statement is parsed as SQL. Capping the raw value means
+ * escaping always emits whole pairs.
+ *
+ * Doubling quotes alone is not enough. On engines that process backslash escapes
+ * (ClickHouse, BigQuery, MySQL) a term ending `\'` consumes the quote that was
+ * meant to close the literal. Both the `bigquery` branch and the `default:` branch
+ * of `fuzzyMatch` — which is where ClickHouse and MySQL land, since neither is
+ * dispatched by name — reach such an engine, so this cannot be left to the caller.
+ * The camps come from `lib/sql/sql-literal.ts` so there is one definition of them.
+ *
+ * Returns the escaped BODY, without the surrounding quotes: callers splice it into
+ * `'%…%'` patterns, so they own the quoting.
  */
-export function escapeFuzzyTerm(value: string): string {
-  return value.slice(0, FUZZY_TERM_MAX).replace(/'/g, "''");
+export function escapeFuzzyTerm(value: string, dialect: string): string {
+  const capped = value.slice(0, FUZZY_TERM_MAX);
+  // Backslashes first — doubling them after the quotes would also double the
+  // backslashes that step introduces.
+  const escaped = dialectProcessesBackslashEscapes(dialect) ? capped.replace(/\\/g, '\\\\') : capped;
+  return escaped.replace(/'/g, "''");
 }
 
 /** Extract matches from query result rows, including searched columns and extra returnColumns. */
@@ -111,7 +126,7 @@ async function fuzzyDuckDb(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzz
   const extra = extraSelectCols(p.returnColumns);
   const searched = searchedSelectCols(p.columns);
   const fromTable = qualifiedTable(p.schema, p.table);
-  const term = escapeFuzzyTerm(p.searchTerm);
+  const term = escapeFuzzyTerm(p.searchTerm, 'duckdb');
 
   // Per-column similarity expressions
   const simExprs = p.columns.map(col => {
@@ -134,7 +149,7 @@ async function fuzzyDuckDb(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzz
   `;
   const [jaroResult, substringEntry] = await Promise.all([
     queryFn(sql),
-    fuzzySubstring(queryFn, p),
+    fuzzySubstring(queryFn, p, 'duckdb'),
   ]);
   return {
     results: [
@@ -149,7 +164,7 @@ async function fuzzyPostgres(queryFn: QueryFn, p: ResolvedParams): Promise<RawFu
   const extra = extraSelectCols(p.returnColumns);
   const searched = searchedSelectCols(p.columns);
   const fromTable = qualifiedTable(p.schema, p.table);
-  const term = escapeFuzzyTerm(p.searchTerm);
+  const term = escapeFuzzyTerm(p.searchTerm, 'postgres');
 
   const simExprs = p.columns.map(col => {
     const castCol = `CAST(${escapeIdent(col)} AS TEXT)`;
@@ -176,7 +191,7 @@ async function fuzzyPostgres(queryFn: QueryFn, p: ResolvedParams): Promise<RawFu
   // rejection here and re-throw at the await point so the caller gets a
   // normal error path.
   const substringSettled: Promise<FuzzyMatchResultEntry | { __err: unknown }> =
-    fuzzySubstring(queryFn, p).catch((err: unknown) => ({ __err: err }));
+    fuzzySubstring(queryFn, p, 'postgres').catch((err: unknown) => ({ __err: err }));
   let trigramEntry: FuzzyMatchResultEntry | null = null;
   try {
     const trigramResult = await queryFn(trigramSql);
@@ -198,7 +213,7 @@ async function fuzzyAthena(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzz
   const extra = extraSelectCols(p.returnColumns);
   const searched = searchedSelectCols(p.columns);
   const fromTable = qualifiedTable(p.schema, p.table);
-  const term = escapeFuzzyTerm(p.searchTerm);
+  const term = escapeFuzzyTerm(p.searchTerm, 'athena');
 
   const simExprs = p.columns.map(col =>
     `1.0 - CAST(levenshtein_distance(lower(CAST(${escapeIdent(col)} AS VARCHAR)), lower('${term}')) AS DOUBLE)
@@ -219,7 +234,7 @@ async function fuzzyAthena(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzz
   `;
   const [levenResult, substringEntry] = await Promise.all([
     queryFn(sql),
-    fuzzySubstring(queryFn, p),
+    fuzzySubstring(queryFn, p, 'athena'),
   ]);
   return {
     results: [
@@ -232,12 +247,19 @@ async function fuzzyAthena(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzz
 
 type QuoteStyle = 'double' | 'backtick';
 
-async function fuzzySubstring(queryFn: QueryFn, p: ResolvedParams, quoteStyle: QuoteStyle = 'double'): Promise<FuzzyMatchResultEntry> {
+/**
+ * `dialect` selects the escaping camp, so it must be the connector's REAL type —
+ * this is the fallback for connectors `fuzzyMatch` does not dispatch by name
+ * (ClickHouse, MySQL), and those process backslash escapes. Passing a stand-in
+ * like 'duckdb' here would silently reinstate the injection.
+ */
+async function fuzzySubstring(queryFn: QueryFn, p: ResolvedParams, dialect: string, quoteStyle: QuoteStyle = 'double'): Promise<FuzzyMatchResultEntry> {
   const q = quoteStyle === 'backtick'
     ? (name: string) => `\`${name.replace(/`/g, '\\`')}\``
     : escapeIdent;
 
-  const term = escapeFuzzyTerm(p.searchTerm).toLowerCase();
+  // Lowercasing after escaping is safe: it changes neither quotes nor backslashes.
+  const term = escapeFuzzyTerm(p.searchTerm, dialect).toLowerCase();
   const words = term.split(/\s+/).filter(Boolean);
   const wordPattern = words.length > 1 ? `'%${words.join('%')}%'` : null;
 
@@ -318,7 +340,7 @@ async function fuzzyMongo(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzzy
 }
 
 async function fuzzyBigQuery(queryFn: QueryFn, p: ResolvedParams): Promise<RawFuzzyMatchResult> {
-  const term = escapeFuzzyTerm(p.searchTerm);
+  const term = escapeFuzzyTerm(p.searchTerm, 'bigquery');
   const q = (name: string) => `\`${name.replace(/`/g, '\\`')}\``;
   const extra = extraSelectCols(p.returnColumns, q);
   const searched = searchedSelectCols(p.columns, q);
@@ -378,7 +400,9 @@ export async function fuzzyMatch(
       break;
     default: {
       // Unknown connectors — fall back to a basic SQL substring match.
-      const substringEntry = await fuzzySubstring(queryFn, p);
+      // Pass the real connector type: unknown dialects must be treated as
+      // escape-processing, which is exactly what this branch receives.
+      const substringEntry = await fuzzySubstring(queryFn, p, connectorType);
       raw = { results: [substringEntry], searchTerm: p.searchTerm };
     }
   }

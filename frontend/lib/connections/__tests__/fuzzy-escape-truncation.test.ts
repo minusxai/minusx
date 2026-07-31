@@ -11,6 +11,10 @@
  *
  * Truncate first, escape second: then the cap operates on the raw value and
  * escaping always emits whole pairs.
+ *
+ * These cases pin the CAP, so they pass a backslash-literal dialect ('duckdb') to
+ * hold the escaping constant. The dialect split itself is pinned by the sibling
+ * `fuzzy-escape-dialect.test.ts`.
  */
 import { describe, it, expect } from 'vitest';
 import { escapeFuzzyTerm, FUZZY_TERM_MAX } from '@/lib/connections/fuzzy-search';
@@ -28,7 +32,7 @@ describe('escapeFuzzyTerm', () => {
     // Sweep the boundary rather than guessing which offset straddles it.
     for (let n = FUZZY_TERM_MAX - 5; n <= FUZZY_TERM_MAX + 5; n++) {
       const value = 'x'.repeat(n) + "'" + 'A';
-      const escaped = escapeFuzzyTerm(value);
+      const escaped = escapeFuzzyTerm(value, 'duckdb');
       expect(isBalanced(`'${escaped}'`), `quote at index ${n}`).toBe(true);
     }
   });
@@ -37,11 +41,11 @@ describe('escapeFuzzyTerm', () => {
     const allQuotes = "'".repeat(FUZZY_TERM_MAX * 2);
     // Every kept quote doubles, so the escaped form is at most twice the cap and
     // — critically — contains only whole pairs.
-    expect(isBalanced(`'${escapeFuzzyTerm(allQuotes)}'`)).toBe(true);
+    expect(isBalanced(`'${escapeFuzzyTerm(allQuotes, 'duckdb')}'`)).toBe(true);
   });
 
   it('still escapes and still truncates', () => {
-    expect(escapeFuzzyTerm("O'Brien")).toBe("O''Brien");
-    expect(escapeFuzzyTerm('y'.repeat(FUZZY_TERM_MAX + 50))).toBe('y'.repeat(FUZZY_TERM_MAX));
+    expect(escapeFuzzyTerm("O'Brien", 'duckdb')).toBe("O''Brien");
+    expect(escapeFuzzyTerm('y'.repeat(FUZZY_TERM_MAX + 50), 'duckdb')).toBe('y'.repeat(FUZZY_TERM_MAX));
   });
 });

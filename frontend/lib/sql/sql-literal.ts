@@ -33,6 +33,19 @@ const BACKSLASH_ESCAPES = immutableSet(['clickhouse', 'bigquery', 'mysql']);
 const BACKSLASH_LITERAL = immutableSet(['postgres', 'postgresql', 'duckdb', 'sqlite', 'presto', 'trino', 'athena']);
 
 /**
+ * Whether `dialect` treats a backslash inside a string literal as an escape
+ * character. An unknown dialect answers `true`: over-escaping is a wrong value,
+ * under-escaping is an injection.
+ *
+ * Exported because the camps are a property of the ENGINES, not of any one
+ * escaper. `lib/connections/fuzzy-search.ts` hand-builds `LIKE '%…%'` patterns and
+ * needs the same split without wanting the surrounding quotes this module adds.
+ */
+export function dialectProcessesBackslashEscapes(dialect: string): boolean {
+  return BACKSLASH_ESCAPES.has(dialect) || !BACKSLASH_LITERAL.has(dialect);
+}
+
+/**
  * Wrap `value` as a single-quoted SQL literal, escaped for `dialect`.
  *
  * The result always starts and ends with a quote and can never be terminated by
@@ -41,9 +54,9 @@ const BACKSLASH_LITERAL = immutableSet(['postgres', 'postgresql', 'duckdb', 'sql
  */
 export function escapeSqlLiteral(value: unknown, dialect: string): string {
   const s = String(value);
-  const processesEscapes = BACKSLASH_ESCAPES.has(dialect) || !BACKSLASH_LITERAL.has(dialect);
   // Backslashes first — doubling them after the quotes would also double the
   // backslashes this step introduces.
-  const escaped = (processesEscapes ? s.replace(/\\/g, '\\\\') : s).replace(/'/g, "''");
+  const escaped = (dialectProcessesBackslashEscapes(dialect) ? s.replace(/\\/g, '\\\\') : s)
+    .replace(/'/g, "''");
   return `'${escaped}'`;
 }
