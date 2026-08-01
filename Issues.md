@@ -30,39 +30,7 @@ building `oldMatch`. A provider is now configured, so this is unblocked.
 
 ## Open
 
-### 2. Tutorial mode takes minutes to load; queries time out
-**Status:** Owned elsewhere — root cause below is the handover; another agent is doing the fix.
-Kept here so the issue stays visible, not to be worked on from this branch.
-
-Every tutorial card sits on "Executing query.." and times out at ~2 min; chat sits on "Loading
-connections and context...".
-
-**Root cause.** The tutorial `static` connection is `type: csv` with 20 parquet files addressed by
-`s3_key`. `lib/connections/csv-connector.ts:110` creates a **VIEW** per file
-(`CREATE OR REPLACE VIEW … AS SELECT * FROM read_parquet('s3://…')`) — a view, not a table, so
-**DuckDB re-reads the object from S3 on every single query**. Nothing is materialised or cached
-locally.
-
-The tutorial dataset is **173 MB across 20 parquet files**. The `Top Level Metrics` dashboard fires
-**11 questions at once** on open. With `OBJECT_STORE_*` pointing at a real bucket, each query pays
-full WAN latency to re-read its parquet; the queries queue behind `MAX_CONCURRENT_QUERIES` and blow
-the client timeout.
-
-**Options, cheapest first.**
-1. **Materialise on instance init** — `CREATE TABLE AS SELECT * FROM read_parquet(...)` instead of
-   `CREATE VIEW` for this connector. `instanceCache` already keeps one DuckDB instance per
-   connection, so the download happens once per process instead of once per query. Costs 173 MB of
-   process memory for the tutorial, which is the thing to check before committing to it.
-2. **Materialise only small files**, keep views above a size threshold, so a customer's large CSV
-   connection is unaffected.
-3. **Ship the tutorial parquet in the image** and read from local disk (`isLocal` branch), removing
-   the network entirely for the demo path.
-4. **DuckDB httpfs caching** — least code, but least control over when it warms.
-
-Option 2 is probably the right shape: the bug is specifically that a *demo* dataset is re-fetched
-per query, and a size threshold fixes that without changing behaviour for real connections.
-
-### 3. Story edits change unrelated parts of the document
+### 2. Story edits change unrelated parts of the document
 **Status:** Open — both hypotheses tested; (a) ruled out, (b) confirmed structurally.
 
 **(a) "the agent isn't told to focus on where the user is looking" — RULED OUT.** The nudge already
@@ -94,18 +62,18 @@ every section — which matches "have to always check whole document" even when 
 editing a `<style>` rule when a story is in compat mode. The canonicalisation noise is separately
 worth fixing by canonicalising on write once, rather than on every edit.
 
-### 4. Screenshot is not identical to the rendered story
+### 3. Screenshot is not identical to the rendered story
 **Status:** Open. Font, spacing and text wrap differ between the capture and the live surface.
 To be reproduced directly by capturing a story and diffing against the live render — not waiting
 on a hand-supplied example.
 
-### 5. Hydration errors in the app shell
+### 4. Hydration errors in the app shell
 **Status:** Open — found, not chased. Next.js dev overlay reports 3 recoverable hydration
 mismatches ("server rendered HTML didn't match the client") on a Chakra `<Stack>`.
 `lib/utils/error-utils.ts` already classifies hydration errors in order to *suppress* them from
 reports, so these are known and muted rather than fixed.
 
-### 6. Lost rationale comment in `file-edit.ts`
+### 5. Lost rationale comment in `file-edit.ts`
 **Status:** Open — one line. `lib/file-state/file-edit.ts:318` sets `assets = undefined` and the
 comment now says only *what* it does. The deleted *why* is load-bearing:
 `store/filesSlice.ts:991` merges with a spread (`{...content, ...persistableChanges}`), and a
@@ -116,7 +84,7 @@ rationale next time the file is touched.
 
 ## Not reproducible
 
-### 7. Search bar (top right) does not work
+### 6. Search bar (top right) does not work
 **Status:** Not reproducible — works end to end.
 
 Verified in the browser against a healthy dev server: typed a query → dropdown with 5 ranked
@@ -127,23 +95,9 @@ repeated: a `grep | head -5` truncation hid the mount at
 `components/file-browser/Breadcrumb.tsx:284`, and a later "reproduction" was actually a wedged dev
 server, not the product.
 
-### 8. App fails to load
+### 7. App fails to load
 **Status:** Not reproducible as a product bug.
 
 A frozen renderer with a permanent spinner was reproduced, but the cause was a wedged Next.js dev
 server (stale `.next`). `rm -rf .next` + restart cleared it completely. Worth knowing this is what
 that failure looks like, since it mimics an application hang convincingly.
-
----
-
-## Watch list — same shape as #1, not yet a problem
-
-The all-or-nothing hash in `FacetMemo` applies to every facet, not just markup. The others are
-survivable today for specific reasons, which are worth knowing because those reasons could change:
-
-- **Query-result `data`** — same all-or-nothing behaviour, but bounded by `enforceQueryLimit`
-  (1000/10000 rows) and stripped from app state entirely by `stripQueryData`, so only explicitly
-  requested tool results carry rows.
-- **`finalQuery`** — same shape, already truncated when huge.
-- **Images are diffed on `key`, never the payload**, so base64 is never hashed or re-sent. This is
-  the pattern the other heavy facets should be measured against.
