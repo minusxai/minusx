@@ -50,6 +50,23 @@ const DELTA: BlockFacetSignal = { state: 'delta' };
 const MAX_DELTA_RATIO = 0.5;
 
 /**
+ * Break markup at element boundaries so a diff can address one element at a time.
+ *
+ * `generateDiff` is a LINE diff, and stored story markup is a handful of very long lines — the
+ * agent writes it as one block, not one element per line. Diffing it as-is makes a one-word edit
+ * replace a whole line, so the diff comes back LARGER than the document (measured: a 2,647-char
+ * story produced a 4,579-char diff) and the delta path could never fire on real content. Splitting
+ * between `>` and `<` gives element-sized units regardless of how the author laid the text out.
+ *
+ * The split keeps every character — concatenating the pieces reproduces the input exactly — so each
+ * emitted `+`/`-` line is a contiguous substring of the real document and stays usable verbatim in
+ * an `oldMatch`. That property is what makes it safe to show the model a re-segmented diff.
+ */
+export function segmentMarkupForDiff(markup: string): string {
+  return markup.replace(/></g, '>\n<');
+}
+
+/**
  * Cap the executed SQL echoed into a projected query result. A pathological `finalQuery` (giant
  * generated `IN (...)` lists, wide `UNION ALL` scaffolding) can run to many KB and is re-diffed
  * every turn. The agent already has the AUTHORED query in the file's `<file_markup>`; app state only
@@ -129,7 +146,10 @@ function projectEntry(memo: FacetMemo, entry: AugmentedFileEntry, opts: EntryOpt
     } else {
       const markup = entry.content.markup;
       const base = memo.rememberedBody(contentKey);
-      const delta = base === undefined ? undefined : generateDiff(base, markup);
+      // Diff element-by-element, not by authored line — see `segmentMarkupForDiff`.
+      const delta = base === undefined
+        ? undefined
+        : generateDiff(segmentMarkupForDiff(base), segmentMarkupForDiff(markup));
       if (delta !== undefined && delta.length <= markup.length * MAX_DELTA_RATIO) {
         json.content = DELTA;
         textBlocks.push({ kind: 'markupdelta', fileId: id, type: entry.data.type, text: delta });

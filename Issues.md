@@ -25,30 +25,31 @@ tokens/turn, a 13.7x reduction**. Three invariants keep it safe (only a FULL emi
 delta base; `reset()` clears bases with hashes; a delta over `MAX_DELTA_RATIO` falls back to full
 and rebases).
 
-**Verification.** Two layers, plus one live run.
+**A second defect, found only by running it.** The first version diffed with `generateDiff`, a LINE
+diff — and real stored story markup is a handful of very long lines, because the agent writes it as
+one block rather than one element per line. A one-word edit therefore replaced a whole line and the
+diff came back BIGGER than the document (measured live: a 2,647-char story produced a 4,579-char
+diff), so every edit failed the size check and silently fell back to full markup. **The fix did
+nothing in production while its tests passed**, because those tests built fixtures with
+`\n`-joined sections. `segmentMarkupForDiff` now splits between `>` and `<` so the diff addresses
+one element at a time regardless of authored layout; the split preserves every character, so each
+emitted `+`/`-` line is still an exact substring of the document and stays usable in an `oldMatch`.
 
-- `lib/projection/__tests__/markup-incremental.test.ts` drives `renderAppState` and measures the
-  reduction. Confirmed RED before the fix (`expected 21993 to be less than 5528.5`).
-- `lib/projection/__tests__/markup-delta-e2e.test.ts` drives **`projectMessages`** — the function
-  that actually assembles what the model receives — over a multi-turn log: the document is sent
-  once, each subsequent small edit is a `<file_markup_delta>` under a quarter the size, an unchanged
-  turn still collapses to `{unchanged:true}`, and the block carries its own "this is a LINE DIFF /
-  strip the prefix before using a line in oldMatch" instruction. These tests cannot pass on `main` —
-  the tag does not exist there.
-- A live session against a real model (conversation 1031, gpt-5.6-terra) created an 8-section story
-  and edited it; the app behaved correctly and the agent's edit was properly scoped. Reading the
-  real requests via `/api/conversations/<id>/llm-calls`, the markup facet went 45 -> 2111 chars
-  (empty draft -> full story) and the projection correctly **declined** a delta, because that change
-  exceeds `MAX_DELTA_RATIO`. That is the guard working, and it is now pinned as its own case in the
-  e2e test.
+**Verification.** Three layers.
 
-**Residual gap:** a `<file_markup_delta>` has not been observed in live production traffic — the
-follow-up small-edit turn did not record an LLM call before the local dev environment became
-unusable (its proprietary tenancy module started throwing at the login path, unrelated to this
-branch). The behaviour is proven through the real assembly function and by reading the rendered
-prompt; it is not proven by a captured live request. To close it: open a story with substantial
-markup, ask for a one-line change, then check
-`(await (await fetch('/api/conversations/<id>/llm-calls')).json())` for `file_markup_delta`.
+- `markup-incremental.test.ts` drives `renderAppState`. Confirmed RED before the fix
+  (`expected 21993 to be less than 5528.5`).
+- `markup-delta-e2e.test.ts` drives **`projectMessages`**, the function that assembles what the
+  model receives: document sent once, subsequent small edits sent as deltas, unchanged turns still
+  collapsing to `{unchanged:true}`, full markup still winning when the change is large, and — the
+  regression case — a delta emitted when the whole document is a SINGLE LINE. That last test was
+  confirmed RED against the line-diff version and green after segmentation.
+- **Live, against a real model.** A 10-section story was created and edited through the app on this
+  branch, with temporary instrumentation at the projection boundary:
+  `FULL full=2639 base=43 delta=2755` for the empty-draft-to-full-story turn (correctly declining a
+  delta), then `DELTA delta=109 full=2647` for a one-word heading edit — **a 109-character payload
+  in place of a 2,647-character document, a 24x reduction on real content**. The instrumentation was
+  removed afterwards.
 
 ---
 

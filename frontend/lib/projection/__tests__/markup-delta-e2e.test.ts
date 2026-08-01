@@ -12,6 +12,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { projectMessages } from '../messages';
+import { segmentMarkupForDiff } from '../project';
 import type { Message, TextContent } from '@/orchestrator/llm';
 import type { AppState } from '@/lib/appState';
 import type { CompressedAugmentedFile, CompressedFileState } from '@/lib/types';
@@ -91,6 +92,36 @@ describe('markup deltas through projectMessages (the real assembly path)', () =>
     const second = textOf(out[1]);
     expect(second).toContain('<file_markup ');
     expect(second).not.toContain('<file_markup_delta');
+  });
+
+  // REGRESSION. Stored story markup is a handful of very long lines — the agent writes it as one
+  // block, not one element per line. A plain LINE diff therefore replaces a whole line for a
+  // one-word edit and comes back BIGGER than the document (measured live: a 2,647-char story gave
+  // a 4,579-char diff), so every edit silently fell back to full markup and the fix did nothing in
+  // production while passing tests built from `\n`-joined fixtures.
+  it('emits a delta even when the whole document is a single line', () => {
+    const oneLine = (heading: string) =>
+      '<story>' + Array.from({ length: SECTIONS }, (_, i) =>
+        `<section class="mb-8"><h2 class="text-2xl font-bold">${i === 4 ? heading : `Section ${i}`}</h2>`
+        + `<p class="text-base">${'Narrative sentence describing the finding. '.repeat(6)}</p></section>`
+      ).join('') + '</story>';
+
+    const out = projectMessages([
+      userTurn('write it', oneLine('Section 4')),
+      userTurn('rename it', oneLine('Section 4 renamed')),
+    ]);
+
+    const first = textOf(out[0]);
+    const second = textOf(out[1]);
+    expect(first).not.toContain('\n<section'); // the fixture really is one line
+    expect(second).toContain('<file_markup_delta');
+    expect(second).not.toContain('Section 29');
+    expect(second.length).toBeLessThan(first.length / 4);
+  });
+
+  it('segmenting for the diff preserves every character', () => {
+    const src = '<story><section class="a"><h2>T</h2><p>body</p></section></story>';
+    expect(segmentMarkupForDiff(src).split('\n').join('')).toBe(src);
   });
 
   it('still collapses to a marker when the story did not change between turns', () => {
