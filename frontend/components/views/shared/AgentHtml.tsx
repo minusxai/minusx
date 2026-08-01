@@ -606,6 +606,7 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
             : 'text'}
           active={editable && !readOnly}
           onApply={onApplyTypography}
+          compiledCss={compiledCss}
           onSelectAncestor={onSelectAncestor}
         />
       )}

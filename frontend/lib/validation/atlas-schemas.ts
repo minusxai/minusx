@@ -528,20 +528,20 @@ export const StoryContent = Type.Object({
     'unlimited — the page scrolls). It is NOT a fixed canvas and is NOT scaled: it renders full-bleed on a phone ' +
     '(~390-430px wide) and fills the width supplied by its parent on desktop. The SAME document must look great at BOTH. ' +
     'STYLING — use the built-in DESIGN SYSTEM (the default): put `data-design="tw"` and the `@container` class on ' +
-    'your full-width root wrapper (e.g. <div data-design="tw" class="@container w-full …">). Do NOT cap or center ' +
+    'your full-width root wrapper (e.g. <div data-design="tw" className="@container w-full …">). Do NOT cap or center ' +
     'the root with `max-w-*`; apply readable max-widths only to nested prose or intentional content bands. Every Tailwind ' +
     'v4 utility then works (arbitrary values like text-[13px] included) — the platform compiles exactly the ' +
     'classes you use at save time. Responsiveness: Tailwind CONTAINER-QUERY variants (`@lg:`, `@2xl:`, `@3xl:` — ' +
     'NEVER viewport `md:`/`lg:`), collapsing every multi-column band to one column on narrow widths; wrap wide ' +
     'tables in `overflow-x-auto`. Dark/light: `dark:` variants follow the app mode. COMPONENTS: the body is ' +
-    'STATIC JSX — plain HTML content tags styled with Tailwind (use `class=`) plus the registered shadcn/ui ' +
+    'STATIC JSX — plain HTML content tags styled with Tailwind (use `className=`) plus the registered shadcn/ui ' +
     'component set (use `className=`; standard shadcn props/variants): ' +
     STORY_UI_COMPONENT_NAME_LIST.join(', ') + '. ' +
     'These and the platform embeds <Question/>, <Number/>, <Param/> (below) are the ONLY Capitalized tags ' +
     'allowed — any other Capitalized tag fails validation, so build everything else from plain HTML + Tailwind ' +
-    'utilities. Components nest freely with HTML and embeds. A <style> ' +
-    'block is allowed ONLY for web-font @imports, motif/signature CSS utilities cannot express, and keyframes — ' +
-    'keep it short and scoped under your root class; rules targeting body or html will NOT apply. <script> tags, ' +
+    'utilities. Components nest freely with HTML and embeds. Tailwind utilities on each element are the ONLY ' +
+    'authored styling path: arbitrary-value utilities cover one-off colors, gradients, textures, dimensions, ' +
+    'and unusual typography. Do not author <style> blocks, selector rules, or inline style/style={{…}} attrs. <script> tags, ' +
     'event-handler attributes, and iframes are stripped at render time. Write it like a designed long-form ' +
     'editorial piece: narrative prose between charts, big pull-quote numbers, section headers. CONTRAST: every ' +
     'piece of text must contrast strongly with the background behind it. Set the `colorMode` field to the mode ' +
@@ -574,8 +574,8 @@ export const StoryContent = Type.Object({
     'single_value <Question/>. It renders the live digits in a <span> that flows with the prose, e.g. ' +
     '`grew to <Number id={142} prefix="$" />` (saved) or ' +
     '`<Number query={`SELECT SUM(mrr) AS mrr FROM metrics`} connection="<db>" col="mrr" prefix="$" suffix=" MRR" />` ' +
-    '(inline). `col` picks the column (default first), `prefix`/`suffix` wrap it, `style={{…}}` themes the span ' +
-    '(literal CSS); clicking it reveals the source question as a footnote. Still LIVE — never hand-type the number. ' +
+    '(inline). `col` picks the column (default first), and `prefix`/`suffix` wrap it. Style it through an enclosing ' +
+    'Tailwind span (typography and color inherit into the live number); clicking it reveals the source question as a footnote. Still LIVE — never hand-type the number. ' +
     'READER FILTERS — declare shared, reader-changeable filters with <Param>: ' +
     '`<Param name="city" type="text" nullable={false} />` (typed input), ' +
     '`<Param name="city" type="text" id={5} column="city" />` (autocomplete from question 5\'s column), or ' +
@@ -588,8 +588,8 @@ export const StoryContent = Type.Object({
     '`<Param name="limit" type="number" widget="slider" min={0} max={100} step={5} />` (range slider). ' +
     'Every embedded `<Question>` AND inline `<Number>` whose SQL references a matching `:param` rebinds on ' +
     'change (so a `<Number query={`… WHERE mrr >= :min_mrr`}>` is driven live by a `min_mrr` slider); the story\'s ' +
-    '`parameterValues` are the defaults. Theme with `style={{…}}` (control) and `labelStyle={{…}}` (label) — LITERAL ' +
-    'CSS objects, not theme tokens (they vanish across the shadow boundary).'),
+    '`parameterValues` are the defaults. The control follows the story theme; compose its placement and surrounding ' +
+    'treatment with Tailwind classes on a wrapper, never inline style objects.'),
   format: Type.Optional(Type.Union([Type.Literal('jsx'), Type.Null()], { description:
     "'jsx' = the story field holds shadcn JSX source rendered by the story interpreter; " +
     'absent/null = legacy HTML' })),

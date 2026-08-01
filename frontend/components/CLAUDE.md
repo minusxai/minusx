@@ -283,14 +283,16 @@ observer is bound to the top realm and goes deaf inside the surface iframe. Widt
 
 **The format toolbar mutates the live DOM first and the source second — both, every time.**
 `components/views/story/StoryTypographyToolbar.tsx` renders in the PARENT document (the iframe's rect
-offsets the anchor) and, on every control, computes the next class string or style value from the host
-element's *live* attributes via the pure algebra in `lib/data/story/typography.ts`, writes it straight
-onto the element, and only then emits it through `applyFormatEdit` → `applyFormatEditsToJsx`. The DOM
+offsets the anchor) and, on every control, computes the next class string from the host element's
+*live* attributes via the pure algebra in `lib/data/story/typography.ts`, writes it straight onto the
+element, and only then emits it through `applyFormatEdit` → `applyFormatEditsToJsx`. The DOM
 write is not an optimisation: the focused text host is render-frozen by the memo guard, so a React
 re-render cannot deliver the change at all. The commit path is deliberately whole-value — the full
-resolved `className` and the full inline `style` string — so a stale AST read can never merge two
-partial edits. Text colour and fill are inline styles, not classes, because a class palette cannot
-cover a colour picker's range.
+resolved `className` — so a stale AST read can never merge two partial edits. Text colour and fill
+persist as important Tailwind arbitrary-value utilities (`text-[#rrggbb]!` / `bg-[#rrggbb]!`): the
+important suffix preserves the old manual-override semantics. A temporary DOM-only inline value
+previews the unbounded color immediately; `compiledCss` changing removes it once the story-specific
+Tailwind rule lands. Touching a picker also removes that property's legacy inline declaration.
 
 The toolbar anchors to one of **three** target kinds, and they do not offer the same controls.
 `'text'` is a focused contenteditable host and gets everything. `'text-element'` is a click-selected

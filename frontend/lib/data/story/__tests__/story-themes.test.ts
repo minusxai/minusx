@@ -50,6 +50,9 @@ describe('STORY_THEMES registry', () => {
       expect(guidance, `${name} guidance`).toBeDefined();
       expect(guidance!.length, `${name} guidance`).toBeGreaterThan(200);
       expect(guidance, `${name} Don't section`).toContain("Don't");
+      expect(guidance, `${name} style block`).not.toMatch(/<style\b/i);
+      expect(guidance, `${name} inline style`).not.toMatch(/\sstyle\s*=/i);
+      expect(guidance, `${name} legacy class attr`).not.toMatch(/\bclass="/i);
     }
   });
 

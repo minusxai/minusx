@@ -60,6 +60,29 @@ describe('bundled prompts (standalone-safe, no backend filesystem)', () => {
     const firstSkill = Object.keys(listSkills())[0];
     expect(getSkill(firstSkill)).toBeTruthy();
   });
+
+  it('teaches Tailwind as the only forward Story styling contract', () => {
+    const stories = getSkill('stories') ?? '';
+    const examples = [...stories.matchAll(/```[^\n]*\n([\s\S]*?)```/g)].map(match => match[1]).join('\n');
+    expect(stories).toMatch(/Tailwind tokens \+ utilities are the ONLY authored styling path for the entire Story DOM/);
+    expect(stories).toContain('There is no Story-CSS escape hatch');
+    expect(stories).toContain('Do not author `<style>` blocks');
+    expect(examples).not.toMatch(/<style\b/i);
+    expect(examples).not.toMatch(/\sstyle\s*=/i);
+    expect(examples).not.toMatch(/\blabelStyle\b/i);
+    expect(examples).not.toMatch(/\bcss\s*:/i);
+    expect(stories).not.toContain('table CSS contract');
+    expect(stories).toContain('The one CSS exception is scoped table/pivot visualization CSS');
+    expect(stories).toContain('use only `source.css` with the stable `.mx-table`, `.mx-th`, `.mx-row`, `.mx-cell`, `.mx-col-*`');
+    expect(stories).toContain('Style the embed\'s surrounding Story element only with Tailwind');
+  });
+
+  it('localizes ordinary Story edits to the user\'s current viewport', () => {
+    const stories = getSkill('stories') ?? '';
+    expect(stories).toContain('Default to the user\'s current viewport');
+    expect(stories).toContain('general, story-wide, repeated-pattern, or structural change');
+    expect(stories).toContain('do not propagate them into off-screen sections');
+  });
 });
 
 // Viz-first posture (Viz V2): the `<viz>` envelope is the DEFAULT authoring

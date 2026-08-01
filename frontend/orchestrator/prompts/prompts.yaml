@@ -863,6 +863,7 @@ templates:
 
       ### Editing an existing story
 
+      - **Default to the user's current viewport.** The AppState `<Viewport>` block identifies the numbered story sections the user is looking at when they make the request; assume a requested change applies there unless they explicitly ask for a general, story-wide, repeated-pattern, or structural change. Keep ordinary copy, styling, and content adjustments localized to those visible sections—do not propagate them into off-screen sections just because similar markup appears elsewhere.
       - Keep edits minimal and scoped to the section/beat the user asked about: a story body is long and repetitive (Tailwind class strings, heights, section shells recur), so never rewrite whole sections when a targeted change will do.
       - When the user requests a targeted change ("fix the headline in the churn section"), change ONLY that — do not restyle, rephrase, or "improve" other parts of the story in the same edit. Rubric-driven polish belongs to build passes (Procedures, section 5), not to user-requested tweaks.
 
@@ -875,8 +876,8 @@ templates:
       - **Components**: the registered shadcn/ui set, with standard props/variants/`className` — the Card family, Badge, Button, Alert, Table family, Separator, Skeleton, Progress, Breadcrumb, Avatar/AvatarGroup, and the interactive set Tabs, Accordion, Collapsible, Tooltip, Popover (they carry their own behavior; no handlers needed or allowed). Dialog, Sheet, and DropdownMenu are NOT registered — an unknown tag is a validation error.
       - **Plain HTML** (content tags: `div`, `span`, headings, `p`, lists, the `table` family, `img`, `a`, `strong`/`em`/`code`, …) styled with **Tailwind utilities + the shadcn CSS-variable tokens** (`bg-card`, `text-muted-foreground`, `border-border`, `rounded-lg`, `--background`, `--primary`, `--radius`, `--chart-1..5`, …). Use `className=` on EVERY element, HTML tags and components alike — the body is JSX (legacy `class=` still renders, but never author it). Classes must be written literally in the markup (they are extracted statically and compiled at save time). Put `data-design="tw"` and `@container` on the root `<div>`.
       - **The platform embeds** `<Question>` / `<Number>` / `<Param>` (section 3) carry every chart and every data number.
-      - **Styling defaults**: tokens + utilities ARE the styling path — style ON the element, always. If it can be written as a utility class on the element (arbitrary values included: gradients, textures, filters), it MUST be. **Never style TEXT — size, weight, style, alignment, color — through a `<style>` block or ANY selector-based rule**: users adjust typography per-element with WYSIWYG controls, and a selector rule out-specifies their edits and silently overrides them. A `<style>` block is allowed ONLY to define `@keyframes` (reference them from the element with an `animate-[…]` arbitrary utility) — a handful of rules at most, never rules that target elements. Banned outright: `position: fixed` / `position: sticky`, and external `url()` / `@import` in CSS (fonts and themes are platform-provided). The theme applies its own font-family and color palette; you can feel free to override in case the user requests a different look. The theme's guidance carries the accent discipline - try to follow it.
-      - **No `<script>`, no event handlers, no iframes.** Prop values are string/number/boolean literals only — no JSX expression containers or spreads — except embed envelopes (`viz={{…}}`, `params={[…]}`, template-literal `query`) and literal `style={{…}}` objects.
+      - **Styling defaults**: Tailwind tokens + utilities are the ONLY authored styling path for the entire Story DOM — style ON the element through `className`, always. There is no Story-CSS escape hatch. Arbitrary-value utilities cover one-off colors (`text-[#2563eb]`, `bg-[#fef3c7]`), gradients, textures, filters, dimensions, and unusual typography while remaining literal Tailwind classes. Do not author `<style>` blocks, selector rules, or inline `style` / `style={{…}}` attributes. They fight per-element WYSIWYG edits and are intentionally outside the forward styling contract. **The one CSS exception is scoped table/pivot visualization CSS:** inside a `<Question>`'s `viz.source.css`, use only the documented stable table-renderer `.mx-*` classes when table-internal presentation cannot be expressed by its declarative fields. That CSS is isolated inside the visualization and is NEVER a way to style Story markup. Use only built-in Tailwind `animate-*` utilities for motion. Banned outright: `position: fixed` / `position: sticky`, and external `url()` / `@import` (fonts and themes are platform-provided). The theme supplies its font family and palette; override them only with literal Tailwind classes when the user requests it. The theme's guidance carries the accent discipline — follow it.
+      - **No `<script>`, no event handlers, no iframes.** Prop values are string/number/boolean literals only — no JSX expression containers or spreads — except embed envelopes (`viz={{…}}`, `params={[…]}`) and template-literal `query` values.
 
       ### Vega-always (HARD RULE)
 
@@ -910,10 +911,13 @@ templates:
       **(B) Saved question with a story-level viz override.** Add `viz` next to `id` to restyle the chart FOR THIS STORY ONLY — the saved file is untouched, so every other dashboard/story keeps the question's own look:
       ```
       <Question id={142} height="430px"
-        viz={{ version: 2, source: { kind: "table", columnFormats: null, conditionalFormats: null,
-                css: ".mx-th{background:#0f766e;color:#fff} .mx-row-odd{background:transparent}" } }} />
+        viz={{ version: 2, source: { kind: "vega-lite", grammar: "vega-lite@6",
+          spec: { mark: "bar", encoding: {
+            x: { field: "month", type: "temporal" },
+            y: { field: "revenue", type: "quantitative" }
+          } } } }} />
       ```
-      The override MUST be a complete envelope (`{version: 2, source: {…}}`, source kinds `vega-lite` | `recipe` | `table` | `pivot` | `vega`, exactly as taught in the questions skill) and it replaces the question's viz WHOLESALE — nothing is merged, so carry over anything you want to keep. This is also how a story restyles a table/pivot to match its design: use the complete stable table CSS contract documented above, and carry over behavioral fields such as `wrapColumns` rather than trying to reproduce them in CSS. Reach for an override when the saved chart's look fights the story; leave it off when the saved look already works. Read that file id first to see its viz config.
+      The override MUST be a complete envelope (`{version: 2, source: {…}}`, source kinds `vega-lite` | `recipe` | `table` | `pivot` | `vega`, exactly as taught in the questions skill) and it replaces the question's viz WHOLESALE — nothing is merged, so carry over anything you want to keep. Chart internals use the declarative Vega/Vega-Lite/recipe configuration because they render on a separate visualization surface; that is not a styling path for Story markup. For table/pivot overrides, prefer the built-in theme, `columnFormats`, `conditionalFormats`, and `wrapColumns`; when the requested table-internal presentation needs CSS, use only `source.css` with the stable `.mx-table`, `.mx-th`, `.mx-row`, `.mx-cell`, `.mx-col-*`, and related classes documented in the questions skill. Style the embed's surrounding Story element only with Tailwind. Reach for an override when the saved chart's look fights the story; leave it off when the saved look already works. Read that file id first to see its viz config.
 
       **(C) Inline question, for story-local one-offs.** A number or small chart that does not deserve its own saved file:
       ```
@@ -937,7 +941,7 @@ templates:
         spreadsheet={{ version: 1,
           columns: [{ name: "month", type: "text" }, { name: "mrr", type: "number" }],
           rows: [["Jan", "120"], ["Feb", "140"]] }}
-        viz={{ version: 2, source: { kind: "table", columnFormats: null, conditionalFormats: null, css: null } }}
+        viz={{ version: 2, source: { kind: "table" } }}
         height="300px"
       />
       ```
@@ -947,7 +951,7 @@ templates:
       ```
       MRR has grown to <Number id={142} prefix="$" /> this quarter.
       ```
-      Polymorphic like `<Question>`: `<Number id={142} />` reads a saved question, or `<Number query={`SELECT SUM(mrr) AS mrr FROM metrics`} connection="duckdb" col="mrr" prefix="$" suffix=" MRR" />` runs inline. `col` picks the column (defaults to first), `prefix`/`suffix` wrap the value, `style={{…}}` themes the span (literal CSS, `style={{color:"#c8781a", fontWeight:700}}`). The reader can click the figure to reveal its source question, so it is always auditable. Its inline `query` may reference declared `<Param>` values (`:name`), which bind automatically.
+      Polymorphic like `<Question>`: `<Number id={142} />` reads a saved question, or `<Number query={`SELECT SUM(mrr) AS mrr FROM metrics`} connection="duckdb" col="mrr" prefix="$" suffix=" MRR" />` runs inline. `col` picks the column (defaults to first), and `prefix`/`suffix` wrap the value. Style the inline figure through an enclosing Tailwind span, e.g. `<span className="text-primary text-4xl font-bold"><Number id={142} prefix="$" /></span>`; typography and color inherit into the live number. The reader can click the figure to reveal the source question, so it is always auditable. Its inline `query` may reference declared `<Param>` values (`:name`), which bind automatically.
 
       **Write `query` as a TEMPLATE LITERAL in backticks** (`query={`…`}`) with real multi-line SQL: actual line breaks, indentation, and `-- comments` all belong inside the backticks, and `<`, `>`, quotes, `:param` tokens are all fine there. NEVER a double-quoted string (`query="…"`) and NEVER `\n` / `\t` escapes: a quoted attribute keeps them literal, the SQL parser breaks on the stray backslash, and a `--` comment swallows the rest.
 
@@ -974,7 +978,7 @@ templates:
       - `type` is `text` | `number` | `date`; `nullable` (default true) lets the reader clear to "Any".
       - `id={N} column="c"` sources an autocomplete from question N's distinct values.
       - `widget="slider"` (number only) renders a range slider.
-      - **Theme it:** `style={{…}}` styles the control, `labelStyle={{…}}` the label, LITERAL CSS objects only (`style={{background:"#1a1a1a", color:"#fff"}}`).
+      - **Theme it:** the platform control follows the selected story theme. Compose its placement and surrounding treatment with Tailwind classes on a wrapper; do not pass inline style objects.
 
       Use filters sparingly, only when reader-driven slicing genuinely serves the goal.
 
@@ -987,7 +991,7 @@ templates:
       - **Type is the instrument.** Dramatic scale contrast: hero headline huge (`text-5xl @2xl:text-7xl`, tight leading) over a small standfirst; uppercase tracked eyebrows (`text-xs uppercase tracking-widest`); `tabular-nums` on figures; prose capped at a readable measure (`max-w-prose`) — long lines are the #1 tell of an undesigned page. An oversized chapter numeral is a cheap, classy pacing device.
       - **Open like a feature.** The first viewport decides whether the reader scrolls: eyebrow → claim headline → one-line standfirst → the lead stat enormous (a styled single-value embed) or a full-bleed hero chart.
       - **Compose with rhythm.** Beats must not all share one shape: alternate dense evidence sections with sparse one-sentence ones; asymmetric splits (60/40) beat centered stacks; earn ONE full-bleed interlude — an inverted band with a single big number — as a mid-story breather.
-      - **Atmosphere.** Shift section backgrounds (`bg-background` / `bg-muted` / the one inverted band); a subtle texture or gradient wash behind the hero lives as an arbitrary-value utility on the element; the `<style>` block earns its keep only for at most one staggered fade-up `@keyframes` on the hero — never scroll-looping motion.
+      - **Atmosphere.** Shift section backgrounds (`bg-background` / `bg-muted` / the one inverted band); a subtle texture or gradient wash behind the hero lives as an arbitrary-value utility on the element. Keep motion to built-in Tailwind `animate-*` utilities and never use scroll-looping motion.
       - **Charts look commissioned.** Embeds are the centerpiece: restyle saved charts via a `viz` override to the story's accent, declutter axes, prefer direct labels over legends. A default-styled chart inside a designed page breaks the spell.
       - **Structural slop, banned like the palettes:** every section a Card, the same 3-up KPI grid repeated per beat, badge soup, centered-everything, all charts one height, emoji as decoration. Palette slop: cream + serif + terracotta, acid-green on black, purple gradients — unless asked.
 

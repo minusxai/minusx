@@ -12,7 +12,7 @@
  * A theme is CSS custom-property VALUES only (the shadcn/tweakcn convention): components and
  * utility classes are identical across themes; a theme swaps the token set TW_INPUT_JSX maps
  * (--background/--foreground/--card/… /--chart-1..5/--radius) plus fonts. Themes set DEFAULTS
- * only — authored/agent CSS is injected after the compiled sheet in document order and wins.
+ * only — authored Tailwind utilities can override them per element.
  *
  * FONTS — §5 families vs bundled assets: only Inter, Noto Serif and JetBrains Mono ship as
  * static assets (public/fonts); the §5 design families are substituted to the closest bundled
@@ -338,8 +338,8 @@ const varsBlock = (vars: Record<string, string>): string =>
 /**
  * Emit ALL themes' `[data-theme="<name>"]` variable + font-family blocks as one CSS string.
  * Appended AFTER the compiled utility sheet so the attribute-scoped blocks beat the
- * `:root`/`.dark` neutral defaults on document order; the story's own authored <style> blocks
- * come later still in the iframe and win over everything.
+ * `:root`/`.dark` neutral defaults on document order; authored Tailwind utilities then consume
+ * the resolved variables per element.
  *
  * Deliberately NO `.dark`-scoped variants: themes are SELF-CONTAINED (one canonical palette;
  * a themed story never re-skins with the app mode). The surface's light/dark class follows

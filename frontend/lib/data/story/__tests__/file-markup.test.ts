@@ -139,15 +139,11 @@ describe('fileToMarkup / markupToContent — story (jsx field inline)', () => {
 });
 
 describe('markupToContent — story authored WITHOUT the <story> wrapper (CreateFile scaffold shape)', () => {
-  it('adopts loose <style> + <div> top-level markup as the story body, embeds included', () => {
-    // Exactly what an agent following the skill_stories scaffold emits: a top-level <style>
-    // block and one root <div>, with platform embeds — no <story> field wrapper.
+  it('adopts a loose Tailwind root as the story body, embeds included', () => {
+    // Exactly what an agent following the stories skill emits: one class-styled root <div>
+    // with platform embeds, but no <story> field wrapper.
     const markup = [
-      '<style>{`',
-      "  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono&display=swap');",
-      '  .story-x { --bg:#101822; color:#f7f0df; background:var(--bg); }',
-      '`}</style>',
-      '<div class="story-x">',
+      '<div data-design="tw" className="@container bg-[#101822] text-[#f7f0df]">',
       '  <section><h1>Churn doubled.</h1><Question id={142} height="430px" /></section>',
       '</div>',
     ].join('\n');
@@ -155,7 +151,7 @@ describe('markupToContent — story authored WITHOUT the <story> wrapper (Create
     expect(back.ok).toBe(true);
     if (back.ok) {
       const story = back.content.story as string;
-      expect(story).toContain('.story-x');                    // style preserved
+      expect(story).toContain('bg-[#101822]');                // Tailwind source preserved
       expect(story).toContain('<h1>Churn doubled.</h1>');     // body preserved
       // A brand-new story is format:'jsx': the embed stays JSX source, never placeholder HTML.
       expect(back.content.format).toBe('jsx');
@@ -431,14 +427,44 @@ describe('markupToContent / fileToMarkup — jsx-format stories', () => {
       expect(back.content.story).toContain('<Badge>');
     }
   });
+
+  it('new and already-clean jsx stories reject authored CSS escape hatches', () => {
+    for (const body of [
+      '<div style={{color:"red"}}>x</div>',
+      '<div><style>{`.x{color:red}`}</style><p className="text-red-500">x</p></div>',
+      '<Param name="region" labelStyle={{color:"red"}} />',
+    ]) {
+      const created = markupToContent('story', `<story>${body}</story>`);
+      expect(created.ok).toBe(false);
+      if (!created.ok) expect(created.error).toMatch(/Tailwind-only stories/);
+
+      const edited = markupToContent('story', `<story>${body}</story>`, {
+        format: 'jsx', story: '<div className="p-4">clean</div>',
+      });
+      expect(edited.ok).toBe(false);
+    }
+  });
+
+  it('grandfathers an existing styled jsx story so unrelated edits remain possible', () => {
+    const existing = {
+      format: 'jsx',
+      story: '<div style={{color:"red"}}><style>{`.x{padding:1rem}`}</style>old</div>',
+    };
+    const back = markupToContent(
+      'story',
+      '<story><div style={{color:"red"}}><style>{`.x{padding:1rem}`}</style>new</div></story>',
+      existing,
+    );
+    expect(back.ok, !back.ok ? back.error : '').toBe(true);
+    if (back.ok) expect(back.content.story).toContain('new');
+  });
 });
 
-// Banned-CSS sanitizer at the save boundary: where markup becomes content,
-// a format:'jsx' story's <style> blocks and inline styles are stripped of position:fixed/sticky
-// and every external-fetch construct (url()/src()/@import; only data: URIs pass). Legacy stories
-// are FROZEN — their @import fonts stay live, so the legacy path is never sanitized.
+// Banned-CSS sanitizer at the save boundary remains for GRANDFATHERED jsx stories: their existing
+// <style>/inline CSS is stripped of position:fixed/sticky and external-fetch constructs. New and
+// already-clean jsx stories reject those authoring escape hatches above. Legacy stories are FROZEN.
 describe('markupToContent — banned CSS stripped for jsx stories, legacy left alone', () => {
-  it('strips @import, external url(), and fixed/sticky from a new story body', () => {
+  it('strips @import, external url(), and fixed/sticky from a grandfathered jsx story body', () => {
     const markup = [
       '<style>{`',
       "@import url('https://fonts.example/css2?family=X');",
@@ -446,7 +472,10 @@ describe('markupToContent — banned CSS stripped for jsx stories, legacy left a
       '`}</style>',
       '<div class="s"><h1 style="position:fixed;color:blue">Hi</h1></div>',
     ].join('\n');
-    const back = markupToContent('story', markup);
+    const back = markupToContent('story', markup, {
+      format: 'jsx',
+      story: '<style>{`.old{color:red}`}</style><div style="color:red">old</div>',
+    });
     expect(back.ok).toBe(true);
     if (back.ok) {
       const story = back.content.story as string;
@@ -459,9 +488,12 @@ describe('markupToContent — banned CSS stripped for jsx stories, legacy left a
     }
   });
 
-  it('keeps data: URIs in a new story body', () => {
+  it('keeps data: URIs in a grandfathered jsx story body', () => {
     const markup = '<style>{`.a{background-image:url("data:image/png;base64,AAAA")}`}</style>\n<div class="s">x</div>';
-    const back = markupToContent('story', markup);
+    const back = markupToContent('story', markup, {
+      format: 'jsx',
+      story: '<style>{`.old{color:red}`}</style><div>old</div>',
+    });
     expect(back.ok).toBe(true);
     if (back.ok) expect(back.content.story as string).toContain('data:image/png;base64,AAAA');
   });

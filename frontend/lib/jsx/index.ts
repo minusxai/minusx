@@ -20,8 +20,9 @@ export function validateJsxSource(
   source: string,
   components: Iterable<string>,
   allowedHtmlTags?: Iterable<string>,
+  stylePolicy?: 'allow' | 'tailwind-only',
 ): ValidationError[] {
   const parsed = parseJsx(source);
   if (!parsed.ok) return [{ message: `JSX syntax error: ${parsed.error}` }];
-  return validateJsx(parsed.nodes, { components, allowedHtmlTags });
+  return validateJsx(parsed.nodes, { components, allowedHtmlTags, stylePolicy });
 }

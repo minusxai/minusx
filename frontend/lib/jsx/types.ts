@@ -78,4 +78,10 @@ export interface ValidateOptions {
    * dangerous denylist (`script`, `iframe`, …). Provide a set to restrict further.
    */
   allowedHtmlTags?: Iterable<string>;
+  /**
+   * Authoring policy for static JSX. `tailwind-only` rejects authored `<style>` blocks and
+   * inline style props while leaving the general interpreter capable of rendering grandfathered
+   * stored content.
+   */
+  stylePolicy?: 'allow' | 'tailwind-only';
 }

@@ -27,4 +27,13 @@ describe('story CSS compile — typography recipe union', () => {
     // previously-saved story recompiles at read time and picks the palette up.
     for (const cls of STORY_WYSIWYG_CLASSES) expect(STORY_RECIPE_UNION).toContain(cls);
   });
+
+  it('compiles arbitrary important picker colors from the edited story source', async () => {
+    const css = await compileStoryCss(
+      '<div className="text-[#ff0000]! bg-[#00ff00]!"><p>x</p></div>',
+      { force: true },
+    );
+    expect(css).toContain('color: #ff0000 !important');
+    expect(css).toContain('background-color: #00ff00 !important');
+  });
 });

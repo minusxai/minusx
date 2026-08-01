@@ -36,6 +36,12 @@ URL-bearing attributes (`href`, `src`, `action`, `formaction`, `poster`, `backgr
 registered set, and names the legacy trap when the tag is a retired design-system component — the
 message is the model's only route to self-correction.
 
+The optional `stylePolicy:'tailwind-only'` adds the Story authoring boundary: it rejects `<style>`,
+`style`, and the historical `<Param labelStyle>` alias with recovery guidance pointing to literal
+`className` utilities. `file-markup.ts` applies it to new and already-clean JSX stories. A JSX story
+that already stores authored CSS uses an explicit compatibility context until migrated, so an
+unrelated edit cannot lock an existing file; legacy HTML is unchanged.
+
 `serialize.ts` is the inverse and the round-trip is load-bearing: strings are entity-escaped
 (`&`, `"`, `<`, `>` in attributes; plus `{`/`}` in text), because acorn-jsx *decodes* entities and
 does **not** process backslash escapes — `JSON.stringify`ing an attribute containing `"` would
@@ -115,14 +121,15 @@ previously-saved story recompiles at read time
 (`lib/data/story/__tests__/story-css-typography.test.ts`).
 
 `lib/data/story/typography.ts` is that second half and the single source of truth for the WYSIWYG
-format toolbar: which Tailwind classes it may apply (a curated, token-based palette — the `text-*`
+format toolbar: which Tailwind classes it may apply (a curated token-based palette — the `text-*`
 size scale, `font-bold`/`italic`/`underline`, the four alignments, curated `mt-*`/`mb-*`/`p-*` steps,
 `max-w-prose`, and the full-bleed recipe) plus the pure class-string algebra that the live DOM
 mutation and the AST write-back both call, so instant feedback and persisted source can never
-diverge. It is curated rather than free-form for two reasons: `story-css.server.ts` pre-bakes the
-whole palette into every story's sheet, so applying a class is a DOM attribute change with zero
-recompile latency, and a bounded palette can never author a declaration the banned-CSS guard would
-strip. Stepping is **relative and in place** — every size/spacing token shifts one step including
+diverge. `story-css.server.ts` pre-bakes that finite palette into every story's sheet, so applying
+one of those classes is a DOM attribute change with zero recompile latency. Picker colors are the
+deliberate unbounded exception: they persist as important arbitrary-value Tailwind utilities and
+use a DOM-only inline preview until the story-specific CSS compile lands. Stepping is **relative
+and in place** — every size/spacing token shifts one step including
 variant-prefixed ones (`text-3xl @2xl:text-5xl` → `text-4xl @2xl:text-6xl`), because the story skill
 mandates responsive type and a stepper that only rewrote the base token would leave the `@2xl:`
 variant winning the cascade and masking the click.

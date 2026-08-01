@@ -35,5 +35,7 @@ export const STORY_HTML_TAGS = [
   'img', 'figure', 'figcaption', 'picture', 'source',
   'section', 'article', 'aside', 'header', 'footer', 'main', 'nav', 'address',
   'hr', 'br', 'wbr', 'time', 'data', 'details', 'summary',
+  // Compatibility-only for stored pre-policy JSX. The Tailwind-only authoring context rejects
+  // new <style> blocks while the renderer continues to support grandfathered stories.
   'style',
 ] as const;
