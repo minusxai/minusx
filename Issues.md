@@ -63,14 +63,36 @@ Option 2 is probably the right shape: the bug is specifically that a *demo* data
 per query, and a size threshold fixes that without changing behaviour for real connections.
 
 ### 3. Story edits change unrelated parts of the document
-**Status:** Open — two hypotheses to test.
+**Status:** Open — both hypotheses tested; (a) ruled out, (b) confirmed structurally.
 
-a. The agent is not told to focus on where the user is looking.
-b. The agent reaches for global styles where local ones would do, so one change lands everywhere.
+**(a) "the agent isn't told to focus on where the user is looking" — RULED OUT.** The nudge already
+exists, twice. `orchestrator/prompts/prompts.yaml:34` explains the `<Viewport>` block and tells the
+agent to use it to ground "this" / "here" / "what I'm looking at". `prompts.yaml:866` is explicit:
+*"Default to the user's current viewport … Keep ordinary copy, styling, and content adjustments
+localized to those visible sections — do not propagate them into off-screen sections just because
+similar markup appears elsewhere."* Adding more prompt here is unlikely to help.
 
-The app *does* send viewport position (`_currentTime`/`<Viewport>` in `lib/projection/messages.ts`),
-so the raw signal exists — the question is whether any prompt tells the agent to *use* it. Both
-halves need verifying against the actual assembled prompt.
+**(b) global vs local styling — CONFIRMED as a real structural path.**
+`lib/data/story/file-markup.ts:58` `hasAuthoredStoryStyles()`: a stored JSX story containing a
+`<style>` element, or any `style`/`labelStyle` attribute, is routed to
+`JSX_STORY_STYLE_COMPAT_CTX` with `stylePolicy: 'allow'` instead of the `'tailwind-only'` policy
+that new stories get. A `<style>` block is **document-scoped by definition** — editing one rule in
+it changes every section matching the selector, which is exactly the reported symptom.
+
+The compat is **sticky**: once a story has authored CSS it keeps `allow` forever, so legacy stories
+are never pushed toward local utilities and stay permanently exposed to this.
+
+**A second, separate contributor — diff noise, not render change.** The markup round-trip
+canonicalises the WHOLE document on every edit, measured: single→double quote style
+(`'text-2xl'` → `"text-2xl"`), void elements (`<br>` → `<br />`, `<img/>` → `<img />`), and the
+`<story>` wrapper joining onto its first child. Class whitespace and entities are preserved. None
+of this changes rendering, but on the first edit of a non-canonical story it makes the diff touch
+every section — which matches "have to always check whole document" even when the render is fine.
+
+**Suggested direction** (not yet implemented): migrate legacy authored CSS to utilities so
+`stylePolicy: 'allow'` stops being sticky, and/or nudge the agent to prefer local utilities over
+editing a `<style>` rule when a story is in compat mode. The canonicalisation noise is separately
+worth fixing by canonicalising on write once, rather than on every edit.
 
 ### 4. Screenshot is not identical to the rendered story
 **Status:** Open. Font, spacing and text wrap differ between the capture and the live surface.
