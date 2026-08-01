@@ -167,7 +167,7 @@ const config: EnvironmentConfig = {
     : resolve(join(baseDuckdbDataPath, 'data/uploads')),
   STATIC_DATASETS_BASE_URL: getOptional(
     process.env.MX_STATIC_DATASETS_BASE_URL,
-    'https://github.com/minusxai/sample_datasets/releases/download',
+    'https://github.com/minusxai/minusx_datasets/releases/download',
   ),
   MD_HOME: process.env.MD_HOME ?? '',
   MD_LOGIN: process.env.MD_LOGIN ?? '',

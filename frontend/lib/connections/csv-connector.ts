@@ -1,6 +1,9 @@
 import 'server-only';
 import { DuckDBInstance, DuckDBConnection } from '@duckdb/node-api';
 import { join } from 'path';
+import { tmpdir } from 'os';
+import { mkdirSync, readdirSync, unlinkSync } from 'fs';
+import { getQueryHash } from '@/lib/utils/query-hash';
 import {
   OBJECT_STORE_BUCKET,
   OBJECT_STORE_REGION,
@@ -97,8 +100,31 @@ export function createRelationSql(file: CsvFileEntry, fileUrl: string): string {
     : `CREATE OR REPLACE VIEW ${relation} AS SELECT * FROM ${readExpr}`;
 }
 
+/**
+ * On-disk home for a static-dataset instance. Keyed by config hash AND pid:
+ * DuckDB is single-writer per file, so two processes with the same config (dev
+ * server + tests) must not share one. Files from previous runs of THIS config
+ * are deleted best-effort — on POSIX an open file survives its unlink, so a
+ * still-live sibling process is unaffected; anything else was left by a dead
+ * process and would otherwise pile up ~140 MB per restart until tmp cleanup.
+ */
+function staticInstancePath(cacheKey: string): string {
+  const dir = join(tmpdir(), 'mx-static-datasets');
+  mkdirSync(dir, { recursive: true });
+  const hash = getQueryHash(cacheKey, {}, 'static-datasets');
+  try {
+    for (const f of readdirSync(dir)) {
+      if (f.startsWith(`${hash}-`) && !f.startsWith(`${hash}-${process.pid}.`)) {
+        unlinkSync(join(dir, f));
+      }
+    }
+  } catch { /* cleanup is opportunistic */ }
+  return join(dir, `${hash}-${process.pid}.duckdb`);
+}
+
 // ---------------------------------------------------------------------------
-// Instance cache — one in-memory DuckDB per unique config hash
+// Instance cache — one DuckDB per unique config hash (in-memory for view-only
+// configs; temp-file-backed when static datasets are materialized into it)
 // ---------------------------------------------------------------------------
 
 // eslint-disable-next-line no-restricted-syntax -- server-only; keyed by config hash (unique per connection config)
@@ -111,10 +137,20 @@ async function initInstance(
   files: CsvFileEntry[]
 ): Promise<DuckDBInstance> {
   const isLocal = !OBJECT_STORE_ACCESS_KEY_ID || !OBJECT_STORE_BUCKET;
-  const hasHttpStatic = files.some((f) => f.dataset) && STATIC_DATASETS_BASE_URL.startsWith('http');
-  const instance = await DuckDBInstance.create(':memory:');
+  const hasStatic = files.some((f) => f.dataset);
+  const hasHttpStatic = hasStatic && STATIC_DATASETS_BASE_URL.startsWith('http');
+  // Static datasets materialize real tables, and fully in-memory those cost RAM
+  // proportional to the dataset (measured ~1.1 GB for the sample data) — a floor,
+  // not a cache. A temp-file-backed instance keeps the rows on local disk with the
+  // buffer pool as the cache, bounded below. View-only configs stay ':memory:'.
+  const instance = await DuckDBInstance.create(
+    hasStatic ? staticInstancePath(cacheKey) : ':memory:',
+  );
   const conn = await instance.connect();
   try {
+    if (hasStatic) {
+      await conn.run(`SET memory_limit = '512MB'`);
+    }
     if (!isLocal || hasHttpStatic) {
       // Install and load httpfs — S3 access for uploaded objects, plain HTTP(S)
       // for static datasets. Static reads need it even with no object store
