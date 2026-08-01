@@ -27,11 +27,14 @@ describe('STORY_TEMPLATES registry', () => {
     }
   });
 
-  it('every guidance is a self-documenting mini-skill: concrete class-carrying markup + Do + Don\'t', () => {
+  it('every guidance is a Tailwind-only mini-skill: className markup + no authored CSS escape hatch', () => {
     for (const t of STORY_TEMPLATES) {
       expect(t.guidance.length, `${t.name}.guidance`).toBeGreaterThan(400);
       // A skeleton or kit snippets — either way, concrete markup with literal classes.
-      expect(t.guidance, `${t.name} markup snippet`).toMatch(/class="/);
+      expect(t.guidance, `${t.name} markup snippet`).toMatch(/className="/);
+      expect(t.guidance, `${t.name} legacy class attr`).not.toMatch(/\bclass="/);
+      expect(t.guidance, `${t.name} style block`).not.toContain('<style>');
+      expect(t.guidance, `${t.name} inline style`).not.toMatch(/\sstyle=\{/);
       expect(t.guidance, `${t.name} Do section`).toMatch(/\bDo\b/);
       expect(t.guidance, `${t.name} Don't section`).toContain("Don't");
     }

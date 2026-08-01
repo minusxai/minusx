@@ -21,7 +21,7 @@ function renderToolbar(initialClassName = '', overrides: Partial<React.Component
   const utils = renderWithProviders(
     <StoryTypographyToolbar target={target} active onApply={onApply} {...overrides} />,
   );
-  return { ...utils, el, onApply };
+  return { ...utils, el, target, onApply };
 }
 
 afterEach(() => {
@@ -83,22 +83,49 @@ describe('StoryTypographyToolbar', () => {
     expect(el.className).toBe('');
   });
 
-  it('the color picker sets an inline color and commits className + style together', () => {
+  it('the color picker persists an important Tailwind class and uses inline color only for preview', () => {
     const { el, onApply } = renderToolbar('text-lg');
     fireEvent.change(screen.getByLabelText('Text color'), { target: { value: '#ff0000' } });
     expect(el.style.color).toBe('rgb(255, 0, 0)');
     expect(onApply).toHaveBeenLastCalledWith('0.0', {
-      className: 'text-lg',
-      style: el.getAttribute('style') ?? '',
+      className: 'text-lg text-[#ff0000]!',
+      style: '',
     });
   });
 
-  it('Default text color clears the inline color (style removed when empty)', () => {
+  it('Default text color removes the picker class and its temporary preview', () => {
     const { el, onApply } = renderToolbar('text-lg');
     fireEvent.change(screen.getByLabelText('Text color'), { target: { value: '#ff0000' } });
     fireEvent.click(screen.getByLabelText('Default text color'));
     expect(el.style.color).toBe('');
     expect(onApply).toHaveBeenLastCalledWith('0.0', { className: 'text-lg', style: '' });
+  });
+
+  it('drops the temporary inline preview when the recompiled story CSS arrives', () => {
+    const { el, target, onApply, rerender } = renderToolbar('text-lg', { compiledCss: '.old{}' });
+    fireEvent.change(screen.getByLabelText('Text color'), { target: { value: '#ff0000' } });
+    expect(el.style.color).toBe('rgb(255, 0, 0)');
+
+    rerender(
+      <StoryTypographyToolbar
+        target={target}
+        active
+        onApply={onApply}
+        compiledCss=".text-\\[\\#ff0000\\]\\!{color:#ff0000!important}"
+      />,
+    );
+    expect(el.style.color).toBe('');
+    expect(el.className).toContain('text-[#ff0000]!');
+  });
+
+  it('migrates a legacy inline color while preserving unrelated inline declarations', () => {
+    const { el, onApply } = renderToolbar('text-lg');
+    el.setAttribute('style', 'color: blue; margin-top: 4px;');
+    fireEvent.change(screen.getByLabelText('Text color'), { target: { value: '#ff0000' } });
+    expect(onApply).toHaveBeenLastCalledWith('0.0', {
+      className: 'text-lg text-[#ff0000]!',
+      style: 'margin-top: 4px;',
+    });
   });
 
   it('advanced controls are hidden until "More formatting" is expanded; width stays basic', () => {
@@ -141,19 +168,23 @@ describe('StoryTypographyToolbar', () => {
     expect(el.className).toBe('text-lg max-w-prose');
   });
 
-  it('the fill picker sets an inline background and clears independently of text color', () => {
+  it('the fill picker writes a Tailwind class and clears independently of text color', () => {
     const { el, onApply } = renderToolbar('text-lg');
     fireEvent.change(screen.getByLabelText('Text color'), { target: { value: '#ff0000' } });
     fireEvent.change(screen.getByLabelText('Fill color'), { target: { value: '#00ff00' } });
     expect(el.style.backgroundColor).toBe('rgb(0, 255, 0)');
     expect(el.style.color).toBe('rgb(255, 0, 0)');
     expect(onApply).toHaveBeenLastCalledWith('0.0', {
-      className: 'text-lg',
-      style: el.getAttribute('style') ?? '',
+      className: 'text-lg text-[#ff0000]! bg-[#00ff00]!',
+      style: '',
     });
     fireEvent.click(screen.getByLabelText('Default fill color'));
     expect(el.style.backgroundColor).toBe('');
     expect(el.style.color).toBe('rgb(255, 0, 0)'); // text color untouched
+    expect(onApply).toHaveBeenLastCalledWith('0.0', {
+      className: 'text-lg text-[#ff0000]!',
+      style: '',
+    });
   });
 
   it('inner padding steps on the advanced row', () => {

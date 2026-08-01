@@ -31,6 +31,10 @@ const DANGEROUS_TAGS = immutableSet([
 // React internals (ref/key — never serializable data), and customized built-ins (is).
 const DENIED_ATTRS = immutableSet(['dangerouslysetinnerhtml', 'ref', 'key', 'srcdoc', 'is']);
 
+// Agent-authored styling escape hatches. `labelStyle` is the one historical component-specific
+// alias (<Param>); keep this list explicit so unrelated data props are never rejected by suffix.
+const INLINE_STYLE_ATTRS = immutableSet(['style', 'labelstyle']);
+
 // `data:image/...` is allowed (inline images); other `data:` (e.g. text/html) is not.
 const DANGEROUS_URL = /^(javascript|vbscript|data):/i;
 const SAFE_DATA_URL = /^data:image\//i;
@@ -58,11 +62,17 @@ export function validateJsx(nodes: JsxNode[], options: ValidateOptions): Validat
   const components = new Set(options.components);
   const allowedHtml = options.allowedHtmlTags ? new Set(options.allowedHtmlTags) : null;
   const errors: ValidationError[] = [];
-  for (const node of nodes) walk(node, components, allowedHtml, errors);
+  for (const node of nodes) walk(node, components, allowedHtml, options.stylePolicy ?? 'allow', errors);
   return errors;
 }
 
-function walk(node: JsxNode, components: Set<string>, allowedHtml: Set<string> | null, errors: ValidationError[]): void {
+function walk(
+  node: JsxNode,
+  components: Set<string>,
+  allowedHtml: Set<string> | null,
+  stylePolicy: 'allow' | 'tailwind-only',
+  errors: ValidationError[],
+): void {
   if (node.type === 'expression') {
     if (!node.value.static) {
       errors.push({ message: `Expression child must be a JSON literal, got ${node.value.exprType}`, start: node.start, end: node.end });
@@ -70,11 +80,17 @@ function walk(node: JsxNode, components: Set<string>, allowedHtml: Set<string> |
     return;
   }
   if (node.type === 'text') return;
-  validateElement(node, components, allowedHtml, errors);
-  for (const child of node.children) walk(child, components, allowedHtml, errors);
+  validateElement(node, components, allowedHtml, stylePolicy, errors);
+  for (const child of node.children) walk(child, components, allowedHtml, stylePolicy, errors);
 }
 
-function validateElement(el: JsxElement, components: Set<string>, allowedHtml: Set<string> | null, errors: ValidationError[]): void {
+function validateElement(
+  el: JsxElement,
+  components: Set<string>,
+  allowedHtml: Set<string> | null,
+  stylePolicy: 'allow' | 'tailwind-only',
+  errors: ValidationError[],
+): void {
   // Tag allowlist.
   if (el.isComponent) {
     if (!components.has(el.tag)) {
@@ -94,6 +110,15 @@ function validateElement(el: JsxElement, components: Set<string>, allowedHtml: S
     errors.push({ message: `Tag <${el.tag}> is not in the allowed HTML tag list`, tag: el.tag, start: el.start, end: el.end });
   }
 
+  if (stylePolicy === 'tailwind-only' && !el.isComponent && el.tag.toLowerCase() === 'style') {
+    errors.push({
+      message: 'Authored <style> blocks are not allowed in Tailwind-only stories; use literal className utilities on each element',
+      tag: el.tag,
+      start: el.start,
+      end: el.end,
+    });
+  }
+
   for (const a of el.attributes) {
     // Spread / non-static attribute values.
     if (!a.value.static) {
@@ -111,6 +136,16 @@ function validateElement(el: JsxElement, components: Set<string>, allowedHtml: S
     // Name-denied attributes (HTML injection / React internals / customized built-ins).
     if (DENIED_ATTRS.has(a.name.toLowerCase())) {
       errors.push({ message: `Attribute "${a.name}" is not allowed`, attr: a.name, tag: el.tag, start: a.start, end: a.end });
+      continue;
+    }
+    if (stylePolicy === 'tailwind-only' && INLINE_STYLE_ATTRS.has(a.name.toLowerCase())) {
+      errors.push({
+        message: `Inline style attribute "${a.name}" is not allowed in Tailwind-only stories; use literal className utilities`,
+        attr: a.name,
+        tag: el.tag,
+        start: a.start,
+        end: a.end,
+      });
       continue;
     }
     // Dangerous URL schemes in URL-bearing attributes (list-valued ones checked per entry).

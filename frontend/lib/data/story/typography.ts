@@ -4,14 +4,15 @@
  * The WYSIWYG typography toolbar edits an element's Tailwind classes directly in the story's
  * JSX source (`className` attr write-back via jsx-edit's applyFormatEditsToJsx). This module is
  * the SINGLE source of truth for:
- *  - which classes the toolbar may apply (curated, token-based — never free-form, so stories
- *    stay theme-compatible and the banned-CSS guard never triggers), and
+ *  - which classes the toolbar may apply (curated token scales plus user-picked arbitrary
+ *    color utilities), and
  *  - the pure class-string algebra the toolbar AND the source write-back both use, so the live
  *    DOM mutation (instant feedback) and the persisted source always converge.
  *
- * Every class listed here is unioned into the story CSS compile (story-css.server.ts), so the
- * whole palette is pre-compiled into every story's stylesheet — applying one is a pure DOM
- * attribute change with zero recompile latency.
+ * Every finite class listed here is unioned into the story CSS compile (story-css.server.ts), so
+ * that palette applies with zero recompile latency. Picker colors are unbounded and therefore
+ * compile from the edited story source; the toolbar supplies an ephemeral DOM-only preview while
+ * that compile is in flight.
  *
  * Pure module — no DOM, no React — unit-testable in the node project.
  */
@@ -26,8 +27,8 @@ export const TYPOGRAPHY_SIZE_SCALE = [
 /**
  * Mutually-exclusive class groups: applying a choice within a group removes the group's other
  * members. Single-member groups (`weight`, `fontStyle`, `decoration`) act as toggles (choice ↔
- * null). Text COLOR is not a group — it's a free value, applied as an inline style by the
- * toolbar's color picker (a class palette can't cover a picker's range).
+ * null). Text/fill colors are free values represented by Tailwind arbitrary-value utilities;
+ * they are separate from these finite groups.
  */
 export const TYPOGRAPHY_GROUPS = {
   size: TYPOGRAPHY_SIZE_SCALE,
@@ -68,6 +69,47 @@ export const STORY_WYSIWYG_CLASSES: readonly string[] = [
 ];
 
 const tokens = (className: string): string[] => className.split(/\s+/).filter(Boolean);
+
+export type StoryColorClassKind = 'text' | 'fill';
+
+const colorPrefix = (kind: StoryColorClassKind): 'text' | 'bg' => kind === 'text' ? 'text' : 'bg';
+
+/**
+ * A picker-owned color utility. The important suffix deliberately preserves the old inline-style
+ * semantics: a manual user choice beats authored responsive/theme color classes, while clearing
+ * the picker removes only this override and reveals the authored colors again.
+ */
+export function storyColorClass(kind: StoryColorClassKind, hex: string): string {
+  return `${colorPrefix(kind)}-[${hex.toLowerCase()}]!`;
+}
+
+/** The picker-owned arbitrary hex color on the base element, including pre-important v1 values. */
+export function currentStoryColor(className: string, kind: StoryColorClassKind): string | null {
+  const prefix = colorPrefix(kind);
+  const re = new RegExp(`^${prefix}-\\[(#[0-9a-f]{6})\\]!?$`, 'i');
+  for (const token of tokens(className)) {
+    const match = re.exec(token);
+    if (match) return match[1].toLowerCase();
+  }
+  return null;
+}
+
+/**
+ * Replace the picker-owned color for one property without touching any authored named,
+ * responsive, or theme-token color utilities. The important picker class wins while present;
+ * `null` restores the authored cascade exactly.
+ */
+export function applyStoryColor(
+  className: string,
+  kind: StoryColorClassKind,
+  hex: string | null,
+): string {
+  const prefix = colorPrefix(kind);
+  const owned = new RegExp(`^${prefix}-\\[#[0-9a-f]{6}\\]!?$`, 'i');
+  const kept = tokens(className).filter(token => !owned.test(token));
+  if (hex !== null) kept.push(storyColorClass(kind, hex));
+  return kept.join(' ');
+}
 
 /** `@2xl:text-5xl` → `text-5xl`; unprefixed tokens come back whole. */
 const variantTail = (token: string): string => token.slice(token.lastIndexOf(':') + 1);

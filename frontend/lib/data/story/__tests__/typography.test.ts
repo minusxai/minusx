@@ -27,6 +27,9 @@ import {
   removeClassTokens,
   FULL_BLEED_CLASSES,
   INNER_PADDING_SCALE,
+  storyColorClass,
+  currentStoryColor,
+  applyStoryColor,
 } from '@/lib/data/story/typography';
 
 describe('typography vocabulary', () => {
@@ -55,6 +58,31 @@ describe('currentChoice', () => {
     // text-muted-foreground is a color utility — neither a size nor an alignment.
     expect(currentChoice('text-muted-foreground text-left', 'size')).toBeNull();
     expect(currentChoice('text-muted-foreground text-left', 'align')).toBe('text-left');
+  });
+});
+
+describe('picker color classes', () => {
+  it('serializes arbitrary colors as important Tailwind utilities', () => {
+    expect(storyColorClass('text', '#A1B2C3')).toBe('text-[#a1b2c3]!');
+    expect(storyColorClass('fill', '#00FF80')).toBe('bg-[#00ff80]!');
+  });
+
+  it('reads current and pre-important picker color classes', () => {
+    expect(currentStoryColor('text-lg text-[#A1B2C3]!', 'text')).toBe('#a1b2c3');
+    expect(currentStoryColor('bg-[#00ff80] p-4', 'fill')).toBe('#00ff80');
+    expect(currentStoryColor('text-primary bg-muted', 'text')).toBeNull();
+  });
+
+  it('replaces only the picker-owned override and preserves authored color classes', () => {
+    expect(applyStoryColor('text-primary dark:text-white text-[#111111]!', 'text', '#abcdef'))
+      .toBe('text-primary dark:text-white text-[#abcdef]!');
+    expect(applyStoryColor('bg-muted bg-[#111111]! p-4', 'fill', '#fedcba'))
+      .toBe('bg-muted p-4 bg-[#fedcba]!');
+  });
+
+  it('clears the manual override to reveal the authored cascade', () => {
+    expect(applyStoryColor('text-primary text-[#abcdef]!', 'text', null)).toBe('text-primary');
+    expect(applyStoryColor('bg-muted bg-[#fedcba]!', 'fill', null)).toBe('bg-muted');
   });
 });
 

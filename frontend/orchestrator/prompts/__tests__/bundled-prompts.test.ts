@@ -60,6 +60,15 @@ describe('bundled prompts (standalone-safe, no backend filesystem)', () => {
     const firstSkill = Object.keys(listSkills())[0];
     expect(getSkill(firstSkill)).toBeTruthy();
   });
+
+  it('teaches Tailwind as the only forward Story styling contract', () => {
+    const stories = getSkill('stories') ?? '';
+    expect(stories).toMatch(/Tailwind tokens \+ utilities are the ONLY authored styling path/);
+    expect(stories).toContain('Do not author `<style>` blocks');
+    expect(stories).not.toContain('A `<style>` block is allowed');
+    expect(stories).not.toContain('style={{color:');
+    expect(stories).not.toContain('Theme it:** `style=');
+  });
 });
 
 // Viz-first posture (Viz V2): the `<viz>` envelope is the DEFAULT authoring

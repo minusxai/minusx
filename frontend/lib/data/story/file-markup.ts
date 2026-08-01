@@ -13,6 +13,7 @@
  * with `type="…"` annotations).
  */
 import { contentToJsx, jsxToContent, type SchemaCtx, type JsonSchema } from './content-jsx';
+import { parseJsx, type JsxNode } from '@/lib/jsx';
 import { atlasSchema } from '@/lib/validation/atlas-json-schemas';
 import type { FileType, StoryContent } from '@/lib/types';
 import { buildStoryJsx, parseStoryJsx } from './story-v2';
@@ -33,11 +34,10 @@ const CTX: SchemaCtx = {
   },
 };
 
-// New-format (`format:'jsx'`) stories: the body IS the agent's shadcn JSX source — stored
-// verbatim except for the banned-CSS strip (§4: position fixed/sticky + external-fetch
-// constructs are removed from <style> blocks and inline styles at the save boundary; legacy
-// stories go through CTX above and keep e.g. their @import fonts live). Validation runs
-// against the shadcn registry names plus the explicit HTML-tag allowlist.
+// New-format (`format:'jsx'`) stories: the body IS the agent's shadcn JSX source. New and clean
+// stories enforce Tailwind-only authored styling in addition to the shadcn registry + HTML tag
+// allowlists. Grandfathered JSX carrying pre-policy CSS takes the compat context below and still
+// runs the banned-CSS sanitizer; legacy stories go through CTX unchanged.
 const JSX_STORY_CTX: SchemaCtx = {
   defs: DEFS,
   jsxField: {
@@ -45,8 +45,31 @@ const JSX_STORY_CTX: SchemaCtx = {
     fromJsx: (inner) => sanitizeStoryMarkupCss(inner),
     components: JSX_STORY_COMPONENT_NAMES,
     allowedHtmlTags: STORY_HTML_TAGS,
+    stylePolicy: 'tailwind-only',
   },
 };
+
+/** Grandfathered JSX stories with authored CSS stay editable until they are migrated. */
+const JSX_STORY_STYLE_COMPAT_CTX: SchemaCtx = {
+  ...JSX_STORY_CTX,
+  jsxField: { ...JSX_STORY_CTX.jsxField!, stylePolicy: 'allow' },
+};
+
+/** Does stored JSX use one of the pre-Tailwind-only authoring escape hatches? */
+function hasAuthoredStoryStyles(content: unknown): boolean {
+  if (!content || typeof content !== 'object') return false;
+  const c = content as { format?: unknown; story?: unknown };
+  if (c.format !== 'jsx' || typeof c.story !== 'string') return false;
+  const parsed = parseJsx(c.story);
+  if (!parsed.ok) return false;
+  const walk = (nodes: JsxNode[]): boolean => nodes.some((node) => {
+    if (node.type !== 'element') return false;
+    if (!node.isComponent && node.tag.toLowerCase() === 'style') return true;
+    if (node.attributes.some(a => a.name.toLowerCase() === 'style' || a.name.toLowerCase() === 'labelstyle')) return true;
+    return walk(node.children);
+  });
+  return walk(parsed.nodes);
+}
 
 const DATA_C_ATTR_RE = /<[^>]*\sdata-c\s*=/;
 
@@ -101,7 +124,11 @@ export type MarkupToContentResult =
  */
 export function markupToContent(type: FileType, markup: string, existingContent?: unknown): MarkupToContentResult {
   const jsxFormat = type === 'story' && !isLegacyStoryContent(existingContent);
-  const r = jsxToContent(markup, schemaFor(type), jsxFormat ? JSX_STORY_CTX : CTX);
+  // New and already-clean JSX stories enforce Tailwind-only authoring. Existing JSX stories that
+  // already carry <style>/inline style are grandfathered so an unrelated edit never locks the file;
+  // once migrated clean, they automatically enter the strict path on their next edit.
+  const jsxCtx = hasAuthoredStoryStyles(existingContent) ? JSX_STORY_STYLE_COMPAT_CTX : JSX_STORY_CTX;
+  const r = jsxToContent(markup, schemaFor(type), jsxFormat ? jsxCtx : CTX);
   if (!r.ok) return { ok: false, error: r.error };
   const content = (r.value && typeof r.value === 'object' ? r.value : {}) as Record<string, unknown>;
   if (jsxFormat) content.format = 'jsx';

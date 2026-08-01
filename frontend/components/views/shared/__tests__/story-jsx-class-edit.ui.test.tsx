@@ -51,11 +51,16 @@ describe('StoryJsxBody — format edits in the edit session', () => {
     expect(onChange).toHaveBeenLastCalledWith('<div className="p-8"><p>Hello</p><h2>Head</h2></div>');
   });
 
-  it('style edits (color picker) land in the source beside class edits', () => {
-    const { editApiRef, onChange } = renderBody();
-    editApiRef.current!.applyFormatEdit('0.0', { className: 'text-base', style: 'color: rgb(255, 0, 0);' });
+  it('a Tailwind color edit removes the legacy inline color in the same source commit', () => {
+    const { editApiRef, onChange } = renderBody({
+      jsx: '<div className="p-8"><p className="text-base" style="color: red; margin-top: 4px;">Hello</p><h2>Head</h2></div>',
+    });
+    editApiRef.current!.applyFormatEdit('0.0', {
+      className: 'text-base text-[#ff0000]!',
+      style: 'margin-top: 4px;',
+    });
     expect(onChange).toHaveBeenLastCalledWith(
-      '<div className="p-8"><p className="text-base" style="color: rgb(255, 0, 0);">Hello</p><h2>Head</h2></div>',
+      '<div className="p-8"><p className="text-base text-[#ff0000]!" style="margin-top: 4px;">Hello</p><h2>Head</h2></div>',
     );
   });
 

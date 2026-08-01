@@ -7,11 +7,11 @@
  * offsetting its iframe-space rect by the iframe's bounding box.
  *
  * Apply flow (see lib/data/story/typography.ts):
- *  1. compute the new class string / style value from the host's live attrs via the pure algebra,
+ *  1. compute the new class string from the host's live attrs via the pure algebra,
  *  2. mutate the DOM element directly (instant feedback — the focused host is render-frozen, so
- *     a React re-render can't deliver the change; the class palette is pre-compiled into every
- *     story's stylesheet, so classes resolve with zero recompile), and
- *  3. emit the full attr values via `onApply` → StoryJsxEditApi.applyFormatEdit → AST write-back.
+ *     a React re-render can't deliver the change; arbitrary picker colors use a temporary inline
+ *     preview until their Tailwind compile lands), and
+ *  3. emit the full class value via `onApply` → StoryJsxEditApi.applyFormatEdit → AST write-back.
  *
  * The container preventDefaults mousedown so focus never leaves the contenteditable host (a blur
  * would commit the text edit and dismiss the toolbar mid-interaction).
@@ -32,6 +32,7 @@ import {
   applyTypographyChoice, currentChoice, stepSizeClass, stepSpacingClass, currentSpacingStep,
   stepPaddingClass, currentPaddingStep, hasMaxWidth, stripMaxWidth, MAX_WIDTH_DEFAULT,
   hasFullBleed, applyFullBleed, removeClassTokens, FULL_BLEED_CLASSES, type TypographyGroup,
+  applyStoryColor, currentStoryColor, type StoryColorClassKind,
 } from '@/lib/data/story/typography';
 
 export interface StoryTypographyToolbarProps {
@@ -49,6 +50,8 @@ export interface StoryTypographyToolbarProps {
   active: boolean;
   /** Commit: the target's full new attr values (already applied to the live DOM element). */
   onApply: (astPath: string, edit: StoryFormatEdit) => void;
+  /** Current server-compiled story CSS. A change means the latest arbitrary color utilities are live. */
+  compiledCss?: string | null;
   /** Breadcrumb click: re-anchor the selection to this ancestor (element targets only). */
   onSelectAncestor?: (astPath: string) => void;
 }
@@ -103,7 +106,12 @@ function ColorSwatchControl({ label, icon, value, onPick }: {
 
 const TOOLBAR_H = 40;
 
-export default function StoryTypographyToolbar({ target, targetKind = 'text', active, onApply, onSelectAncestor }: StoryTypographyToolbarProps) {
+type ColorStyleProp = 'color' | 'background-color';
+
+const stylePropFor = (kind: StoryColorClassKind): ColorStyleProp =>
+  kind === 'text' ? 'color' : 'background-color';
+
+export default function StoryTypographyToolbar({ target, targetKind = 'text', active, onApply, compiledCss, onSelectAncestor }: StoryTypographyToolbarProps) {
   // The live element's className + rects ARE the display state — measured fresh each render;
   // this counter just forces a re-render after applies and on scroll/resize.
   const [, setVersion] = useState(0);
@@ -127,6 +135,16 @@ export default function StoryTypographyToolbar({ target, targetKind = 'text', ac
   // Full-bleed toggle memory: the recipe tokens ADDED per element, removed on untoggle (an
   // authored px-6 survives the round trip).
   const bleedAddedRef = useRef(new Map<string, string[]>());
+  // Arbitrary picker colors need one story-CSS compile. Keep their instant preview out of the
+  // authored JSX, and clear it as soon as AgentHtml receives the newly compiled stylesheet.
+  const pendingColorPreviewsRef = useRef(new Map<HTMLElement, Map<ColorStyleProp, string>>());
+  useEffect(() => {
+    for (const [el, previews] of pendingColorPreviewsRef.current) {
+      for (const prop of previews.keys()) el.style.removeProperty(prop);
+      if (!el.getAttribute('style')) el.removeAttribute('style');
+    }
+    pendingColorPreviewsRef.current.clear();
+  }, [compiledCss]);
 
   // Re-render (rAF-throttled) on scroll/resize in BOTH documents so the anchored position
   // tracks the host instead of drifting.
@@ -165,9 +183,9 @@ export default function StoryTypographyToolbar({ target, targetKind = 'text', ac
     y: Math.max(8, (box?.top ?? 0) + rect.top - toolbarH - 8),
   };
 
-  // The focused host is render-frozen (StoryJsxBody's memo guard), so class/style must land on
-  // the live DOM element directly — React can't deliver them. The same values go to the AST
-  // write-back verbatim.
+  // The focused host is render-frozen (StoryJsxBody's memo guard), so class changes must land on
+  // the live DOM element directly — React can't deliver them. The same class value goes to the
+  // AST write-back verbatim.
   const hostEl = target.el;
   const cls = hostEl.className;
   const apply = (transform: (className: string) => string) => {
@@ -176,17 +194,37 @@ export default function StoryTypographyToolbar({ target, targetKind = 'text', ac
     onApply(target.astPath, { className: next });
     setVersion(v => v + 1);
   };
-  // Inline style values (free colors — a class palette can't cover a picker): live-preview on
-  // the DOM, committed as the FULL style string so the write-back mirrors the element exactly.
-  const applyStyleProp = (prop: 'color' | 'background-color', value: string | null) => {
-    if (value === null) hostEl.style.removeProperty(prop);
-    else hostEl.style.setProperty(prop, value);
+  // Picker colors persist ONLY as Tailwind arbitrary-value classes. A DOM-only inline value gives
+  // instant feedback during the async compile, then the compiledCss effect above removes it. When
+  // an older story carries an inline color, touching that picker removes the declaration from JSX.
+  const applyColor = (kind: StoryColorClassKind, value: string | null) => {
+    const prop = stylePropFor(kind);
+    const previews = pendingColorPreviewsRef.current.get(hostEl) ?? new Map<ColorStyleProp, string>();
+
+    // Temporarily peel off every preview before reading the persisted inline style. Otherwise a
+    // second picker action could accidentally write the first picker preview into the JSX.
+    for (const previewProp of previews.keys()) hostEl.style.removeProperty(previewProp);
+    hostEl.style.removeProperty(prop); // migrate/clear a legacy persisted color for this property
     if (!hostEl.getAttribute('style')) hostEl.removeAttribute('style');
-    onApply(target.astPath, { className: hostEl.className, style: hostEl.getAttribute('style') ?? '' });
+    const persistedStyle = hostEl.getAttribute('style') ?? '';
+
+    const nextClassName = applyStoryColor(hostEl.className, kind, value);
+    hostEl.setAttribute('class', nextClassName);
+    if (value === null) previews.delete(prop);
+    else previews.set(prop, value);
+    for (const [previewProp, previewValue] of previews) hostEl.style.setProperty(previewProp, previewValue);
+    if (previews.size > 0) pendingColorPreviewsRef.current.set(hostEl, previews);
+    else pendingColorPreviewsRef.current.delete(hostEl);
+
+    // `style` is cleanup-only: it removes a legacy declaration. The chosen color itself exists
+    // solely in className and can never be persisted as an inline style.
+    onApply(target.astPath, { className: nextClassName, style: persistedStyle });
     setVersion(v => v + 1);
   };
   const toggle = (group: TypographyGroup, choice: string) =>
     apply(c => applyTypographyChoice(c, group, currentChoice(c, group) === choice ? null : choice));
+  const clearTextColor = () => applyColor('text', null);
+  const clearFillColor = () => applyColor('fill', null);
   const isOn = (group: TypographyGroup, choice: string) => currentChoice(cls, group) === choice;
   const sizeLabel = (currentChoice(cls, 'size') ?? 'text-base').replace('text-', '');
   // The spacing readout answers "what does this translate to": Tailwind steps are 0.25rem each,
@@ -303,19 +341,27 @@ export default function StoryTypographyToolbar({ target, targetKind = 'text', ac
               <ColorSwatchControl
                 label="Text color"
                 icon={<LuBaseline />}
-                value={cssColorToHex(hostEl.style.color)}
-                onPick={hex => applyStyleProp('color', hex)}
+                value={currentStoryColor(cls, 'text') ?? cssColorToHex(hostEl.style.color)}
+                onPick={hex => applyColor('text', hex)}
               />
-              {stepButton('Default text color', <LuCircleSlash2 />, () => applyStyleProp('color', null))}
+              <Tip label="Default text color">
+                <IconButton aria-label="Default text color" size="2xs" variant="ghost" onClick={clearTextColor}>
+                  <LuCircleSlash2 />
+                </IconButton>
+              </Tip>
             </>
           )}
           <ColorSwatchControl
             label="Fill color"
             icon={<LuPaintBucket />}
-            value={cssColorToHex(hostEl.style.backgroundColor)}
-            onPick={hex => applyStyleProp('background-color', hex)}
+            value={currentStoryColor(cls, 'fill') ?? cssColorToHex(hostEl.style.backgroundColor)}
+            onPick={hex => applyColor('fill', hex)}
           />
-          {stepButton('Default fill color', <LuCircleSlash2 />, () => applyStyleProp('background-color', null))}
+          <Tip label="Default fill color">
+            <IconButton aria-label="Default fill color" size="2xs" variant="ghost" onClick={clearFillColor}>
+              <LuCircleSlash2 />
+            </IconButton>
+          </Tip>
           {divider}
           <Tip label="Toggle full width">
             <IconButton

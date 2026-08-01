@@ -26,4 +26,12 @@ describe('story schema text ↔ component registry drift', () => {
       expect(text).toContain(name);
     }
   });
+
+  it('describes Tailwind classes as the only forward styling path', () => {
+    const text = contentSchemaText('story');
+    expect(text).toContain('Tailwind utilities on each element are the ONLY authored styling path');
+    expect(text).toContain('Do not author <style> blocks');
+    expect(text).toContain('className=');
+    expect(text).not.toContain('A <style> block is allowed');
+  });
 });

@@ -78,6 +78,32 @@ describe('validateJsx — component registry', () => {
   });
 });
 
+describe('validateJsx — Tailwind-only style policy', () => {
+  const tailwindOnly: ValidateOptions = {
+    components: ['Param'],
+    allowedHtmlTags: ['div', 'style'],
+    stylePolicy: 'tailwind-only',
+  };
+
+  it('rejects style blocks and inline HTML styles with recovery guidance', () => {
+    const errs = errors('<div style="color:red"><style>{`.x{color:red}`}</style></div>', tailwindOnly);
+    expect(errs.some(e => e.tag === 'style' && e.message.includes('className'))).toBe(true);
+    expect(errs.some(e => e.attr === 'style' && e.message.includes('className'))).toBe(true);
+  });
+
+  it('rejects historical component style aliases but accepts literal Tailwind classes', () => {
+    expect(errors('<Param labelStyle={{color:"red"}} />', tailwindOnly).some(e => e.attr === 'labelStyle')).toBe(true);
+    expect(errors('<div className="text-[#ff0000] bg-muted">x</div>', tailwindOnly)).toEqual([]);
+  });
+
+  it('keeps styles valid under the default compatibility policy', () => {
+    expect(errors('<div style="color:red"><style>{`.x{color:red}`}</style></div>', {
+      components: [],
+      allowedHtmlTags: ['div', 'style'],
+    })).toEqual([]);
+  });
+});
+
 describe('validateJsx — unknown-component error guidance', () => {
   it('keeps the stable "Unknown component" prefix', () => {
     const errs = errors(`<Chart />`, { components: ['Question'] });
