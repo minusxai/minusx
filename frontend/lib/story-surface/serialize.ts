@@ -58,14 +58,42 @@ async function toDataUrl(url: string): Promise<string | null> {
 }
 
 /**
+ * URLs whose inlining failed since the last {@link takeFailedFontUrls}. A capture that could not
+ * inline a face is NOT a failed capture — it renders in a fallback family — but it is a DEGRADED
+ * one, and silently degraded output is the reason "the screenshot doesn't match the story" is so
+ * hard to diagnose: substituting a family changes glyph widths, so spacing and line WRAPPING move
+ * with it, and all three read as three separate bugs. Same contract as `reviewFile`'s
+ * `renderPending` / `reviewNote` — a degraded result must not look like a clean one.
+ */
+// eslint-disable-next-line no-restricted-syntax -- browser-only capture diagnostics, drained per capture
+const failedFontUrls = new Set<string>();
+
+/** Drain the failed-font set, returning what failed since the last call. */
+export function takeFailedFontUrls(): string[] {
+  const urls = Array.from(failedFontUrls);
+  failedFontUrls.clear();
+  return urls;
+}
+
+/**
  * Rewrite every remote `url(...)` in `css` to a data: URL. Font files that fail to fetch keep their
- * original URL (they simply won't render in the <img> context) rather than breaking the whole sheet.
+ * original URL rather than breaking the whole sheet — but the <img>-rendered SVG has no network, so
+ * that face will NOT render and the text falls back to another family. Failures are recorded in
+ * {@link takeFailedFontUrls} and warned once, so the substitution is observable.
  */
 export async function inlineFontUrls(css: string): Promise<string> {
   const urls = Array.from(new Set(Array.from(css.matchAll(FONT_URL_RE), (m) => m[2])));
   if (urls.length === 0) return css;
   const resolved = await Promise.all(urls.map(async (u) => [u, await toDataUrl(u)] as const));
   const map = new Map(resolved);
+  const failed = resolved.filter(([, data]) => data === null).map(([u]) => u);
+  if (failed.length > 0) {
+    failed.forEach((u) => failedFontUrls.add(u));
+    console.warn(
+      `[capture] ${failed.length} font file(s) could not be inlined; the capture will render them in a `
+      + `fallback family, which also shifts spacing and line wrapping: ${failed.join(', ')}`
+    );
+  }
   return css.replace(FONT_URL_RE, (whole, _q, url: string) => {
     const data = map.get(url);
     return data ? `url("${data}")` : whole;

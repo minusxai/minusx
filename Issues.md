@@ -31,47 +31,91 @@ building `oldMatch`. A provider is now configured, so this is unblocked.
 ## Open
 
 ### 2. Story edits change unrelated parts of the document
-**Status:** Open — both hypotheses tested; (a) ruled out, (b) confirmed structurally.
+**Status:** Partially fixed — the confirmed mechanism is addressed; one contributor is documented
+and deliberately NOT changed.
 
 **(a) "the agent isn't told to focus on where the user is looking" — RULED OUT.** The nudge already
-exists, twice. `orchestrator/prompts/prompts.yaml:34` explains the `<Viewport>` block and tells the
-agent to use it to ground "this" / "here" / "what I'm looking at". `prompts.yaml:866` is explicit:
-*"Default to the user's current viewport … Keep ordinary copy, styling, and content adjustments
-localized to those visible sections — do not propagate them into off-screen sections just because
-similar markup appears elsewhere."* Adding more prompt here is unlikely to help.
+exists twice. `orchestrator/prompts/prompts.yaml:34` explains the `<Viewport>` block; `:866` says
+*"Default to the user's current viewport … do not propagate them into off-screen sections just
+because similar markup appears elsewhere."* Two further bullets already demand minimal, scoped
+edits. More prompt on scope would be redundant.
 
-**(b) global vs local styling — CONFIRMED as a real structural path.**
+**(b) global vs local styling — CONFIRMED, and now addressed.**
 `lib/data/story/file-markup.ts:58` `hasAuthoredStoryStyles()`: a stored JSX story containing a
-`<style>` element, or any `style`/`labelStyle` attribute, is routed to
-`JSX_STORY_STYLE_COMPAT_CTX` with `stylePolicy: 'allow'` instead of the `'tailwind-only'` policy
-that new stories get. A `<style>` block is **document-scoped by definition** — editing one rule in
-it changes every section matching the selector, which is exactly the reported symptom.
+`<style>` element or any `style`/`labelStyle` attribute is routed to `JSX_STORY_STYLE_COMPAT_CTX`
+with `stylePolicy: 'allow'` rather than the `'tailwind-only'` policy new stories get. A `<style>`
+rule is document-scoped, so editing one restyles every matching element — including off-screen
+sections. The compat is **sticky**: once a story has authored CSS it keeps `allow` forever.
 
-The compat is **sticky**: once a story has authored CSS it keeps `allow` forever, so legacy stories
-are never pushed toward local utilities and stay permanently exposed to this.
+*Fix applied:* a new bullet in the "Editing an existing story" prompt section states that a
+`<style>` rule is global and a class is local, that older stories still carry authored CSS where
+editing a rule silently restyles everything matching the selector, and that a localized change
+belongs on utility classes. Reaching for a `<style>` rule now requires the user to have asked for a
+story-wide change, and the agent must say so.
 
-**A second, separate contributor — diff noise, not render change.** The markup round-trip
-canonicalises the WHOLE document on every edit, measured: single→double quote style
-(`'text-2xl'` → `"text-2xl"`), void elements (`<br>` → `<br />`, `<img/>` → `<img />`), and the
-`<story>` wrapper joining onto its first child. Class whitespace and entities are preserved. None
-of this changes rendering, but on the first edit of a non-canonical story it makes the diff touch
-every section — which matches "have to always check whole document" even when the render is fine.
-
-**Suggested direction** (not yet implemented): migrate legacy authored CSS to utilities so
-`stylePolicy: 'allow'` stops being sticky, and/or nudge the agent to prefer local utilities over
-editing a `<style>` rule when a story is in compat mode. The canonicalisation noise is separately
-worth fixing by canonicalising on write once, rather than on every edit.
+**A second contributor — diff noise, not render change. Documented, not changed.** The markup
+round-trip canonicalises the WHOLE document on every edit: quote style (`'x'` -> `"x"`), void
+elements (`<br>` -> `<br />`), and the `<story>` wrapper joining its first child. Class whitespace
+and entities are preserved, so **rendering is unaffected** — but on the first edit of a
+non-canonical story the diff touches every section, which reads as "it changed the whole document".
+Deliberately left alone: that canonical round-trip is what makes the echoed diff authoritative and
+`oldMatch` reliable (`store/CLAUDE.md:133`), so moving it is a change to the edit surface for a
+purely cosmetic gain. Fix it by canonicalising once on write if it becomes worth the risk.
 
 ### 3. Screenshot is not identical to the rendered story
-**Status:** Open. Font, spacing and text wrap differ between the capture and the live surface.
-To be reproduced directly by capturing a story and diffing against the live render — not waiting
-on a hand-supplied example.
+**Status:** Partially fixed — the silent-degradation path is closed; the specific reported case is
+not confirmed reproduced.
+
+The capture pipeline is already careful about fonts: `@font-face` files are inlined as `data:` URIs,
+`document.fonts.ready` is awaited (bounded), and `applyInheritedTypography` bakes the root's computed
+typography onto the clone precisely because otherwise "text falls back to UA serif at
+`line-height: normal` and **re-wraps**".
+
+The hole was that `inlineFontUrls` (`lib/story-surface/serialize.ts`) returned `null` on ANY fetch
+failure with no log and no signal. The face then keeps its original URL, which an `<img>`-rendered
+SVG cannot fetch, so the text silently renders in a fallback family — and substituting a family
+changes glyph widths, so **spacing and line wrapping move with it**. One degradation presents as the
+exact reported triple (font, spacing, wrap) and is undiagnosable by construction.
+
+*Fix applied:* failures are now recorded and warned. `takeFailedFontUrls()` drains the URLs that
+failed since the last call, matching the `renderPending` / `reviewNote` contract used by
+`reviewFile` — a degraded capture must not read as a clean one. Covered by three tests in
+`lib/story-surface/__tests__/serialize.ui.test.ts`.
+
+**Honest limit:** this makes the most likely cause observable; it does not prove it was the cause.
+The next step is a capture on a story that actually exhibits the mismatch and reading the new
+warning. I could not confirm it here — the local workspace has no story with the defect.
 
 ### 4. Hydration errors in the app shell
-**Status:** Open — found, not chased. Next.js dev overlay reports 3 recoverable hydration
-mismatches ("server rendered HTML didn't match the client") on a Chakra `<Stack>`.
-`lib/utils/error-utils.ts` already classifies hydration errors in order to *suppress* them from
-reports, so these are known and muted rather than fixed.
+**Status:** Open — root-caused precisely, NOT fixed. This is the one item left undone.
+
+Reproduced on a clean dev server at `/p/org` (1 recoverable error; it does not fire on every route
+or every load, which is why it looked intermittent). Full component path from the console trace:
+
+```
+RightSidebar > HStack2 > Stack2 > chakra(div) display={{base:"none", ...}}
+  <Insertion>
++ <div className="chakra-stack css-1somh0n">
+```
+
+The `+` node is the HStack's OWN div rendered by the client with a different Emotion class hash than
+the server produced. Two candidates were checked and eliminated: it is **not** the
+`{!isCollapsed && ...}` conditional at `RightSidebar.tsx:524` — `uiSlice`'s `initialState` sets
+`rightSidebarCollapsed: true` deliberately ("Start closed so hydration never flashes the expanded
+sidebar", `store/uiSlice.ts:73`) and `DataLoader` only applies the persisted value after mount — and
+it is **not** the responsive `display` prop, which compiles to a media query.
+
+That leaves an Emotion style-insertion divergence between server and client render.
+`components/app-shell/Providers.tsx` mounts `<ChakraProvider value={system}>` with **no Emotion
+cache provider and no `useServerInsertedHTML`**, which is the documented Next.js App Router
+requirement for Emotion-based libraries; without it, SSR-inserted styles are not flushed in the
+order the client recreates them.
+
+**Why it was not fixed here:** the change belongs in the app shell and affects every page in the
+product, while the bug itself is a dev-overlay-only warning that React recovers from by regenerating
+that subtree. Making that change without being able to regression-test every route is a worse trade
+than leaving it. It is a contained, well-specified next task: add an Emotion cache provider with
+`useServerInsertedHTML` in `Providers.tsx` and re-check this route.
 
 ### 5. Lost rationale comment in `file-edit.ts`
 **Status:** Fixed — commit on `MISC/fixes-v7`.

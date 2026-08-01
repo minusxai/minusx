@@ -71,7 +71,13 @@ clone only** (the live DOM is never mutated):
 - head styles cloned in (`collectSurfaceCss` — the story's own `<style>` blocks already live inside
   the root and travel with it);
 - remote `url()` refs in every in-clone `<style>` inlined as `data:` URIs (`inlineFontUrls`, cached
-  forever — fonts are immutable), and `<img src>` inlined the same way;
+  forever — fonts are immutable), and `<img src>` inlined the same way. A face that fails to inline
+  keeps its original URL, which the `<img>`-rendered SVG cannot fetch, so the text renders in a
+  **fallback family** — and substituting a family changes glyph widths, so spacing and line
+  **wrapping** shift with it. That is one degradation presenting as three, which is why
+  `takeFailedFontUrls()` exists: it drains the URLs that failed since the last call (and
+  `inlineFontUrls` warns), so a degraded capture is observable instead of being read as three
+  unrelated rendering bugs. Same contract as `reviewFile`'s `renderPending` / `reviewNote`;
 - scroll offsets baked as transforms (`applyScrollOffsets` — `scrollLeft` is a property, so
   `XMLSerializer` drops it) and form state stamped as attributes (`stampFormValues`);
 - `applyInheritedTypography` — the standalone document has no `<html>`/`<body>`, so Tailwind
