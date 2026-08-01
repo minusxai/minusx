@@ -31,7 +31,8 @@ building `oldMatch`. A provider is now configured, so this is unblocked.
 ## Open
 
 ### 2. Tutorial mode takes minutes to load; queries time out
-**Status:** Open — root cause identified, fix not written.
+**Status:** Owned elsewhere — root cause below is the handover; another agent is doing the fix.
+Kept here so the issue stays visible, not to be worked on from this branch.
 
 Every tutorial card sits on "Executing query.." and times out at ~2 min; chat sits on "Loading
 connections and context...".
@@ -121,10 +122,6 @@ survivable today for specific reasons, which are worth knowing because those rea
 - **Query-result `data`** — same all-or-nothing behaviour, but bounded by `enforceQueryLimit`
   (1000/10000 rows) and stripped from app state entirely by `stripQueryData`, so only explicitly
   requested tool results carry rows.
-- **Query-result facet keys are content-derived.** `queryResultId` is a hash of query + params +
-  database, so an edited query produces a brand-new key and its rows are always sent in full, even
-  when almost every row is unchanged. Inherent to keying by content; only worth addressing if
-  result payloads start dominating.
 - **`finalQuery`** — same shape, already truncated when huge.
 - **Images are diffed on `key`, never the payload**, so base64 is never hashed or re-sent. This is
   the pattern the other heavy facets should be measured against.
