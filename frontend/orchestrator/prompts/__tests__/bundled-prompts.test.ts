@@ -72,6 +72,9 @@ describe('bundled prompts (standalone-safe, no backend filesystem)', () => {
     expect(examples).not.toMatch(/\blabelStyle\b/i);
     expect(examples).not.toMatch(/\bcss\s*:/i);
     expect(stories).not.toContain('table CSS contract');
+    expect(stories).toContain('The one CSS exception is scoped table/pivot visualization CSS');
+    expect(stories).toContain('use only `source.css` with the stable `.mx-table`, `.mx-th`, `.mx-row`, `.mx-cell`, `.mx-col-*`');
+    expect(stories).toContain('Style the embed\'s surrounding Story element only with Tailwind');
   });
 
   it('localizes ordinary Story edits to the user\'s current viewport', () => {
