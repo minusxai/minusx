@@ -171,7 +171,7 @@ templates:
       - Columns (2 or 3): equal cells on one gutter, and EACH COLUMN OPENS UNDER A RULE
         (`<div className="border-t-2 border-foreground pt-3">` heading + short copy); columns top-align
         and share the line rhythm. Collapse to one column on phones (`@2xl:grid-cols-3`).
-      - Quadrants: 2×2 grid with hairline cross rules (`divide-x divide-y divide-border`) and tiny
+      - Quadrants: 2x2 grid with hairline cross rules (`divide-x divide-y divide-border`) and tiny
         muted axis labels at the edges ("← less … more →").
       - Chart slide: claim headline + ONE `<Question>` (430-460px, ≥ 60% width) + one takeaway line
         under it. Restyle via `viz` override: all series in grays, ONE accent element (the bar/line
