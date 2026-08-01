@@ -49,8 +49,12 @@ app/f/[id]/page.tsx
 ```
 
 `FileView` centralizes the visual-vs-code decision: when `uiSlice.fileViewMode[id] === 'json'` it
-renders `views/CodeView.tsx` (editable JSON + read-only agent XML via `fileToMarkup`) instead of
-the type view. No type view carries its own JSON branch.
+renders `views/CodeView.tsx` instead of the type view. No type view carries its own JSON branch.
+Both surfaces are editable when `editable` is set: the **File** tab writes JSON back through
+`applyJsonContentEdit`, and the **Markup** tab writes the agent-facing `fileToMarkup` projection
+back through `applyMarkupContentEdit` — the direct-editor twin of `editFileStr`, sharing its parse,
+its context live-version fold and its permissive validation. A file type supplying an
+`xmlContentTransform` (context) shows a third **Agent** tab, and that one alone stays read-only.
 
 Two generic bridges let a view push chrome up into the shared header without a command bus:
 `file-toolbar/FileToolbarContext.tsx` (`useFileToolbarActions(memoizedActions)` in the view →
