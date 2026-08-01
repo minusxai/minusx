@@ -12,19 +12,33 @@ Status key: **Open** · **In progress** · **Fixed** · **Not reproducible** · 
 ## Fixed
 
 ### 1. Context bloat — ~8k tokens per story edit
-**Status:** Fixed — PR #683 (`MISC/fixes-v7`), not yet merged, not yet LLM-verified.
+**Status:** Fixed — PR #683. Unit-verified; the delta path is NOT yet observed firing end-to-end.
 
-`FacetMemo` diffs every facet by exact hash: identical → a 42-token `{unchanged:true}` marker,
-different by one character → the **whole value**. `project.ts` had one facet key
+`FacetMemo` diffs every facet by exact hash: identical -> a 42-token `{unchanged:true}` marker,
+different by one character -> the **whole value**. `project.ts` had one facet key
 (`file:<id>:content`) for the entire document, and the agent edits one line at a time, so every
 edit re-sent the whole story.
 
 Measured on a 40-section story: **5,498 tokens/turn while editing vs 42 tokens/turn while idle** —
-a 131× gap. Fix emits a line diff (`<file_markup_delta>`) against the last full copy: **400
-tokens/turn, a 13.7× reduction**.
+a 131x gap. Fix emits a line diff (`<file_markup_delta>`) against the last full copy: **400
+tokens/turn, a 13.7x reduction**. Three invariants keep it safe (only a FULL emission records a
+delta base; `reset()` clears bases with hashes; a delta over `MAX_DELTA_RATIO` falls back to full
+and rebases).
 
-Remaining: browser-verify with a live model that the agent handles delta blocks correctly when
-building `oldMatch`. A provider is now configured, so this is unblocked.
+**Live verification, honestly reported.** A real chat session was run against a live model
+(conversation 1031, gpt-5.6-terra). The agent created an 8-section story and edited it, and the
+app behaved correctly throughout. Reading the actual LLM requests via
+`/api/conversations/1031/llm-calls`, the story markup facet went `45 chars -> 2111 chars`
+(empty draft -> full story) and the projection correctly **declined** to send a delta, because that
+change exceeds `MAX_DELTA_RATIO` — the guard working as designed.
+
+What is therefore still unproven is the payoff case: a SMALL edit to an already-large story
+emitting a real `<file_markup_delta>` into a live request. The follow-up edit turn did not produce
+a recorded LLM call before this session ended, so no delta block has been observed in production
+traffic. The mechanism is proven by unit tests and by reading the rendered prompt artifact; it is
+not yet proven by a live request. **Do this before merging:** open a story with substantial markup,
+ask for a one-line change, then check
+`(await (await fetch('/api/conversations/<id>/llm-calls')).json())` for `<file_markup_delta>`.
 
 ---
 
