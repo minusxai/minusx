@@ -33,9 +33,21 @@ import type {
   ProjectionTextBlock,
 } from './types';
 import type { ImageContent } from '@/orchestrator/llm';
+// The same Myers line diff the EditFile echo uses, so a markup delta reads identically to the
+// diffs the agent already receives after its own edits.
+import { generateDiff } from '@/lib/file-state/shared';
 
 const PRESENT: BlockFacetSignal = { state: 'present' };
 const UNCHANGED: BlockFacetSignal = { state: 'unchanged' };
+const DELTA: BlockFacetSignal = { state: 'delta' };
+
+/**
+ * Send a markup delta only while it stays under this fraction of the whole document. Deltas are
+ * measured against the last FULL emission, so they grow as the document drifts from it; past this
+ * ratio the full document is cheaper *and* rebases the baseline, which is what keeps the sequence
+ * from degenerating into an ever-larger diff.
+ */
+const MAX_DELTA_RATIO = 0.5;
 
 /**
  * Cap the executed SQL echoed into a projected query result. A pathological `finalQuery` (giant
@@ -101,13 +113,32 @@ function projectEntry(memo: FacetMemo, entry: AugmentedFileEntry, opts: EntryOpt
   };
 
   // markup — out-of-JSON block when changed. Suppressed entirely for references (policy).
+  //
+  // A changed document is sent as a DELTA against the copy already in the window whenever one
+  // exists and the delta is materially smaller. Without this, an edit loop re-sends the whole
+  // document every turn: hashing is all-or-nothing, and the agent changes one line at a time, so a
+  // 40-section story cost ~5.5k tokens per turn while being edited versus 42 tokens per turn while
+  // idle. The baseline is whatever was last emitted IN FULL (`rememberBody`), so the diff always
+  // has something visible to apply to; with no baseline, or a delta that saves little, the full
+  // document goes as before.
   if (opts.includeMarkup && entry.content) {
-    const d = memo.diff(`file:${id}:content`, entry.content);
+    const contentKey = `file:${id}:content`;
+    const d = memo.diff(contentKey, entry.content);
     if (isUnchanged(d)) {
       json.content = UNCHANGED;
     } else {
-      json.content = PRESENT;
-      textBlocks.push({ kind: 'markup', fileId: id, type: entry.data.type, text: entry.content.markup });
+      const markup = entry.content.markup;
+      const base = memo.rememberedBody(contentKey);
+      const delta = base === undefined ? undefined : generateDiff(base, markup);
+      if (delta !== undefined && delta.length <= markup.length * MAX_DELTA_RATIO) {
+        json.content = DELTA;
+        textBlocks.push({ kind: 'markupdelta', fileId: id, type: entry.data.type, text: delta });
+      } else {
+        json.content = PRESENT;
+        textBlocks.push({ kind: 'markup', fileId: id, type: entry.data.type, text: markup });
+        // Only a FULL emission may become a delta base — the model has seen exactly this text.
+        memo.rememberBody(contentKey, markup);
+      }
     }
   }
 

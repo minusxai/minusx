@@ -59,6 +59,8 @@ export function facetHash(value: unknown): string {
  */
 export class FacetMemo {
   private readonly last = new Map<string, string>();
+  /** Last full TEXT emitted per key — the base a delta rebases onto. See {@link rememberBody}. */
+  private readonly body = new Map<string, string>();
 
   /**
    * Diff one facet by its stable key.
@@ -81,8 +83,31 @@ export class FacetMemo {
     return this.last.has(key);
   }
 
-  /** Drop all baselines (e.g. at a summarization boundary) so the next pass re-emits in full. */
+  /**
+   * The exact TEXT last emitted in full for this key, if any.
+   *
+   * {@link diff} only retains hashes, which is enough to say "changed" but not enough to say WHAT
+   * changed. Markup needs the latter: a document edited one line at a time would otherwise be
+   * re-sent whole on every turn. Only callers that emit a delta record a body here, and they record
+   * the text they actually put in the window — never a value the model has not been shown, or the
+   * delta would rebase onto something invisible.
+   */
+  rememberBody(key: string, text: string): void {
+    this.body.set(key, text);
+  }
+
+  /** The remembered body for this key, or `undefined` when nothing has been emitted in full yet. */
+  rememberedBody(key: string): string | undefined {
+    return this.body.get(key);
+  }
+
+  /**
+   * Drop all baselines (e.g. at a summarization boundary) so the next pass re-emits in full.
+   * Clears remembered BODIES too: past that boundary the earlier turns are gone from the window,
+   * so a delta rebasing onto one would apply to text the model can no longer see.
+   */
   reset(): void {
     this.last.clear();
+    this.body.clear();
   }
 }

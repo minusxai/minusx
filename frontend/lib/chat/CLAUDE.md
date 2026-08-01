@@ -134,7 +134,7 @@ rather than a silently un-routed managed call.
 `frontend/lib/projection/types.ts` (rich `AugmentedFiles` vs projected JSON),
 `frontend/lib/projection/from-compressed.ts` (`CompressedAugmentedFile` → `AugmentedFiles`),
 `frontend/lib/projection/project.ts` (per-facet diff → lean JSON + out-of-JSON blocks),
-`frontend/lib/projection/render.ts` (blocks → `<AppState>` / `<file_markup>` / `<query_data>` +
+`frontend/lib/projection/render.ts` (blocks → `<AppState>` / `<file_markup>` / `<file_markup_delta>` / `<query_data>` +
 image content), `frontend/lib/projection/messages.ts` (`projectMessages` — the single pass over an
 assembled `Message[]`), `frontend/lib/projection/image-validate.ts` (`imageContentFromUrl`,
 `assertValidProviderImages`).
@@ -298,6 +298,20 @@ sees *and* what Redux stores.
   `SUPERSEDED_SCREENSHOT_STUB`. That is bounded on purpose — in an edit loop the previous
   screenshot-bearing edit sits near the tail, so only a short cache suffix is clipped. Any *new*
   backward rewrite is not bounded that way and will invalidate the whole prefix.
+- **Markup is the one facet sent INCREMENTALLY.** Every other facet is all-or-nothing: hash equal →
+  `{unchanged:true}`, hash different → the whole value. On a document the agent edits one line at a
+  time that is pathological — a 40-section story measured ~5.5k tokens *per turn* while being edited
+  against 42 tokens per turn while idle, which is what filled the window in a couple of exchanges.
+  So a changed `file:<id>:content` is emitted as a line diff (`<file_markup_delta>`, the same
+  `generateDiff` the EditFile echo uses) against the last copy sent in FULL, dropping the same case
+  to ~400 tokens. Three invariants keep it honest, all in `project.ts` / `facets.ts`: only a **full**
+  emission records a delta base (`FacetMemo.rememberBody`), so a diff never rebases onto text the
+  model was never shown; `FacetMemo.reset()` clears the bases with the hashes, because past a
+  summarization boundary the base is no longer in the window; and a delta above `MAX_DELTA_RATIO`
+  (half the document) falls back to the full markup, which re-bases and stops the diff growing
+  without bound as the document drifts. The block is labelled in the prompt as a diff *and* tells the
+  model to strip `+`/`-` prefixes before reusing a line in `oldMatch` — unlabelled, it reads as a
+  very short document.
 - **Images diff on `key`, never on the payload** (`file:<id>:image`, `qr:<queryResultId>:image`), so base64 is
   never hashed. A `data:` URL placed in `ImageContent.url` is the bug that shipped once (the provider
   reported an undefined MIME type) — `imageContentFromUrl` and `assertValidProviderImages` exist to
