@@ -135,11 +135,19 @@ cache provider and no `useServerInsertedHTML`**, which is the documented Next.js
 requirement for Emotion-based libraries; without it, SSR-inserted styles are not flushed in the
 order the client recreates them.
 
-**Why it was not fixed here:** the change belongs in the app shell and affects every page in the
-product, while the bug itself is a dev-overlay-only warning that React recovers from by regenerating
-that subtree. Making that change without being able to regression-test every route is a worse trade
-than leaving it. It is a contained, well-specified next task: add an Emotion cache provider with
-`useServerInsertedHTML` in `Providers.tsx` and re-check this route.
+**Why it is still open.** The change belongs in the app shell and affects every route, while the
+bug itself is a dev-overlay-only warning that React recovers from by regenerating that subtree.
+It could not be verified here either: the local dev environment became unreachable behind its
+proprietary tenancy module (every route 307s to `/login`, and `RightSidebar` does not render on the
+login page), so an app-shell change could not be exercised at all. Shipping an unverifiable global
+change to fix a recoverable dev warning is the wrong trade.
+
+**The next task, fully specified.** Add an Emotion cache provider to
+`components/app-shell/Providers.tsx` — a client component that creates the cache once and flushes
+inserted rules through `useServerInsertedHTML` — wrapping the existing `<ChakraProvider value={system}>`.
+Then load `/p/org` with the right sidebar mounted and confirm the console reports no
+"Hydration failed" entry. Ruled out already, so do not re-investigate: the `{!isCollapsed && ...}`
+conditional and the responsive `display` prop.
 
 ### 5. Lost rationale comment in `file-edit.ts`
 **Status:** Fixed — commit on `MISC/fixes-v7`.
