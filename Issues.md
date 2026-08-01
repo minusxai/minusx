@@ -74,13 +74,13 @@ mismatches ("server rendered HTML didn't match the client") on a Chakra `<Stack>
 reports, so these are known and muted rather than fixed.
 
 ### 5. Lost rationale comment in `file-edit.ts`
-**Status:** Open — one line. `lib/file-state/file-edit.ts:318` sets `assets = undefined` and the
-comment now says only *what* it does. The deleted *why* is load-bearing:
-`store/filesSlice.ts:991` merges with a spread (`{...content, ...persistableChanges}`), and a
-spread cannot delete a key — so `delete` would silently stop clearing the field. Restore the
-rationale next time the file is touched.
+**Status:** Fixed — commit on `MISC/fixes-v7`.
 
----
+`lib/file-state/file-edit.ts:317` now records why `assets` is assigned `undefined` rather than
+`delete`-ed: staged edits recombine with stored content by SPREAD (the save path and
+`selectMergedContent`), and a spread cannot remove a key, so `delete` silently leaves the stored
+manifest intact. Pinned by `lib/file-state/__tests__/story-assets-cleared.test.ts`, whose second
+case asserts the `delete` form does NOT clear it — so the trap is now enforced, not remembered.
 
 ## Not reproducible
 
