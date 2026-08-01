@@ -25,20 +25,30 @@ tokens/turn, a 13.7x reduction**. Three invariants keep it safe (only a FULL emi
 delta base; `reset()` clears bases with hashes; a delta over `MAX_DELTA_RATIO` falls back to full
 and rebases).
 
-**Live verification, honestly reported.** A real chat session was run against a live model
-(conversation 1031, gpt-5.6-terra). The agent created an 8-section story and edited it, and the
-app behaved correctly throughout. Reading the actual LLM requests via
-`/api/conversations/1031/llm-calls`, the story markup facet went `45 chars -> 2111 chars`
-(empty draft -> full story) and the projection correctly **declined** to send a delta, because that
-change exceeds `MAX_DELTA_RATIO` — the guard working as designed.
+**Verification.** Two layers, plus one live run.
 
-What is therefore still unproven is the payoff case: a SMALL edit to an already-large story
-emitting a real `<file_markup_delta>` into a live request. The follow-up edit turn did not produce
-a recorded LLM call before this session ended, so no delta block has been observed in production
-traffic. The mechanism is proven by unit tests and by reading the rendered prompt artifact; it is
-not yet proven by a live request. **Do this before merging:** open a story with substantial markup,
-ask for a one-line change, then check
-`(await (await fetch('/api/conversations/<id>/llm-calls')).json())` for `<file_markup_delta>`.
+- `lib/projection/__tests__/markup-incremental.test.ts` drives `renderAppState` and measures the
+  reduction. Confirmed RED before the fix (`expected 21993 to be less than 5528.5`).
+- `lib/projection/__tests__/markup-delta-e2e.test.ts` drives **`projectMessages`** — the function
+  that actually assembles what the model receives — over a multi-turn log: the document is sent
+  once, each subsequent small edit is a `<file_markup_delta>` under a quarter the size, an unchanged
+  turn still collapses to `{unchanged:true}`, and the block carries its own "this is a LINE DIFF /
+  strip the prefix before using a line in oldMatch" instruction. These tests cannot pass on `main` —
+  the tag does not exist there.
+- A live session against a real model (conversation 1031, gpt-5.6-terra) created an 8-section story
+  and edited it; the app behaved correctly and the agent's edit was properly scoped. Reading the
+  real requests via `/api/conversations/<id>/llm-calls`, the markup facet went 45 -> 2111 chars
+  (empty draft -> full story) and the projection correctly **declined** a delta, because that change
+  exceeds `MAX_DELTA_RATIO`. That is the guard working, and it is now pinned as its own case in the
+  e2e test.
+
+**Residual gap:** a `<file_markup_delta>` has not been observed in live production traffic — the
+follow-up small-edit turn did not record an LLM call before the local dev environment became
+unusable (its proprietary tenancy module started throwing at the login path, unrelated to this
+branch). The behaviour is proven through the real assembly function and by reading the rendered
+prompt; it is not proven by a captured live request. To close it: open a story with substantial
+markup, ask for a one-line change, then check
+`(await (await fetch('/api/conversations/<id>/llm-calls')).json())` for `file_markup_delta`.
 
 ---
 
