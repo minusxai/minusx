@@ -8,9 +8,7 @@ import { LATEST_DATA_VERSION } from '@/lib/database/constants';
 import { hashPassword } from '@/lib/auth/password-utils';
 import workspaceTemplate from '@/lib/database/workspace-template.json';
 import { DEFAULT_STYLES } from '@/lib/branding/whitelabel';
-import { copySeedMxfoodForMode } from '@/lib/object-store';
 import { registerCompanyWithGateway } from '@/lib/gateway/gateway-register.server';
-import { MXFOOD_TABLES } from '@/lib/object-store/mxfood-tables';
 import { getRawConfig, saveRawConfig } from '@/lib/data/configs.server';
 import { ConnectionsAPI } from '@/lib/data/connections.server';
 import { DEFAULT_MODE } from '@/lib/mode/mode-types';
@@ -97,17 +95,9 @@ export class AuthModule implements IAuthModule {
     initData.version = LATEST_DATA_VERSION;
     await atomicImport(initData);
 
-    // Tutorial mode ships a CSV connection that points at parquet files which
-    // must live on disk under LOCAL_UPLOAD_PATH/csvs/tutorial/mxfood/. Without
-    // this best-effort copy, the very first tutorial query in a fresh install
-    // explodes with a DuckDB "No files found that match the pattern" IO error.
-    // Fire-and-forget so registration redirect isn't blocked on the (possibly
-    // multi-MB) one-time download from the mxfood seed release.
-    copySeedMxfoodForMode('tutorial', MXFOOD_TABLES).then((copied) => {
-      console.log(`[AuthModule.register] Seeded ${copied.length}/${MXFOOD_TABLES.length} mxfood tutorial tables`);
-    }).catch((err) => {
-      console.warn('[AuthModule.register] mxfood tutorial seed failed (non-fatal):', err);
-    });
+    // The tutorial's sample-data connection needs no seeding here: its entries are
+    // `dataset` references that the CSV connector reads from the published source
+    // and materializes on first use (lib/connections/csv-connector.ts).
 
     const warnings: string[] = [];
 

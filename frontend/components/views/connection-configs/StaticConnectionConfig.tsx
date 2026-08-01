@@ -44,7 +44,7 @@ import {
 import { CsvFileInfo, JobSchedule } from '@/lib/types';
 import { reimportGoogleSheets } from '@/lib/connections/client/google-sheets';
 import { mergeReimportedSheetFiles } from '@/lib/data/helpers/sheet-reimport';
-import { validateIdentifier } from '@/lib/csv-utils';
+import { validateIdentifier, fileRowKey } from '@/lib/csv-utils';
 import { BaseConfigProps } from './types';
 import { SheetsAutoSyncSection } from './SheetsAutoSyncSection';
 import { FileRow } from './FileRow';
@@ -224,7 +224,7 @@ export default function StaticConnectionConfig({
   // ── Rename handlers ───────────────────────────────────────────────────────
 
   const handleStartEdit = (f: CsvFileInfo) => {
-    setEditingKey(f.s3_key);
+    setEditingKey(fileRowKey(f));
     setEditSchema(f.schema_name);
     setEditTable(f.table_name);
     setEditError('');
@@ -235,14 +235,14 @@ export default function StaticConnectionConfig({
     setEditError('');
   };
 
-  const handleConfirmRename = (s3Key: string) => {
+  const handleConfirmRename = (rowKey: string) => {
     const schemaErr = validateIdentifier(editSchema);
     if (schemaErr) { setEditError(`Schema: ${schemaErr}`); return; }
     const tableErr = validateIdentifier(editTable);
     if (tableErr) { setEditError(`Table: ${tableErr}`); return; }
 
     // Collision check — exclude the file being renamed
-    const others = existingFiles.filter((f) => f.s3_key !== s3Key);
+    const others = existingFiles.filter((f) => fileRowKey(f) !== rowKey);
     if (others.some((f) => f.schema_name === editSchema && f.table_name === editTable)) {
       setEditError(`${editSchema}.${editTable} is already used by another file`);
       return;
@@ -250,7 +250,7 @@ export default function StaticConnectionConfig({
 
     onChange({
       files: existingFiles.map((f) =>
-        f.s3_key === s3Key ? { ...f, schema_name: editSchema, table_name: editTable } : f
+        fileRowKey(f) === rowKey ? { ...f, schema_name: editSchema, table_name: editTable } : f
       ),
     });
     setEditingKey(null);
@@ -259,9 +259,9 @@ export default function StaticConnectionConfig({
 
   // ── Delete with confirmation ──────────────────────────────────────────────
 
-  const handleDeleteFileClick = (s3Key: string) => {
-    const file = existingFiles.find((f) => f.s3_key === s3Key);
-    setDeleteTarget({ type: 'file', s3Key, name: file ? `${file.schema_name}.${file.table_name}` : s3Key });
+  const handleDeleteFileClick = (rowKey: string) => {
+    const file = existingFiles.find((f) => fileRowKey(f) === rowKey);
+    setDeleteTarget({ type: 'file', s3Key: rowKey, name: file ? `${file.schema_name}.${file.table_name}` : rowKey });
   };
 
   const handleDeleteSheetGroupClick = (spreadsheetId: string) => {
@@ -273,14 +273,16 @@ export default function StaticConnectionConfig({
   const handleDeleteConfirm = () => {
     if (!deleteTarget) return;
     if (deleteTarget.type === 'file') {
-      onChange({ files: existingFiles.filter((f) => f.s3_key !== deleteTarget.s3Key) });
-      onPendingDeletion?.(deleteTarget.s3Key);
+      const file = existingFiles.find((f) => fileRowKey(f) === deleteTarget.s3Key);
+      onChange({ files: existingFiles.filter((f) => fileRowKey(f) !== deleteTarget.s3Key) });
+      // Only uploaded entries have an object to delete; a dataset entry is just config.
+      if (file?.s3_key) onPendingDeletion?.(file.s3_key);
       if (editingKey === deleteTarget.s3Key) setEditingKey(null);
     } else {
       const groupFiles = sheetsGroups.get(deleteTarget.id) ?? [];
       onChange({ files: existingFiles.filter((f) => f.spreadsheet_id !== deleteTarget.id) });
-      groupFiles.forEach((f) => onPendingDeletion?.(f.s3_key));
-      if (groupFiles.some((f) => f.s3_key === editingKey)) setEditingKey(null);
+      groupFiles.forEach((f) => f.s3_key && onPendingDeletion?.(f.s3_key));
+      if (groupFiles.some((f) => fileRowKey(f) === editingKey)) setEditingKey(null);
     }
     setDeleteTarget(null);
     // Auto-save after delete
@@ -295,7 +297,7 @@ export default function StaticConnectionConfig({
 
     const spreadsheetUrl = groupFiles[0].spreadsheet_url ?? '';
     const schemaName = groupFiles[0].schema_name ?? 'public';
-    const oldS3Keys = groupFiles.map((f) => f.s3_key);
+    const oldS3Keys = groupFiles.map((f) => f.s3_key).filter((k): k is string => !!k);
 
     setReimportingId(spreadsheetId);
     try {

@@ -50,7 +50,7 @@ Model providers, keys, and assignments are configured **in the app** (setup wiza
 | `BASE_DUCKDB_DATA_PATH` | `.` (image: `/app`) | Base directory for resolving relative DuckDB file paths. |
 | `ANALYTICS_DB_DIR` | derived | Directory for the internal usage-analytics DuckDB store. |
 | `LOCAL_UPLOAD_PATH` | `<base>/data/uploads` | Filesystem directory for uploaded files. |
-| `MXFOOD_DUCKDB_URL` | GitHub release URL | Where the tutorial sample dataset is downloaded from (point at a mirror for airgapped installs). |
+| `MX_STATIC_DATASETS_BASE_URL` | GitHub release URL | Base URL the tutorial sample dataset is read from, as `{base}/{dataset}/{table}.parquet` (point at a mirror for airgapped installs). |
 
 ## Object storage (optional)
 

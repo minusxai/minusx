@@ -45,3 +45,13 @@ export function validateIdentifier(value: string): string | null {
   if (!NAME_PATTERN.test(value)) return 'Lowercase letters, numbers, and underscores only';
   return null;
 }
+
+/**
+ * Stable row identity for a CSV-connection file entry. Uploaded entries are
+ * identified by their object key; static-dataset entries have no object key,
+ * so they key on dataset + relation name instead. Used by the connection
+ * editor for edit/delete bookkeeping — never as a storage key.
+ */
+export function fileRowKey(f: { s3_key?: string; dataset?: string; schema_name: string; table_name: string }): string {
+  return f.s3_key ?? `dataset:${f.dataset ?? ''}:${f.schema_name}.${f.table_name}`;
+}

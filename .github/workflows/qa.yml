@@ -167,8 +167,8 @@ jobs:
         run: tar -xf next-qa.tar && rm next-qa.tar
 
       # No QA_BASE_URL → the QA config `next start`s the restored build and runs its
-      # shard of the flows against it in tutorial mode. mxfood sample data seeds via the
-      # public release download (no S3 creds in CI → local object store).
+      # shard of the flows against it in tutorial mode. mxfood sample data is read from
+      # its published source by the CSV connector on first query (warmed in reset.setup).
       - name: Run QA flows (shard ${{ matrix.shard }}/3)
         working-directory: ./frontend
         env:

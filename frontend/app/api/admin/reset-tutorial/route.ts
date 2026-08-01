@@ -19,8 +19,6 @@ import { getModules } from '@/lib/modules/registry';
 import { DEFAULT_STYLES } from '@/lib/branding/whitelabel';
 import { DEFAULT_DB_TYPE } from '@/lib/config';
 import workspaceTemplate from '@/lib/database/workspace-template.json';
-import { copySeedMxfoodForMode } from '@/lib/object-store';
-import { MXFOOD_TABLES } from '@/lib/object-store/mxfood-tables';
 
 export const POST = withAuth(async (_request: NextRequest, user) => {
   if (!isAdmin(user.role)) {
@@ -95,12 +93,8 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
       );
     }
 
-    // Re-copy mxfood seed Parquet files — best-effort
-    copySeedMxfoodForMode('tutorial', MXFOOD_TABLES).then((copied) => {
-      console.log(`[RESET_TUTORIAL] Re-copied ${copied.length}/${MXFOOD_TABLES.length} mxfood tables`);
-    }).catch((err) =>
-      console.warn('[RESET_TUTORIAL] mxfood S3 copy failed (non-fatal):', err)
-    );
+    // Sample data needs no re-copy: the tutorial connection's `dataset` entries are
+    // read from the published source by the CSV connector on first use.
 
     return NextResponse.json({
       success: true,

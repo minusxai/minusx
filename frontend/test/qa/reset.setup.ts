@@ -13,8 +13,8 @@ import { resetTutorial, waitForTutorialData } from './flows';
 
 setup('reset tutorial to pristine seed', async ({ request }) => {
   await resetTutorial(request);
-  // mxfood sample data copies in fire-and-forget after reset/registration; wait for
-  // it so the data-asserting flows (query/dashboard) run against ready data.
+  // Sample data materializes on first query; warm it here so the data-asserting
+  // flows (query/dashboard) don't all queue behind a cold fetch.
   const ready = await waitForTutorialData(request);
   if (!ready) {
     // eslint-disable-next-line no-console

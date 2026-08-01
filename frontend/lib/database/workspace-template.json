@@ -1892,7 +1892,7 @@
        "filename": "ad_campaigns.parquet",
        "table_name": "ad_campaigns",
        "schema_name": "mxfood",
-       "s3_key": "csvs/tutorial/mxfood/ad_campaigns.parquet",
+       "dataset": "mxfood",
        "file_format": "parquet",
        "row_count": 69,
        "columns": [
@@ -1930,7 +1930,7 @@
        "filename": "ad_spend.parquet",
        "table_name": "ad_spend",
        "schema_name": "mxfood",
-       "s3_key": "csvs/tutorial/mxfood/ad_spend.parquet",
+       "dataset": "mxfood",
        "file_format": "parquet",
        "row_count": 2650,
        "columns": [
@@ -1968,7 +1968,7 @@
        "filename": "attribution.parquet",
        "table_name": "attribution",
        "schema_name": "mxfood",
-       "s3_key": "csvs/tutorial/mxfood/attribution.parquet",
+       "dataset": "mxfood",
        "file_format": "parquet",
        "row_count": 30000,
        "columns": [
@@ -2002,7 +2002,7 @@
        "filename": "deliveries.parquet",
        "table_name": "deliveries",
        "schema_name": "mxfood",
-       "s3_key": "csvs/tutorial/mxfood/deliveries.parquet",
+       "dataset": "mxfood",
        "file_format": "parquet",
        "row_count": 367312,
        "columns": [
@@ -2044,7 +2044,7 @@
        "filename": "drivers.parquet",
        "table_name": "drivers",
        "schema_name": "mxfood",
-       "s3_key": "csvs/tutorial/mxfood/drivers.parquet",
+       "dataset": "mxfood",
        "file_format": "parquet",
        "row_count": 800,
        "columns": [
@@ -2082,7 +2082,7 @@
        "filename": "events.parquet",
        "table_name": "events",
        "schema_name": "mxfood",
-       "s3_key": "csvs/tutorial/mxfood/events.parquet",
+       "dataset": "mxfood",
        "file_format": "parquet",
        "row_count": 7643737,
        "columns": [
@@ -2124,7 +2124,7 @@
        "filename": "marketing_channels.parquet",
        "table_name": "marketing_channels",
        "schema_name": "mxfood",
-       "s3_key": "csvs/tutorial/mxfood/marketing_channels.parquet",
+       "dataset": "mxfood",
        "file_format": "parquet",
        "row_count": 5,
        "columns": [
@@ -2146,7 +2146,7 @@
        "filename": "order_items.parquet",
        "table_name": "order_items",
        "schema_name": "mxfood",
-       "s3_key": "csvs/tutorial/mxfood/order_items.parquet",
+       "dataset": "mxfood",
        "file_format": "parquet",
        "row_count": 1038204,
        "columns": [
@@ -2180,7 +2180,7 @@
        "filename": "orders.parquet",
        "table_name": "orders",
        "schema_name": "mxfood",
-       "s3_key": "csvs/tutorial/mxfood/orders.parquet",
+       "dataset": "mxfood",
        "file_format": "parquet",
        "row_count": 399267,
        "columns": [
@@ -2258,7 +2258,7 @@
        "filename": "product_categories.parquet",
        "table_name": "product_categories",
        "schema_name": "mxfood",
-       "s3_key": "csvs/tutorial/mxfood/product_categories.parquet",
+       "dataset": "mxfood",
        "file_format": "parquet",
        "row_count": 5,
        "columns": [
@@ -2276,7 +2276,7 @@
        "filename": "product_subcategories.parquet",
        "table_name": "product_subcategories",
        "schema_name": "mxfood",
-       "s3_key": "csvs/tutorial/mxfood/product_subcategories.parquet",
+       "dataset": "mxfood",
        "file_format": "parquet",
        "row_count": 28,
        "columns": [
@@ -2298,7 +2298,7 @@
        "filename": "products.parquet",
        "table_name": "products",
        "schema_name": "mxfood",
-       "s3_key": "csvs/tutorial/mxfood/products.parquet",
+       "dataset": "mxfood",
        "file_format": "parquet",
        "row_count": 7194,
        "columns": [
@@ -2340,7 +2340,7 @@
        "filename": "promo_codes.parquet",
        "table_name": "promo_codes",
        "schema_name": "mxfood",
-       "s3_key": "csvs/tutorial/mxfood/promo_codes.parquet",
+       "dataset": "mxfood",
        "file_format": "parquet",
        "row_count": 6,
        "columns": [
@@ -2390,7 +2390,7 @@
        "filename": "promo_usage.parquet",
        "table_name": "promo_usage",
        "schema_name": "mxfood",
-       "s3_key": "csvs/tutorial/mxfood/promo_usage.parquet",
+       "dataset": "mxfood",
        "file_format": "parquet",
        "row_count": 37578,
        "columns": [
@@ -2424,7 +2424,7 @@
        "filename": "restaurants.parquet",
        "table_name": "restaurants",
        "schema_name": "mxfood",
-       "s3_key": "csvs/tutorial/mxfood/restaurants.parquet",
+       "dataset": "mxfood",
        "file_format": "parquet",
        "row_count": 510,
        "columns": [
@@ -2470,7 +2470,7 @@
        "filename": "subscription_plans.parquet",
        "table_name": "subscription_plans",
        "schema_name": "mxfood",
-       "s3_key": "csvs/tutorial/mxfood/subscription_plans.parquet",
+       "dataset": "mxfood",
        "file_format": "parquet",
        "row_count": 3,
        "columns": [
@@ -2500,7 +2500,7 @@
        "filename": "support_tickets.parquet",
        "table_name": "support_tickets",
        "schema_name": "mxfood",
-       "s3_key": "csvs/tutorial/mxfood/support_tickets.parquet",
+       "dataset": "mxfood",
        "file_format": "parquet",
        "row_count": 32412,
        "columns": [
@@ -2550,7 +2550,7 @@
        "filename": "user_subscriptions.parquet",
        "table_name": "user_subscriptions",
        "schema_name": "mxfood",
-       "s3_key": "csvs/tutorial/mxfood/user_subscriptions.parquet",
+       "dataset": "mxfood",
        "file_format": "parquet",
        "row_count": 2922,
        "columns": [
@@ -2588,7 +2588,7 @@
        "filename": "users.parquet",
        "table_name": "users",
        "schema_name": "mxfood",
-       "s3_key": "csvs/tutorial/mxfood/users.parquet",
+       "dataset": "mxfood",
        "file_format": "parquet",
        "row_count": 30000,
        "columns": [
@@ -2646,7 +2646,7 @@
        "filename": "zones.parquet",
        "table_name": "zones",
        "schema_name": "mxfood",
-       "s3_key": "csvs/tutorial/mxfood/zones.parquet",
+       "dataset": "mxfood",
        "file_format": "parquet",
        "row_count": 12,
        "columns": [

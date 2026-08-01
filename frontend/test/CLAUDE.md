@@ -187,7 +187,7 @@ QA    next build with NEXT_PUBLIC_E2E deliberately UNSET
       REAL LLM → assertions must be structural/deterministic, never on generated text
       port 3101 · distDir .next-qa · PGLITE_DATA_DIR data/pglite-qa
       workers: QA_PARALLELISM || 2, fullyParallel: true
-      setup chain: auth.setup → reset.setup (reset tutorial + waitForTutorialData) → qa specs
+      setup chain: auth.setup → reset.setup (reset tutorial + warm sample data via waitForTutorialData) → qa specs
 ```
 
 That asymmetry explains the rest: there is no faux-assertion helper on the QA side, `qa.yml` must

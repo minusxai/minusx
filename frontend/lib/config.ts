@@ -53,7 +53,8 @@ interface EnvironmentConfig {
   HEADLESS_CAPTURE: boolean;
   SHARE_GUEST_CHAT_ENABLED: boolean;
   LOCAL_UPLOAD_PATH: string;
-  MXFOOD_DUCKDB_URL: string;
+  /** Base URL published datasets are read from: ${base}/${dataset}/${table}.parquet. */
+  STATIC_DATASETS_BASE_URL: string;
   MD_HOME: string;
   MD_LOGIN: string;
   MD_REGISTER: string;
@@ -164,9 +165,9 @@ const config: EnvironmentConfig = {
   LOCAL_UPLOAD_PATH: process.env.LOCAL_UPLOAD_PATH
     ? resolve(process.env.LOCAL_UPLOAD_PATH)
     : resolve(join(baseDuckdbDataPath, 'data/uploads')),
-  MXFOOD_DUCKDB_URL: getOptional(
-    process.env.MXFOOD_DUCKDB_URL,
-    'https://github.com/minusxai/sample_datasets/releases/download/v1.0/mxfood.duckdb',
+  STATIC_DATASETS_BASE_URL: getOptional(
+    process.env.MX_STATIC_DATASETS_BASE_URL,
+    'https://github.com/minusxai/sample_datasets/releases/download',
   ),
   MD_HOME: process.env.MD_HOME ?? '',
   MD_LOGIN: process.env.MD_LOGIN ?? '',
@@ -300,7 +301,7 @@ export const QUERY_CACHE_LEASE_MS = config.QUERY_CACHE_LEASE_MS;
 export const REMOTE_SESSION_TTL_MS = config.REMOTE_SESSION_TTL_MS;
 export const REMOTE_SESSION_IDLE_MS = config.REMOTE_SESSION_IDLE_MS;
 export const LOCAL_UPLOAD_PATH = config.LOCAL_UPLOAD_PATH;
-export const MXFOOD_DUCKDB_URL = config.MXFOOD_DUCKDB_URL;
+export const STATIC_DATASETS_BASE_URL = config.STATIC_DATASETS_BASE_URL;
 export const MD_HOME = config.MD_HOME;
 export const MD_LOGIN = config.MD_LOGIN;
 export const MD_REGISTER = config.MD_REGISTER;

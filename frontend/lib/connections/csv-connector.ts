@@ -8,6 +8,7 @@ import {
   OBJECT_STORE_SECRET_ACCESS_KEY,
   OBJECT_STORE_ENDPOINT,
   LOCAL_UPLOAD_PATH,
+  STATIC_DATASETS_BASE_URL,
 } from '@/lib/config';
 import { NodeConnector, SchemaEntry, QueryResult, QueryStream } from './base';
 import { duckDbStreamFromConn } from './duckdb-stream';
@@ -21,7 +22,10 @@ import { resolveObjectKey } from '@/lib/object-store';
 interface CsvFileEntry {
   table_name: string;
   schema_name: string;
-  s3_key: string;
+  /** Uploaded object in the store; resolved through resolveObjectKey. */
+  s3_key?: string;
+  /** Published dataset name; read from ${STATIC_DATASETS_BASE_URL}/${dataset}/${table_name}.parquet. */
+  dataset?: string;
   file_format: 'csv' | 'parquet';
   row_count: number;
   columns: Array<{ name: string; type: string }>;
@@ -51,6 +55,49 @@ function makeJsonSafe(rows: Record<string, unknown>[]): Record<string, unknown>[
 }
 
 // ---------------------------------------------------------------------------
+// Static datasets — published, read-only files addressed by name
+// ---------------------------------------------------------------------------
+
+/** Both become URL path segments, so nothing outside this set may pass. */
+const DATASET_IDENT = /^[A-Za-z0-9_-]+$/;
+
+/**
+ * The URL a static entry is read from. `dataset` and `table_name` come from the
+ * connection document, so they are validated as bare identifiers before being
+ * joined into a path; the base comes from server config only — a connection
+ * document can never point the connector at an arbitrary host.
+ */
+export function staticFileUrl(file: CsvFileEntry, baseUrl: string): string {
+  if (!file.dataset || !DATASET_IDENT.test(file.dataset)) {
+    throw new Error(`Invalid dataset name: ${JSON.stringify(file.dataset)}`);
+  }
+  if (!DATASET_IDENT.test(file.table_name)) {
+    throw new Error(`Invalid table name for static dataset: ${JSON.stringify(file.table_name)}`);
+  }
+  if (file.file_format !== 'parquet') {
+    throw new Error(`Static datasets are parquet-only, got: ${file.file_format}`);
+  }
+  return `${baseUrl.replace(/\/+$/, '')}/${file.dataset}/${file.table_name}.parquet`;
+}
+
+/**
+ * Static entries are MATERIALIZED, uploaded objects stay views. A view re-reads
+ * the file on every query — for a dataset fetched over the network that multiplies
+ * into a full re-download per dashboard tile, which is what made the sample-data
+ * dashboard time out. Materializing at init pays the fetch once per process; the
+ * instance cache already scopes that to one instance per config.
+ */
+export function createRelationSql(file: CsvFileEntry, fileUrl: string): string {
+  const readExpr = file.file_format === 'parquet'
+    ? `read_parquet('${fileUrl}')`
+    : `read_csv_auto('${fileUrl}')`;
+  const relation = `"${file.schema_name}"."${file.table_name}"`;
+  return file.dataset
+    ? `CREATE OR REPLACE TABLE ${relation} AS SELECT * FROM ${readExpr}`
+    : `CREATE OR REPLACE VIEW ${relation} AS SELECT * FROM ${readExpr}`;
+}
+
+// ---------------------------------------------------------------------------
 // Instance cache — one in-memory DuckDB per unique config hash
 // ---------------------------------------------------------------------------
 
@@ -64,14 +111,18 @@ async function initInstance(
   files: CsvFileEntry[]
 ): Promise<DuckDBInstance> {
   const isLocal = !OBJECT_STORE_ACCESS_KEY_ID || !OBJECT_STORE_BUCKET;
+  const hasHttpStatic = files.some((f) => f.dataset) && STATIC_DATASETS_BASE_URL.startsWith('http');
   const instance = await DuckDBInstance.create(':memory:');
   const conn = await instance.connect();
   try {
-    if (!isLocal) {
-      // Install and load httpfs for S3 access
+    if (!isLocal || hasHttpStatic) {
+      // Install and load httpfs — S3 access for uploaded objects, plain HTTP(S)
+      // for static datasets. Static reads need it even with no object store
+      // configured, which is why this is not gated on isLocal alone.
       await conn.run('INSTALL httpfs');
       await conn.run('LOAD httpfs');
-
+    }
+    if (!isLocal) {
       // Configure S3 credentials
       await conn.run(`SET s3_region = '${OBJECT_STORE_REGION}'`);
       if (OBJECT_STORE_ACCESS_KEY_ID) {
@@ -86,7 +137,8 @@ async function initInstance(
       }
     }
 
-    // Create schemas and views for each file
+    // Create schemas, then a relation per file: static datasets materialize as
+    // tables (fetched once, here), uploaded objects stay views over the store.
     const schemas = new Set<string>();
     for (const file of files) {
       if (!schemas.has(file.schema_name)) {
@@ -94,30 +146,32 @@ async function initInstance(
         schemas.add(file.schema_name);
       }
 
-      // resolveObjectKey, not the raw s3_key: DuckDB reads the object itself rather than
-      // going through the store, so it has to apply the SAME prefix the store applied on
-      // write. Joining the logical key directly looks right and reads the wrong directory
-      // — the file is there, just not where this looked.
-      const physicalKey = await resolveObjectKey(file.s3_key);
-      const fileUrl = isLocal
-        ? join(LOCAL_UPLOAD_PATH, physicalKey)
-        : `s3://${OBJECT_STORE_BUCKET ?? ''}/${physicalKey}`;
+      let fileUrl: string;
+      if (file.dataset) {
+        fileUrl = staticFileUrl(file, STATIC_DATASETS_BASE_URL);
+      } else {
+        // resolveObjectKey, not the raw s3_key: DuckDB reads the object itself rather than
+        // going through the store, so it has to apply the SAME prefix the store applied on
+        // write. Joining the logical key directly looks right and reads the wrong directory
+        // — the file is there, just not where this looked.
+        const physicalKey = await resolveObjectKey(file.s3_key ?? '');
+        fileUrl = isLocal
+          ? join(LOCAL_UPLOAD_PATH, physicalKey)
+          : `s3://${OBJECT_STORE_BUCKET ?? ''}/${physicalKey}`;
+      }
 
-      const readExpr = file.file_format === 'parquet'
-        ? `read_parquet('${fileUrl}')`
-        : `read_csv_auto('${fileUrl}')`;
-
-      await conn.run(
-        `CREATE OR REPLACE VIEW "${file.schema_name}"."${file.table_name}" AS SELECT * FROM ${readExpr}`
-      );
+      await conn.run(createRelationSql(file, fileUrl));
     }
 
     // Lock down DuckDB access to the storage prefix of the uploaded files only.
     // allowed_directories must be set BEFORE disabling external access.
     // Also from the PHYSICAL key: the allow-list has to name the directory the reads
     // actually target, or every read is refused once external access is disabled.
-    const storagePrefix = files[0]
-      ? (await resolveObjectKey(files[0].s3_key)).split('/')[0]
+    // Static entries need no allowance: their rows were materialized above, so
+    // after this lockdown the instance touches nothing outside itself for them.
+    const firstUpload = files.find((f) => !f.dataset && f.s3_key);
+    const storagePrefix = firstUpload
+      ? (await resolveObjectKey(firstUpload.s3_key!)).split('/')[0]
       : '';
     if (isLocal && storagePrefix) {
       await conn.run(`SET allowed_directories = ['${join(LOCAL_UPLOAD_PATH, storagePrefix)}/']`);

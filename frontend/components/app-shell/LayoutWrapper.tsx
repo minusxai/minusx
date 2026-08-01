@@ -6,7 +6,6 @@ import { usePathname } from 'next/navigation';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import Sidebar from './Sidebar';
 import MobileBottomNav from './MobileBottomNav';
-import DataPrepBanner from '../banners/DataPrepBanner';
 import { RecordingProvider } from '@/lib/hooks/useRecordingContext';
 import RemoteSessionPrompts from '@/components/remote/RemoteSessionPrompts';
 import { useRouter } from '@/lib/navigation/use-navigation';
@@ -72,7 +71,6 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
         // one resize, one relayout, one repaint.
         minH="100vh"
       >
-        <DataPrepBanner />
         {children}
       </Box>
       <RemoteSessionPrompts />
