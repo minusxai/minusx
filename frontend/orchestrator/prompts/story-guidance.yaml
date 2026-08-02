@@ -148,9 +148,13 @@ templates:
       put the air BELOW the content, not around it.
 
       THE SLIDE (every slide, no exceptions; fixed/sticky are banned — a slide is a tall section):
-      - `<section className="min-h-[var(--mx-vh,760px)] flex flex-col border-b border-border py-14">` —
-        `--mx-vh` is the reader's real viewport height (platform-provided), so each slide fills the
-        screen; the fallback covers headless renders. Never vh units (broken in this surface).
+      - The deck is `<SlideDeck>` wrapping one `<Slide>` per slide. `<Slide>` already fills the
+        reader's real viewport (`--mx-vh`, platform-provided, with a headless fallback) as a flex
+        column — add the dressing per slide: `<Slide title="…" className="border-b border-border py-14">`.
+        Never vh units (broken in this surface); never a raw `<section>` for a slide — Slide is what
+        powers the reader's slide overview and present-mode paging.
+      - Give EVERY slide a short spoken `title` (it names the slide in the overview rail and the
+        present controls; untitled slides fall back to their first heading).
       - HEADER BAND on every content slide: kicker `<p className="text-xs uppercase tracking-widest font-semibold text-primary">01 · ACT NAME</p>`
         + hairline `<hr className="mt-3 mb-10">`; then the slide h2. Same gutters, same band, every slide — the repetition IS the design.
       - FOOTER META closes every content slide: `<div className="mt-auto pt-10 flex justify-between text-xs text-muted-foreground"><span>Deck title — date</span><span className="font-semibold">07</span></div>`.
@@ -191,25 +195,27 @@ templates:
       Skeleton (cover → divider → chart slide; extend the pattern per act):
 
       <div data-design="tw" className="@container px-6 @2xl:px-12">
-        <section className="min-h-[var(--mx-vh,760px)] flex flex-col border-b border-border py-14">
-          <p className="text-xs uppercase tracking-widest font-semibold text-primary">Company · Quarter</p>
-          <hr className="mt-3" />
-          <h1 className="mt-auto text-6xl @2xl:text-8xl font-bold tracking-tight max-w-4xl">The title states the one finding</h1>
-          <p className="mt-6 text-lg text-muted-foreground max-w-xl">A standfirst no longer than the breath it takes to say it.</p>
-          <div className="mt-auto pt-10 flex justify-between text-xs text-muted-foreground"><span>Author</span><span>Date</span></div>
-        </section>
-        <section className="min-h-[var(--mx-vh,760px)] flex flex-col justify-center bg-primary text-primary-foreground -mx-6 @2xl:-mx-12 px-6 @2xl:px-12">
-          <span className="text-9xl font-bold text-primary-foreground/25">01</span>
-          <h2 className="mt-2 text-4xl @2xl:text-5xl font-semibold">Act title, mirrored in the contents</h2>
-        </section>
-        <section className="min-h-[var(--mx-vh,760px)] flex flex-col border-b border-border py-14">
-          <p className="text-xs uppercase tracking-widest font-semibold text-primary">01 · ACT NAME</p>
-          <hr className="mt-3 mb-10" />
-          <h2 className="text-3xl @2xl:text-5xl font-semibold max-w-3xl">The headline is the takeaway, spoken aloud</h2>
-          <div className="mt-10 max-w-5xl"><Question id={N} height="440px" /></div>
-          <p className="mt-4 text-sm text-muted-foreground max-w-prose">One line under the chart: what to remember when the slide is gone.</p>
-          <div className="mt-auto pt-10 flex justify-between text-xs text-muted-foreground"><span>Deck title — date</span><span className="font-semibold">07</span></div>
-        </section>
+        <SlideDeck>
+          <Slide title="Cover" className="border-b border-border py-14">
+            <p className="text-xs uppercase tracking-widest font-semibold text-primary">Company · Quarter</p>
+            <hr className="mt-3" />
+            <h1 className="mt-auto text-6xl @2xl:text-8xl font-bold tracking-tight max-w-4xl">The title states the one finding</h1>
+            <p className="mt-6 text-lg text-muted-foreground max-w-xl">A standfirst no longer than the breath it takes to say it.</p>
+            <div className="mt-auto pt-10 flex justify-between text-xs text-muted-foreground"><span>Author</span><span>Date</span></div>
+          </Slide>
+          <Slide title="Act one" className="justify-center bg-primary text-primary-foreground -mx-6 @2xl:-mx-12 px-6 @2xl:px-12">
+            <span className="text-9xl font-bold text-primary-foreground/25">01</span>
+            <h2 className="mt-2 text-4xl @2xl:text-5xl font-semibold">Act title, mirrored in the contents</h2>
+          </Slide>
+          <Slide title="The takeaway, spoken" className="border-b border-border py-14">
+            <p className="text-xs uppercase tracking-widest font-semibold text-primary">01 · ACT NAME</p>
+            <hr className="mt-3 mb-10" />
+            <h2 className="text-3xl @2xl:text-5xl font-semibold max-w-3xl">The headline is the takeaway, spoken aloud</h2>
+            <div className="mt-10 max-w-5xl"><Question id={N} height="440px" /></div>
+            <p className="mt-4 text-sm text-muted-foreground max-w-prose">One line under the chart: what to remember when the slide is gone.</p>
+            <div className="mt-auto pt-10 flex justify-between text-xs text-muted-foreground"><span>Deck title — date</span><span className="font-semibold">07</span></div>
+          </Slide>
+        </SlideDeck>
       </div>
 
       Do
