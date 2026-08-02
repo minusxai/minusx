@@ -37,7 +37,7 @@ export type StoryThemeName = (typeof STORY_THEME_NAMES)[number];
  * orthogonal to the design theme. Same pattern as STORY_THEME_NAMES: the enum lives here; the
  * registry (`lib/data/story/story-templates.ts`) types its entries against it.
  */
-export const STORY_TEMPLATE_NAMES = ['editorial', 'deck', 'scrolly'] as const;
+export const STORY_TEMPLATE_NAMES = ['editorial', 'deck', 'scrolly', 'dashboard'] as const;
 export type StoryTemplateName = (typeof STORY_TEMPLATE_NAMES)[number];
 
 // ============================================================================
@@ -540,7 +540,8 @@ export const StoryContent = Type.Object({
     'These and the platform embeds <Question/>, <Number/>, <Param/> (below) are the ONLY Capitalized tags ' +
     'allowed — any other Capitalized tag fails validation, so build everything else from plain HTML + Tailwind ' +
     'utilities. Components nest freely with HTML and embeds. ' +
-    'GRID LAYOUT — for a dashboard-like band the reader can drag/resize in edit mode, use ' +
+    'GRID LAYOUT — DEFAULT for any band/cluster of 2+ <Question> embeds (KPI rows, chart pairs, ' +
+    'dashboard-shaped sections; the reader can drag/resize the tiles in edit mode): use ' +
     '<Grid><GridItem x={0} y={0} w={8} h={5}>…</GridItem>…</Grid>: 12 columns × 86px rows, x/w in columns, ' +
     'y/h in rows, no overlaps; direct children of Grid must be GridItems (one component each, no nested Grids). ' +
     'Inside a GridItem the CELL is the height — an embed fills it, so never author height= on a <Question> ' +
@@ -610,7 +611,8 @@ export const StoryContent = Type.Object({
     'theme name); components and utility classes are identical across themes, only the tokens change.'))),
   template: Type.Optional(Nullable(StringEnum(STORY_TEMPLATE_NAMES,
     "Story template (format:'jsx' only) — the document's structural genre: 'editorial' (long-read magazine " +
-    "feature), 'deck' (slide-section presentation), 'scrolly' (playful scrollytelling). Set it from the " +
+    "feature), 'deck' (slide-section presentation), 'scrolly' (playful scrollytelling), 'dashboard' " +
+    '(a Grid of draggable KPI/chart tiles with minimal prose). Set it from the ' +
     'Clarify template pick (the result returns that template\'s authoring ' +
     'guidance — follow it for the beat structure). METADATA ONLY: it records intent and drives the structure ' +
     'YOU write; no automatic CSS or layout is applied.'))),

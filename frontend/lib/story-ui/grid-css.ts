@@ -16,6 +16,7 @@ export const STORY_GRID_EDIT_CSS = `
 .react-grid-layout { position: relative; }
 .react-grid-item { transition: none !important; }
 .react-grid-item img { pointer-events: none; user-select: none; }
+.react-grid-item a { -webkit-user-drag: none; }
 .react-grid-item.resizing { z-index: 1; will-change: width, height; }
 .react-grid-item.react-draggable-dragging { z-index: 3; will-change: transform; cursor: grabbing; }
 .react-grid-item.react-grid-placeholder {

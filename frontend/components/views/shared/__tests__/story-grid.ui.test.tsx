@@ -166,6 +166,37 @@ describe('Grid — layout commits in the edit session', () => {
   });
 });
 
+describe('Grid — edit mode never lets a native drag hijack a tile drag', () => {
+  // The embed card's title is an <a href="/f/N">. Anchors are natively draggable, so a tile
+  // drag that starts on the title ALSO starts a browser link-drag — a URL ghost follows the
+  // cursor and dropping it navigates the page. Every native dragstart inside the grid must be
+  // cancelled while editing.
+  const LINKED_DOC = '<Grid><GridItem x={0} y={0} w={6} h={3}><a href="/f/26">Average Events</a></GridItem></Grid>';
+
+  it('cancels dragstart on a link inside a grid item', () => {
+    const { container } = renderBody({ editable: true, jsx: LINKED_DOC });
+    const link = container.querySelector('a[href="/f/26"]') as HTMLElement;
+    expect(link).not.toBeNull();
+    const e = new Event('dragstart', { bubbles: true, cancelable: true });
+    link.dispatchEvent(e);
+    expect(e.defaultPrevented).toBe(true);
+  });
+
+  it('does NOT cancel dragstart outside edit mode (readers keep native behavior)', () => {
+    const { container } = renderBody({ jsx: LINKED_DOC });
+    const link = container.querySelector('a[href="/f/26"]') as HTMLElement;
+    const e = new Event('dragstart', { bubbles: true, cancelable: true });
+    link.dispatchEvent(e);
+    expect(e.defaultPrevented).toBe(false);
+  });
+
+  it('suppresses native anchor dragging in the edit CSS', () => {
+    const { container } = renderBody({ editable: true, jsx: LINKED_DOC });
+    const css = container.querySelector('style[data-mx-grid-css]')!.textContent!;
+    expect(css).toContain('-webkit-user-drag: none');
+  });
+});
+
 describe('GridItem — embeds fill the cell', () => {
   it('a <Question> inside a GridItem renders at 100% height, ignoring an authored height', () => {
     const { container } = renderBody({

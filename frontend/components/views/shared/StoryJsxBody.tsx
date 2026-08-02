@@ -510,7 +510,15 @@ function GridAdapter(props: Record<string, unknown>) {
     if (changed.length > 0) ctx.onLayoutEdit!(changed);
   };
   return (
-    <div {...{ [AST_PATH_ATTR]: astPath }} className="w-full" ref={wrapRef}>
+    <div
+      {...{ [AST_PATH_ATTR]: astPath }}
+      className="w-full"
+      ref={wrapRef}
+      // Tile drags are react-grid-layout MOUSE drags; any NATIVE drag inside the grid is a
+      // hijack — an embed title is an <a href>, natively draggable, so a tile drag starting on
+      // it also drags the LINK (URL ghost, drop-navigation). Kill native drags while editing.
+      onDragStartCapture={(e) => e.preventDefault()}
+    >
       {/* RGL structural CSS, INSIDE the surface subtree (head styles never reach the iframe). */}
       <style data-mx-grid-css="">{STORY_GRID_EDIT_CSS}</style>
       <RGL

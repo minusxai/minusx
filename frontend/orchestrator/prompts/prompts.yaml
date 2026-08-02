@@ -833,7 +833,7 @@ templates:
 
       Every story, from scratch or from a dashboard, follows the same loop:
 
-      1. **Clarify** with the user (via the `clarify` tool). Settle four things: the **theme**, the **template** (the document's structural genre), the **audience and goal**, and the **scope/data** to cover. Theme and template are TWO preset clarify calls, each with `options: []`: first `type: 'design'` (the design-theme picker), then `type: 'template'` (editorial | deck | scrolly) — the app shows the pickers itself, and each result returns the chosen value PLUS its authoring guidance (personality, beats, layout grammar, Do/Don'ts). Write both picks into the story's `<theme>` and `<template>` fields and FOLLOW the returned template guidance for the beat structure. If the user answers "Figure it out", the result carries the full catalog — choose yourself from the story's content and audience, then follow that choice's guidance. Infer what you reasonably can and just confirm.
+      1. **Clarify** with the user (via the `clarify` tool). Settle four things: the **theme**, the **template** (the document's structural genre), the **audience and goal**, and the **scope/data** to cover. Theme and template are TWO preset clarify calls, each with `options: []`: first `type: 'design'` (the design-theme picker), then `type: 'template'` (editorial | deck | scrolly | dashboard) — the app shows the pickers itself, and each result returns the chosen value PLUS its authoring guidance (personality, beats, layout grammar, Do/Don'ts). Write both picks into the story's `<theme>` and `<template>` fields and FOLLOW the returned template guidance for the beat structure. If the user answers "Figure it out", the result carries the full catalog — choose yourself from the story's content and audience, then follow that choice's guidance. Infer what you reasonably can and just confirm.
       2. **Build** the story (Procedures, section 5): find the lead, storyboard the beats, write the shadcn JSX.
       3. **Review** it and judge it as the intended reader. Every EditFile already returns the screenshot + full rubric (LLM visual review included); call ReviewFile when you want a fresh grade without editing.
       4. **Fix and improve.** ALWAYS fix every `error` finding (any error gates `overall` to 0), then work through the `warn`s, applying each finding's `fix`, and raise the `overall` score. Repeat. **Do not stop until every `error` is cleared AND `overall` is at least 4.** Keep going past that only if it still looks off.
@@ -882,7 +882,7 @@ templates:
 
       ### `<Grid>` / `<GridItem>` — the dashboard-style positioned layout
 
-      For a dashboard-like band — KPI tiles + charts arranged on a 2-D grid the READER can later drag and resize in edit mode — use `<Grid>` with `<GridItem>` children instead of hand-rolled flex/grid CSS:
+      **DEFAULT RULE: whenever two or more `<Question>` embeds (KPI tiles, charts) sit TOGETHER as a band or cluster — side by side, a KPI row, a chart pair, any dashboard-shaped section — lay them out with `<Grid>`/`<GridItem>`, not hand-rolled flex/grid CSS.** The reader can then drag and resize the tiles in edit mode; a flex row gives them nothing. Hand-rolled layout stays right for prose, heroes, callouts, and single embeds interleaved with text:
 
       ```
       <Grid>
@@ -896,7 +896,7 @@ templates:
       - **The cell is the single source of height.** NEVER author `height=` on a `<Question>`/embed inside a GridItem — it fills the cell. Size charts by `h` instead (charts want `h` 4–6, stat tiles 2–3).
       - Direct children of `<Grid>` must be `<GridItem>`s (anything else is dropped); put exactly one component per item. Do not nest a Grid inside a Grid.
       - On phones the grid stacks vertically **in source order** — author GridItems in reading order (top-left → bottom-right).
-      - Use it for genuinely grid-shaped sections. Prose, heroes, and flowing editorial layout stay plain HTML + Tailwind — a Grid wrapping the whole story reads as a dashboard, not a story.
+      - Use it for every multi-embed band (that is the default, per above). Prose, heroes, and flowing editorial layout stay plain HTML + Tailwind — a Grid wrapping the whole story reads as a dashboard, not a story.
 
       ### Vega-always (HARD RULE)
 
