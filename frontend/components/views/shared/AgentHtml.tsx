@@ -19,6 +19,7 @@ import StoryEmbeds, {
 } from '@/components/views/shared/StoryEmbeds';
 import StoryJsxBody, { STORY_SELECTION_CSS, type StoryJsxEditApi, type StoryTextHostTarget, type StoryFormatEdit } from '@/components/views/shared/StoryJsxBody';
 import { STORY_FLOATING_CSS } from '@/lib/story-ui';
+import { SurfaceWidthContext } from '@/lib/dashboard-surface/surface-width';
 import { getStoryFontCss, STORY_FONTS_ATTR } from '@/lib/data/story/story-fonts';
 import StorySelectionPopover from '@/components/views/story/StorySelectionPopover';
 import StoryTypographyToolbar from '@/components/views/story/StoryTypographyToolbar';
@@ -157,6 +158,11 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
   const [paramTargets, setParamTargets] = useState<ParamTarget[]>([]);
   // Jsx WYSIWYG: pending-edit access into StoryJsxBody (AST write-back) for serialize().
   const jsxEditApiRef = useRef<StoryJsxEditApi | null>(null);
+  // The surface's measured width, provided to the jsx body (SurfaceWidthContext) — the story
+  // Grid's edit-mode react-grid-layout consumes it directly, because RGL's WidthProvider
+  // measures through a polyfill observer whose refresh triggers never fire inside the iframe
+  // realm (the dashboard's exact problem, solved the same way — see lib/dashboard-surface).
+  const [surfaceWidth, setSurfaceWidth] = useState<number | null>(null);
   // Jsx WYSIWYG: the focused editable text host — anchors the typography toolbar.
   const [textHost, setTextHost] = useState<StoryTextHostTarget | null>(null);
   // Jsx WYSIWYG Phase 2: the click-selected format target (sections, wrappers, embed-carrying
@@ -366,6 +372,24 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     // the real-browser guard (scripts/story-width-matrix.ts) drives it directly.
     const disposeAutoSize = autoSizeStorySurface({ surface, iframe, doc, fluid, fixedHeight: height });
 
+    // Width provision for the jsx body (see surfaceWidth above). The iframe element is a
+    // TOP-document RO target — natively reliable, unlike observers inside the iframe realm.
+    // Trailing 60ms debounce: a pane-toggle resize burst becomes one grid relayout.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- measured only after the doc write
+    setSurfaceWidth(iframe.clientWidth || null);
+    let widthTimer = 0;
+    let widthObserver: ResizeObserver | undefined;
+    if (isJsx && typeof ResizeObserver !== 'undefined') {
+      widthObserver = new ResizeObserver(() => {
+        window.clearTimeout(widthTimer);
+        widthTimer = window.setTimeout(() => {
+          const w = iframe.clientWidth;
+          if (w > 0) setSurfaceWidth(w);
+        }, 60);
+      });
+      widthObserver.observe(iframe);
+    }
+
     // Re-mirror app styles whenever the iframe tree mutates — emotion injects each tile's styles lazily
     // (into the MAIN document.head) only when that tile mounts; mirrorAppStyles copies them across.
     let debounce = 0;
@@ -380,6 +404,8 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     return () => {
       disposeAutoSize();
       observer.disconnect();
+      widthObserver?.disconnect();
+      if (widthTimer) window.clearTimeout(widthTimer);
       if (debounce) window.clearTimeout(debounce);
       timers.forEach(t => window.clearTimeout(t));
       // Defer unmount: cleanup runs during the parent's commit, and synchronously unmounting another
@@ -444,23 +470,25 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
       if (!surfaceRoot) return;
       reactRootRef.current.render(
         createPortal(
-          <StoryJsxBody
-            doc={doc}
-            jsx={html || ''}
-            readOnly={readOnly}
-            paramValues={paramValues}
-            onParamValuesChange={onParamValuesChange}
-            filePath={filePath}
-            colorMode={colorMode}
-            editable={editable && !readOnly}
-            onChange={onChange}
-            onEditNumber={onEditNumber}
-            onEditQuestion={onEditQuestion}
-            onEditParamQuery={onEditParamQuery}
-            editApiRef={jsxEditApiRef}
-            onTextHostFocusChange={editable && !readOnly ? setTextHost : undefined}
-            onElementSelectChange={editable && !readOnly ? setSelectedEl : undefined}
-          />,
+          <SurfaceWidthContext.Provider value={surfaceWidth}>
+            <StoryJsxBody
+              doc={doc}
+              jsx={html || ''}
+              readOnly={readOnly}
+              paramValues={paramValues}
+              onParamValuesChange={onParamValuesChange}
+              filePath={filePath}
+              colorMode={colorMode}
+              editable={editable && !readOnly}
+              onChange={onChange}
+              onEditNumber={onEditNumber}
+              onEditQuestion={onEditQuestion}
+              onEditParamQuery={onEditParamQuery}
+              editApiRef={jsxEditApiRef}
+              onTextHostFocusChange={editable && !readOnly ? setTextHost : undefined}
+              onElementSelectChange={editable && !readOnly ? setSelectedEl : undefined}
+            />
+          </SurfaceWidthContext.Provider>,
           surfaceRoot,
         ),
       );
@@ -484,7 +512,7 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
         colorMode={colorMode}
       />,
     );
-  }, [targets, inlineTargets, numberTargets, paramTargets, isJsx, html, readOnly, editable, paramValues, onParamValuesChange, onEditNumber, onEditQuestion, onEditParamQuery, filePath, colorMode]);
+  }, [targets, inlineTargets, numberTargets, paramTargets, isJsx, html, readOnly, editable, paramValues, onParamValuesChange, onEditNumber, onEditQuestion, onEditParamQuery, filePath, colorMode, surfaceWidth]);
 
   // Keep the iframe's color-mode class in sync without rebuilding the whole document.
   useEffect(() => {

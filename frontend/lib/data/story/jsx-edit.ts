@@ -100,7 +100,20 @@ export interface JsxLayoutEdit {
  * nothing could be applied or the source doesn't parse. Never throws.
  */
 export function applyLayoutEditsToJsx(source: string, edits: JsxLayoutEdit[]): string {
-  throw new Error('not implemented');
+  if (edits.length === 0) return source;
+  const parsed = parseJsx(source);
+  if (!parsed.ok) return source;
+  let applied = false;
+  for (const edit of edits) {
+    const node = resolveByPath(parsed.nodes, edit.astPath);
+    if (!node || node.type !== 'element' || !node.isComponent || node.tag !== 'GridItem') continue;
+    setStaticJsxAttr(node, 'x', edit.x);
+    setStaticJsxAttr(node, 'y', edit.y);
+    setStaticJsxAttr(node, 'w', edit.w);
+    setStaticJsxAttr(node, 'h', edit.h);
+    applied = true;
+  }
+  return applied ? serializeJsx(parsed.nodes) : source;
 }
 
 /**

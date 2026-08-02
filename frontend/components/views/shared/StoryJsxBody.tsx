@@ -27,6 +27,7 @@ import {
   createContext, memo, useContext, useEffect, useMemo, useState,
   cloneElement, type ComponentType, type ReactElement, type RefObject, type FocusEvent, type FormEvent,
 } from 'react';
+import RGL, { type Layout } from 'react-grid-layout';
 
 import { parseJsx, type JsxNode, type JsxElement } from '@/lib/jsx';
 import {
@@ -48,7 +49,15 @@ import { numberFromJsxAttrs } from '@/lib/data/story/story-number';
 import {
   isStorySqlParamSource, paramFromJsxAttrs, storyParamToQuestionParameter, type StoryParam,
 } from '@/lib/data/story/story-params';
-import { applyDomEditsToJsx, applyFormatEditsToJsx, resolveJsxNodeAtPath, type JsxFormatEdit, isEditableTextHost } from '@/lib/data/story/jsx-edit';
+import {
+  applyDomEditsToJsx, applyFormatEditsToJsx, applyLayoutEditsToJsx, resolveJsxNodeAtPath,
+  type JsxFormatEdit, type JsxLayoutEdit, isEditableTextHost,
+} from '@/lib/data/story/jsx-edit';
+import { Grid, GridItemContext, gridItemChildren, type GridProps, type GridItemProps } from '@/components/kit/grid';
+import { gridCols, gridRowHeight, gridItemRect, diffLayouts, type GridItemRect } from '@/lib/story-ui/grid-layout';
+import { STORY_GRID_EDIT_CSS } from '@/lib/story-ui/grid-css';
+import { useSurfaceWidth } from '@/lib/dashboard-surface/surface-width';
+import { STORY_CANVAS_WIDTH } from '@/lib/story-surface';
 import { crumbHint } from '@/lib/data/story/typography';
 import { envelopeVizType } from '@/lib/viz/viz-templates';
 import type { QuestionParameter } from '@/lib/types';
@@ -148,6 +157,12 @@ export interface StoryJsxEditApi {
    */
   applyFormatEdit: (astPath: string, edit: StoryFormatEdit) => void;
   /**
+   * Record grid rect edits (drag/resize commit — the Grid adapter's path, also usable for
+   * programmatic nudges). Staged beside the other edit kinds under the same no-clobber
+   * composition; invalid/stale paths are dropped at staging, so a stale commit is a no-op.
+   */
+  applyLayoutEdit: (edits: JsxLayoutEdit[]) => void;
+  /**
    * Re-anchor the click-selection to the element at `astPath` (breadcrumb navigation). Only
    * selectable targets (plain, non-text-host, non-root) take effect; anything else is ignored.
    */
@@ -179,6 +194,8 @@ interface EditSession {
   onBlur: () => void;
   /** Stage a className/style edit for the element at `path` (typography toolbar) and fire onChange. */
   applyFormatEdit: (path: string, edit: StoryFormatEdit) => void;
+  /** Stage grid drag/resize rect edits (validated against the current source) and fire onChange. */
+  applyLayoutEdit: (edits: JsxLayoutEdit[]) => void;
   /** Current source with all pending edits applied; null when there is nothing to commit. */
   serialize: () => string | null;
 }
@@ -195,11 +212,17 @@ function createEditSession(): EditSession {
   // innerHTML edits on EVERY commit — a text-edit blur must never re-derive the source without
   // the format changes, and vice versa (the no-clobber invariant).
   const formatEdits = new Map<string, Omit<JsxFormatEdit, 'astPath'>>();
+  // Staged grid rect edits (astPath → x/y/w/h, drag/resize commits). Composed LAST — all three
+  // kinds are attribute- or subtree-local, so AST paths stay stable across the whole chain.
+  const layoutEdits = new Map<string, GridItemRect>();
   const asEdits = (m: Map<string, string>) => [...m].map(([astPath, innerHtml]) => ({ astPath, innerHtml }));
   const composed = (inner: Map<string, string>) =>
-    applyFormatEditsToJsx(
-      applyDomEditsToJsx(jsx, asEdits(inner)).source,
-      [...formatEdits].map(([astPath, edit]) => ({ astPath, ...edit })),
+    applyLayoutEditsToJsx(
+      applyFormatEditsToJsx(
+        applyDomEditsToJsx(jsx, asEdits(inner)).source,
+        [...formatEdits].map(([astPath, edit]) => ({ astPath, ...edit })),
+      ),
+      [...layoutEdits].map(([astPath, rect]) => ({ astPath, ...rect })),
     );
   return {
     setProps(nextJsx, nextOnChange, nextOnFocusChange) {
@@ -229,13 +252,26 @@ function createEditSession(): EditSession {
       formatEdits.set(path, { ...formatEdits.get(path), ...edit });
       onChange?.(composed(edits));
     },
+    applyLayoutEdit(incoming) {
+      // Validate against the CURRENT source at staging time: a stale/hostile path must be a
+      // no-op (no onChange echo — an echo would dirty the file on merely opening edit mode).
+      const parsed = parseJsx(jsx);
+      if (!parsed.ok) return;
+      const valid = incoming.filter((e) => {
+        const node = resolveJsxNodeAtPath(parsed.nodes, e.astPath);
+        return !!node && node.type === 'element' && node.isComponent && node.tag === 'GridItem';
+      });
+      if (valid.length === 0) return;
+      for (const e of valid) layoutEdits.set(e.astPath, { x: e.x, y: e.y, w: e.w, h: e.h });
+      onChange?.(composed(edits));
+    },
     serialize() {
       // Committed edits + the in-progress one (Save can land before the host blurs).
       const pending = new Map(edits);
       if (active && active.userEdited && active.el.innerHTML !== active.snapshot) {
         pending.set(active.path, active.el.innerHTML);
       }
-      if (pending.size === 0 && formatEdits.size === 0) return null;
+      if (pending.size === 0 && formatEdits.size === 0 && layoutEdits.size === 0) return null;
       return composed(pending);
     },
   };
@@ -279,6 +315,8 @@ interface StoryJsxEmbedContextValue {
   onEditQuestion?: (req: StoryQuestionEditRequest) => void;
   onEditNumber?: (req: NumberQueryEditRequest) => void;
   onEditParamQuery?: (req: StoryParamQueryEditRequest) => void;
+  /** Edit mode: the Grid adapter's drag/resize commit into the edit session. */
+  onLayoutEdit?: (edits: JsxLayoutEdit[]) => void;
 }
 
 const StoryJsxEmbedContext = createContext<StoryJsxEmbedContextValue>({
@@ -301,6 +339,9 @@ function embedHeightPx(h: unknown, minH: number, defaultH: number): number {
  */
 function QuestionEmbedAdapter(props: Record<string, unknown>) {
   const ctx = useContext(StoryJsxEmbedContext);
+  // Inside a <GridItem> the CELL is the single source of height (h × rowHeight): the embed
+  // fills it and any authored height= is ignored — two truths for one dimension always drift.
+  const inGridItem = useContext(GridItemContext);
   const extParams = ctx.externalParameters?.length ? ctx.externalParameters : undefined;
   const extValues = ctx.externalParameters?.length ? ctx.values : undefined;
   const astPath = props[AST_PATH_ATTR];
@@ -316,7 +357,7 @@ function QuestionEmbedAdapter(props: Record<string, unknown>) {
         {...{ [AST_PATH_ATTR]: astPath }}
         aria-label="Question embed"
         className={EMBED_CARD_CLASSES}
-        style={{ width: '100%', height: `${embedHeightPx(props.height, MIN_CHART_H, DEFAULT_CHART_H)}px` }}
+        style={{ width: '100%', height: inGridItem ? '100%' : `${embedHeightPx(props.height, MIN_CHART_H, DEFAULT_CHART_H)}px` }}
       >
         <SmartEmbeddedQuestionContainer
           questionId={questionId}
@@ -349,7 +390,7 @@ function QuestionEmbedAdapter(props: Record<string, unknown>) {
       {...{ [AST_PATH_ATTR]: astPath }}
       aria-label="Question embed"
       className={`relative ${bare ? EMBED_BARE_CLASSES : EMBED_CARD_CLASSES}`}
-      style={{ width: '100%', height: `${h}px` }}
+      style={{ width: '100%', height: inGridItem ? '100%' : `${h}px` }}
     >
       <EmbeddedQuestionContainer
         question={inlineEmbedToQuestionContent(embed)}
@@ -426,12 +467,72 @@ function ParamControlAdapter(props: Record<string, unknown>) {
   );
 }
 
-/** The interpreter registry for jsx stories: shadcn components + the three embed adapters. */
+/**
+ * `<Grid>` in edit mode: react-grid-layout over the SAME geometry the pure-CSS component
+ * renders (margin [0,0] — the gutter is padding inside each GridItem, so both modes place
+ * identically). The RGL item key IS each GridItem's AST path; a drag/resize stop diffs the
+ * full layout (vertical compaction moves siblings) and commits only real changes into the
+ * edit session. View mode renders the kit Grid untouched — nothing draggable ever reaches
+ * a reader.
+ */
+function GridAdapter(props: Record<string, unknown>) {
+  const ctx = useContext(StoryJsxEmbedContext);
+  // Width: RGL needs px. The surface provides it (AgentHtml) — WidthProvider's polyfill
+  // observer is deaf inside the iframe realm; fall back to the logical canvas width.
+  const surfaceWidth = useSurfaceWidth();
+  const gridProps = props as GridProps;
+  if (!ctx.editable || !ctx.onLayoutEdit) return <Grid {...gridProps} />;
+
+  const { cols, rowHeight, children } = gridProps;
+  const astPath = props[AST_PATH_ATTR];
+  const nCols = gridCols(cols);
+  const rh = gridRowHeight(rowHeight);
+  const items = gridItemChildren(children).filter(
+    (el) => typeof (el.props as Record<string, unknown>)[AST_PATH_ATTR] === 'string',
+  );
+  const rects = new Map<string, GridItemRect>(items.map((el) => [
+    (el.props as Record<string, unknown>)[AST_PATH_ATTR] as string,
+    gridItemRect(el.props, nCols),
+  ]));
+  const layout: Layout[] = [...rects].map(([i, r]) => ({ i, ...r, resizeHandles: ['se' as const] }));
+  const commit = (next: Layout[]) => {
+    const changed = diffLayouts(next, rects);
+    if (changed.length > 0) ctx.onLayoutEdit!(changed);
+  };
+  return (
+    <div {...{ [AST_PATH_ATTR]: astPath }} className="w-full">
+      {/* RGL structural CSS, INSIDE the surface subtree (head styles never reach the iframe). */}
+      <style data-mx-grid-css="">{STORY_GRID_EDIT_CSS}</style>
+      <RGL
+        width={surfaceWidth ?? STORY_CANVAS_WIDTH}
+        cols={nCols}
+        rowHeight={rh}
+        margin={[0, 0]}
+        containerPadding={[0, 0]}
+        compactType="vertical"
+        layout={layout}
+        onDragStop={commit}
+        onResizeStop={commit}
+        isDraggable
+        isResizable
+      >
+        {items.map((el) => {
+          const path = (el.props as Record<string, unknown>)[AST_PATH_ATTR] as string;
+          // RGL positions this wrapper; the cloned item stops self-positioning and fills it.
+          return <div key={path}>{cloneElement(el, { editing: true } as Partial<GridItemProps>)}</div>;
+        })}
+      </RGL>
+    </div>
+  );
+}
+
+/** The interpreter registry for jsx stories: shadcn components + the embed/grid adapters. */
 const STORY_JSX_REGISTRY: Record<string, ComponentType<Record<string, unknown>>> = {
   ...STORY_UI_COMPONENTS,
   Question: QuestionEmbedAdapter,
   Number: NumberEmbedAdapter,
   Param: ParamControlAdapter,
+  Grid: GridAdapter,
 };
 
 /** Walk the AST for `<Param>` declarations — the story's shared params (external params for embeds). */
@@ -512,6 +613,7 @@ export default function StoryJsxBody({
     editApiRef.current = {
       serialize: () => session.serialize(),
       applyFormatEdit: (astPath, edit) => session.applyFormatEdit(astPath, edit),
+      applyLayoutEdit: (layoutEdits) => session.applyLayoutEdit(layoutEdits),
       selectElement: (astPath) => selectByPath.invoke(astPath),
     };
     return () => { editApiRef.current = null; };
@@ -628,6 +730,7 @@ export default function StoryJsxBody({
     onEditQuestion,
     onEditNumber,
     onEditParamQuery,
+    onLayoutEdit: editable && !readOnly ? (layoutEdits) => session.applyLayoutEdit(layoutEdits) : undefined,
   };
 
   if (!parsed.ok) {

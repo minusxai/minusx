@@ -25,14 +25,20 @@ export const GRID_DEFAULT_COLS = 12;
 /** Row height in px — dashboard's 80px rowHeight + 6px margin, folded (see module doc). */
 export const GRID_DEFAULT_ROW_HEIGHT = 86;
 
+/** Round to integer and clamp to [lo, hi]; `fallback` for anything non-numeric. */
+function intIn(value: unknown, lo: number, hi: number, fallback: number): number {
+  const n = typeof value === 'number' && Number.isFinite(value) ? Math.round(value) : fallback;
+  return Math.min(hi, Math.max(lo, n));
+}
+
 /** Sanitize the authored `cols` prop: integer, clamped to [1, 24]; default 12. */
 export function gridCols(value: unknown): number {
-  throw new Error('not implemented');
+  return intIn(value, 1, 24, GRID_DEFAULT_COLS);
 }
 
 /** Sanitize the authored `rowHeight` prop: integer px, clamped to [20, 400]; default 86. */
 export function gridRowHeight(value: unknown): number {
-  throw new Error('not implemented');
+  return intIn(value, 20, 400, GRID_DEFAULT_ROW_HEIGHT);
 }
 
 /**
@@ -44,12 +50,16 @@ export function gridItemRect(
   props: { x?: unknown; y?: unknown; w?: unknown; h?: unknown },
   cols: number,
 ): GridItemRect {
-  throw new Error('not implemented');
+  const w = intIn(props.w, 1, cols, 6);
+  const h = intIn(props.h, 1, Number.MAX_SAFE_INTEGER, 4);
+  const x = intIn(props.x, 0, cols - w, 0);
+  const y = intIn(props.y, 0, Number.MAX_SAFE_INTEGER, 0);
+  return { x, y, w, h };
 }
 
 /** Total rows the grid spans — max(y+h) over items, minimum 1 (an empty grid keeps one row). */
 export function gridRows(rects: GridItemRect[]): number {
-  throw new Error('not implemented');
+  return rects.reduce((max, r) => Math.max(max, r.y + r.h), 1);
 }
 
 /**
@@ -61,5 +71,19 @@ export function diffLayouts(
   next: readonly { i: string; x: number; y: number; w: number; h: number }[],
   current: ReadonlyMap<string, GridItemRect>,
 ): GridLayoutEdit[] {
-  throw new Error('not implemented');
+  const edits: GridLayoutEdit[] = [];
+  for (const item of next) {
+    const prev = current.get(item.i);
+    if (!prev) continue;
+    const rect: GridItemRect = {
+      x: Math.max(0, Math.round(item.x)),
+      y: Math.max(0, Math.round(item.y)),
+      w: Math.max(1, Math.round(item.w)),
+      h: Math.max(1, Math.round(item.h)),
+    };
+    if (rect.x !== prev.x || rect.y !== prev.y || rect.w !== prev.w || rect.h !== prev.h) {
+      edits.push({ astPath: item.i, ...rect });
+    }
+  }
+  return edits;
 }
