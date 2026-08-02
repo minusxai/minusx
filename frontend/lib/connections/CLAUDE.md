@@ -65,11 +65,14 @@ Mongo ignores params entirely: its "query" is JSON `{collection, pipeline}` and 
 DuckDB, SQLite, and CSV/Sheets all execute *through DuckDB*: `duckdb-registry.ts` keys one
 `DuckDBInstance` per absolute file path, `sqlite-via-duckdb-registry.ts` attaches SQLite files with
 `ATTACH … (TYPE SQLITE, READ_ONLY)` (deliberately avoiding better-sqlite3 blocking the event loop),
-and `csv-connector.ts` builds an in-memory instance whose relations come in two forms: uploaded
+and `csv-connector.ts` builds one instance per config whose relations come in two forms: uploaded
 objects become `httpfs` views over the store, while `dataset` entries — published, read-only
 datasets addressed as `${STATIC_DATASETS_BASE_URL}/${dataset}/${table}.parquet` — are
 **materialized** with `CREATE TABLE AS` at init, so the network is paid once per process instead
-of on every query (the base URL comes from server config only, never the connection document). All three
+of on every query (the base URL comes from server config only, never the connection document).
+View-only configs stay `:memory:`; a config with any `dataset` entry is backed by a pid-scoped
+temp file with a 512 MB buffer cap, because materialized rows held purely in memory are a RAM
+floor proportional to the dataset (~1.1 GB measured for the sample data) rather than a cache. All three
 share `duckdb-stream.ts` for chunked streaming and `duckdb-query.ts` for interrupt-based timeouts.
 `internal-db-connector.ts` runs against the *document* DB via `getModules().db.exec`, is gated to
 `mode === 'internals'` in `run-query.ts`, parses every statement and rejects any write root key (an
