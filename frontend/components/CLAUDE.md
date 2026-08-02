@@ -295,6 +295,10 @@ session as the THIRD edit kind beside text and format edits (`applyLayoutEditsTo
 under the same no-clobber invariant. The adapter clones each GridItem with an internal `editing`
 prop so the item stops self-positioning inside RGL's wrapper. Embeds inside a GridItem fill the
 cell (`GridItemContext` — the cell is the single source of height; authored `height=` is ignored).
+While editing, every NATIVE dragstart inside the grid is cancelled (plus `-webkit-user-drag: none`
+on tile links in the edit CSS): embed titles are `<a href>`s, natively draggable, and a tile drag
+starting on one otherwise also drags the link — URL ghost, drop-navigation. View mode keeps
+native link behavior for readers.
 
 **The WYSIWYG text host freezes its subtree while focused.** `StoryJsxBody` treats a focused editable host as prop-equal so React bails out and never reconciles it — without that, any upstream re-render (an embed refetch, a param change, a Redux update elsewhere) reconciles mid-keystroke and clobbers what the user is typing. A render that must happen anyway commits the in-progress edit first. Edits commit on blur by writing back into the JSX **AST** by `data-mx-ast` path, never by scraping the rendered DOM, and only after real user input — programmatic focus churn does not commit. Because the host is rich `contentEditable`, the write-back has to preserve inline elements (`<strong>`, `<em>`, links); a plaintext-only commit silently strips them. The parsed result runs through the same `validateJsxSource` and prop deny list as agent-authored markup — pasted HTML is untrusted input, and there is no editor-trusted parse.
 

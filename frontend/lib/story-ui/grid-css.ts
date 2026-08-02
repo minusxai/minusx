@@ -4,11 +4,14 @@
  * edit-mode Grid adapter (never `<head>`: head styles are lost by the SVG capture path, and
  * the top document's stylesheets never reach the iframe realm at all).
  *
- * Two deliberate deviations from the library stylesheet:
+ * Three deliberate deviations from the library stylesheet:
  *  - ALL `.react-grid-item` transitions are killed. Chromium does not repaint transformed
  *    `foreignObject` content mid-transition — items would freeze between positions (the
  *    dashboard's stale-tiles bug; DashboardView injects the same rule).
  *  - Only the south-east resize handle rules are carried (the adapter enables only `se`).
+ *  - Anchors inside tiles get `-webkit-user-drag: none`: an embed title is an `<a href>`,
+ *    natively draggable, so a tile drag starting on it also dragged the LINK (URL ghost +
+ *    drop-navigation). The adapter's dragstart preventDefault is the engine-agnostic half.
  *
  * View mode needs none of this: the pure-CSS Grid positions via compiled Tailwind classes.
  */
