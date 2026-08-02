@@ -9,7 +9,9 @@ development philosophy that governs every task — the things that apply no matt
 editing. Twenty module docs carry the detail.
 
 It documents the code **as it is today**: no plan narrative, no migration history, no changelog.
-That is what git is for.
+That is what git is for. This applies to **every** module doc and every code comment, not just
+this file — a "Phase 3" heading or a "previously this was X" aside in any doc is drift the day
+it lands.
 
 Everything here is loaded into **every** session, so keep it small. A module doc is loaded lazily —
 when files in its directory are read — so its cost is paid only by work that needs it. Directories
