@@ -219,11 +219,17 @@ open. Importing `test` from `@playwright/test` in a new spec silently opts out o
 Two things keep it from becoming noise. It asserts **only when the test would otherwise have
 passed** (`testInfo.status === testInfo.expectedStatus`), so a flow that fails its own assertion
 reports that, not a console line logged on the way. And the allowlist requires a stated reason per
-entry — it currently tolerates the hydration mismatch above (pre-existing on main:
-`components/ui/Link.tsx` calls `preserveParams()`, which no-ops on the server and appends
-`?mode=`/`?as_user=`/`?view=` on the client, so the first client render disagrees with the SSR HTML),
-navigation-cancelled fetches, and devtools advisories. Its hydration entry delegates to the app's own
-`isHydrationError` (`lib/utils/error-utils.ts`), so tightening the classifier tightens the gate.
+entry — it now tolerates only navigation-cancelled fetches and devtools advisories.
+
+**The hydration allowance has been removed, and that is the list working as intended.** It used to
+excuse a mismatch from `components/ui/Link.tsx` calling `preserveParams()`, which read
+`window.location` during render — no-op on the server, `?mode=`/`?as_user=`/`?view=` on the client,
+so every link disagreed with the SSR HTML. Both causes are fixed (`Link` reads `useSearchParams()`;
+`app/p/[[...path]]/page.tsx` picks its sidebar through `useSyncExternalStore`), and neither reason
+the entry gave for leaving it survived: `useSearchParams` carries `as_user` along with everything
+else, and the dynamic-rendering bailout costs nothing — a production build already renders all 136
+routes dynamically, so there is no static route to lose. A hydration error reaching this gate now is
+a regression, not known noise.
 
 Both suites locate controls by `aria-label` via `getByLabel` — 55 of the ~67 locators across
 `test/e2e`, `test/qa` and `test/flows`. A control without one is a missing `aria-label` on the

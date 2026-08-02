@@ -61,6 +61,18 @@ Two generic bridges let a view push chrome up into the shared header without a c
 `useFileToolbar()` in `FileHeader`) and `file-toolbar/PresentationContext.tsx` (native Fullscreen
 API via `useSyncExternalStore`; `FileHeader` offers the toggle for `PRESENTABLE_TYPES`).
 
+**Never read `window` during render.** `'use client'` still renders on the server here, so a
+browser-only value makes the first client render disagree with the SSR HTML — React regenerates the
+subtree, or for attributes refuses to patch it at all. It has bitten this tree twice, in both forms:
+structurally in `app/p/[[...path]]/page.tsx` (a `matchMedia` `useState` initializer picking which
+sidebar to render) and attribute-wise in `components/ui/Link.tsx` (`window.location.search` in the
+href, i.e. every link). Reach for `useSyncExternalStore` — React reuses its *server* snapshot during
+hydration — or `useSearchParams()`. Both files carry the full reasoning inline, including why the
+obvious alternatives were rejected; read them before changing either.
+
+The QA console guard (`test/qa/console-guard.ts`) no longer allowlists hydration errors, so a new one
+fails that suite instead of being absorbed as known noise.
+
 ## The kit / Chakra split
 
 Two design systems coexist. `components/kit/` is the Tailwind v4 + vendored-shadcn stack; app

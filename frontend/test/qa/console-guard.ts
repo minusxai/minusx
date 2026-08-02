@@ -13,7 +13,6 @@
  * Adding an entry requires a reason. Removing one is how a fix gets locked in.
  */
 import { type Page, expect } from '@playwright/test';
-import { isHydrationError } from '@/lib/utils/error-utils';
 
 interface Allowance {
   /** Matches the message text, or a classifier over it. */
@@ -23,19 +22,14 @@ interface Allowance {
 }
 
 const ALLOWED: Allowance[] = [
-  {
-    // Reuses the app's OWN classifier (lib/utils/error-utils.ts), which already
-    // treats these as browser-recoverable and suppresses reporting them. Keeping
-    // one definition means tightening it there tightens it here.
-    match: isHydrationError,
-    why:
-      'Pre-existing on main: components/ui/Link.tsx calls preserveParams(), which returns the ' +
-      'href untouched on the server and appends ?mode= / ?as_user= / ?view= on the client, so the ' +
-      'first client render disagrees with the SSR HTML. Not fixed here because the obvious ' +
-      'fixes each regress something: Redux carries mode/view but NOT as_user (would silently ' +
-      'break impersonation links), and useSearchParams() in an app-wide component forces a ' +
-      'dynamic-rendering bailout. Needs its own change.',
-  },
+  // The hydration allowance that used to live here is GONE, which is the point of this list.
+  // Both causes are fixed: `components/ui/Link.tsx` now reads `useSearchParams()` instead of
+  // `window.location` (so server and client build the same href), and `app/p/[[...path]]/page.tsx`
+  // picks its sidebar through `useSyncExternalStore`, whose server snapshot React reuses during
+  // hydration. Neither objection recorded in the old entry survived: `useSearchParams` carries
+  // `as_user` along with everything else, and the dynamic-rendering bailout costs nothing here —
+  // a production build renders all 136 routes dynamically already, with no static route to lose.
+  // A hydration error reaching this gate again is a regression, not known noise.
   {
     // Playwright navigates away mid-flight constantly; the browser cancels the
     // in-flight fetch and Next/our fetch-patch logs it. Not a product fault.
