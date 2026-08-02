@@ -70,6 +70,7 @@ import {
   PopoverDescription,
 } from '@/components/kit/popover';
 import { Grid, GridItem } from '@/components/kit/grid';
+import { SlideDeck, Slide } from '@/components/kit/slides';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const STORY_UI_COMPONENTS: Record<string, React.ComponentType<any>> = {
@@ -133,6 +134,8 @@ export const STORY_UI_COMPONENTS: Record<string, React.ComponentType<any>> = {
   PopoverDescription,
   Grid,
   GridItem,
+  SlideDeck,
+  Slide,
 };
 
 export const STORY_UI_COMPONENT_NAMES = Object.keys(STORY_UI_COMPONENTS);

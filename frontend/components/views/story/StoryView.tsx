@@ -18,8 +18,14 @@ import {
 } from '@/lib/data/story/story-question';
 import { updateNumberQueryInJsx } from '@/lib/data/story/story-number';
 import { updateParamQueryInHtml, updateParamQueryInJsx } from '@/lib/data/story/story-params';
+import { updateSlideTitleInJsx } from '@/lib/data/story/story-slides';
 import { preloadStoryFonts } from '@/lib/data/story/story-fonts';
 import { useStoryRebuildStability } from '@/lib/hooks/use-story-rebuild-stability';
+import { useSlideNav } from '@/lib/story-ui/use-slide-nav';
+import { useSlideThumbnails } from '@/lib/story-ui/use-slide-thumbs';
+import { usePresentation } from '@/components/file-toolbar/PresentationContext';
+import StorySlideRail from './StorySlideRail';
+import StoryPresentControls from './StoryPresentControls';
 import { STORY_W } from './ScaledStoryFrame';
 import { PageMarkerDevOverlay } from './PageMarkerDevOverlay';
 
@@ -155,6 +161,27 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
   const renderKey = `${session.key}:${hashStory(htmlForRender)}`;
   const pinHeight = useStoryRebuildStability(canvasRef, renderKey);
 
+  // Slide chrome (a story authored with <SlideDeck>): birds-eye rail while browsing and
+  // editing; presenting shows only the paging pill (a slide list during presentation was
+  // tried and removed — nothing may compete with the slides). useSlideNav settles to
+  // empty for a story with no slides, so the whole chrome stays unmounted on ordinary
+  // stories. Presentation toggling changes which ancestor scrolls — hence isPresenting
+  // as the scrollerKey.
+  const isPresenting = usePresentation()?.isPresenting ?? false;
+  const slideNav = useSlideNav(canvasRef, renderKey, isPresenting);
+  const showSlideRail = !isPresenting;
+  const slideThumbs = useSlideThumbnails(slideNav, renderKey, showSlideRail);
+  // Rail rename (edit sessions only): write the title back onto the <Slide> by its AST
+  // path — the interpreter stamps data-mx-ast on every rendered element. Staged like any
+  // other story edit; the resulting content change makes StoryView adopt the new body and
+  // cleanly rebuild, which also refreshes discovery and thumbnails.
+  const onRenameSlide = useCallback((index: number, title: string) => {
+    if (numericId === undefined) return;
+    const astPath = slideNav.slides[index]?.el.getAttribute('data-mx-ast');
+    if (!astPath) return;
+    applyStoryHtmlEdit({ fileId: numericId, story: updateSlideTitleInJsx(content.story ?? '', astPath, title) });
+  }, [numericId, slideNav.slides, content.story]);
+
   // Warm the TOP document's font cache for the theme's platform fonts, so every iframe
   // remount (each agent edit) re-registers its font-display:swap @font-face against
   // already-cached files instead of flashing fallback text (jsx stories only — legacy
@@ -205,6 +232,11 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
     // story's last line. OUTSIDE the capture box (data-story-capture), so captures are unpadded.
     <Box aria-label="Story page" w="100%" minH="420px">
       <Box display="flex" justifyContent="center" pb="24" mb="24">
+        {/* Birds-eye rail: OUTSIDE the captured box (the canvas), so captures and the OG
+            preview never see it. A flex sibling — the story is fluid and reflows around it. */}
+        {showSlideRail && (
+          <StorySlideRail nav={slideNav} thumbnails={slideThumbs} onRenameSlide={editing ? onRenameSlide : undefined} />
+        )}
         {/* Relative wrapper anchors the DEV marker overlay OVER the captured box without being INSIDE
             it — so the serialized capture sees the story alone, and the app-state screenshot's baked
             gutter is the only numbering in the image (no double markers). */}
@@ -238,6 +270,9 @@ export default function StoryView({ content, fileId, readOnly = false, headerEdi
           <PageMarkerDevOverlay enabled={showDevMarkers} colorMode={colorMode} />
         </Box>
       </Box>
+      {/* Present-mode paging: fixed, but INSIDE the fullscreen container's subtree (StoryView
+          renders under the PresentationProvider wrapper) — the top layer hides anything outside. */}
+      {isPresenting && <StoryPresentControls nav={slideNav} />}
       <NumberQueryEditor request={numberEdit} filePath={storyPath} onClose={() => setNumberEdit(null)} />
       <StoryQuestionEditor
         request={questionEdit}
