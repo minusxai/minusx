@@ -91,11 +91,11 @@ namespace prefix is applied at the **factory**, not behind a module a caller may
 earlier attempt put it behind the injectable `getModules().store`, which no call site ever asked for,
 so the prefixing silently never happened. Wrapping what everyone already calls is what makes it
 unbypassable — `copyObject` prefixes *both* keys, so a copy cannot cross the boundary. There are
-deliberately no shared keys: the mxfood sample parquets, once server-side-copied from a single
-`seeds/mxfood/` prefix, are now generated into a `tmpdir()` cache (`local-seed.ts`) and written into
-each namespace's own keyspace, because reading a shared prefix would need an exemption from the
-prefix and an exemption is the hole. It stores
-uploads, chart images, CSV/Parquet warehouse files, the mxfood tutorial seed, and — via
+deliberately no shared keys: reading a shared prefix would need an exemption from the prefix, and an
+exemption is the hole. The mxfood sample data is not stored here at all — the tutorial connection's
+`dataset` entries are read from a published source URL by the CSV connector directly
+(`lib/connections/csv-connector.ts`), which never goes through the store. It stores
+uploads, chart images, CSV/Parquet warehouse files, and — via
 `lib/query-cache/blob-store.ts` — every cached query result blob. It does not know about files rows.
 
 **`lib/secrets/`** — the credential boundary. Raw credentials never live in a `files` row: they are
@@ -270,9 +270,10 @@ route is a route allowed to read data this build may misread.
 **Seeding.** `AuthModule.register` reads `lib/database/workspace-template.json` (a static import,
 so a dev server must be restarted to pick up template edits), substitutes `{{ORG_NAME}}`,
 `{{ADMIN_EMAIL}}`, `{{ADMIN_NAME}}`, `{{ADMIN_PASSWORD_HASH}}`, `{{TIMESTAMP}}`, `{{DEFAULT_STYLES}}`,
-runs `applyMigrations`, `atomicImport`s the result, then fire-and-forget copies the mxfood tutorial
-Parquet seed (`copySeedMxfoodForMode('tutorial', MXFOOD_TABLES)`), optionally saves a bootstrap LLM
-config and creates a first connection. After adding a migration, `npm run update-workspace-template`
+runs `applyMigrations`, `atomicImport`s the result, optionally saves a bootstrap LLM
+config and creates a first connection. Sample data is not copied anywhere: the tutorial
+connection's `dataset` entries are fetched from the published source and materialized by the CSV
+connector on first use. After adding a migration, `npm run update-workspace-template`
 (`scripts/update-workspace-template.ts`) re-runs migrations over the template.
 
 ## Interactions with other areas

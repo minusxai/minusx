@@ -16,6 +16,7 @@ import {
   LuTrash2,
 } from 'react-icons/lu';
 import { CsvFileInfo } from '@/lib/types';
+import { fileRowKey } from '@/lib/csv-utils';
 
 // ─── Inline rename row ────────────────────────────────────────────────────────
 
@@ -29,9 +30,9 @@ export interface FileRowProps {
   onStartEdit: (f: CsvFileInfo) => void;
   onEditSchema: (v: string) => void;
   onEditTable: (v: string) => void;
-  onConfirmRename: (s3Key: string) => void;
+  onConfirmRename: (rowKey: string) => void;
   onCancelEdit: () => void;
-  onDelete: (s3Key: string) => void;
+  onDelete: (rowKey: string) => void;
   /** Extra indent for nested rows (e.g. inside a sheets group) */
   nested?: boolean;
 }
@@ -42,7 +43,7 @@ export function FileRow({
   nested = false,
 }: FileRowProps) {
   const tableInputRef = useRef<HTMLInputElement>(null);
-  const isEditing = editingKey === f.s3_key;
+  const isEditing = editingKey === fileRowKey(f);
   const colPreview = f.columns.slice(0, 4).map((c) => c.name).join(', ')
     + (f.columns.length > 4 ? ` +${f.columns.length - 4}` : '');
 
@@ -79,12 +80,12 @@ export function FileRow({
             value={editTable}
             onChange={(e) => onEditTable(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') onConfirmRename(f.s3_key);
+              if (e.key === 'Enter') onConfirmRename(fileRowKey(f));
               if (e.key === 'Escape') onCancelEdit();
             }}
             aria-label="Table name"
           />
-          <IconButton size="xs" variant="ghost" colorPalette="green" aria-label="Confirm rename" onClick={() => onConfirmRename(f.s3_key)}>
+          <IconButton size="xs" variant="ghost" colorPalette="green" aria-label="Confirm rename" onClick={() => onConfirmRename(fileRowKey(f))}>
             <LuCheck />
           </IconButton>
           <IconButton size="xs" variant="ghost" aria-label="Cancel rename" onClick={onCancelEdit}>
@@ -143,7 +144,7 @@ export function FileRow({
         variant="ghost"
         colorPalette="red"
         aria-label={`Delete table ${f.table_name}`}
-        onClick={() => onDelete(f.s3_key)}
+        onClick={() => onDelete(fileRowKey(f))}
       >
         <LuTrash2 size={11} />
       </IconButton>

@@ -75,17 +75,20 @@ export async function resetTutorial(request: APIRequestContext): Promise<boolean
 }
 
 /**
- * Wait until the tutorial mxfood sample data has finished copying (registration
- * kicks that off fire-and-forget). Polls /api/orgs/seed-status. Returns true once
- * ready; returns true immediately if the endpoint is absent (older deployment —
- * assume its long-lived data already exists). Returns false on timeout.
+ * Warm the tutorial sample data. The `static` connection's dataset entries are
+ * fetched from the published source and materialized on FIRST use, so the first
+ * query pays the download. Firing one trivial query here moves that cost out of
+ * the data-asserting flows (the dashboard flow issues many queries at once and
+ * would otherwise all queue behind a cold fetch). Returns true once a query
+ * answers; false if it never does within the timeout.
  */
 export async function waitForTutorialData(request: APIRequestContext, timeoutMs = 120_000): Promise<boolean> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const res = await request.get(`/api/orgs/seed-status?mode=${QA_MODE}`);
-    if (res.status() === 404) return true; // endpoint not deployed — assume data already seeded
-    if (res.ok() && (await res.json())?.data?.ready) return true;
+    const res = await request.post(`/api/query?mode=${QA_MODE}`, {
+      data: { connection_name: 'static', query: 'SELECT 1 FROM mxfood.orders LIMIT 1' },
+    });
+    if (res.ok()) return true;
     await new Promise((r) => setTimeout(r, 2000));
   }
   return false;

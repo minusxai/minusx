@@ -20,14 +20,7 @@ EOF
 fi
 
 # The documents DB is seeded automatically at workspace/company registration
-# (no manual import step).
-
-echo "[cloud-setup] Downloading sample DuckDB data..."
-mkdir -p "$ROOT/data"
-if [ ! -f "$ROOT/data/mxfood.duckdb" ]; then
-  curl -fSL -o "$ROOT/data/mxfood.duckdb" \
-    https://github.com/minusxai/sample_datasets/releases/download/v1.0/mxfood.duckdb \
-    || echo "[cloud-setup] WARNING: mxfood.duckdb download failed (non-fatal)"
-fi
+# (no manual import step). Sample data is fetched from its published source by
+# the CSV connector on first use — nothing to download here.
 
 echo "[cloud-setup] Done."

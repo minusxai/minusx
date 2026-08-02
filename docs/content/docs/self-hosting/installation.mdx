@@ -63,16 +63,12 @@ The LLM provider is configured **in the app** after first launch — the setup
 wizard's AI Models step (or Settings → Models) stores providers and API keys in
 the workspace; see [LLM Providers](/docs/self-hosting/llm-providers).
 
-### 3. Download sample data
+The **mxfood** demo dataset (a food delivery analytics database) needs no download:
+the tutorial reads it from its published source on first use. Airgapped installs can
+mirror it and point `MX_STATIC_DATASETS_BASE_URL` at the mirror — see
+[Configuration](/docs/self-hosting/configuration).
 
-Download the **mxfood** demo dataset (~140MB) — a food delivery analytics database:
-
-```bash
-mkdir -p data
-curl -L -o data/mxfood.duckdb https://github.com/minusxai/sample_datasets/releases/download/v1.0/mxfood.duckdb
-```
-
-### 4. Start MinusX
+### 3. Start MinusX
 
 ```bash
 docker compose up -d

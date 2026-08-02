@@ -1,10 +1,9 @@
 /**
  * AuthModule E2E tests.
  *
- * Covers workspace registration — including the tutorial-mode mxfood parquet
- * seed copy. Without that seed step, fresh OSS installs hit "No files found
- * that match the pattern …/csvs/tutorial/mxfood/<table>.parquet" the first
- * time the tutorial connection is queried.
+ * Covers workspace registration. The tutorial's sample-data connection ships
+ * `dataset` entries that the CSV connector reads from the published source on
+ * first use — registration performs no data copying.
  *
  * Run: npm test -- lib/modules/auth/__tests__/auth-module.test.ts
  */
@@ -14,21 +13,8 @@ import * as path from 'path';
 
 const TEST_DB_PATH = path.join(process.cwd(), 'data', 'test_auth_module.db');
 
-// Spy mock — preserves other exports so atomicImport (which doesn't import this
-// module directly) is unaffected, but lets us assert on the seed-copy call.
-// `vi.hoisted` lifts the spy alongside the hoisted `vi.mock` factory so it's
-// initialized before the factory closure dereferences it.
-const { copySeedSpy } = vi.hoisted(() => ({
-  copySeedSpy: vi.fn().mockResolvedValue([]),
-}));
-vi.mock('@/lib/object-store', async (importOriginal) => {
-  const orig = await importOriginal<Record<string, unknown>>();
-  return { ...orig, copySeedMxfoodForMode: copySeedSpy };
-});
-
 import { AuthModule } from '@/lib/modules/auth';
 import { truncateAllTables } from '@/store/__tests__/test-utils';
-import { MXFOOD_TABLES } from '@/lib/object-store/mxfood-tables';
 import { getModules } from '@/lib/modules/registry';
 import { getRawConfig } from '@/lib/data/configs.server';
 import { resolveConfigSecrets } from '@/lib/secrets/config-secrets.server';
@@ -45,7 +31,6 @@ describe('AuthModule.register', () => {
   beforeEach(async () => {
     cleanupDbFiles();
     await truncateAllTables();
-    copySeedSpy.mockClear();
   });
 
   afterEach(async () => {
@@ -53,7 +38,7 @@ describe('AuthModule.register', () => {
     vi.clearAllMocks();
   });
 
-  it('seeds the workspace and triggers mxfood tutorial parquet copy', async () => {
+  it('seeds the workspace, with the tutorial connection on published dataset entries', async () => {
     const mod = new AuthModule();
 
     const result = await mod.register({
@@ -79,10 +64,12 @@ describe('AuthModule.register', () => {
     );
     expect(Number(tutorialResult.rows[0].count)).toBeGreaterThan(0);
 
-    // The mxfood seed copy should have been kicked off for tutorial mode with
-    // every table the workspace-template's tutorial connection references.
-    expect(copySeedSpy).toHaveBeenCalledTimes(1);
-    expect(copySeedSpy).toHaveBeenCalledWith('tutorial', MXFOOD_TABLES);
+    // The tutorial connection must reference published datasets, not uploaded
+    // objects — dataset entries need no copy step and no object-store state.
+    const conn = await ConnectionsAPI.getRawByName('static', 'tutorial');
+    const files = (conn.config as { files: Array<{ dataset?: string; s3_key?: string }> }).files;
+    expect(files.length).toBeGreaterThan(0);
+    expect(files.every((f) => f.dataset === 'mxfood' && f.s3_key === undefined)).toBe(true);
   });
 
   it('refuses to register a second time', async () => {

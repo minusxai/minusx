@@ -41,7 +41,7 @@ export const sheetsSyncJobHandler: JobHandler = {
     for (const [spreadsheetId, groupFiles] of groups) {
       const spreadsheetUrl = groupFiles[0].spreadsheet_url ?? '';
       const schemaName = groupFiles[0].schema_name ?? 'public';
-      const oldS3Keys = groupFiles.map((f) => f.s3_key);
+      const oldS3Keys = groupFiles.map((f) => f.s3_key).filter((k): k is string => !!k);
 
       try {
         const { files: incoming, spreadsheetId: parsedId } = await importGoogleSheetToS3(
@@ -64,7 +64,8 @@ export const sheetsSyncJobHandler: JobHandler = {
         // replaced AND every freshly-uploaded key we did NOT keep (importGoogleSheetToS3 uploads ALL
         // live tabs, including deleted/new ones we drop). Keep only the keys still referenced.
         const referenced = new Set(updatedFiles.filter((f) => f.spreadsheet_id === spreadsheetId).map((f) => f.s3_key));
-        const garbage = [...oldS3Keys, ...reimported.map((f) => f.s3_key)].filter((k) => !referenced.has(k));
+        const garbage = [...oldS3Keys, ...reimported.map((f) => f.s3_key)]
+          .filter((k): k is string => !!k && !referenced.has(k));
         await Promise.allSettled(garbage.map((key) => deleteS3File(key)));
 
         results.push({

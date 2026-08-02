@@ -48,7 +48,8 @@ export interface CsvFileInfo {
   filename: string;
   table_name: string;
   schema_name: string;         // DuckDB schema, e.g. "public" or "mxfood"
-  s3_key: string;              // S3 object key, org-scoped
+  s3_key?: string;             // Uploaded object key (uploads); absent for static datasets
+  dataset?: string;            // Published dataset name (read from STATIC_DATASETS_BASE_URL); absent for uploads
   file_format: 'csv' | 'parquet';
   row_count: number;
   columns: { name: string; type: string }[];

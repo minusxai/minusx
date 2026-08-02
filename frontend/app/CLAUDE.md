@@ -162,8 +162,8 @@ promotion.
 
 **Auth, orgs, users.** `api/auth/[...nextauth]` re-exports the NextAuth handlers; `check-2fa`,
 `send-otp` (phone 2FA *or* passwordless email), `verify-otp` (stateless JWT round-trip) sit beside it.
-`api/orgs/register` is the workspace bootstrap (gated by `ENABLE_ORG_CREATION`), `api/orgs/seed-status`
-polls the fire-and-forget mxfood copy. `api/users` + `api/users/[id]` use `auth()` directly rather than
+`api/orgs/register` is the workspace bootstrap (gated by `ENABLE_ORG_CREATION`).
+`api/users` + `api/users/[id]` use `auth()` directly rather than
 `withAuth` and do their own admin-vs-self authorization.
 
 **Admin / settings-backing.** `api/admin/{db-version,validate-db,migrate-db,export-db,import-data,
