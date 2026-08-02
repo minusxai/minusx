@@ -30,6 +30,7 @@ import { fileURLToPath } from 'url';
 import { chromium, webkit, firefox, type BrowserType } from '@playwright/test';
 import { WIDTH_FIXTURES, runWidthChecks } from './story-width-matrix';
 import { B2_FIXTURES, runB2Checks } from './b2-surface-matrix';
+import { buildGridFixtures, runGridChecks } from './story-grid-matrix';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -144,7 +145,9 @@ const FIXTURES: Record<string, string> = {
     </div>`),
 };
 
-/** Capture + fluid-width + B2 dashboard-surface fixtures, served from the one origin. */
+/** Capture + fluid-width + B2 dashboard-surface fixtures, served from the one origin.
+ *  The story-grid fixtures are merged in at startup (their stylesheet is compiled by the real
+ *  per-story Tailwind compiler, which is async). */
 const ALL_FIXTURES: Record<string, string> = { ...FIXTURES, ...WIDTH_FIXTURES, ...B2_FIXTURES };
 
 function serve(port: number, handler: http.RequestListener): Promise<http.Server> {
@@ -321,6 +324,7 @@ async function runEngine(browserType: BrowserType, base: string): Promise<CheckR
   // (their fixtures are served from the same map and drive the same bundle).
   results.push(...await runWidthChecks(ctx, base));
   results.push(...await runB2Checks(ctx, base));
+  results.push(...await runGridChecks(ctx, base));
 
   await browser.close();
   return results;
@@ -342,6 +346,7 @@ const yamlPlugin: Plugin = {
 };
 
 async function main(): Promise<void> {
+  Object.assign(ALL_FIXTURES, await buildGridFixtures());
   // Bundle the REAL modules for the browser (alias @ → repo root, matching tsconfig paths).
   const bundle = await build({
     // A real entry file, not an assembled string: the imports stay visible to tsc,

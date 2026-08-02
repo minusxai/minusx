@@ -19,6 +19,7 @@ export const STORY_UI_COMPONENT_NAME_LIST = [
   'Collapsible', 'CollapsibleTrigger', 'CollapsibleContent',
   'Tooltip', 'TooltipTrigger', 'TooltipContent', 'TooltipProvider',
   'Popover', 'PopoverTrigger', 'PopoverContent', 'PopoverAnchor', 'PopoverHeader', 'PopoverTitle', 'PopoverDescription',
+  'Grid', 'GridItem',
 ] as const;
 
 /**

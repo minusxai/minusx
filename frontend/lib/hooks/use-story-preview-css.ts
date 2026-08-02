@@ -43,17 +43,25 @@ export function useStoryPreviewCss(
   dirty: boolean,
 ): StoryPreviewCss {
   const story = content?.story ?? '';
-  const persisted = content?.compiledCss ?? null;
+  // Empty-string persisted css is ABSENT, not a stylesheet: an unsaved agent draft stores ''
+  // (the server compile only runs at save), and serving it as a real fallback renders the
+  // story unstyled for a whole compile round-trip.
+  const persisted = content?.compiledCss || null;
   const isJsx = content?.format === 'jsx';
   const marked = isJsx || hasDesignSystemMarker(story);
   const needsPreview = marked && (dirty || persisted === null);
   const cached = needsPreview ? cache.get(story) : undefined;
 
-  // Best available value right now: cached preview → persisted → null. The persisted CSS is
-  // served while a stale-preview fetch is in flight so the story never flashes unstyled.
+  // Best available value right now: cached preview → persisted → last served → null. The
+  // fallback chain is served while a stale-preview fetch is in flight so the story never
+  // flashes unstyled — critically for DRAFTS (persisted absent), where every change in edit
+  // mode (an agent edit landing, a grid drag commit) otherwise rendered unstyled until the
+  // preview compile returned.
   const [fetched, setFetched] = useState<{ story: string; css: string | null } | null>(null);
   // When the last compile request FIRED — drives the leading-edge debounce below.
   const lastFireRef = useRef(0);
+  // The last css this hook actually served — the draft's no-flash fallback.
+  const [lastServed, setLastServed] = useState<string | null>(null);
 
   useEffect(() => {
     if (!needsPreview || cached !== undefined) return;
@@ -82,14 +90,18 @@ export function useStoryPreviewCss(
   }, [needsPreview, cached, story, isJsx]);
 
   // `ready` = the returned css belongs to THIS story. Only the final fallback
-  // (serving persisted/null while the current story's compile is in flight) is not ready.
-  // `ready` = the returned css belongs to THIS story. Only the final fallback
-  // (serving persisted/null while the current story's compile is in flight) is not ready.
-  if (!marked) return { css: null, ready: true };
-  if (!needsPreview) return { css: persisted, ready: true };
-  if (cached !== undefined) return { css: cached, ready: true };
-  if (fetched && fetched.story === story) return { css: fetched.css, ready: true };
-  return { css: persisted, ready: false };
+  // (serving persisted / last-served css while the current story's compile is in flight) is
+  // not ready.
+  let out: StoryPreviewCss;
+  if (!marked) out = { css: null, ready: true };
+  else if (!needsPreview) out = { css: persisted, ready: true };
+  else if (cached !== undefined) out = { css: cached, ready: true };
+  else if (fetched && fetched.story === story) out = { css: fetched.css, ready: true };
+  else out = { css: persisted ?? lastServed, ready: false };
+  // Adjust-state-during-render (the same pattern as useHeldStoryRender below): remember the
+  // served css so a later render whose fallback is ABSENT can keep the last styled frame.
+  if (out.css !== null && out.css !== lastServed) setLastServed(out.css);
+  return out;
 }
 
 /**

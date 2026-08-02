@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" fill="none">
+  <!-- Dashboard: kicker + one-line verdict, a KPI band of tiles, evidence tiles on a grid; a drag cursor lifting one tile -->
+  <rect width="640" height="400" fill="#f8f7f5"/>
+  <!-- kicker -->
+  <rect x="40" y="34" width="84" height="8" rx="2" fill="#d64a33"/>
+  <!-- one-sentence verdict -->
+  <rect x="40" y="54" width="332" height="22" rx="3" fill="#26251f"/>
+  <!-- param filters row -->
+  <rect x="452" y="54" width="68" height="18" rx="4" stroke="#c9c6bf" stroke-width="2" fill="#ffffff"/>
+  <rect x="530" y="54" width="68" height="18" rx="4" stroke="#c9c6bf" stroke-width="2" fill="#ffffff"/>
+  <!-- KPI band: 4 tiles -->
+  <g>
+    <rect x="40" y="98" width="130" height="64" rx="5" stroke="#26251f" stroke-width="2.5" fill="#ffffff"/>
+    <rect x="54" y="112" width="52" height="8" rx="2" fill="#a8a49c"/>
+    <rect x="54" y="128" width="76" height="18" rx="3" fill="#26251f"/>
+    <rect x="183" y="98" width="130" height="64" rx="5" stroke="#26251f" stroke-width="2.5" fill="#ffffff"/>
+    <rect x="197" y="112" width="52" height="8" rx="2" fill="#a8a49c"/>
+    <rect x="197" y="128" width="76" height="18" rx="3" fill="#26251f"/>
+    <rect x="326" y="98" width="130" height="64" rx="5" stroke="#26251f" stroke-width="2.5" fill="#ffffff"/>
+    <rect x="340" y="112" width="52" height="8" rx="2" fill="#a8a49c"/>
+    <rect x="340" y="128" width="76" height="18" rx="3" fill="#d64a33"/>
+    <rect x="469" y="98" width="130" height="64" rx="5" stroke="#26251f" stroke-width="2.5" fill="#ffffff"/>
+    <rect x="483" y="112" width="52" height="8" rx="2" fill="#a8a49c"/>
+    <rect x="483" y="128" width="76" height="18" rx="3" fill="#26251f"/>
+  </g>
+  <!-- main chart tile -->
+  <g>
+    <rect x="40" y="178" width="372" height="150" rx="5" stroke="#26251f" stroke-width="2.5" fill="#ffffff"/>
+    <rect x="58" y="194" width="110" height="9" rx="2" fill="#26251f"/>
+    <rect x="58" y="272" width="30" height="40" rx="2" fill="#c9c6bf"/>
+    <rect x="102" y="252" width="30" height="60" rx="2" fill="#c9c6bf"/>
+    <rect x="146" y="262" width="30" height="50" rx="2" fill="#c9c6bf"/>
+    <rect x="190" y="236" width="30" height="76" rx="2" fill="#c9c6bf"/>
+    <rect x="234" y="222" width="30" height="90" rx="2" fill="#d64a33"/>
+    <rect x="278" y="244" width="30" height="68" rx="2" fill="#c9c6bf"/>
+    <rect x="322" y="230" width="30" height="82" rx="2" fill="#c9c6bf"/>
+  </g>
+  <!-- side tile being DRAGGED: offset, dashed placeholder behind it -->
+  <rect x="428" y="178" width="171" height="150" rx="5" stroke="#c9c6bf" stroke-width="2.5" stroke-dasharray="7 6" fill="#f1efe9"/>
+  <g transform="translate(14 -10) rotate(2 520 250)">
+    <rect x="428" y="178" width="171" height="150" rx="5" stroke="#26251f" stroke-width="2.5" fill="#ffffff"/>
+    <rect x="446" y="194" width="86" height="9" rx="2" fill="#26251f"/>
+    <path d="M446 300 L482 262 L516 278 L556 224" stroke="#d64a33" stroke-width="3.5" fill="none"/>
+  </g>
+  <!-- drag cursor -->
+  <path d="M560 158 l0 20 5 -5 4 9 5 -2 -4 -9 7 0 z" fill="#26251f"/>
+  <!-- footnote -->
+  <rect x="40" y="352" width="196" height="7" rx="2" fill="#a8a49c"/>
+</svg>

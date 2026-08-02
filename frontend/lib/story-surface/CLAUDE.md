@@ -114,7 +114,10 @@ sticky table headers are our code, not authored CSS, and the test asserts `.stic
 `surface-width.tsx` is a bare React context. react-grid-layout's `WidthProvider` measures through
 `resize-observer-polyfill`, whose refresh triggers are top-document events that never fire inside the
 iframe realm — it measures once and goes deaf. The surface already tracks width authoritatively, so
-`DashboardView` consumes `useSurfaceWidth()` instead of re-deriving it.
+`DashboardView` consumes `useSurfaceWidth()` instead of re-deriving it. The context is shared, not
+dashboard-only: `AgentHtml` provides it around the jsx story body the same way (iframe-element
+ResizeObserver, 60 ms trailing debounce), where the story `<Grid>`'s edit-mode react-grid-layout
+consumes it.
 
 ## `lib/html` — iframe document plumbing
 
@@ -150,7 +153,8 @@ iframe realm — it measures once and goes deaf. The surface already tracks widt
 ## Interactions with other areas
 
 **Story render path.** `components/views/story/StoryView.tsx` → `components/views/shared/AgentHtml.tsx`
-builds the iframe document, mounts the surface, injects styles, and portals the body in.
+builds the iframe document, mounts the surface, injects styles, provides the measured surface width
+(`SurfaceWidthContext` — the story grid's edit mode consumes it), and portals the body in.
 `format:'jsx'` bodies go through `components/views/shared/StoryJsxBody.tsx`, which calls `parseJsx` +
 `renderStoryNodes` with `STORY_UI_COMPONENTS` plus the live embeds from
 `components/views/shared/StoryEmbeds.tsx`. **Contract:** the interpreter runs in the *parent* React

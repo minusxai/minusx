@@ -67,6 +67,29 @@ import — so server-side save validation stays headless.
 `STORY_HTML_TAGS`, the explicit HTML allowlist for new-format stories; `__tests__/registry-names.test.ts`
 asserts the two never drift. Adding a component means editing **both** files.
 
+## The story grid — `Grid` / `GridItem`
+
+`components/kit/grid.tsx` is the dashboard-style positioned layout for jsx stories (registered
+like any other component; the name collides with the retired LEGACY `Grid` in
+`lib/data/story/story-components.ts` deliberately — separate allowlists, same precedent as `Card`).
+View mode is **pure CSS**: items are absolutely positioned from CSS variables consumed by literal
+Tailwind arbitrary-value classes (spaceless `calc()` — the recipe-class extractor splits string
+literals on whitespace), so captures serialize by construction and no JS measures anything.
+Below the `@2xl` container width items stack in source order, KEEPING their px height (embeds
+inside fill the cell at 100% via the exported `GridItemContext`, so auto height would collapse
+them). `lib/data/story/__tests__/story-css-grid.test.ts` pins that the per-story Tailwind compile
+actually EMITS these rules — candidates being extracted is not proof of emission.
+
+`grid-layout.ts` is the pure geometry (12 cols × 86px rows — the dashboard's 80+6 folded; the
+gutter is `p-[3px]` INSIDE each item so edit-mode react-grid-layout runs `margin [0,0]` and both
+modes place with identical arithmetic). It owns the single defaulting/clamping rule
+(`gridItemRect`) and the drag-commit diff (`diffLayouts` — empty diff = the mount-echo guard).
+`grid-css.ts` is the hand-vendored RGL structural CSS for edit mode (transitions killed — the
+foreignObject repaint bug), injected inside the surface root by `StoryJsxBody`'s `GridAdapter`.
+Edit-mode drag/resize commits are the edit session's THIRD edit kind: `applyLayoutEditsToJsx`
+(`lib/data/story/jsx-edit.ts`) writes x/y/w/h back by AST path, composed after text and format
+edits. The RGL item key IS the GridItem's `data-mx-ast` path.
+
 `interpreter.tsx` turns a validated AST into React elements over an injected registry:
 
 ```
@@ -140,6 +163,8 @@ variant winning the cascade and masking the click.
 |---|---|
 | Add/deny a JSX attribute or tag | `frontend/lib/jsx/validate.ts` (+ mirror in `frontend/lib/story-ui/interpreter.tsx`) |
 | Add a component stories can use | `frontend/lib/story-ui/registry.ts` **and** `frontend/lib/story-ui/component-names.ts` |
+| Change grid geometry / drag-commit diff | `frontend/lib/story-ui/grid-layout.ts` (+ `frontend/components/kit/grid.tsx` classes) |
+| Grid items misplaced in edit mode vs view mode | `frontend/lib/story-ui/grid-css.ts`, the `GridAdapter` in `frontend/components/views/shared/StoryJsxBody.tsx` |
 | Allow another raw HTML tag | `frontend/lib/story-ui/component-names.ts` (`STORY_HTML_TAGS`) |
 | Story CSS candidate list is short a class | `frontend/lib/story-ui/recipe-classes.ts` → `npm run generate-story-ui-classes` |
 | Add a class the format toolbar can apply | `frontend/lib/data/story/typography.ts` (auto-unions into the compile and flips the CSS version) |

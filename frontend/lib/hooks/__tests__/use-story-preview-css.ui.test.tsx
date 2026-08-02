@@ -60,6 +60,37 @@ describe('useStoryPreviewCss', () => {
   });
 });
 
+describe('useStoryPreviewCss — unsaved drafts must never flash unstyled between compiles', () => {
+  // An agent DRAFT has empty persisted compiledCss (the server compile only runs at save). In
+  // edit mode the story flows live, so every change — an agent edit landing, a grid drag
+  // commit — renders immediately while its preview compile is in flight. Falling back to the
+  // EMPTY persisted css rendered the whole story unstyled (serif text, blue links, unpositioned
+  // grid) for the round-trip. The fallback must be the last css this hook served instead.
+  it('serves the LAST SERVED css (not the empty persisted css) while the next compile is in flight', async () => {
+    const fn = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, data: { css: '.chunk-one{}' } }) } as unknown as Response)
+      .mockReturnValue(new Promise(() => {})); // second compile: in flight forever
+    vi.stubGlobal('fetch', fn);
+    const { result, rerender } = renderHook(
+      ({ story }: { story: string }) => useStoryPreviewCss({ story, compiledCss: '' }, true),
+      { initialProps: { story: TW('draft-chunk-one bg-red-50') } },
+    );
+    await waitFor(() => expect(result.current).toEqual({ css: '.chunk-one{}', ready: true }));
+    // The next agent chunk / drag commit changes the story; its compile is in flight.
+    rerender({ story: TW('draft-chunk-two bg-red-100') });
+    expect(result.current).toEqual({ css: '.chunk-one{}', ready: false });
+  });
+
+  it('treats an empty-string persisted css as absent (a draft is a draft even when not dirty)', async () => {
+    const fetchFn = mockFetchCss('.compiled-fresh{}');
+    const { result } = renderHook(() =>
+      useStoryPreviewCss({ story: TW('empty-persisted bg-blue-50'), compiledCss: '' }, false),
+    );
+    await waitFor(() => expect(result.current).toEqual({ css: '.compiled-fresh{}', ready: true }));
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('useStoryPreviewCss — leading-edge compile (agent edits should not eat a 300ms debounce)', () => {
   function mockPendingFetch() {
     // Never resolves: these tests assert WHEN the request fires, not what it returns.

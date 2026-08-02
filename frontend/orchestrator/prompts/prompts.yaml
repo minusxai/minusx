@@ -833,7 +833,7 @@ templates:
 
       Every story, from scratch or from a dashboard, follows the same loop:
 
-      1. **Clarify** with the user (via the `clarify` tool). Settle four things: the **theme**, the **template** (the document's structural genre), the **audience and goal**, and the **scope/data** to cover. Theme and template are TWO preset clarify calls, each with `options: []`: first `type: 'design'` (the design-theme picker), then `type: 'template'` (editorial | deck | scrolly) — the app shows the pickers itself, and each result returns the chosen value PLUS its authoring guidance (personality, beats, layout grammar, Do/Don'ts). Write both picks into the story's `<theme>` and `<template>` fields and FOLLOW the returned template guidance for the beat structure. If the user answers "Figure it out", the result carries the full catalog — choose yourself from the story's content and audience, then follow that choice's guidance. Infer what you reasonably can and just confirm.
+      1. **Clarify** with the user (via the `clarify` tool). Settle four things: the **theme**, the **template** (the document's structural genre), the **audience and goal**, and the **scope/data** to cover. Theme and template are TWO preset clarify calls, each with `options: []`: first `type: 'design'` (the design-theme picker), then `type: 'template'` (editorial | deck | scrolly | dashboard) — the app shows the pickers itself, and each result returns the chosen value PLUS its authoring guidance (personality, beats, layout grammar, Do/Don'ts). Write both picks into the story's `<theme>` and `<template>` fields and FOLLOW the returned template guidance for the beat structure. If the user answers "Figure it out", the result carries the full catalog — choose yourself from the story's content and audience, then follow that choice's guidance. Infer what you reasonably can and just confirm.
       2. **Build** the story (Procedures, section 5): find the lead, storyboard the beats, write the shadcn JSX.
       3. **Review** it and judge it as the intended reader. Every EditFile already returns the screenshot + full rubric (LLM visual review included); call ReviewFile when you want a fresh grade without editing.
       4. **Fix and improve.** ALWAYS fix every `error` finding (any error gates `overall` to 0), then work through the `warn`s, applying each finding's `fix`, and raise the `overall` score. Repeat. **Do not stop until every `error` is cleared AND `overall` is at least 4.** Keep going past that only if it still looks off.
@@ -874,11 +874,29 @@ templates:
 
       The `<story>` body is **shadcn JSX** — one fragment, one root `<div>`, no JavaScript. You already know this entire API; write it exactly as you would in any shadcn/Tailwind app:
 
-      - **Components**: the registered shadcn/ui set, with standard props/variants/`className` — the Card family, Badge, Button, Alert, Table family, Separator, Skeleton, Progress, Breadcrumb, Avatar/AvatarGroup, and the interactive set Tabs, Accordion, Collapsible, Tooltip, Popover (they carry their own behavior; no handlers needed or allowed). Dialog, Sheet, and DropdownMenu are NOT registered — an unknown tag is a validation error.
+      - **Components**: the registered shadcn/ui set, with standard props/variants/`className` — the Card family, Badge, Button, Alert, Table family, Separator, Skeleton, Progress, Breadcrumb, Avatar/AvatarGroup, the interactive set Tabs, Accordion, Collapsible, Tooltip, Popover (they carry their own behavior; no handlers needed or allowed), and the positioned layout pair Grid/GridItem (below). Dialog, Sheet, and DropdownMenu are NOT registered — an unknown tag is a validation error.
       - **Plain HTML** (content tags: `div`, `span`, headings, `p`, lists, the `table` family, `img`, `a`, `strong`/`em`/`code`, …) styled with **Tailwind utilities + the shadcn CSS-variable tokens** (`bg-card`, `text-muted-foreground`, `border-border`, `rounded-lg`, `--background`, `--primary`, `--radius`, `--chart-1..5`, …). Use `className=` on EVERY element, HTML tags and components alike — the body is JSX (legacy `class=` still renders, but never author it). Classes must be written literally in the markup (they are extracted statically and compiled at save time). Put `data-design="tw"` and `@container` on the root `<div>`.
       - **The platform embeds** `<Question>` / `<Number>` / `<Param>` (section 3) carry every chart and every data number.
       - **Styling defaults**: Tailwind tokens + utilities are the ONLY authored styling path for the entire Story DOM — style ON the element through `className`, always. There is no Story-CSS escape hatch. Arbitrary-value utilities cover one-off colors (`text-[#2563eb]`, `bg-[#fef3c7]`), gradients, textures, filters, dimensions, and unusual typography while remaining literal Tailwind classes. Do not author `<style>` blocks, selector rules, or inline `style` / `style={{…}}` attributes. They fight per-element WYSIWYG edits and are intentionally outside the forward styling contract. **The one CSS exception is scoped table/pivot visualization CSS:** inside a `<Question>`'s `viz.source.css`, use only the documented stable table-renderer `.mx-*` classes when table-internal presentation cannot be expressed by its declarative fields. That CSS is isolated inside the visualization and is NEVER a way to style Story markup. Use only built-in Tailwind `animate-*` utilities for motion. Banned outright: `position: fixed` / `position: sticky`, and external `url()` / `@import` (fonts and themes are platform-provided). The theme supplies its font family and palette; override them only with literal Tailwind classes when the user requests it. The theme's guidance carries the accent discipline — follow it.
       - **No `<script>`, no event handlers, no iframes.** Prop values are string/number/boolean literals only — no JSX expression containers or spreads — except embed envelopes (`viz={{…}}`, `params={[…]}`) and template-literal `query` values.
+
+      ### `<Grid>` / `<GridItem>` — the dashboard-style positioned layout
+
+      **DEFAULT RULE: whenever two or more `<Question>` embeds (KPI tiles, charts) sit TOGETHER as a band or cluster — side by side, a KPI row, a chart pair, any dashboard-shaped section — lay them out with `<Grid>`/`<GridItem>`, not hand-rolled flex/grid CSS.** The reader can then drag and resize the tiles in edit mode; a flex row gives them nothing. Hand-rolled layout stays right for prose, heroes, callouts, and single embeds interleaved with text:
+
+      ```
+      <Grid>
+        <GridItem x={0} y={0} w={8} h={5}><Question id={142} /></GridItem>
+        <GridItem x={8} y={0} w={4} h={5}><Card className="h-full">…</Card></GridItem>
+        <GridItem x={0} y={5} w={12} h={3}><Question id={17} /></GridItem>
+      </Grid>
+      ```
+
+      - The model: **12 columns × 86px rows** (`x`/`w` in columns, `y`/`h` in rows; a GridItem is `h × 86px` tall). Items must not overlap; gutters are automatic.
+      - **The cell is the single source of height.** NEVER author `height=` on a `<Question>`/embed inside a GridItem — it fills the cell. Size charts by `h` instead (charts want `h` 4–6, stat tiles 2–3).
+      - Direct children of `<Grid>` must be `<GridItem>`s (anything else is dropped); put exactly one component per item. Do not nest a Grid inside a Grid.
+      - On phones the grid stacks vertically **in source order** — author GridItems in reading order (top-left → bottom-right).
+      - Use it for every multi-embed band (that is the default, per above). Prose, heroes, and flowing editorial layout stay plain HTML + Tailwind — a Grid wrapping the whole story reads as a dashboard, not a story.
 
       ### Vega-always (HARD RULE)
 
