@@ -539,7 +539,13 @@ export const StoryContent = Type.Object({
     STORY_UI_COMPONENT_NAME_LIST.join(', ') + '. ' +
     'These and the platform embeds <Question/>, <Number/>, <Param/> (below) are the ONLY Capitalized tags ' +
     'allowed — any other Capitalized tag fails validation, so build everything else from plain HTML + Tailwind ' +
-    'utilities. Components nest freely with HTML and embeds. Tailwind utilities on each element are the ONLY ' +
+    'utilities. Components nest freely with HTML and embeds. ' +
+    'GRID LAYOUT — for a dashboard-like band the reader can drag/resize in edit mode, use ' +
+    '<Grid><GridItem x={0} y={0} w={8} h={5}>…</GridItem>…</Grid>: 12 columns × 86px rows, x/w in columns, ' +
+    'y/h in rows, no overlaps; direct children of Grid must be GridItems (one component each, no nested Grids). ' +
+    'Inside a GridItem the CELL is the height — an embed fills it, so never author height= on a <Question> ' +
+    'there; size by h instead. On phones GridItems stack in source order. ' +
+    'Tailwind utilities on each element are the ONLY ' +
     'authored styling path: arbitrary-value utilities cover one-off colors, gradients, textures, dimensions, ' +
     'and unusual typography. Do not author <style> blocks, selector rules, or inline style/style={{…}} attrs. <script> tags, ' +
     'event-handler attributes, and iframes are stripped at render time. Write it like a designed long-form ' +

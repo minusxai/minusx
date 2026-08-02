@@ -283,6 +283,19 @@ observer is bound to the top realm and goes deaf inside the surface iframe. Widt
 | Empty / new-file hero | `views/shared/empty-states.tsx` |
 | Right sidebar & app chrome | `app-shell/RightSidebar.tsx`, `app-shell/Sidebar.tsx`, `app-shell/DataLoader.tsx` |
 
+**The story `<Grid>` renders two different ways, and only edit mode is interactive.**
+`StoryJsxBody`'s `GridAdapter` overrides the registry's pure-CSS `Grid` (`components/kit/grid.tsx`)
+exactly like the embed adapters override `Question`/`Number`/`Param`: view mode renders the kit
+component untouched (absolute positioning from CSS vars — capture-safe, nothing draggable reaches a
+reader), edit mode mounts react-grid-layout at `margin [0,0]` (the gutter is padding inside each
+GridItem, so both modes place identically) with width from `useSurfaceWidth()` and the RGL item key
+set to each GridItem's `data-mx-ast` path. A drag/resize stop diffs the full layout
+(`diffLayouts` — an empty diff is the mount-echo guard) and stages the changed rects in the edit
+session as the THIRD edit kind beside text and format edits (`applyLayoutEditsToJsx`), composing
+under the same no-clobber invariant. The adapter clones each GridItem with an internal `editing`
+prop so the item stops self-positioning inside RGL's wrapper. Embeds inside a GridItem fill the
+cell (`GridItemContext` — the cell is the single source of height; authored `height=` is ignored).
+
 **The WYSIWYG text host freezes its subtree while focused.** `StoryJsxBody` treats a focused editable host as prop-equal so React bails out and never reconciles it — without that, any upstream re-render (an embed refetch, a param change, a Redux update elsewhere) reconciles mid-keystroke and clobbers what the user is typing. A render that must happen anyway commits the in-progress edit first. Edits commit on blur by writing back into the JSX **AST** by `data-mx-ast` path, never by scraping the rendered DOM, and only after real user input — programmatic focus churn does not commit. Because the host is rich `contentEditable`, the write-back has to preserve inline elements (`<strong>`, `<em>`, links); a plaintext-only commit silently strips them. The parsed result runs through the same `validateJsxSource` and prop deny list as agent-authored markup — pasted HTML is untrusted input, and there is no editor-trusted parse.
 
 **The format toolbar mutates the live DOM first and the source second — both, every time.**

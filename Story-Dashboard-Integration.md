@@ -1,5 +1,10 @@
 # Story ↔ Dashboard Integration: `<Grid>` / `<GridItem>` drag-and-drop layout for JSX stories
 
+> **Status: IMPLEMENTED** on `feature/dashboard-story-integration`. This file is the design
+> record; the code is the truth. One deviation from the plan below: `applyLayoutEdit` is
+> exposed on `StoryJsxEditApi` (beside `applyFormatEdit`) rather than kept session-internal —
+> it is the deterministic test seam and a future programmatic-nudge hook.
+
 A registered story component pair that gives `format:'jsx'` stories the dashboard's
 drag-and-drop grid: the agent authors layout as static JSX props, and in story edit mode the
 user drags/resizes items exactly like dashboard tiles. Layout changes persist by AST
