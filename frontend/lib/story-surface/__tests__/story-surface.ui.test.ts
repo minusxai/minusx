@@ -142,6 +142,65 @@ describe('svg surface', () => {
 // for full-viewport slides — one slide would be as tall as the whole deck. The surface therefore
 // stamps the HOST window's viewport height on the story root as `--mx-vh`; deck-style sections use
 // `min-h-[var(--mx-vh,760px)]`. On the root (inside the serialized subtree) so captures keep it.
+// ResizeObserver is DEAF for foreignObject descendants in Chromium — both realms, not even the
+// spec-mandated initial delivery (same quirk family as IntersectionObserver, which WindowedTile
+// works around). So RO(surface.root) never fires, and RO(iframe) can't help with height: the
+// iframe is content-sized — its height is exactly what sync() last wrote. A story that portals
+// its content AFTER the first sync (every jsx story; worst for an embed-less slide deck, which
+// has no later churn) would deadlock at height 0. The reliable signal is an inner-realm
+// MutationObserver on the story root: content mounting, embed hydration and WYSIWYG edits are
+// all DOM mutations.
+describe('autoSizeStorySurface — content-mutation resync', () => {
+  const mountHosted = () => {
+    const iframe = document.createElement('iframe');
+    document.body.appendChild(iframe);
+    const idoc = iframe.contentDocument!;
+    const surface = mountStorySurface(idoc, 'svg', 1280);
+    const dispose = autoSizeStorySurface({ surface, iframe, doc: idoc, fluid: true });
+    return { iframe, idoc, surface, dispose };
+  };
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+
+  it('resyncs height when content mounts into the root after the first sync', async () => {
+    const { iframe, idoc, surface, dispose } = mountHosted();
+    expect(iframe.style.height).toBe('0px');
+    Object.defineProperty(surface.root, 'scrollHeight', { value: 1234, configurable: true });
+    surface.root.appendChild(idoc.createElement('div'));
+    await tick();
+    expect(iframe.style.height).toBe('1234px');
+    dispose();
+    iframe.remove();
+  });
+
+  it('stops resyncing after dispose', async () => {
+    const { iframe, idoc, surface, dispose } = mountHosted();
+    dispose();
+    Object.defineProperty(surface.root, 'scrollHeight', { value: 999, configurable: true });
+    surface.root.appendChild(idoc.createElement('div'));
+    await tick();
+    expect(iframe.style.height).toBe('0px');
+    iframe.remove();
+  });
+
+  it('does not loop on its own --mx-vh stamp (the one write inside the observed subtree)', async () => {
+    const { iframe, surface, dispose } = mountHosted();
+    // Trip one mutation; sync re-stamps --mx-vh — if that write is not change-guarded, the
+    // observer would re-fire forever. Count callbacks via a probe observer on the same root.
+    let mutations = 0;
+    const probe = new (iframe.contentDocument!.defaultView as Window & typeof globalThis).MutationObserver(() => mutations++);
+    probe.observe(surface.root, { attributes: true, childList: true, subtree: true });
+    surface.root.appendChild(iframe.contentDocument!.createElement('div'));
+    await tick();
+    const after = mutations;
+    await tick();
+    await tick();
+    expect(mutations).toBe(after); // settled — no self-sustaining mutation loop
+    probe.disconnect();
+    dispose();
+    iframe.remove();
+  });
+});
+
 describe('autoSizeStorySurface — host viewport height var (--mx-vh)', () => {
   const mountHosted = () => {
     const iframe = document.createElement('iframe');
