@@ -22,14 +22,6 @@ interface Allowance {
 }
 
 const ALLOWED: Allowance[] = [
-  // The hydration allowance that used to live here is GONE, which is the point of this list.
-  // Both causes are fixed: `components/ui/Link.tsx` now reads `useSearchParams()` instead of
-  // `window.location` (so server and client build the same href), and `app/p/[[...path]]/page.tsx`
-  // picks its sidebar through `useSyncExternalStore`, whose server snapshot React reuses during
-  // hydration. Neither objection recorded in the old entry survived: `useSearchParams` carries
-  // `as_user` along with everything else, and the dynamic-rendering bailout costs nothing here —
-  // a production build renders all 136 routes dynamically already, with no static route to lose.
-  // A hydration error reaching this gate again is a regression, not known noise.
   {
     // Playwright navigates away mid-flight constantly; the browser cancels the
     // in-flight fetch and Next/our fetch-patch logs it. Not a product fault.

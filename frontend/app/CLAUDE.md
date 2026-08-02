@@ -245,12 +245,12 @@ server-renders metadata, body is client-only), `settings`, `conversations`, `rec
 `hello-world` (onboarding wizard, `ssr:false`), `login`, `register`, `oauth/authorize`.
 
 **Every route in this tree renders dynamically — there is no static route to protect.** A production
-build reports all 136 as `ƒ (Dynamic)`, which follows from the middleware session gate: nothing can
-be prerendered without a user. That fact settles a recurring argument: `useSearchParams()` in a
-widely-used client component is normally avoided because it forces a static-rendering bailout, and
-that reasoning does not apply here. `components/ui/Link.tsx` uses it deliberately, because reading
-`window.location` during render is a hydration mismatch on every link (see
-`frontend/components/CLAUDE.md`). Confirm with `npm run build` before assuming a route is static.
+build reports each one as `ƒ (Dynamic)`, which follows from the middleware session gate: nothing can
+be prerendered without a user. So the usual reason to avoid `useSearchParams()` in a widely-used
+client component — it forces a static-rendering bailout — costs nothing here, which is why
+`components/ui/Link.tsx` uses it rather than reading `window.location` during render (a hydration
+mismatch on every link; see `frontend/components/CLAUDE.md`). Re-check with `npm run build` before
+assuming any route is static.
 
 ## Interactions with other areas
 

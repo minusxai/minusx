@@ -219,17 +219,11 @@ open. Importing `test` from `@playwright/test` in a new spec silently opts out o
 Two things keep it from becoming noise. It asserts **only when the test would otherwise have
 passed** (`testInfo.status === testInfo.expectedStatus`), so a flow that fails its own assertion
 reports that, not a console line logged on the way. And the allowlist requires a stated reason per
-entry — it now tolerates only navigation-cancelled fetches and devtools advisories.
+entry — it tolerates navigation-cancelled fetches and devtools advisories, and nothing else.
 
-**The hydration allowance has been removed, and that is the list working as intended.** It used to
-excuse a mismatch from `components/ui/Link.tsx` calling `preserveParams()`, which read
-`window.location` during render — no-op on the server, `?mode=`/`?as_user=`/`?view=` on the client,
-so every link disagreed with the SSR HTML. Both causes are fixed (`Link` reads `useSearchParams()`;
-`app/p/[[...path]]/page.tsx` picks its sidebar through `useSyncExternalStore`), and neither reason
-the entry gave for leaving it survived: `useSearchParams` carries `as_user` along with everything
-else, and the dynamic-rendering bailout costs nothing — a production build already renders all 136
-routes dynamically, so there is no static route to lose. A hydration error reaching this gate now is
-a regression, not known noise.
+**Hydration errors are NOT allowlisted, so one reaching this gate is a regression.** The rule that
+prevents them — never read `window`, `Math.random()` or `Date.now()` during render — is in
+`frontend/components/CLAUDE.md` with the worked examples.
 
 Both suites locate controls by `aria-label` via `getByLabel` — 55 of the ~67 locators across
 `test/e2e`, `test/qa` and `test/flows`. A control without one is a missing `aria-label` on the
