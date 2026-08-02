@@ -8,16 +8,26 @@
 'use client';
 
 import NextLink from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { preserveParams } from '@/lib/navigation/url-utils';
 import { forwardRef, ComponentProps } from 'react';
 
 /**
  * Enhanced Link component with automatic parameter preservation
+ *
+ * The query string comes from `useSearchParams`, NOT `window.location`. This component renders
+ * during SSR, where there is no `window` — reading it there produced a bare `href` on the server
+ * and a `?mode=tutorial` one on the client, which React reports as an attribute hydration mismatch
+ * that it explicitly "won't patch up", on every link in the tree. `useSearchParams` resolves to the
+ * same value in both renders.
  */
 export const Link = forwardRef<HTMLAnchorElement, ComponentProps<typeof NextLink>>(
   ({ href, ...props }, ref) => {
+    const searchParams = useSearchParams();
     // Preserve both as_user and mode params if href is a string
-    const preservedHref = typeof href === 'string' ? preserveParams(href) : href;
+    const preservedHref = typeof href === 'string'
+      ? preserveParams(href, searchParams?.toString() ?? '')
+      : href;
 
     return <NextLink ref={ref} href={preservedHref} {...props} />;
   }
