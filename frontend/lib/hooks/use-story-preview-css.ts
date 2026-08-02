@@ -61,7 +61,7 @@ export function useStoryPreviewCss(
   // When the last compile request FIRED — drives the leading-edge debounce below.
   const lastFireRef = useRef(0);
   // The last css this hook actually served — the draft's no-flash fallback.
-  const lastServedRef = useRef<string | null>(null);
+  const [lastServed, setLastServed] = useState<string | null>(null);
 
   useEffect(() => {
     if (!needsPreview || cached !== undefined) return;
@@ -91,17 +91,17 @@ export function useStoryPreviewCss(
 
   // `ready` = the returned css belongs to THIS story. Only the final fallback
   // (serving persisted / last-served css while the current story's compile is in flight) is
-  // not ready. Recording the served value in a ref during render is safe: it is only ever
-  // read to substitute for an ABSENT fallback on a later render.
-  const serve = (css: string | null, ready: boolean): StoryPreviewCss => {
-    if (css !== null) lastServedRef.current = css;
-    return { css, ready };
-  };
-  if (!marked) return { css: null, ready: true };
-  if (!needsPreview) return serve(persisted, true);
-  if (cached !== undefined) return serve(cached, true);
-  if (fetched && fetched.story === story) return serve(fetched.css, true);
-  return serve(persisted ?? lastServedRef.current, false);
+  // not ready.
+  let out: StoryPreviewCss;
+  if (!marked) out = { css: null, ready: true };
+  else if (!needsPreview) out = { css: persisted, ready: true };
+  else if (cached !== undefined) out = { css: cached, ready: true };
+  else if (fetched && fetched.story === story) out = { css: fetched.css, ready: true };
+  else out = { css: persisted ?? lastServed, ready: false };
+  // Adjust-state-during-render (the same pattern as useHeldStoryRender below): remember the
+  // served css so a later render whose fallback is ABSENT can keep the last styled frame.
+  if (out.css !== null && out.css !== lastServed) setLastServed(out.css);
+  return out;
 }
 
 /**
