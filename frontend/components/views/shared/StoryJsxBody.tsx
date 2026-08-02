@@ -24,7 +24,7 @@
  * reconciling it) — an upstream re-render (param change, embed refetch) can never clobber typing.
  */
 import {
-  createContext, memo, useContext, useEffect, useMemo, useState,
+  createContext, memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState,
   cloneElement, type ComponentType, type ReactElement, type RefObject, type FocusEvent, type FormEvent,
 } from 'react';
 import RGL, { type Layout } from 'react-grid-layout';
@@ -477,9 +477,19 @@ function ParamControlAdapter(props: Record<string, unknown>) {
  */
 function GridAdapter(props: Record<string, unknown>) {
   const ctx = useContext(StoryJsxEmbedContext);
-  // Width: RGL needs px. The surface provides it (AgentHtml) — WidthProvider's polyfill
-  // observer is deaf inside the iframe realm; fall back to the logical canvas width.
+  // Width: RGL needs px, and it needs the GRID CONTAINER's width — the surface width minus
+  // whatever authored gutter (the root's px-6, a max-width band) surrounds the grid, which
+  // only the DOM knows. The surface width (AgentHtml's SurfaceWidthContext) is the RE-MEASURE
+  // TRIGGER, not the value: a synchronous clientWidth read is realm-safe; it is ResizeObserver
+  // DELIVERY that goes deaf inside the iframe (the WidthProvider problem).
   const surfaceWidth = useSurfaceWidth();
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const [gridWidth, setGridWidth] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const w = wrapRef.current?.clientWidth;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- measure-after-layout: the DOM is the source
+    if (w && w !== gridWidth) setGridWidth(w);
+  }, [surfaceWidth, gridWidth]);
   const gridProps = props as GridProps;
   if (!ctx.editable || !ctx.onLayoutEdit) return <Grid {...gridProps} />;
 
@@ -500,11 +510,11 @@ function GridAdapter(props: Record<string, unknown>) {
     if (changed.length > 0) ctx.onLayoutEdit!(changed);
   };
   return (
-    <div {...{ [AST_PATH_ATTR]: astPath }} className="w-full">
+    <div {...{ [AST_PATH_ATTR]: astPath }} className="w-full" ref={wrapRef}>
       {/* RGL structural CSS, INSIDE the surface subtree (head styles never reach the iframe). */}
       <style data-mx-grid-css="">{STORY_GRID_EDIT_CSS}</style>
       <RGL
-        width={surfaceWidth ?? STORY_CANVAS_WIDTH}
+        width={gridWidth ?? surfaceWidth ?? STORY_CANVAS_WIDTH}
         cols={nCols}
         rowHeight={rh}
         margin={[0, 0]}
