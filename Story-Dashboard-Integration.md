@@ -4,6 +4,17 @@
 > record; the code is the truth. One deviation from the plan below: `applyLayoutEdit` is
 > exposed on `StoryJsxEditApi` (beside `applyFormatEdit`) rather than kept session-internal —
 > it is the deterministic test seam and a future programmatic-nudge hook.
+>
+> **Follow-ups shipped after live verification:**
+> - Edit-mode RGL sizes to the grid's own container (`clientWidth` re-measure keyed on the
+>   surface width), not the surface width — the story root's authored gutter shrinks it.
+> - Native drags are cancelled inside the grid while editing (`onDragStartCapture` +
+>   `-webkit-user-drag: none`): an embed title is an `<a href>`, natively draggable, so a tile
+>   drag starting on it also dragged the LINK (URL ghost + drop-navigation).
+> - Grid is the **default** for any band of 2+ question embeds (skill + schema), not an
+>   opt-in for "dashboard-like" asks.
+> - A fourth story template `dashboard` (enum, story-guidance.yaml mini-skill mandating Grid
+>   layout, picker wireframe `public/story-templates/dashboard.svg`).
 
 A registered story component pair that gives `format:'jsx'` stories the dashboard's
 drag-and-drop grid: the agent authors layout as static JSX props, and in story edit mode the
