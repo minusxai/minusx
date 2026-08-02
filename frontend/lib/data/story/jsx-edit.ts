@@ -82,6 +82,27 @@ export function applyFormatEditsToJsx(source: string, edits: JsxFormatEdit[]): s
   return applied ? serializeJsx(parsed.nodes) : source;
 }
 
+/** A grid drag/resize commit: the full rect for the `<GridItem>` at `astPath`. */
+export interface JsxLayoutEdit {
+  astPath: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * Set `x`/`y`/`w`/`h` on the `<GridItem>` elements at the given AST paths (the story grid's
+ * drag/resize commit path). One parse, one serialize for the whole batch — vertical
+ * compaction moves siblings, so a drag commits several items at once. Paths that don't
+ * resolve, or resolve to anything other than a `<GridItem>` component, are skipped — a
+ * stale/hostile path must never corrupt a story body. Returns `source` unchanged when
+ * nothing could be applied or the source doesn't parse. Never throws.
+ */
+export function applyLayoutEditsToJsx(source: string, edits: JsxLayoutEdit[]): string {
+  throw new Error('not implemented');
+}
+
 /**
  * Set the element's class attribute under the CANONICAL `className` spelling, replacing a
  * legacy `class` attr (or an accidental class+className pair) in place — a format edit must
