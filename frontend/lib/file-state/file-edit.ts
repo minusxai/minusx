@@ -314,7 +314,12 @@ function stageMarkupContentEdit(options: {
     ? foldContextAgentView(mergedContent, parsedContent.content)
     : { ...(mergedContent as Record<string, unknown>), ...parsedContent.content };
 
-  // Story dependencies derive from the JSX body; explicitly override the obsolete stored field.
+  // Story dependencies derive from the JSX body, so the legacy `assets` manifest is obsolete and
+  // must not survive a re-save. Assign `undefined` — do NOT `delete`: `newContent` becomes
+  // `persistableChanges`, and both the save path and `selectMergedContent`
+  // (`store/filesSlice.ts`) recombine with a SPREAD (`{...content, ...persistableChanges}`).
+  // A spread cannot remove a key, so `delete` would leave the stored `assets` in place; an
+  // explicit `undefined` overrides it, and `JSON.stringify` drops it on persist.
   if (fileState.type === 'story') (newContent as Record<string, unknown>).assets = undefined;
 
   const contentChanged = JSON.stringify(newContent) !== JSON.stringify(mergedContent);

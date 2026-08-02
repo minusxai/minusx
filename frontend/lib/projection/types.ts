@@ -123,7 +123,12 @@ export interface AugmentedFiles {
  * - `unchanged`— identical to a prior in-window turn; NO block emitted (the model already has it).
  * An absent facet is simply omitted from the JSON (the field is not set).
  */
-export type BlockFacetSignal = { state: 'present' } | { state: 'unchanged' };
+/**
+ * `delta` is markup only: the block carries a unified diff against the copy of this file's markup
+ * already in the window, not the whole document. Emitted only when a baseline for the file is
+ * present earlier in the SAME projection pass, so the diff always has something to apply to.
+ */
+export type BlockFacetSignal = { state: 'present' } | { state: 'unchanged' } | { state: 'delta' };
 
 /** A file in the LLM-facing JSON: metadata diffed inline; markup/image signaled (blocks emitted separately). */
 export interface ProjectedFileJson {
@@ -171,7 +176,7 @@ export interface ProjectedFilesJson {
 // ─────────────────────────────── Out-of-JSON blocks ───────────────────────────────
 
 /** Kinds of raw text blocks emitted alongside the JSON (heavy/opaque facets pulled out). */
-type ProjectionTextBlockKind = 'markup' | 'querydata';
+type ProjectionTextBlockKind = 'markup' | 'markupdelta' | 'querydata';
 
 /**
  * A raw text block emitted next to the projected JSON — real newlines/quotes, never a JSON

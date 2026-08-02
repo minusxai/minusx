@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useEffect, useMemo, useState } from 'react';
+import { use, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 import { Box, VStack, HStack, Flex, Button } from '@chakra-ui/react';
@@ -24,6 +24,8 @@ interface PathPageProps {
   params: Promise<{ path?: string[] }>;
 }
 
+const MOBILE_QUERY = '(max-width: 767px)';
+
 export default function PathPage({ params }: PathPageProps) {
   const router = useRouter();
   const { navigate } = useNavigationGuard();
@@ -36,19 +38,27 @@ export default function PathPage({ params }: PathPageProps) {
 
   // Determine if we're on mobile or desktop (true = mobile, false = desktop).
   // useBreakpointValue accesses window during render and fails SSR even with { ssr: false }.
-  // The lazy useState initializer safely returns undefined on the server (window is absent)
-  // and reads the actual value on the client — no synchronous setState inside the effect.
-  // The === true/false checks below handle the undefined initial state (neither sidebar shows).
-  const [isMobile, setIsMobile] = useState<boolean | undefined>(() => {
-    if (typeof window === 'undefined') return undefined;
-    return window.matchMedia('(max-width: 767px)').matches;
-  });
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 767px)');
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
+  //
+  // Reading `matchMedia` in a lazy `useState` initializer looks like it avoids a render, but it
+  // makes the FIRST CLIENT RENDER disagree with the server: the server has no window and renders
+  // neither sidebar, while the client already knows it is desktop and renders <RightSidebar>. React
+  // sees an element the server never sent, reports "Hydration failed … this tree will be
+  // regenerated", and rebuilds the whole subtree on every load of this route — far more work than
+  // the extra render that trick was avoiding.
+  //
+  // `useSyncExternalStore` is the primitive for exactly this: React uses the SERVER snapshot during
+  // hydration and only then switches to the client one, so the first client render matches the
+  // server by construction. (A lazy `useState` initializer cannot do that — it runs once, with the
+  // client value, during the render React is trying to match against the server's.)
+  const isMobile = useSyncExternalStore<boolean | undefined>(
+    (onStoreChange) => {
+      const mq = window.matchMedia(MOBILE_QUERY);
+      mq.addEventListener('change', onStoreChange);
+      return () => mq.removeEventListener('change', onStoreChange);
+    },
+    () => window.matchMedia(MOBILE_QUERY).matches,
+    () => undefined,
+  );
 
   // Unwrap params Promise (Next.js 16 requirement)
   const { path } = use(params);

@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
-  inlineFontUrls, applyScrollOffsets, collectSurfaceCss, clearFontDataUrlCache,
+  inlineFontUrls, applyScrollOffsets, collectSurfaceCss, clearFontDataUrlCache, takeFailedFontUrls,
   stampFormValues, serializeStorySvg, svgToImage, applyInheritedTypography, awaitFontsReady,
 } from '@/lib/story-surface/serialize';
 import { clearStoryFontCache } from '@/lib/html/resolve-story-fonts';
@@ -55,6 +55,31 @@ describe('inlineFontUrls', () => {
     global.fetch = vi.fn(async () => { throw new Error('offline'); }) as unknown as typeof fetch;
     const css = '@font-face{src:url(https://cdn/y.woff2)}';
     expect(await inlineFontUrls(css)).toBe(css);
+  });
+
+  // A capture that silently swaps the font family also changes glyph widths, so spacing and line
+  // wrapping move with it — the "screenshot doesn't match the story" report. Degrading is fine;
+  // degrading INVISIBLY is what makes it undiagnosable, so the failure must be recoverable.
+  it('reports which font files could not be inlined', async () => {
+    takeFailedFontUrls(); // drain anything a previous test left
+    global.fetch = vi.fn(async () => { throw new Error('offline'); }) as unknown as typeof fetch;
+    await inlineFontUrls('@font-face{src:url(https://cdn/z.woff2)}');
+    expect(takeFailedFontUrls()).toEqual(['https://cdn/z.woff2']);
+  });
+
+  it('reports nothing when every font inlines', async () => {
+    takeFailedFontUrls();
+    fakeFontFetch();
+    await inlineFontUrls('@font-face{font-family:X;src:url(https://cdn/ok.woff2)}');
+    expect(takeFailedFontUrls()).toEqual([]);
+  });
+
+  it('drains, so each capture reports only its OWN failures', async () => {
+    takeFailedFontUrls();
+    global.fetch = vi.fn(async () => { throw new Error('offline'); }) as unknown as typeof fetch;
+    await inlineFontUrls('@font-face{src:url(https://cdn/first.woff2)}');
+    expect(takeFailedFontUrls()).toEqual(['https://cdn/first.woff2']);
+    expect(takeFailedFontUrls()).toEqual([]);
   });
 
   it('fetches each unique font file once even when referenced repeatedly', async () => {

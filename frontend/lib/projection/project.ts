@@ -33,9 +33,38 @@ import type {
   ProjectionTextBlock,
 } from './types';
 import type { ImageContent } from '@/orchestrator/llm';
+// The same Myers line diff the EditFile echo uses, so a markup delta reads identically to the
+// diffs the agent already receives after its own edits.
+import { generateDiff } from '@/lib/file-state/shared';
 
 const PRESENT: BlockFacetSignal = { state: 'present' };
 const UNCHANGED: BlockFacetSignal = { state: 'unchanged' };
+const DELTA: BlockFacetSignal = { state: 'delta' };
+
+/**
+ * Send a markup delta only while it stays under this fraction of the whole document. Deltas are
+ * measured against the last FULL emission, so they grow as the document drifts from it; past this
+ * ratio the full document is cheaper *and* rebases the baseline, which is what keeps the sequence
+ * from degenerating into an ever-larger diff.
+ */
+const MAX_DELTA_RATIO = 0.5;
+
+/**
+ * Break markup at element boundaries so a diff can address one element at a time.
+ *
+ * `generateDiff` is a LINE diff, and stored story markup is a handful of very long lines — the
+ * agent writes it as one block, not one element per line. Diffing it as-is makes a one-word edit
+ * replace a whole line, so the diff comes back LARGER than the document (measured: a 2,647-char
+ * story produced a 4,579-char diff) and the delta path could never fire on real content. Splitting
+ * between `>` and `<` gives element-sized units regardless of how the author laid the text out.
+ *
+ * The split keeps every character — concatenating the pieces reproduces the input exactly — so each
+ * emitted `+`/`-` line is a contiguous substring of the real document and stays usable verbatim in
+ * an `oldMatch`. That property is what makes it safe to show the model a re-segmented diff.
+ */
+export function segmentMarkupForDiff(markup: string): string {
+  return markup.replace(/></g, '>\n<');
+}
 
 /**
  * Cap the executed SQL echoed into a projected query result. A pathological `finalQuery` (giant
@@ -101,13 +130,35 @@ function projectEntry(memo: FacetMemo, entry: AugmentedFileEntry, opts: EntryOpt
   };
 
   // markup — out-of-JSON block when changed. Suppressed entirely for references (policy).
+  //
+  // A changed document is sent as a DELTA against the copy already in the window whenever one
+  // exists and the delta is materially smaller. Without this, an edit loop re-sends the whole
+  // document every turn: hashing is all-or-nothing, and the agent changes one line at a time, so a
+  // 40-section story cost ~5.5k tokens per turn while being edited versus 42 tokens per turn while
+  // idle. The baseline is whatever was last emitted IN FULL (`rememberBody`), so the diff always
+  // has something visible to apply to; with no baseline, or a delta that saves little, the full
+  // document goes as before.
   if (opts.includeMarkup && entry.content) {
-    const d = memo.diff(`file:${id}:content`, entry.content);
+    const contentKey = `file:${id}:content`;
+    const d = memo.diff(contentKey, entry.content);
     if (isUnchanged(d)) {
       json.content = UNCHANGED;
     } else {
-      json.content = PRESENT;
-      textBlocks.push({ kind: 'markup', fileId: id, type: entry.data.type, text: entry.content.markup });
+      const markup = entry.content.markup;
+      const base = memo.rememberedBody(contentKey);
+      // Diff element-by-element, not by authored line — see `segmentMarkupForDiff`.
+      const delta = base === undefined
+        ? undefined
+        : generateDiff(segmentMarkupForDiff(base), segmentMarkupForDiff(markup));
+      if (delta !== undefined && delta.length <= markup.length * MAX_DELTA_RATIO) {
+        json.content = DELTA;
+        textBlocks.push({ kind: 'markupdelta', fileId: id, type: entry.data.type, text: delta });
+      } else {
+        json.content = PRESENT;
+        textBlocks.push({ kind: 'markup', fileId: id, type: entry.data.type, text: markup });
+        // Only a FULL emission may become a delta base — the model has seen exactly this text.
+        memo.rememberBody(contentKey, markup);
+      }
     }
   }
 

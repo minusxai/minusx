@@ -30,6 +30,16 @@ function renderTextBlock(b: ProjectionTextBlock): string {
     const attrs = `file_id="${b.fileId}"${b.type ? ` type="${b.type}"` : ''}`;
     return `<file_markup ${attrs}>\n${b.text}\n</file_markup>`;
   }
+  if (b.kind === 'markupdelta') {
+    // The whole document is NOT repeated here. The tag has to say so explicitly: an unlabelled diff
+    // reads as a short document, and the agent would build `oldMatch` strings out of `+`/`-` lines.
+    const attrs = `file_id="${b.fileId}"${b.type ? ` type="${b.type}"` : ''}`;
+    return `<file_markup_delta ${attrs}>\n`
+      + `This is a LINE DIFF against the most recent full <file_markup file_id="${b.fileId}"> above,\n`
+      + `not the document itself. Apply it to that copy to get the current markup. Lines are prefixed\n`
+      + `+ (added), - (removed) or a space (context); strip the prefix before using a line in oldMatch.\n`
+      + `${b.text}\n</file_markup_delta>`;
+  }
   return `<query_data query_result_id="${b.queryResultId}">\n${b.text}\n</query_data>`;
 }
 

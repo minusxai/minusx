@@ -14,14 +14,20 @@
  * @param targetUrl - The URL to navigate to
  * @returns URL with parameters preserved if they exist
  */
-export function preserveParams(targetUrl: string): string {
-  // Server-side: return as-is
-  if (typeof window === 'undefined') {
+export function preserveParams(targetUrl: string, search?: string): string {
+  // `search` lets a RENDERING caller supply the query string from a source both the server and the
+  // client can see (Next's `useSearchParams`). Without it this function falls back to
+  // `window.location`, which is absent during SSR — so a rendered <a> got a bare href on the server
+  // and a mode-carrying one on the client, and React reported "some attributes of the server
+  // rendered HTML didn't match … This won't be patched up". Imperative callers (navigate, redirect)
+  // run only in the browser and can keep omitting it.
+  const rawSearch = search ?? (typeof window === 'undefined' ? undefined : window.location.search);
+  if (rawSearch === undefined) {
     return targetUrl;
   }
 
   // Check current URL parameters
-  const currentParams = new URLSearchParams(window.location.search);
+  const currentParams = new URLSearchParams(rawSearch);
   const asUser = currentParams.get('as_user');
   const mode = currentParams.get('mode');
   const view = currentParams.get('view');
@@ -32,7 +38,10 @@ export function preserveParams(targetUrl: string): string {
   }
 
   // Add parameters to target URL
-  const targetURL = new URL(targetUrl, window.location.origin);
+  // Base only matters for resolving a relative target; the origin is dropped by the
+  // pathname+search return below, and `window` may not exist here.
+  const base = typeof window === 'undefined' ? 'http://localhost' : window.location.origin;
+  const targetURL = new URL(targetUrl, base);
 
   if (asUser) {
     targetURL.searchParams.set('as_user', asUser);
