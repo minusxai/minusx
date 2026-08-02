@@ -61,14 +61,24 @@ Two generic bridges let a view push chrome up into the shared header without a c
 `useFileToolbar()` in `FileHeader`) and `file-toolbar/PresentationContext.tsx` (native Fullscreen
 API via `useSyncExternalStore`; `FileHeader` offers the toggle for `PRESENTABLE_TYPES`).
 
-**Never read `window` during render.** `'use client'` still renders on the server here, so a
-browser-only value makes the first client render disagree with the SSR HTML — React regenerates the
-subtree, or for attributes refuses to patch it at all. It has bitten this tree twice, in both forms:
-structurally in `app/p/[[...path]]/page.tsx` (a `matchMedia` `useState` initializer picking which
-sidebar to render) and attribute-wise in `components/ui/Link.tsx` (`window.location.search` in the
-href, i.e. every link). Reach for `useSyncExternalStore` — React reuses its *server* snapshot during
-hydration — or `useSearchParams()`. Both files carry the full reasoning inline, including why the
-obvious alternatives were rejected; read them before changing either.
+**Nothing that differs between server and client may be read during render** — not `window`, not
+`Math.random()`, not `Date.now()`. `'use client'` still renders on the server here, so such a value
+makes the first client render disagree with the SSR HTML. React then regenerates the subtree, or —
+for attributes and text — refuses to patch it and logs a production error. Three instances, one per
+form, each fixed differently:
+
+| Form | Site | Fix |
+|---|---|---|
+| structural | `app/p/[[...path]]/page.tsx` — `matchMedia` in a `useState` initializer chose which sidebar to render | `useSyncExternalStore` |
+| attribute | `components/ui/Link.tsx` — `window.location.search` in the href, i.e. every link | `useSearchParams()` |
+| text (#418) | `components/explore/message/ExampleQuestions.tsx` — `Math.random()` picked the greeting | re-roll only after a `useSyncExternalStore` hydration probe flips |
+
+`useSyncExternalStore` is the general tool: React uses its `getServerSnapshot` for **both** the server
+render and the hydrating client render, then switches — so the first client render matches by
+construction. Each file carries the reasoning inline, including why the obvious alternative was
+rejected; read it before changing either. **`react-hooks/purity` is the lint that catches the
+`Math.random()`/`Date.now()` form — an `eslint-disable` on it is a hydration bug until proven
+otherwise.**
 
 The QA console guard (`test/qa/console-guard.ts`) no longer allowlists hydration errors, so a new one
 fails that suite instead of being absorbed as known noise.
