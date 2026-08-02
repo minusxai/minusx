@@ -61,6 +61,27 @@ Two generic bridges let a view push chrome up into the shared header without a c
 `useFileToolbar()` in `FileHeader`) and `file-toolbar/PresentationContext.tsx` (native Fullscreen
 API via `useSyncExternalStore`; `FileHeader` offers the toggle for `PRESENTABLE_TYPES`).
 
+**Nothing that differs between server and client may be read during render** — not `window`, not
+`Math.random()`, not `Date.now()`. `'use client'` still renders on the server here, so such a value
+makes the first client render disagree with the SSR HTML. React then regenerates the subtree, or —
+for attributes and text — refuses to patch it and logs a production error. Three instances, one per
+form. Three components hold the worked examples — copy their approach rather than re-deriving it:
+
+| Browser-only input | Where | How it is kept SSR-safe |
+|---|---|---|
+| `matchMedia` deciding which subtree renders | `app/p/[[...path]]/page.tsx` | `useSyncExternalStore` |
+| `window.location.search` in an href | `components/ui/Link.tsx` | `useSearchParams()` |
+| `Math.random()` choosing display text | `components/explore/message/ExampleQuestions.tsx` | re-roll only once a `useSyncExternalStore` hydration probe flips |
+
+`useSyncExternalStore` is the general tool: React uses its `getServerSnapshot` for **both** the server
+render and the hydrating client render, then switches — so the first client render matches by
+construction. Each file states inline why the obvious alternative was rejected; read it before
+changing either. **`react-hooks/purity` is the lint that catches the `Math.random()`/`Date.now()`
+form — an `eslint-disable` on it is a hydration bug until proven otherwise.**
+
+The QA console guard (`test/qa/console-guard.ts`) no longer allowlists hydration errors, so a new one
+fails that suite instead of being absorbed as known noise.
+
 ## The kit / Chakra split
 
 Two design systems coexist. `components/kit/` is the Tailwind v4 + vendored-shadcn stack; app

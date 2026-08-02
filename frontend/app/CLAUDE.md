@@ -244,6 +244,14 @@ wizard, a dedicated page rather than a `new/[type]` draft), `l/[shareId]` (publi
 server-renders metadata, body is client-only), `settings`, `conversations`, `recordings`, `benchmark`,
 `hello-world` (onboarding wizard, `ssr:false`), `login`, `register`, `oauth/authorize`.
 
+**Every route in this tree renders dynamically — there is no static route to protect.** A production
+build reports each one as `ƒ (Dynamic)`, which follows from the middleware session gate: nothing can
+be prerendered without a user. So the usual reason to avoid `useSearchParams()` in a widely-used
+client component — it forces a static-rendering bailout — costs nothing here, which is why
+`components/ui/Link.tsx` uses it rather than reading `window.location` during render (a hydration
+mismatch on every link; see `frontend/components/CLAUDE.md`). Re-check with `npm run build` before
+assuming any route is static.
+
 ## Interactions with other areas
 
 - **← `lib/file-state/`**: the client `FilesAPI` and `lib/file-state/query-results.ts` are the callers of

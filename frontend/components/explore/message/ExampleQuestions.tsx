@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useSyncExternalStore } from 'react';
 import { VStack, Grid, GridItem } from '@chakra-ui/react';
 import { useAppSelector } from '@/store/hooks';
 import { selectEffectiveUser } from '@/store/authSlice';
@@ -21,6 +21,14 @@ interface ExampleQuestionsProps {
   customPrompts?: string[];
 }
 
+// A "has React finished hydrating?" probe. There is no external store to watch, so `subscribe`
+// never fires; the value comes purely from React using getServerSnapshot for the server render AND
+// the hydrating client render, then switching to getSnapshot. All three are module-level so their
+// identities stay stable across renders.
+const subscribeNever = () => () => {};
+const getHydratedTrue = () => true;
+const getHydratedFalse = () => false;
+
 const greetings = [
   (name: string) => `Hi ${name}, what would you like to explore today?`,
   (name: string) => `Hey ${name}, ready to dig into some data?`,
@@ -34,14 +42,17 @@ function ExampleQuestionsImpl({ onPromptClick, colSpan, colStart, customPrompts 
   const { config } = useConfigs();
   const agentName = config.branding.agentName;
   const firstName = user?.name?.split(' ')[0].split('@')[0] || 'there';
-  // greetings is module-level and stable; greeting is intentionally
-  // re-randomised on firstName change only — Math.random() in useMemo is
-  // the desired behaviour.
+  // A random greeting per visit is the intent, but picking it DURING RENDER is not: the server
+  // renders one string and the hydrating client renders another, which React reports as
+  // "Text content does not match server-rendered HTML" (minified #418) in production. So the
+  // server render and the client's FIRST render both use greetings[0], and the re-roll happens
+  // only once `hydrated` flips after mount — by which point React is no longer matching trees.
+  const hydrated = useSyncExternalStore(subscribeNever, getHydratedTrue, getHydratedFalse);
   const greeting = useMemo(() => {
-    // eslint-disable-next-line react-hooks/purity
-    const index = Math.floor(Math.random() * greetings.length);
+    // eslint-disable-next-line react-hooks/purity -- guarded by `hydrated`; see above
+    const index = hydrated ? Math.floor(Math.random() * greetings.length) : 0;
     return greetings[index](firstName);
-  }, [firstName]);
+  }, [firstName, hydrated]);
 
   const prompts = useMemo(
     () => (customPrompts && customPrompts.length > 0

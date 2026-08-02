@@ -219,11 +219,11 @@ open. Importing `test` from `@playwright/test` in a new spec silently opts out o
 Two things keep it from becoming noise. It asserts **only when the test would otherwise have
 passed** (`testInfo.status === testInfo.expectedStatus`), so a flow that fails its own assertion
 reports that, not a console line logged on the way. And the allowlist requires a stated reason per
-entry — it currently tolerates the hydration mismatch above (pre-existing on main:
-`components/ui/Link.tsx` calls `preserveParams()`, which no-ops on the server and appends
-`?mode=`/`?as_user=`/`?view=` on the client, so the first client render disagrees with the SSR HTML),
-navigation-cancelled fetches, and devtools advisories. Its hydration entry delegates to the app's own
-`isHydrationError` (`lib/utils/error-utils.ts`), so tightening the classifier tightens the gate.
+entry — it tolerates navigation-cancelled fetches and devtools advisories, and nothing else.
+
+**Hydration errors are NOT allowlisted, so one reaching this gate is a regression.** The rule that
+prevents them — never read `window`, `Math.random()` or `Date.now()` during render — is in
+`frontend/components/CLAUDE.md` with the worked examples.
 
 Both suites locate controls by `aria-label` via `getByLabel` — 55 of the ~67 locators across
 `test/e2e`, `test/qa` and `test/flows`. A control without one is a missing `aria-label` on the
