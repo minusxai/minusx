@@ -73,10 +73,8 @@ function ExampleQuestionsImpl({ onPromptClick, colSpan, colStart, customPrompts 
   );
 }
 
-// Memoized: ChatInterface used to re-render on every streaming chunk (cascading
-// down into ~15 Box renders here, 46+ times per 16s in the original trace).
-// Even after the bag-selector fix in ChatInterface, this guards against future
-// regressions where the parent re-renders for an internal reason (scroll state,
-// container resize, …) — the props are stable, so React skips the subtree.
+// Memoized because this subtree is ~15 Boxes deep and its props are stable: a parent re-render for
+// an internal reason (streaming chunk, scroll state, container resize, …) would otherwise cascade
+// through all of them, and this sits under a component that re-renders often.
 const ExampleQuestions = memo(ExampleQuestionsImpl);
 export default ExampleQuestions;

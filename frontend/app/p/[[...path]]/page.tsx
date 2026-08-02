@@ -39,12 +39,11 @@ export default function PathPage({ params }: PathPageProps) {
   // Determine if we're on mobile or desktop (true = mobile, false = desktop).
   // useBreakpointValue accesses window during render and fails SSR even with { ssr: false }.
   //
-  // Reading `matchMedia` in a lazy `useState` initializer looks like it avoids a render, but it
-  // makes the FIRST CLIENT RENDER disagree with the server: the server has no window and renders
-  // neither sidebar, while the client already knows it is desktop and renders <RightSidebar>. React
-  // sees an element the server never sent, reports "Hydration failed … this tree will be
-  // regenerated", and rebuilds the whole subtree on every load of this route — far more work than
-  // the extra render that trick was avoiding.
+  // Reading `matchMedia` in a lazy `useState` initializer looks like it saves a render, and costs
+  // far more: the server has no window and renders neither sidebar, while the client's FIRST render
+  // already knows it is desktop and renders <RightSidebar>. React sees an element the server never
+  // sent, reports "Hydration failed … this tree will be regenerated", and rebuilds the subtree on
+  // every load of this route.
   //
   // `useSyncExternalStore` is the primitive for exactly this: React uses the SERVER snapshot during
   // hydration and only then switches to the client one, so the first client render matches the

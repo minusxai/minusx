@@ -11,6 +11,13 @@ export interface ScreenshotOptions {
    * captures, where a tall page would otherwise rasterize at maxWidth × thousands of px.
    */
   maxHeight?: number;
+  /**
+   * Floor for output WIDTH in px, which OUTRANKS `maxHeight`. Because the height cap scales both
+   * axes, a very tall view is squeezed until its text is unreadable — and an unreadable capture
+   * costs the same tokens while still being graded. When the two conflict the image gets taller
+   * rather than narrower. Never raises the scale above `maxWidth`.
+   */
+  minWidth?: number;
   backgroundColor?: string;    // Background color
   quality?: number;            // JPEG quality (0-1, default: AGENT_IMAGE_JPEG_QUALITY = 0.85)
   format?: 'png' | 'jpeg';     // Output format (default: 'jpeg')

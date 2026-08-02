@@ -91,6 +91,37 @@ describe('captureElementBlob — serialization capture, no snapdom', () => {
     expect(made[0].height).toBe(200);
   });
 
+  // The height cap scales BOTH axes, so a long page drags its own width down with it. Left alone,
+  // a real 925x11257 css story captures at 210px wide — text about four pixels tall, which the
+  // visual judge still grades. `minWidth` outranks the height cap so the image grows taller
+  // instead of becoming unreadable.
+  it('floors the WIDTH when the height cap would squeeze it below legibility', async () => {
+    await captureElementBlob(el(925, 11257), {
+      colorMode: 'light', maxWidth: 512, maxHeight: 2560, minWidth: 384,
+    });
+    // height cap alone → 2560/11257 = 0.227 → 210px wide. The floor lifts it to 384/925 = 0.4151.
+    expect(made[0].width).toBe(384);
+    expect(made[0].height).toBe(4673);
+  });
+
+  // The floor must never widen the output past the real output-size bound.
+  it('clamps the width floor to maxWidth when the two conflict', async () => {
+    await captureElementBlob(el(300, 9000), {
+      colorMode: 'light', maxWidth: 200, maxHeight: 2560, minWidth: 384,
+    });
+    // floor wants 384/300 = 1.28; maxWidth allows only 200/300 = 0.667, and wins.
+    expect(made[0].width).toBe(200);
+    expect(made[0].height).toBe(6000);
+  });
+
+  it('applies the floor to a moderately tall page too — 341px would also be too narrow', async () => {
+    await captureElementBlob(el(800, 6000), {
+      colorMode: 'light', maxWidth: 512, maxHeight: 2560, minWidth: 384,
+    });
+    expect(made[0].width).toBe(384);
+    expect(made[0].height).toBe(2880);
+  });
+
   it('scales by pixelRatio (default 0.75) when no maxWidth is given', async () => {
     await captureElementBlob(el(800, 400), { colorMode: 'light' });
     expect(made[0].width).toBe(600);
