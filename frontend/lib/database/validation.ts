@@ -131,12 +131,18 @@ function validateDataStructure(initData: InitData): ValidationResult {
   }
 
   // Check for duplicate document paths
-  const paths = new Set<string>();
+  // Mirror the real uniqueness rule (idx_files_path_published_unique … WHERE
+  // draft = false): drafts may share a path freely — only PUBLISHED documents
+  // must be path-unique. Flagging every duplicate made migrate-db hard-fail on
+  // legal workspaces holding same-path drafts. Absent `draft` = published
+  // (older exports predate the column).
+  const publishedPaths = new Set<string>();
   for (const doc of documents) {
-    if (paths.has(doc.path)) {
+    if ((doc as { draft?: boolean }).draft === true) continue;
+    if (publishedPaths.has(doc.path)) {
       errors.push(`Duplicate document path '${doc.path}'`);
     }
-    paths.add(doc.path);
+    publishedPaths.add(doc.path);
   }
 
   return { valid: errors.length === 0, errors, warnings };

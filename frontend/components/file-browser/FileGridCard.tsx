@@ -9,6 +9,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { generateFileUrl } from '@/lib/slug-utils';
 import { Link } from '@/components/ui/Link';
 import DashboardUsageBadge from '../banners/DashboardUsageBadge';
+import FileTagBadges from './FileTagBadges';
 
 interface FileGridCardProps {
   file: DbFile;
@@ -130,6 +131,7 @@ export default function FileGridCard({
             {file.type === 'question' && (
               <DashboardUsageBadge dashboards={dashboardsByQuestionId.get(file.id)} compact />
             )}
+            <FileTagBadges meta={file.meta} compact />
           </VStack>
         </VStack>
         </Box>
