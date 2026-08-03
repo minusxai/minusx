@@ -85,7 +85,16 @@ export class MetricsRecorder {
 
   /** Called by the fixture teardown: append auto pass/fail rows and persist. */
   finalize(): void {
-    const passed = this.testInfo.status === this.testInfo.expectedStatus && this.testInfo.status === 'passed';
+    // The console guard asserts AFTER this teardown, so its verdict must be
+    // read from the collected violations directly — otherwise a flow the
+    // guard is about to fail (e.g. a story whose authored queries error in
+    // the browser) would be reported as PASS while the job goes red.
+    const guardViolations =
+      (this.testInfo as { qaConsoleViolations?: () => readonly string[] }).qaConsoleViolations?.() ?? [];
+    const passed =
+      this.testInfo.status === this.testInfo.expectedStatus &&
+      this.testInfo.status === 'passed' &&
+      guardViolations.length === 0;
     for (const flow of this.flows) {
       this.rows.push({ flow, metric: 'pass', value: passed, kind: 'pass' });
     }

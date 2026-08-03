@@ -25,9 +25,14 @@ const E2E_SECRET = process.env.QA_E2E_SECRET || 'local-qa-secret';
 export const test = base.extend<{ consoleGuard: void }>({
   consoleGuard: [
     async ({ page }, use, testInfo) => {
-      const assertNoConsoleErrors = installConsoleGuard(page);
+      const guard = installConsoleGuard(page);
+      // Stash the live violations getter where the metrics fixture can reach
+      // it: metrics tear down (and persist their pass/fail row) BEFORE this
+      // fixture's assert below runs, so agreeing on the verdict requires
+      // reading the same collected violations, not the test status.
+      (testInfo as { qaConsoleViolations?: () => readonly string[] }).qaConsoleViolations = guard.violations;
       await use();
-      if (testInfo.status === testInfo.expectedStatus) assertNoConsoleErrors();
+      if (testInfo.status === testInfo.expectedStatus) guard.assert();
     },
     { auto: true },
   ],

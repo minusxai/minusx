@@ -41,14 +41,26 @@ function isAllowed(message: string): boolean {
   return ALLOWED.some((a) => a.match(message));
 }
 
+export interface ConsoleGuard {
+  /** Fails the test if any non-allowlisted error was collected. */
+  assert: () => void;
+  /** The violations collected so far — for metrics that must agree with the verdict. */
+  violations: () => readonly string[];
+}
+
 /**
- * Start collecting console errors on `page`. Returns an assert function; call it
+ * Start collecting console errors on `page`. Returns the guard; call `assert`
  * at the end of the flow (or let `test/qa/flows.ts`'s fixture do it for you).
+ * `violations` exists so the metrics recorder can fold the guard's verdict
+ * into a flow's recorded pass/fail — the guard fails the test AFTER metrics
+ * persist, so without it a measured flow could report PASS in the run report
+ * while the guard fails the job (observed live: a story whose authored
+ * queries errored in the console).
  *
  * Collect-then-assert rather than fail-fast: a flow that is going to fail on its
  * own assertion should report THAT, not a console line that happened first.
  */
-export function installConsoleGuard(page: Page): () => void {
+export function installConsoleGuard(page: Page): ConsoleGuard {
   const violations: string[] = [];
 
   page.on('console', (msg) => {
@@ -62,11 +74,14 @@ export function installConsoleGuard(page: Page): () => void {
     if (!isAllowed(text)) violations.push(`pageerror: ${text}`);
   });
 
-  return () => {
-    expect(
-      violations,
-      `Unexpected browser console errors during this flow. If one is known-benign, add it to ` +
-        `ALLOWED in test/qa/console-guard.ts WITH a reason:\n  - ${violations.join('\n  - ')}`,
-    ).toEqual([]);
+  return {
+    assert: () => {
+      expect(
+        violations,
+        `Unexpected browser console errors during this flow. If one is known-benign, add it to ` +
+          `ALLOWED in test/qa/console-guard.ts WITH a reason:\n  - ${violations.join('\n  - ')}`,
+      ).toEqual([]);
+    },
+    violations: () => violations,
   };
 }
