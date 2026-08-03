@@ -20,6 +20,7 @@ export const STORY_UI_COMPONENT_NAME_LIST = [
   'Tooltip', 'TooltipTrigger', 'TooltipContent', 'TooltipProvider',
   'Popover', 'PopoverTrigger', 'PopoverContent', 'PopoverAnchor', 'PopoverHeader', 'PopoverTitle', 'PopoverDescription',
   'Grid', 'GridItem',
+  'SlideDeck', 'Slide',
 ] as const;
 
 /**

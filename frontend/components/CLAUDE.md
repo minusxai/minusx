@@ -321,6 +321,22 @@ on tile links in the edit CSS): embed titles are `<a href>`s, natively draggable
 starting on one otherwise also drags the link — URL ghost, drop-navigation. View mode keeps
 native link behavior for readers.
 
+**The story `<SlideDeck>` renders as plain stacked sections; all slide chrome lives in the parent
+document.** `components/kit/slides.tsx` stamps each slide `data-mx-slide` (render artifact); StoryView
+runs `useSlideNav` (`lib/story-ui/use-slide-nav.ts`) over the mounted iframe and mounts
+`views/story/StorySlideRail.tsx` (birds-eye rail while browsing and editing — a flex sibling of the
+canvas, OUTSIDE the captured box; shows slide-content thumbnails from
+`lib/story-ui/use-slide-thumbs.ts` when a capture matching the slide count exists, else a numbered
+title list; during an edit session each entry offers inline title rename, written back to the
+`<Slide title>` attribute by AST path via `lib/data/story/story-slides.ts`) and `views/story/StoryPresentControls.tsx` (prev/next/counter + keyboard while
+`usePresentation().isPresenting`; presenting shows only the pill — the rail unmounts, and a
+slide list during presentation was tried and deliberately removed). The present controls are `position: fixed` but must stay
+inside the fullscreen container's subtree — the top layer hides anything outside it — and their
+keyboard listeners attach to the top document AND the iframe document, because iframe events never
+bubble across. Navigation scrolls the parent-document scroll container (the iframe never scrolls);
+the fullscreen wrapper becomes that scroller while presenting, which is why StoryView passes
+`isPresenting` as the hook's scroller re-resolution key.
+
 **The WYSIWYG text host freezes its subtree while focused.** `StoryJsxBody` treats a focused editable host as prop-equal so React bails out and never reconciles it — without that, any upstream re-render (an embed refetch, a param change, a Redux update elsewhere) reconciles mid-keystroke and clobbers what the user is typing. A render that must happen anyway commits the in-progress edit first. Edits commit on blur by writing back into the JSX **AST** by `data-mx-ast` path, never by scraping the rendered DOM, and only after real user input — programmatic focus churn does not commit. Because the host is rich `contentEditable`, the write-back has to preserve inline elements (`<strong>`, `<em>`, links); a plaintext-only commit silently strips them. The parsed result runs through the same `validateJsxSource` and prop deny list as agent-authored markup — pasted HTML is untrusted input, and there is no editor-trusted parse.
 
 **The format toolbar mutates the live DOM first and the source second — both, every time.**

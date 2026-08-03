@@ -208,7 +208,13 @@ export function autoSizeStorySurface(
   const sync = () => {
     const viewportH = hostWin?.innerHeight;
     if (viewportH && viewportH > 0) {
-      surface.root.style.setProperty('--mx-vh', `${Math.round(viewportH)}px`);
+      // Change-guarded: this is the ONE write sync makes inside the observed subtree, and the
+      // content MutationObserver below watches root attributes — an unguarded write would
+      // re-trigger it on every sync instead of settling.
+      const vh = `${Math.round(viewportH)}px`;
+      if (surface.root.style.getPropertyValue('--mx-vh') !== vh) {
+        surface.root.style.setProperty('--mx-vh', vh);
+      }
     }
     if (fluid) {
       // The story's containing block is the iframe's body; the iframe element is the same-document
@@ -231,24 +237,47 @@ export function autoSizeStorySurface(
   sync();
 
   let ro: ResizeObserver | undefined;
+  let contentMo: MutationObserver | undefined;
   // Gated on EITHER axis needing resync, never on height alone: a fluid caller must keep tracking
   // the container even when its height is fixed, or it stays pinned to its mount width forever.
-  if ((fluid || fixedHeight === undefined) && typeof ResizeObserver !== 'undefined') {
-    ro = new ResizeObserver(sync);
-    ro.observe(surface.root);
-    // The body lives in another document, where ResizeObserver delivery is not guaranteed. Observing
-    // the iframe element itself (same-document) makes pane-width changes (side-chat toggle) — which
-    // resize the fluid surface and rewrap it to a different content height — always resync. This is
-    // the ONLY thing that fires on a pane-width change: the caller's build effect keys off the
-    // LOGICAL width, which is a constant, so a fluid story that is not re-synced here would stay at
-    // its mount width forever.
-    ro.observe(iframe);
+  if (fluid || fixedHeight === undefined) {
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(sync);
+      ro.observe(surface.root);
+      // The body lives in another document, where ResizeObserver delivery is not guaranteed. Observing
+      // the iframe element itself (same-document) makes pane-width changes (side-chat toggle) — which
+      // resize the fluid surface and rewrap it to a different content height — always resync. This is
+      // the ONLY thing that fires on a pane-width change: the caller's build effect keys off the
+      // LOGICAL width, which is a constant, so a fluid story that is not re-synced here would stay at
+      // its mount width forever.
+      ro.observe(iframe);
+    }
+    // ResizeObserver is DEAF for foreignObject descendants in Chromium — both realms, not even
+    // the initial delivery (same quirk family as IntersectionObserver, which WindowedTile works
+    // around). So ro.observe(surface.root) above never fires, and ro.observe(iframe) cannot help
+    // with height: the iframe is content-sized, its height is exactly what sync() last wrote.
+    // Content that mounts or grows AFTER the first sync (every jsx story portals its body in
+    // later; embeds hydrate later still; an embed-less slide deck has no churn at all to get
+    // rescued by) would deadlock the surface at height 0. The signals that provably fire:
+    // mutations (mount/hydration/edits), image loads, and font swaps. MutationObserver batches
+    // per microtask and every apply is change-guarded, so this settles rather than loops.
+    const InnerMO = doc.defaultView?.MutationObserver;
+    if (InnerMO) {
+      contentMo = new InnerMO(sync);
+      contentMo.observe(surface.root, { childList: true, subtree: true, attributes: true, characterData: true });
+    }
+    // Image loads and font swaps reflow with NO mutation — hook them explicitly.
+    surface.root.addEventListener('load', sync, true);
+    doc.fonts?.ready?.then(sync, () => {});
   }
   // Host-window height changes don't resize a content-sized iframe (no ResizeObserver delivery),
   // so --mx-vh needs its own listener.
   hostWin?.addEventListener('resize', sync);
   return () => {
     ro?.disconnect();
+    // The content observer belongs to the iframe's realm, which may already be torn down.
+    try { contentMo?.disconnect(); } catch { /* realm gone — nothing left to disconnect */ }
+    surface.root.removeEventListener('load', sync, true);
     hostWin?.removeEventListener('resize', sync);
   };
 }

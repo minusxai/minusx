@@ -90,6 +90,34 @@ Edit-mode drag/resize commits are the edit session's THIRD edit kind: `applyLayo
 (`lib/data/story/jsx-edit.ts`) writes x/y/w/h back by AST path, composed after text and format
 edits. The RGL item key IS the GridItem's `data-mx-ast` path.
 
+## The slide deck — `SlideDeck` / `Slide`
+
+`components/kit/slides.tsx` is the presentation layout for jsx stories (the `deck` template's
+slide recipe as a component). Pure stacked flow: each `Slide` is a full-viewport flex column
+(`min-h-[var(--mx-vh,760px)]` — `--mx-vh` is the host viewport height stamped on the surface
+root; vh units are broken inside `foreignObject`), so captures serialize by construction and
+nothing measures anything. `Slide` deliberately sets no `w-full`: an explicit 100% width breaks
+the full-bleed divider recipe (negative side margins over a fixed width).
+
+Each rendered slide is stamped `data-mx-slide` (+ `data-mx-slide-title` when authored) — render
+artifacts (covered by the `data-mx-*` write-back strip), and the discovery contract for the
+PARENT-document chrome: `slide-nav.ts` (pure math — discovery + title fallback, the
+iframe→parent coordinate mapping, the active-slide rule) and `use-slide-nav.ts` (the hook:
+bounded discovery poll re-armed per content rebuild, scroll-tracked active index, imperative
+`goTo`). Consumers are `components/views/story/StorySlideRail.tsx` (birds-eye rail while browsing
+and editing; edit sessions add inline title rename, written back by AST path via
+`lib/data/story/story-slides.ts`) and `StoryPresentControls.tsx` (paging + keyboard while
+fullscreen via `PresentationContext` — presenting shows only the pill). Navigation always scrolls a parent-document container — the iframe is
+content-sized and never scrolls itself — and the scroller is re-resolved on use because
+presentation mode changes which ancestor scrolls.
+
+The rail's content thumbnails are `slide-thumbs.ts` + `use-slide-thumbs.ts`: ONE surface
+serialization per content rebuild (the same `serializeStorySvg` → `svgToImage` pipeline as the OG
+share card), rasterized once and cropped per slide into small JPEG data URLs — never the multi-MB
+SVG URL per entry. The capture debounces after mount and re-arms on iframe resize (embeds hydrate
+late and each hydration grows the surface; resizes stopping is the recapture signal, and they stop
+once hydration settles). Every failure path returns null and the rail falls back to its title list.
+
 `interpreter.tsx` turns a validated AST into React elements over an injected registry:
 
 ```
@@ -164,6 +192,9 @@ variant winning the cascade and masking the click.
 | Add/deny a JSX attribute or tag | `frontend/lib/jsx/validate.ts` (+ mirror in `frontend/lib/story-ui/interpreter.tsx`) |
 | Add a component stories can use | `frontend/lib/story-ui/registry.ts` **and** `frontend/lib/story-ui/component-names.ts` |
 | Change grid geometry / drag-commit diff | `frontend/lib/story-ui/grid-layout.ts` (+ `frontend/components/kit/grid.tsx` classes) |
+| Change slide sizing / stamps | `frontend/components/kit/slides.tsx` |
+| Change slide discovery / navigation math | `frontend/lib/story-ui/slide-nav.ts`, `frontend/lib/story-ui/use-slide-nav.ts` |
+| Change slide thumbnail capture / crop geometry | `frontend/lib/story-ui/slide-thumbs.ts`, `frontend/lib/story-ui/use-slide-thumbs.ts` |
 | Grid items misplaced in edit mode vs view mode | `frontend/lib/story-ui/grid-css.ts`, the `GridAdapter` in `frontend/components/views/shared/StoryJsxBody.tsx` |
 | Allow another raw HTML tag | `frontend/lib/story-ui/component-names.ts` (`STORY_HTML_TAGS`) |
 | Story CSS candidate list is short a class | `frontend/lib/story-ui/recipe-classes.ts` → `npm run generate-story-ui-classes` |
