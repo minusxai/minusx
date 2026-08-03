@@ -124,6 +124,7 @@ export default function FileListRow({
               color={getFileTypeMetadata(file.type).color}
               flexShrink={0}
             />
+            <FileTagBadges meta={file.meta} compact />
             <Text
               fontWeight="500"
               fontSize="sm"
@@ -138,7 +139,6 @@ export default function FileListRow({
             {file.type === 'question' && (
               <DashboardUsageBadge dashboards={dashboardsByQuestionId.get(file.id)} />
             )}
-            <FileTagBadges meta={file.meta} compact />
           </HStack>
 
           {/* Type Label — hide when section already indicates the type */}

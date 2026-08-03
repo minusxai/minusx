@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, VStack, Text, Icon } from '@chakra-ui/react';
+import { Box, HStack, VStack, Text, Icon } from '@chakra-ui/react';
 import { DbFile } from '@/lib/types';
 import { getFileTypeMetadata, getFileDisplayName, isFileUntitled } from '@/lib/ui/file-metadata';
 import { RESERVED_NAMES } from '@/lib/data/helpers/connections';
@@ -104,12 +104,15 @@ export default function FileGridCard({
           h="120px"
           justify="center"
         >
-          {/* File Icon */}
-          <Icon
-            as={getFileTypeMetadata(file.type).icon}
-            boxSize={8}
-            color={getFileTypeMetadata(file.type).color}
-          />
+          {/* File Icon (+ system-tag indicators, e.g. the legacy-story marker) */}
+          <HStack gap={1.5} align="center">
+            <Icon
+              as={getFileTypeMetadata(file.type).icon}
+              boxSize={8}
+              color={getFileTypeMetadata(file.type).color}
+            />
+            <FileTagBadges meta={file.meta} />
+          </HStack>
 
           {/* File Name */}
           <VStack gap={0.5} w="100%" align="center" minW={0}>
@@ -131,7 +134,6 @@ export default function FileGridCard({
             {file.type === 'question' && (
               <DashboardUsageBadge dashboards={dashboardsByQuestionId.get(file.id)} compact />
             )}
-            <FileTagBadges meta={file.meta} compact />
           </VStack>
         </VStack>
         </Box>

@@ -11,15 +11,12 @@ import { FILE_TAG_LEGACY_STORY } from '@/lib/types/files';
 import type { DbFile } from '@/lib/types';
 
 describe('FileTagBadges', () => {
-  it('renders a badge per tag, labelled for lookup', () => {
+  it('renders an indicator per tag, labelled for lookup (known tag = icon, unknown = text pill)', () => {
     renderWithProviders(<FileTagBadges meta={{ tags: [FILE_TAG_LEGACY_STORY, 'custom-tag'] }} />);
-    expect(screen.getByLabelText(`${FILE_TAG_LEGACY_STORY} tag`)).toBeTruthy();
-    expect(screen.getByLabelText('custom-tag tag')).toBeTruthy();
-  });
-
-  it('the legacy-story badge shows a human label', () => {
-    renderWithProviders(<FileTagBadges meta={{ tags: [FILE_TAG_LEGACY_STORY] }} />);
-    expect(screen.getByLabelText(`${FILE_TAG_LEGACY_STORY} tag`).textContent).toMatch(/legacy/i);
+    // Known tag renders as a compact icon (no text — the human copy lives in the tooltip).
+    expect(screen.getByLabelText(`${FILE_TAG_LEGACY_STORY} tag`).textContent).toBe('');
+    // Unknown tags stay visible as their raw name so future taggers need no UI change.
+    expect(screen.getByLabelText('custom-tag tag').textContent).toBe('custom-tag');
   });
 
   it('a tagged file renders its badge on the FileGridCard tile', () => {
@@ -39,7 +36,7 @@ describe('FileTagBadges', () => {
         handleDragLeave={noop} handleDrop={noop}
       />,
     );
-    expect(screen.getByLabelText(`${FILE_TAG_LEGACY_STORY} tag`).textContent).toMatch(/legacy/i);
+    expect(screen.getByLabelText(`${FILE_TAG_LEGACY_STORY} tag`)).toBeTruthy();
   });
 
   it('a tagged file renders its badge on the FileListRow too (the folder browser list layout)', () => {
@@ -59,7 +56,7 @@ describe('FileTagBadges', () => {
         handleDragEnter={noop} handleDragLeave={noop} handleDrop={noop}
       />,
     );
-    expect(screen.getByLabelText(`${FILE_TAG_LEGACY_STORY} tag`).textContent).toMatch(/legacy/i);
+    expect(screen.getByLabelText(`${FILE_TAG_LEGACY_STORY} tag`)).toBeTruthy();
   });
 
   it('renders nothing for absent or empty tags', () => {
