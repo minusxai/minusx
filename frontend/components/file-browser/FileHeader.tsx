@@ -344,7 +344,7 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
               </HStack>
             )}
             <FileHealthBadge fileId={fileId} fileType={fileType} />
-            <FileTagBadges meta={fileMeta} />
+            <FileTagBadges meta={fileMeta} labeled />
             {readOnlyBadge}
           </>
         )}

@@ -16,10 +16,11 @@ import type { IconType } from 'react-icons';
 import { Tooltip } from '@/components/kit/tooltip';
 import { getFileTags, FILE_TAG_LEGACY_STORY } from '@/lib/types/files';
 
-/** Known system tags: icon + human tooltip. Unknown tags render a text pill. */
-const TAG_ICONS: Record<string, { icon: IconType; tooltip: string }> = {
+/** Known system tags: icon + short label + human tooltip. Unknown tags render a text pill. */
+const TAG_DISPLAY: Record<string, { icon: IconType; label: string; tooltip: string }> = {
   [FILE_TAG_LEGACY_STORY]: {
     icon: LuHistory,
+    label: 'Legacy',
     tooltip: 'Legacy story — authored on the old pipeline',
   },
 };
@@ -27,17 +28,24 @@ const TAG_ICONS: Record<string, { icon: IconType; tooltip: string }> = {
 interface FileTagBadgesProps {
   meta: Record<string, unknown> | null | undefined;
   compact?: boolean;
+  /**
+   * `labeled` renders known tags as icon+text pills (the file HEADER, whose
+   * neighbours — Story, File Health — are labeled pills; a bare 14px icon
+   * disappears there). Default is icon-only, for rows/tiles where the
+   * indicator sits directly beside the file-type icon.
+   */
+  labeled?: boolean;
 }
 
-export default function FileTagBadges({ meta, compact = false }: FileTagBadgesProps) {
+export default function FileTagBadges({ meta, compact = false, labeled = false }: FileTagBadgesProps) {
   const tags = getFileTags(meta);
   if (tags.length === 0) return null;
 
   return (
     <HStack gap={1} flexShrink={0} align="center">
       {tags.map((tag) => {
-        const known = TAG_ICONS[tag];
-        if (known) {
+        const known = TAG_DISPLAY[tag];
+        if (known && !labeled) {
           return (
             <Tooltip key={tag} content={known.tooltip}>
               <Icon
@@ -50,11 +58,12 @@ export default function FileTagBadges({ meta, compact = false }: FileTagBadgesPr
             </Tooltip>
           );
         }
-        return (
-          <Text
+        const pill = (
+          <HStack
             key={tag}
             aria-label={`${tag} tag`}
-            px={1.5}
+            gap={1}
+            px={2}
             py={0.5}
             bg="bg.muted"
             color="fg.muted"
@@ -64,9 +73,11 @@ export default function FileTagBadges({ meta, compact = false }: FileTagBadgesPr
             fontFamily="mono"
             cursor="default"
           >
-            {tag}
-          </Text>
+            {known && <Icon as={known.icon} boxSize={3} />}
+            <Text>{known?.label ?? tag}</Text>
+          </HStack>
         );
+        return known ? <Tooltip key={tag} content={known.tooltip}>{pill}</Tooltip> : pill;
       })}
     </HStack>
   );

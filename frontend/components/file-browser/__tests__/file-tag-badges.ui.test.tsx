@@ -19,6 +19,11 @@ describe('FileTagBadges', () => {
     expect(screen.getByLabelText('custom-tag tag').textContent).toBe('custom-tag');
   });
 
+  it('the labeled variant (file header) shows the human label, matching its pill neighbours', () => {
+    renderWithProviders(<FileTagBadges meta={{ tags: [FILE_TAG_LEGACY_STORY] }} labeled />);
+    expect(screen.getByLabelText(`${FILE_TAG_LEGACY_STORY} tag`).textContent).toMatch(/legacy/i);
+  });
+
   it('a tagged file renders its badge on the FileGridCard tile', () => {
     const file = {
       id: 1, name: 'Old story', path: '/org/old-story', type: 'story',
