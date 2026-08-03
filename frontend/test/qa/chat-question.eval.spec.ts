@@ -1,0 +1,61 @@
+/**
+ * Measured QA flow: chat question (Tests/QA/Evals Arch V3 — measured flows).
+ *
+ * `*.eval.spec.ts` files are ordinary QA flows that ALSO record metrics
+ * (tokens, pass/fail, screenshots) via the metrics fixture, so a run's
+ * results can be reported and compared across runs by `scripts/qa-report.ts`.
+ * They run wherever the QA suite runs; a measured harness selects just them
+ * with `playwright test test/qa/*.eval.spec.ts`. Naming is the opt-in: a
+ * file that deliberately spends real LLM tokens is visible at a glance.
+ *
+ * Same discipline as chat-flow.spec.ts: real model, structural assertions
+ * only, tutorial mode, failures are failures.
+ */
+import {
+  expect, e2eUrl, waitForStore, sendChat, assertChatReplied,
+  latestConversationId, hasLlm, QA_MODE,
+} from './flows';
+import { test } from './metrics';
+
+const FLOW = 'Chat Question';
+
+test.describe('eval: chat question', () => {
+  // Run whenever a model is reachable — a runner credential or a live target
+  // with its own LLM. Fork PRs have neither and skip (see chat-flow.spec.ts).
+  test.skip(!hasLlm() && !process.env.QA_BASE_URL, 'no provider credential and not targeting a deployment — real-LLM QA disabled');
+  // Cold prod-build start: the first send can wait minutes for connections
+  // + context to load before Send enables (see sendChat).
+  test.describe.configure({ timeout: 480_000 });
+
+  test('ask a question, measure tokens, capture the conversation', async ({ page, request, metrics }) => {
+    metrics.flow(FLOW); // declared up front: a failure still reports pass:false
+
+    await page.goto(e2eUrl('/explore'), { waitUntil: 'domcontentloaded' });
+    await waitForStore(page);
+
+    expect(await sendChat(page, 'In one short sentence, what is 2 + 2?'), 'composer should be driveable').toBe(true);
+    await assertChatReplied(page, 1);
+
+    const id = await latestConversationId(page);
+    expect(id, 'the turn should produce a conversation').toBeTruthy();
+
+    // Sum this conversation's real token usage from the recorded LLM calls
+    // (admin-only endpoint; the QA account is the workspace admin).
+    let totalTokens = 0;
+    await expect
+      .poll(
+        async () => {
+          const res = await request.get(`/api/conversations/${id}/llm-calls?mode=${QA_MODE}`);
+          if (!res.ok()) return false;
+          const calls: Array<{ stats?: { total_tokens?: number } }> = (await res.json())?.calls ?? [];
+          totalTokens = calls.reduce((sum, c) => sum + Number(c.stats?.total_tokens ?? 0), 0);
+          return totalTokens > 0;
+        },
+        { message: 'no recorded LLM call stats with tokens for the conversation', timeout: 60_000 },
+      )
+      .toBe(true);
+    metrics.record(FLOW, 'total_tokens', totalTokens);
+
+    await metrics.screenshot(page, FLOW, 'conversation');
+  });
+});

@@ -219,7 +219,7 @@ const eslintConfig = defineConfig([
   // Playwright E2E: the fixture API names its callback `use`, which the react-hooks
   // plugin mistakes for a Hook. Not React code.
   {
-    files: ["test/e2e/**", "playwright.config.ts"],
+    files: ["test/e2e/**", "test/qa/**", "playwright.config.ts", "playwright.qa.config.ts"],
     rules: {
       "react-hooks/rules-of-hooks": "off",
     },

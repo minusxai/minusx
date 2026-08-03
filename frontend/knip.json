@@ -4,6 +4,7 @@
   "entry": [
     "test/e2e/*.setup.ts",
     "test/qa/*.setup.ts",
+    "test/qa/metrics.global-setup.ts",
     "benchmarks/dataanalystbench.ts",
     "scripts/*.ts",
     "scripts/*.mjs",

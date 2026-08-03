@@ -73,6 +73,7 @@ Everything runs from `frontend/`. Names that mean what they say are omitted.
 | `check-docs` | `check-docs-consistency.ts` alone. Four sweeps, the first three over **every** `CLAUDE.md` in the repo, not just the root: (1) each backticked path resolves, (2) no source comment references a missing `*.md`, (3) each nested doc is named in the root `CLAUDE.md`, unless it is a short pointer stub whose redirect target exists, (4) no tracked `.md` exists outside `CLAUDE.md` / the root `README.md` / `docs/**`. Exits 1 if the root `CLAUDE.md` is absent. |
 | `test` / `test:main` / `test:ui` / `test:orchestrator` | Vitest; all projects, or one. |
 | `test:e2e` / `test:qa` | The two Playwright configs (see below). |
+| `qa-report` | `scripts/qa-report.ts`: merges N QA metrics runs (`test/qa/.metrics/` dirs, one per `test:qa` invocation) into a machine-parseable JSON report plus a self-contained HTML one (screenshots base64-inlined). One run = a plain report; two+ = a side-by-side comparison. `--run <dir>[:<label>]` per run, `--out <dir>`. |
 | `capture-matrix` | Chromium+WebKit+Firefox fixture matrix over the real serialization modules. No dev server. |
 | `capture-fidelity` | Pixel-diffs the headless capture backend against the client serialize path. Sets `HEADLESS_CAPTURE=1` and a throwaway `NEXTAUTH_SECRET`. |
 | `update-workspace-template` | Runs migrations over `lib/database/workspace-template.json` with placeholder values substituted, restores the `{{TEMPLATE_VAR}}` markers, writes back. Never touches a database — review with `git diff`. |
@@ -187,8 +188,33 @@ QA    next build with NEXT_PUBLIC_E2E deliberately UNSET
       REAL LLM → assertions must be structural/deterministic, never on generated text
       port 3101 · distDir .next-qa · PGLITE_DATA_DIR data/pglite-qa
       workers: QA_PARALLELISM || 2, fullyParallel: true
-      setup chain: auth.setup → reset.setup (reset tutorial + warm sample data via waitForTutorialData) → qa specs
+      setup chain: provision.setup → auth.setup → reset.setup (reset tutorial + warm sample data
+                   via waitForTutorialData) → qa specs
 ```
+
+**QA measured flows (`test/qa/*.eval.spec.ts`).** Ordinary QA specs that additionally record
+metrics — numbers, pass/fail, screenshots — through the fixture in `test/qa/metrics.ts` (import
+`test` from there; it extends the QA `test`, console guard included). Rows are keyed
+`(flow, metric)` and written per test under `test/qa/.metrics/rows/` (parallel-worker safe); the
+pass/fail row is auto-recorded from `testInfo.status` for every flow declared via
+`metrics.flow(name)`, so a failing flow reports `pass: false` instead of vanishing. The config's
+`globalSetup` (`test/qa/metrics.global-setup.ts`) resets the dir per run and stamps
+`meta.json` from `QA_RUN_LABEL`/`QA_BASE_URL`. `npm run qa-report` merges any number of such run
+dirs into one comparison table. The filename convention is the selection mechanism: a harness that
+measures runs exactly `playwright test test/qa/*.eval.spec.ts`, and "this file deliberately spends
+real LLM tokens" is visible at a glance.
+
+**QA workspace provisioning (`test/qa/provision.setup.ts`).** Env-gated head of the setup chain:
+a no-op unless `QA_PROVISION_WORKSPACE` is set, in which case it registers a FRESH workspace
+through the real "Set Up Your Workspace" form at `/login?register` (on `QA_PROVISION_ROOT_URL`,
+default baseURL) with the `QA_EMAIL`/`QA_PASSWORD` credentials before auth.setup logs in. Success
+is either the server redirect landing on `QA_BASE_URL`'s host (deployments that serve each
+workspace on its own host) or the in-place "created successfully" notice (single-workspace
+bootstrap) — one spec QAs both. When provisioning ran, auth.setup treats the external target like
+a fresh local one: it marks onboarding complete and seeds the LLM config.
+`ANALYST_AGENT_MODEL_CONFIG` may carry an inline `apiKey` (+ `awsRegion`), making the config
+self-contained for ANY provider; without one the runner-level
+`ANTHROPIC_API_KEY`/`AWS_BEARER_TOKEN_BEDROCK` credentials cover the two defaults as before.
 
 That asymmetry explains the rest: there is no faux-assertion helper on the QA side, `qa.yml` must
 supply a real provider credential, and `test/qa/runtime-gate.spec.ts` exists purely to prove the
@@ -392,6 +418,9 @@ built from the repository root**, not from `docs/`.
 | Assert on Redux without polling | `frontend/test/helpers/redux-wait.ts` |
 | Add a faux-LLM browser E2E spec | `frontend/test/e2e/` (+ `frontend/test/flows/e2e-faux.ts`) |
 | Add a real-LLM QA flow | `frontend/test/qa/flows.ts` (import `test` from here, not `@playwright/test`) |
+| Add a measured QA flow (metrics + report) | `frontend/test/qa/metrics.ts` (import `test` from here; name the spec `*.eval.spec.ts`) |
+| Merge QA metrics runs into a report | `frontend/scripts/qa-report.ts` |
+| Provision a fresh workspace before QA | `frontend/test/qa/provision.setup.ts` (gated on `QA_PROVISION_WORKSPACE`) |
 | Allow a known-benign console error in QA | `frontend/test/qa/console-guard.ts` |
 | Change E2E server env / ports | `frontend/playwright.config.ts` |
 | Change QA server env / workers | `frontend/playwright.qa.config.ts` |
