@@ -6,6 +6,7 @@ import { screen } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import FileTagBadges from '@/components/file-browser/FileTagBadges';
 import FileGridCard from '@/components/file-browser/FileGridCard';
+import FileListRow from '@/components/file-browser/FileListRow';
 import { FILE_TAG_LEGACY_STORY } from '@/lib/types/files';
 import type { DbFile } from '@/lib/types';
 
@@ -36,6 +37,26 @@ describe('FileTagBadges', () => {
         toggleFileSelection={noop} enterSelectionWithFile={noop} handleDragStart={noop}
         handleDrag={noop} handleDragEnd={noop} handleDragOver={noop} handleDragEnter={noop}
         handleDragLeave={noop} handleDrop={noop}
+      />,
+    );
+    expect(screen.getByLabelText(`${FILE_TAG_LEGACY_STORY} tag`).textContent).toMatch(/legacy/i);
+  });
+
+  it('a tagged file renders its badge on the FileListRow too (the folder browser list layout)', () => {
+    const file = {
+      id: 2, name: 'Old story row', path: '/org/old-story-row', type: 'story',
+      content: null, references: [], version: 1, last_edit_id: null,
+      created_at: 't', updated_at: 't',
+      meta: { tags: [FILE_TAG_LEGACY_STORY] },
+    } as unknown as DbFile;
+    const noop = () => {};
+    renderWithProviders(
+      <FileListRow
+        file={file} sectionKey={'story' as never} selectionMode={false} selectedFileIds={new Set()}
+        draggedFileId={null} dropTargetId={null} dashboardsByQuestionId={new Map()}
+        contextCountByFolder={new Map()} toggleFileSelection={noop} enterSelectionWithFile={noop}
+        handleDragStart={noop} handleDrag={noop} handleDragEnd={noop} handleDragOver={noop}
+        handleDragEnter={noop} handleDragLeave={noop} handleDrop={noop}
       />,
     );
     expect(screen.getByLabelText(`${FILE_TAG_LEGACY_STORY} tag`).textContent).toMatch(/legacy/i);

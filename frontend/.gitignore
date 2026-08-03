@@ -18,6 +18,9 @@
 
 # next.js
 /.next/
+# any NEXT_DIST_DIR variant (secondary dev servers) — must stay ignored or
+# Tailwind's source scan ingests compiled chunks and corrupts globals.css
+/.next-*/
 /out/
 
 # production

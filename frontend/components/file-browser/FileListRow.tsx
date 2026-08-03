@@ -9,6 +9,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { generateFileUrl } from '@/lib/slug-utils';
 import { Link } from '@/components/ui/Link';
 import DashboardUsageBadge from '../banners/DashboardUsageBadge';
+import FileTagBadges from './FileTagBadges';
 
 type SectionKey = 'context' | 'dashboard' | 'story' | 'folder' | 'question' | '_other';
 
@@ -137,6 +138,7 @@ export default function FileListRow({
             {file.type === 'question' && (
               <DashboardUsageBadge dashboards={dashboardsByQuestionId.get(file.id)} />
             )}
+            <FileTagBadges meta={file.meta} compact />
           </HStack>
 
           {/* Type Label — hide when section already indicates the type */}
