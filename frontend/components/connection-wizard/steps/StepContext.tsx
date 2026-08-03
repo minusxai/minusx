@@ -19,6 +19,7 @@ import { mergeWhitelist } from '@/lib/context/context-utils';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import type { ContextContent, Whitelist, WhitelistNode, DocEntry } from '@/lib/types';
 import { useAgentProgress } from '../useAgentProgress';
+import { wizardAgentOutcome } from '../agent-outcome';
 import type { QuestionnaireAnswers } from '../ConnectionWizardTypes';
 import StepContextTablesStep from './StepContextTablesStep';
 import StepContextDocsStep from './StepContextDocsStep';
@@ -92,8 +93,16 @@ export default function StepContext({
   const conversation = useAppSelector(state =>
     activeConvId ? selectConversation(state, activeConvId) : undefined
   );
-  const isAgentRunning = showAgentFeed && conversation?.executionState !== 'FINISHED';
-  const isAgentDone = showAgentFeed && conversation?.executionState === 'FINISHED';
+  // A crashed run reaches FINISHED exactly like a successful one, so the outcome is three-valued —
+  // see `wizardAgentOutcome`. Without this the header chip read "Done!" over the error box.
+  const agentOutcome = wizardAgentOutcome({
+    started: showAgentFeed,
+    running: conversation?.executionState !== 'FINISHED',
+    error: conversation?.error,
+  });
+  const isAgentRunning = agentOutcome === 'running';
+  const isAgentDone = agentOutcome === 'done';
+  const isAgentFailed = agentOutcome === 'failed';
   const agentProgress = useAgentProgress(isAgentRunning, isAgentDone);
 
   // Watch the real context file in Redux for agent edits
@@ -453,6 +462,7 @@ export default function StepContext({
   return (
     <StepContextDocsStep
       isAgentRunning={isAgentRunning}
+      isAgentFailed={isAgentFailed}
       docContent={docContent}
       hadExistingDocs={hadExistingDocs}
       showAgentFeed={showAgentFeed}

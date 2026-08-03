@@ -170,6 +170,29 @@ export function byokProviders(config: LlmConfig | undefined): LlmProviderEntry[]
 }
 
 /**
+ * Whether at least one provider can actually authenticate — the question setup has to answer,
+ * and a stricter one than {@link hasLlmEndpoints}.
+ *
+ * The distinction matters because an entry can exist while carrying nothing to authenticate with:
+ * `Add provider` writes a `minusx` row, and on an install with no gateway secret no key ever
+ * arrives. Counting that row as configuration is what lets a workspace finish setup with an AI
+ * that cannot run a single call.
+ *
+ * Three ways to be usable, because not every provider authenticates with a key: a credential
+ * (typed or a stored `@SECRETS/…` ref); Bedrock with a region, which authenticates via SigV4
+ * environment credentials; and a custom OpenAI-compatible `baseUrl`, which is how a local model
+ * server is addressed and legitimately needs no key.
+ */
+export function hasUsableLlmProvider(config: LlmConfig | undefined): boolean {
+  return (config?.providers ?? []).some((p) => {
+    if (p.apiKey?.trim()) return true;
+    if (p.provider === 'amazon-bedrock') return !!p.awsRegion?.trim();
+    if (p.provider === CUSTOM_PROVIDER) return !!p.baseUrl?.trim();
+    return false;
+  });
+}
+
+/**
  * Whether an `llm` section actually configures an endpoint. A section carrying
  * only agent-policy overrides — or nothing at all, which is what Settings →
  * Models writes once the last provider is deleted — is NOT configuration.

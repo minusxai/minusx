@@ -6,6 +6,7 @@ import { LuPlay, LuDatabase, LuSparkles } from 'react-icons/lu';
 import { useAppDispatch } from '@/store/hooks';
 import { setLeftSidebarCollapsed } from '@/store/uiSlice';
 import { switchMode } from '@/lib/mode/mode-utils';
+import { hasUsableLlmProvider } from '@/lib/llm/llm-config-types';
 import {
   pulseKeyframes,
   sparkleKeyframes,
@@ -19,7 +20,7 @@ import { useConfigs, updateConfig } from '@/lib/hooks/useConfigs';
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import { useAppSelector } from '@/store/hooks';
 import ConnectionWizard from '@/components/connection-wizard/ConnectionWizard';
-import type { ConnectionWizardStep, QuestionnaireAnswers } from '@/components/connection-wizard/ConnectionWizardTypes';
+import { asWizardStep, type ConnectionWizardStep, type QuestionnaireAnswers } from '@/components/connection-wizard/ConnectionWizardTypes';
 
 const TYPEWRITER_SPEED = 35; // ms per character
 
@@ -118,10 +119,12 @@ export function HelloWorldContent() {
     }
   }, []);
 
-  // Show the AI-model step when no LLM provider is configured yet. Captured
-  // once at mount so the step doesn't vanish from the indicator mid-wizard
-  // after the user saves a provider inside it.
-  const [includeModelsStep] = useState(() => !(config.llm?.providers?.length));
+  // Show the AI-model step until a provider can actually AUTHENTICATE. Testing for a provider
+  // ENTRY instead is what let a credential-less row hide this step: `Add provider` writes a
+  // `minusx` row, an install with no gateway secret never receives a key for it, and the one
+  // step that could fix that stopped being offered. Captured once at mount so the step doesn't
+  // vanish from the indicator mid-wizard after the user saves a provider inside it.
+  const [includeModelsStep] = useState(() => !hasUsableLlmProvider(config.llm));
 
   const handleStartConnection = useCallback(() => {
     const first = includeModelsStep ? 'models' : 'connection';
@@ -129,13 +132,22 @@ export function HelloWorldContent() {
     persistStep(first);
   }, [persistStep, includeModelsStep]);
 
+  // Skipping leaves the wizard, but only a workspace that can actually run the agent counts as
+  // SET UP. Marking it complete regardless is what produced a "You're all set!" screen over a
+  // workspace with no usable provider — and, because completion also stops the wizard being
+  // offered, no route back to the step that fixes it.
   const handleSkipToHome = useCallback(async () => {
+    if (!hasUsableLlmProvider(config.llm)) {
+      setStep('models');
+      persistStep('models');
+      return;
+    }
     try {
       await handleComplete();
     } catch (err) {
       console.error('[HelloWorldContent] Skip setup failed to mark complete:', err);
     }
-  }, [handleComplete]);
+  }, [handleComplete, config.llm, persistStep]);
 
   // Skip Step 1 by reusing the first existing connection
   const handleSkipConnection = useCallback(() => {
@@ -354,7 +366,7 @@ export function HelloWorldContent() {
       {isWizard && !isComplete && (
         <Box position="relative" zIndex={1} w="100%" maxW="1060px" mx="auto">
           <ConnectionWizard
-            initialStep={(savedWizard?.step as ConnectionWizardStep) ?? (includeModelsStep ? 'models' : 'connection')}
+            initialStep={asWizardStep(savedWizard?.step) ?? (includeModelsStep ? 'models' : 'connection')}
             initialConnectionId={savedWizard?.connectionId}
             initialConnectionName={savedWizard?.connectionName}
             initialContextFileId={savedWizard?.contextFileId}
@@ -365,13 +377,17 @@ export function HelloWorldContent() {
             showSkipConnection
             showSlackStep
             showModelsStep={includeModelsStep}
+            // Unnumbered on purpose. The step indicator numbers the steps, and it numbers them
+            // DYNAMICALLY — the AI-model step is only present when no provider can authenticate, so
+            // any number written into a heading here is wrong in one of the two configurations. It
+            // was wrong in both: every heading ran one behind the bar above it.
             greetings={{
               models: 'Connect an AI model.',
-              connection: "Step 1: Let's connect your data.",
+              connection: "Let's connect your data.",
               questionnaire: "Tell us about your data.",
-              context: "Step 2: Let's create a Knowledge Base.",
-              generating: "Step 3: Let's build your first dashboard.",
-              slack: "Step 4: Connect Slack.",
+              context: "Let's create a Knowledge Base.",
+              generating: "Let's build your first dashboard.",
+              slack: "Connect Slack.",
             }}
           />
         </Box>

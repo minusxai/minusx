@@ -359,7 +359,7 @@ export default function StaticConnectionConfig({
             <HStack gap={1.5} justify="center">
               <LuUpload size={13} color={activePanel === 'csv-upload' ? 'var(--chakra-colors-accent-teal)' : 'var(--chakra-colors-fg-muted)'} />
               <Text fontSize="xs" fontWeight={activePanel === 'csv-upload' ? '700' : '500'} color={activePanel === 'csv-upload' ? 'accent.teal' : 'fg.muted'}>
-                Upload CSV / XLSX
+                Upload a data file
               </Text>
             </HStack>
           </Box>
@@ -628,7 +628,6 @@ export default function StaticConnectionConfig({
                   <Text fontSize="2xs" color="fg.subtle" fontFamily="mono">
                     queried as schema.table
                   </Text>
-                  <Text fontSize="2xs" color="fg.subtle">&middot;</Text>
                 </HStack>
               </Box>
             </Collapsible.Content>

@@ -127,7 +127,7 @@ root layout stamps `data-mx-telemetry` on `<html>` and `instrumentation-client.t
 `SEND_ERRORS_IN_DEV` and `IS_DEV`/`IS_TEST` come from `constants.ts` so the three Sentry init files
 (server / edge / client) can share one gate.
 
-The three gateway env vars (`MX_GATEWAY_ORIGIN`, `MX_GATEWAY_URL_PROXY`, `MX_GATEWAY_SHARED_SECRET`)
+The three gateway env vars (`MX_GATEWAY_URL`, `MX_GATEWAY_URL_PROXY`, `MX_GATEWAY_SHARED_SECRET`)
 all live here rather than in `constants.ts` — see the `lib/gateway` section below.
 
 ## `compatibility.json` — the published support contract
@@ -170,7 +170,12 @@ Self-hosted installs never use any of it.
 
 **Three env vars address it, all in `config.ts` (`server-only`), never `constants.ts`** — the browser
 never calls the gateway, so a client import is a build error rather than a silently-inlined default.
-`MX_GATEWAY_ORIGIN` is the origin: one service, two planes — control plane (orgs, credits, status) at
+They are `MX_GATEWAY_URL`, `MX_GATEWAY_URL_PROXY` and `MX_GATEWAY_SHARED_SECRET`. **`MX_GATEWAY_ORIGIN`
+is not one of them** — it is the export `MX_GATEWAY_URL` is read into, trailing slashes trimmed and
+defaulted to `https://llm.minusx.ai`. Setting `MX_GATEWAY_ORIGIN` in an environment configures
+nothing; the rest of this section names the export, because that is what every consumer imports.
+
+The origin is one service, two planes — control plane (orgs, credits, status) at
 its root, inference at its `/v1`. `MX_GATEWAY_URL_PROXY` is the full inference URL and *derives* from
 the origin (`MX_GATEWAY_ORIGIN + '/v1'`), so staging is normally one variable: two that can disagree
 eventually do, and the disagreement surfaces as an auth failure against a gateway that never minted

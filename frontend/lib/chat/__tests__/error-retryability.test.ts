@@ -30,6 +30,18 @@ describe('classifyErrorRetryability', () => {
       expect(classifyErrorRetryability(msg)).toBe('terminal');
     });
 
+    // A provider configured with NO credential at all. pi-ai raises this before any HTTP call, so
+    // none of the status-shaped auth patterns match it — yet it is the most deterministic failure
+    // of the lot, and the one a fresh self-hosted workspace actually hits.
+    it.each([
+      'No API key for provider: minusx',
+      '[callLLM] LLM stream drop (agent=mxgen_1, reason=error, willRetry=false): No API key for provider: anthropic',
+      'Missing API key for provider: openai',
+    ])('missing credential: %s', (msg) => {
+      expect(classifyErrorRetryability(msg)).toBe('terminal');
+      expect(classifyTerminalReason(msg)).toBe('auth');
+    });
+
     it.each([
       '403 {"type":"error","error":{"type":"permission_error","message":"not allowed"}}',
       'Forbidden',

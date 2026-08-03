@@ -6,20 +6,26 @@ import { LuSparkles, LuChevronDown, LuChevronRight } from 'react-icons/lu';
 import ChatInterface from '@/components/explore/ChatInterface';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 
-/** Collapsible agent trace — auto-opens when first rendered */
-export default function AgentFeedCollapsible({ connectionName, contextPath, isRunning }: { connectionName: string; contextPath: string; isRunning: boolean }) {
+/**
+ * Collapsible agent trace — auto-opens when first rendered.
+ *
+ * `hasFailed` is separate from `!isRunning` because a crashed run stops running exactly like a
+ * successful one: without it the chip read "Done!" with the error banner visible inside the panel.
+ */
+export default function AgentFeedCollapsible({ connectionName, contextPath, isRunning, hasFailed = false }: { connectionName: string; contextPath: string; isRunning: boolean; hasFailed?: boolean }) {
   const { config } = useConfigs();
   const agentName = config.branding.agentName;
   const [isOpen, setIsOpen] = useState(true);
   const wasRunningRef = useRef(isRunning);
   useEffect(() => {
-    // Auto-close when agent transitions from running → done
-    if (wasRunningRef.current && !isRunning) {
+    // Auto-close when the agent transitions from running → done. A FAILED run keeps the panel open:
+    // the error the user has to act on is inside it.
+    if (wasRunningRef.current && !isRunning && !hasFailed) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsOpen(false);
     }
     wasRunningRef.current = isRunning;
-  }, [isRunning]);
+  }, [isRunning, hasFailed]);
   return (
     <Collapsible.Root open={isOpen} onOpenChange={(e) => setIsOpen(e.open)}>
       <Collapsible.Trigger asChild>
@@ -45,9 +51,14 @@ export default function AgentFeedCollapsible({ connectionName, contextPath, isRu
               Exploring tables & writing first draft (~30s)
             </Text>
           )}
-          {!isRunning && (
+          {!isRunning && !hasFailed && (
             <Text fontSize="xs" fontFamily="mono" color="accent.teal" flex={1}>
               Done!
+            </Text>
+          )}
+          {hasFailed && (
+            <Text fontSize="xs" fontFamily="mono" color="accent.danger" flex={1}>
+              Failed
             </Text>
           )}
           {!isRunning && !isOpen && <Box flex={1} />}
