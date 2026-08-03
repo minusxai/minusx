@@ -70,6 +70,9 @@ describe('renderHtml', () => {
     });
     expect(html).toContain('run-a');
     expect(html).toContain('run-b');
+    // Column targets are clickable links to the runs' deployments.
+    expect(html).toContain('<a href="https://a.example"');
+    expect(html).toContain('<a href="https://b.example"');
     expect(html).toContain('PASS');
     expect(html).toContain('FAIL');
     expect(html).toContain('150');
