@@ -70,8 +70,10 @@ Importing this module has a side effect — it calls `setLlmCallRecorder` (from 
 once, which persists every LLM request row at call time.
 
 **`frontend/lib/chat/conversation-turn.server.ts`** — one turn segment end to end: lease, commit,
-delta buffering, error mirroring, usage recording, auto-retry of a crash-interrupted turn, and the
-first-turn AI title (via `runMicroTask('title', …)`). It owns nothing about *which* agent runs.
+delta buffering, error mirroring, usage recording, auto-retry of a crash-interrupted turn, the
+first-turn AI title (via `runMicroTask('title', …)`), and the turn's app events (browser
+`USER_MESSAGE`, one `CHAT_TURN` per segment, `ERROR` on failure — it runs detached, so nothing
+upstream can observe the outcome). It owns nothing about *which* agent runs.
 
 **`frontend/lib/chat/conversation-stream.server.ts`** — the wakeup bus only (`notifyMessage`,
 `notifyDelta`, `notifyStatus`, `notifyInterrupt`, `subscribe`). No SSE, no serialization, no cursor

@@ -304,7 +304,9 @@ The constants live beside the rules (`scoring.ts`: weights `0.3/0.3/0.4` for vis
   `eslint.config.mjs` as "ensures the error is reported to internal monitoring", but the
   function only `console.error`s. The only publisher of `AppEvents.ERROR` on the request path is
   `withAuth`'s rethrow branch — a route that catches its own error and returns
-  `handleApiError(e)` never reaches it.
+  `handleApiError(e)` never reaches it. (Detached chat turns are the exception that proves the
+  rule: they run off the request path, which is why `runConversationTurn` publishes its own
+  `ERROR` + `chat:turn` events — see `frontend/lib/chat/CLAUDE.md`.)
 - **`handleApiError` has a legacy substring fallback:** any non-`UserFacingError` whose message
   contains `'not found'` becomes a 404 whose body says `"Resource not found"`, discarding the
   original message. Throw a `FileNotFoundError` to control the response.
