@@ -366,6 +366,12 @@ built from the repository root**, not from `docs/`.
   rest (`"..."`) entry, so omission from `pages` always means omission from the tree.
 - **`check-docs` is part of `validate`.** It exits non-zero if the repo-root `CLAUDE.md` is missing,
   so `npm run validate` fails until that file exists.
+- **`check-docs` resolves paths case-INSENSITIVELY on macOS and case-sensitively in CI.** It asks the
+  filesystem, so a mention of `claude.md` finds `CLAUDE.md` on a Mac and finds nothing on Linux. A
+  local green therefore does not predict CI for anything whose casing differs from the file on disk;
+  CI is the authority. The checker excludes its own source (`SELF`) for exactly this reason — it
+  names doc filenames as lowercase match patterns, which the source sweep would otherwise report as
+  dead pointers, on Linux only.
 - **`check-docs`'s path sweep falls back to matching by BASENAME.** Before failing, it looks for the
   path's last segment anywhere under `frontend/` and then anywhere in the repo. So a pointer with the
   right filename and the *wrong directory* passes the gate — `lib/ui/story-theme-options.ts` resolves

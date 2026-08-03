@@ -37,6 +37,8 @@ import { execFileSync } from 'child_process';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const ROOT_DOC = 'CLAUDE.md';
+/** This file, repo-relative — excluded from the source sweep below. */
+const SELF = 'frontend/scripts/check-docs-consistency.ts';
 
 // `data` is deliberately absent: the repo-root `data/` holds databases, but
 // `frontend/lib/data/` is a source directory and skipping it hides real files.
@@ -194,6 +196,10 @@ let mentionsChecked = 0;
 const sourceFiles = walk(REPO_ROOT, (n) => /\.(ts|tsx|js|jsx|mjs|cjs|css|mdx|md)$/.test(n));
 for (const file of sourceFiles) {
   const rel = file.slice(REPO_ROOT.length + 1);
+  // This checker names doc filenames as PATTERNS, not pointers — `claude.md` and `readme.md` are
+  // the allowlist sweep 4 matches against, lowercased. Scanning them here reports the checker to
+  // itself, and only on a case-sensitive filesystem, so it passes locally on macOS and fails in CI.
+  if (rel === SELF) continue;
   let text;
   try { text = readFileSync(file, 'utf8'); } catch { continue; }
   if (!text.includes('.md')) continue;
