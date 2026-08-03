@@ -12,7 +12,7 @@ import { selectFile, selectMergedContent } from '@/store/filesSlice';
 import { getStore } from '@/store/store';
 import { captureFileViewWithReadiness } from '@/lib/screenshot/capture';
 import type { FileViewReadiness } from '@/lib/screenshot/readiness';
-import { AGENT_IMAGE_MAX_PX, AGENT_IMAGE_MAX_H_PX } from '@/lib/screenshot/constants';
+import { AGENT_IMAGE_MAX_PX, AGENT_IMAGE_MAX_H_PX, AGENT_IMAGE_MIN_W_PX } from '@/lib/screenshot/constants';
 import { uploadBlobOrEmbed } from '@/lib/object-store/client';
 import { FilesAPI } from '@/lib/data/files';
 import { isRubricFileType, scoreFileDeterministic } from '@/lib/rubric/registry';
@@ -121,8 +121,11 @@ export async function captureFileScreenshot(
   const { blob, readiness } = await captureFileViewWithReadiness(fileId, {
     colorMode: opts.colorMode, fullHeight: !!opts.fullHeight, maxWidth: AGENT_IMAGE_MAX_PX, format: 'jpeg',
     // A full-height capture of a long story is maxWidth × several-thousand px — thousands of image
-    // tokens per edit. Cap the height too (downscales the whole view; never crops).
+    // tokens per edit. Cap the height too (downscales the whole view; never crops). The width floor
+    // outranks that cap: past a certain page length the height cap alone squeezes the capture until
+    // the judge below is grading text it cannot read.
     maxHeight: AGENT_IMAGE_MAX_H_PX,
+    minWidth: AGENT_IMAGE_MIN_W_PX,
     readinessTimeoutMs: 20000,
   });
   return { url: await uploadBlobOrEmbed(blob, 'screenshot.jpg', 'image/jpeg'), readiness };

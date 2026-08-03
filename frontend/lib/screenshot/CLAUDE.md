@@ -69,7 +69,8 @@ looking at, plus per-element scroll offsets — is emitted as a tiny separate `<
 
 `constants.ts` is the single source for agent-image numbers (`AGENT_IMAGE_MAX_PX = 512`,
 `AGENT_IMAGE_MAX_H_PX = 2560` — the height cap that downscales a full-height review capture instead
-of cropping it, `DISPLAY_IMAGE_MAX_PX = 1536`, `AGENT_IMAGE_PIXEL_RATIO = 2`,
+of cropping it, `AGENT_IMAGE_MIN_W_PX = 384` — the width floor that outranks it,
+`DISPLAY_IMAGE_MAX_PX = 1536`, `AGENT_IMAGE_PIXEL_RATIO = 2`,
 `AGENT_IMAGE_JPEG_QUALITY = 0.85`, chart watermark geometry) and is dependency-free so the browser
 capture path, the client chart renderer and the server Sharp/Resvg renderer can all import it.
 
@@ -147,6 +148,13 @@ than calling `serializeStorySvg` in-page (the app bundle does not expose it on `
 - **Scale the raster, never the element.** `fitScale` picks whichever of `maxWidth`/`maxHeight` binds
   tightest (falling back to `pixelRatio`, default 0.75) and the whole element is downscaled, never
   cropped — re-laying-out the element at a target width would change what is being captured.
+- **`minWidth` outranks `maxHeight`, because the height cap scales BOTH axes.** A tall view drags its
+  own width down with it: a 925x11257 css story on the height cap alone rasterizes 210px wide, where
+  body text is about four pixels tall. That image costs the same tokens as a legible one and the
+  visual judge still grades it, so the failure is silent and produces confident wrong findings rather
+  than a missing screenshot. `AGENT_IMAGE_MIN_W_PX` is the width below which a capture stops being
+  evidence; past it the image grows taller instead. The floor never raises the scale above
+  `maxWidth`, which remains a real output bound.
 - **Surface-level serialization gotchas live in `frontend/lib/story-surface/CLAUDE.md`** — Blob-URL
   canvas tainting, styles injected into `<head>` being lost, and DOM state (scroll, form values,
   canvas pixels) not being markup. They apply to both paths here.

@@ -2,14 +2,22 @@
 /**
  * Assert that documentation still points at code that exists.
  *
- * Three sweeps, all mechanical:
+ * Four sweeps, all mechanical:
  *   1. Every file path referenced in ANY `CLAUDE.md` resolves to a real file or directory.
  *   2. No source comment references a `*.md` file that no longer exists.
  *   3. Every nested `CLAUDE.md` is reachable from the root one.
+ *   4. No tracked `.md` exists outside the allowlist — i.e. no plan documents.
  *
  * Sweep 3 exists because a nested doc only auto-loads for work inside its own
  * directory. An unlinked module doc is invisible to anyone reading top-down —
  * present, correct, and never found.
+ *
+ * Sweep 4 enforces the root rule that docs describe the code as it is today. A plan
+ * ("Phase 3", "not in scope (v1)") is stale the moment the work lands, and sweep 1
+ * cannot help: it only reads `CLAUDE.md`, so a plan file anywhere else rots with no
+ * signal at all. This is a NAME allowlist rather than a grep for plan-shaped prose,
+ * because the failure is the file existing, not how it is written — a plan titled
+ * "Notes" with no phase headings is the same problem. Plans belong outside the repo.
  *
  * Neither can tell you a description is WRONG — only that a pointer is DEAD, which is
  * the drift that actually misleads a reader, and the only kind a machine can catch
@@ -29,6 +37,8 @@ import { execFileSync } from 'child_process';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const ROOT_DOC = 'CLAUDE.md';
+/** This file, repo-relative — excluded from the source sweep below. */
+const SELF = 'frontend/scripts/check-docs-consistency.ts';
 
 // `data` is deliberately absent: the repo-root `data/` holds databases, but
 // `frontend/lib/data/` is a source directory and skipping it hides real files.
@@ -186,6 +196,10 @@ let mentionsChecked = 0;
 const sourceFiles = walk(REPO_ROOT, (n) => /\.(ts|tsx|js|jsx|mjs|cjs|css|mdx|md)$/.test(n));
 for (const file of sourceFiles) {
   const rel = file.slice(REPO_ROOT.length + 1);
+  // This checker names doc filenames as PATTERNS, not pointers — `claude.md` and `readme.md` are
+  // the allowlist sweep 4 matches against, lowercased. Scanning them here reports the checker to
+  // itself, and only on a case-sensitive filesystem, so it passes locally on macOS and fails in CI.
+  if (rel === SELF) continue;
   let text;
   try { text = readFileSync(file, 'utf8'); } catch { continue; }
   if (!text.includes('.md')) continue;
@@ -237,7 +251,27 @@ for (const relDoc of CLAUDE_DOCS) {
   unlinked.push(`${relDoc} is not referenced from ${ROOT_DOC}`);
 }
 
-if (failures.length || orphaned.length || unlinked.length) {
+
+// ── Sweep 4: no plan documents ───────────────────────────────────────────────
+// The only markdown this repo keeps is the doc tree itself plus the root README;
+// `docs/` is the published site and is .mdx today, allowed here so a legitimate page
+// added later does not trip the gate. Case-insensitive, because a case-insensitive
+// filesystem would otherwise let `Claude.md` through as a non-doc.
+const stray: string[] = [];
+const trackedMarkdown = execFileSync('git', ['ls-files', '-z', '*.md', '*.MD', '*.Md', '*.mD'], {
+  cwd: REPO_ROOT, encoding: 'utf8',
+}).split('\0').filter(Boolean);
+
+for (const rel of trackedMarkdown) {
+  const lower = rel.toLowerCase();
+  const base = lower.split('/').pop()!;
+  if (base === 'claude.md') continue;          // a module doc, any depth
+  if (lower === 'readme.md') continue;         // the root README only
+  if (lower.startsWith('docs/')) continue;     // the published site
+  stray.push(rel);
+}
+
+if (failures.length || orphaned.length || unlinked.length || stray.length) {
   if (failures.length) {
     console.error(`\ncheck-docs: ${failures.length} dead path(s) across ${CLAUDE_DOCS.length} CLAUDE.md file(s):\n`);
     for (const f of failures) console.error(`  ${f}`);
@@ -252,6 +286,15 @@ if (failures.length || orphaned.length || unlinked.length) {
     console.error(`\ncheck-docs: ${unlinked.length} module doc(s) unreachable from the root:\n`);
     for (const u of unlinked) console.error(`  ${u}`);
     console.error(`\nAdd a pointer in ${ROOT_DOC} so a top-down reader can find it.`);
+  }
+  if (stray.length) {
+    console.error(`\ncheck-docs: ${stray.length} markdown file(s) outside the doc tree:\n`);
+    for (const t of stray) console.error(`  ${t}`);
+    console.error(
+      '\nOnly CLAUDE.md, the root README.md and docs/** are tracked as markdown. A plan or'
+      + '\ndesign note is stale the day the work lands — keep it outside the repo, or fold what'
+      + '\nstays true into the nearest CLAUDE.md.',
+    );
   }
   console.error('');
   process.exit(1);

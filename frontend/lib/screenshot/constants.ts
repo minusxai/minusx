@@ -25,6 +25,23 @@ export const AGENT_IMAGE_MAX_PX = 512;
 export const AGENT_IMAGE_MAX_H_PX = 2560;
 
 /**
+ * WIDTH floor (px) for a full-height capture, overriding {@link AGENT_IMAGE_MAX_H_PX} when the two
+ * conflict.
+ *
+ * The height cap scales BOTH axes, so on a very tall view it drags the width down with it: a real
+ * 925×11257 css story lands at 210px wide, where body text rasterizes to roughly four pixels tall.
+ * That image still costs image tokens, and the visual judge still grades it — it just grades
+ * something it cannot read, which is worse than having no screenshot at all. This floor is the
+ * point below which a capture stops being evidence, so it wins over the height cap and the image
+ * gets taller instead.
+ *
+ * Both caps are still respected in the common case: a view only hits this floor when it is roughly
+ * 2.4x taller than the height cap alone would allow. Widening the floor buys legibility linearly
+ * and tokens quadratically — this value keeps a full-page story readable at ~40% of its css width.
+ */
+export const AGENT_IMAGE_MIN_W_PX = 384;
+
+/**
  * Longest-side cap (px) for an image shown to the USER before it becomes an agent image — today the
  * region-capture crop the annotator displays and lets the user draw on. Larger than
  * AGENT_IMAGE_MAX_PX so the annotator canvas is crisp on a retina screen (a 512px bitmap stretched

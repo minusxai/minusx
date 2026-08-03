@@ -38,13 +38,22 @@ const mimeFor = (format: ScreenshotOptions['format']): string => (format === 'pn
 export function fitScale(
   cssWidth: number,
   cssHeight: number,
-  opts: { maxWidth?: number; maxHeight?: number; pixelRatio?: number },
+  opts: { maxWidth?: number; maxHeight?: number; minWidth?: number; pixelRatio?: number },
 ): number {
   const caps: number[] = [];
   if (opts.maxWidth != null && cssWidth > 0) caps.push(opts.maxWidth / cssWidth);
   if (opts.maxHeight != null && cssHeight > 0) caps.push(opts.maxHeight / cssHeight);
   if (caps.length === 0) return opts.pixelRatio ?? 0.75;
-  return Math.min(...caps);
+  const capped = Math.min(...caps);
+
+  // `minWidth` is a legibility floor, and it outranks `maxHeight`: because the height cap scales
+  // both axes, a very tall view is squeezed until its text is unreadable, and an unreadable capture
+  // costs the same tokens while actively misleading the visual judge. Raise the scale back to the
+  // floor when that happens — never above the width cap, which is a real output-size bound.
+  if (opts.minWidth == null || cssWidth <= 0) return capped;
+  const floor = opts.minWidth / cssWidth;
+  const widthCap = opts.maxWidth != null ? opts.maxWidth / cssWidth : Infinity;
+  return Math.min(Math.max(capped, floor), widthCap);
 }
 
 /**

@@ -70,7 +70,7 @@ Everything runs from `frontend/`. Names that mean what they say are omitted.
 | Script | Notes |
 |---|---|
 | `validate` | The only types+lint gate. Runs `tsc --noEmit`, `eslint --cache --quiet`, and `scripts/check-docs-consistency.ts` concurrently (via `concurrently -g`). |
-| `check-docs` | `check-docs-consistency.ts` alone. Three sweeps over **every** `CLAUDE.md` in the repo, not just the root: (1) each backticked path resolves, (2) no source comment references a missing `*.md`, (3) each nested doc is named in the root `CLAUDE.md`, unless it is a short pointer stub whose redirect target exists. Exits 1 if the root `CLAUDE.md` is absent. |
+| `check-docs` | `check-docs-consistency.ts` alone. Four sweeps, the first three over **every** `CLAUDE.md` in the repo, not just the root: (1) each backticked path resolves, (2) no source comment references a missing `*.md`, (3) each nested doc is named in the root `CLAUDE.md`, unless it is a short pointer stub whose redirect target exists, (4) no tracked `.md` exists outside `CLAUDE.md` / the root `README.md` / `docs/**`. Exits 1 if the root `CLAUDE.md` is absent. |
 | `test` / `test:main` / `test:ui` / `test:orchestrator` | Vitest; all projects, or one. |
 | `test:e2e` / `test:qa` | The two Playwright configs (see below). |
 | `capture-matrix` | Chromium+WebKit+Firefox fixture matrix over the real serialization modules. No dev server. |
@@ -366,6 +366,13 @@ built from the repository root**, not from `docs/`.
   rest (`"..."`) entry, so omission from `pages` always means omission from the tree.
 - **`check-docs` is part of `validate`.** It exits non-zero if the repo-root `CLAUDE.md` is missing,
   so `npm run validate` fails until that file exists.
+- **`check-docs` resolves paths case-INSENSITIVELY on macOS and case-sensitively in CI.** It asks the
+  filesystem, so a lower-cased spelling of a doc filename resolves on a Mac and resolves to nothing
+  on Linux. A local green therefore does not predict CI for anything whose casing differs from the
+  file on disk; CI is the authority. Two consequences worth knowing before editing either file: the
+  checker excludes its own source (`SELF`) because it names doc filenames as lower-cased match
+  patterns, and **prose here must not spell a doc filename in lower case inside backticks** — the
+  path sweep reads it as a pointer and fails on Linux only.
 - **`check-docs`'s path sweep falls back to matching by BASENAME.** Before failing, it looks for the
   path's last segment anywhere under `frontend/` and then anywhere in the repo. So a pointer with the
   right filename and the *wrong directory* passes the gate — `lib/ui/story-theme-options.ts` resolves

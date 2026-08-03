@@ -55,7 +55,7 @@ const MAX_DELTA_RATIO = 0.5;
  * `generateDiff` is a LINE diff, and stored story markup is a handful of very long lines — the
  * agent writes it as one block, not one element per line. Diffing it as-is makes a one-word edit
  * replace a whole line, so the diff comes back LARGER than the document (measured: a 2,647-char
- * story produced a 4,579-char diff) and the delta path could never fire on real content. Splitting
+ * story yields a 4,579-char diff) and the delta path never fires on real content. Splitting
  * between `>` and `<` gives element-sized units regardless of how the author laid the text out.
  *
  * The split keeps every character — concatenating the pieces reproduces the input exactly — so each
