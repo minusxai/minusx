@@ -52,7 +52,7 @@ export default function FileTagBadges({ meta, compact = false, labeled = false }
                 as={known.icon}
                 aria-label={`${tag} tag`}
                 boxSize={compact ? 3 : 3.5}
-                color="fg.muted"
+                color="accent.warning"
                 cursor="default"
               />
             </Tooltip>
@@ -65,11 +65,11 @@ export default function FileTagBadges({ meta, compact = false, labeled = false }
             gap={1}
             px={2}
             py={0.5}
-            bg="bg.muted"
-            color="fg.muted"
+            bg={known ? 'accent.warning/15' : 'bg.muted'}
+            color={known ? 'accent.warning' : 'fg.muted'}
             borderRadius="full"
             fontSize={compact ? '2xs' : 'xs'}
-            fontWeight="500"
+            fontWeight="600"
             fontFamily="mono"
             cursor="default"
           >

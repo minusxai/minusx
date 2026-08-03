@@ -322,6 +322,7 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
         viewMode={viewMode}
         onViewModeChange={(m) => dispatch(setFileViewMode({ fileId, mode: m }))}
         headerActions={headerActionsNode}
+        preTypeBadges={<FileTagBadges meta={fileMeta} labeled />}
         additionalBadges={(
           <>
             {questionCount !== undefined && (
@@ -344,7 +345,6 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
               </HStack>
             )}
             <FileHealthBadge fileId={fileId} fileType={fileType} />
-            <FileTagBadges meta={fileMeta} labeled />
             {readOnlyBadge}
           </>
         )}

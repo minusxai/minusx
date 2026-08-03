@@ -118,13 +118,13 @@ export default function FileListRow({
           )}
           {/* Icon + Name */}
           <HStack flex="1" gap={3} minW={0}>
+            <FileTagBadges meta={file.meta} compact />
             <Icon
               as={getFileTypeMetadata(file.type).icon}
               boxSize={5}
               color={getFileTypeMetadata(file.type).color}
               flexShrink={0}
             />
-            <FileTagBadges meta={file.meta} compact />
             <Text
               fontWeight="500"
               fontSize="sm"

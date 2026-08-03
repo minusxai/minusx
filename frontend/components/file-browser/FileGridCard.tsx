@@ -104,14 +104,14 @@ export default function FileGridCard({
           h="120px"
           justify="center"
         >
-          {/* File Icon (+ system-tag indicators, e.g. the legacy-story marker) */}
+          {/* System-tag indicators (e.g. the legacy-story marker) + File Icon */}
           <HStack gap={1.5} align="center">
+            <FileTagBadges meta={file.meta} />
             <Icon
               as={getFileTypeMetadata(file.type).icon}
               boxSize={8}
               color={getFileTypeMetadata(file.type).color}
             />
-            <FileTagBadges meta={file.meta} />
           </HStack>
 
           {/* File Name */}
