@@ -47,10 +47,17 @@ export default defineConfig({
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
-  // Ordered setup chain: log in → reset tutorial → run flows. The reset uses the
-  // admin storageState and is best-effort (skips on a non-admin account).
+  // Every run starts with a clean metrics dir (see test/qa/metrics.ts) so the
+  // per-run report reflects exactly this run.
+  globalSetup: './test/qa/metrics.global-setup.ts',
+  // Ordered setup chain: (provision →) log in → reset tutorial → run flows.
+  // Provision is an env-gated no-op unless QA_PROVISION_WORKSPACE is set (it
+  // registers a fresh workspace through the real registration form first).
+  // The reset uses the admin storageState and is best-effort (skips on a
+  // non-admin account).
   projects: [
-    { name: 'setup', testMatch: /auth\.setup\.ts/ },
+    { name: 'provision', testMatch: /provision\.setup\.ts/ },
+    { name: 'setup', testMatch: /auth\.setup\.ts/, dependencies: ['provision'] },
     {
       name: 'reset',
       testMatch: /reset\.setup\.ts/,

@@ -20,6 +20,7 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:qa": "playwright test --config=playwright.qa.config.ts",
+    "qa-report": "tsx scripts/qa-report.ts",
     "capture-matrix": "tsx --conditions react-server scripts/capture-matrix.ts",
     "capture-fidelity": "HEADLESS_CAPTURE=1 NEXTAUTH_SECRET=fidelity-local node_modules/.bin/tsx --conditions react-server scripts/headless-capture-fidelity.ts",
     "update-workspace-template": "tsx --conditions react-server scripts/update-workspace-template.ts",

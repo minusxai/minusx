@@ -428,6 +428,7 @@ export function LoginOrRegisterForm({
                   <Box w="full">
                     <Input
                       type="text"
+                      aria-label="Workspace name"
                       placeholder="Workspace Name"
                       value={workspaceName}
                       onChange={(e) => { const v = e.target.value; setWorkspaceName(v); if (workspaceNameError) { const r = validateWorkspaceName(v); setWorkspaceNameError(r.valid ? null : r.error!); } }}
@@ -444,6 +445,7 @@ export function LoginOrRegisterForm({
                   <Box w="full">
                     <Input
                       type="text"
+                      aria-label="Admin name"
                       placeholder="Your Name"
                       value={adminName}
                       onChange={(e) => { const v = e.target.value; setAdminName(v); if (adminNameError) { const r = validateFullName(v); setAdminNameError(r.valid ? null : r.error!); } }}
@@ -457,6 +459,7 @@ export function LoginOrRegisterForm({
                   <Box w="full">
                     <Input
                       type="email"
+                      aria-label="Admin email"
                       placeholder="Email"
                       value={adminEmail}
                       onChange={(e) => { const v = e.target.value; setAdminEmail(v); if (adminEmailError) { const r = validateEmail(v); setAdminEmailError(r.valid ? null : r.error!); } }}
@@ -470,6 +473,7 @@ export function LoginOrRegisterForm({
                   <Box w="full">
                     <Input
                       type="password"
+                      aria-label="Admin password"
                       placeholder="Password"
                       value={adminPassword}
                       onChange={(e) => { const v = e.target.value; setAdminPassword(v); if (adminPasswordError) { const r = validatePassword(v); setAdminPasswordError(r.valid ? null : r.error!); } }}
@@ -483,6 +487,7 @@ export function LoginOrRegisterForm({
                   <Box>
                     <HStack gap={2} alignItems="center">
                       <Checkbox
+                        aria-label="Accept terms of service"
                         checked={tosAccepted}
                         onCheckedChange={(e) => { setTosAccepted(!!e.checked); setTosError(null); }}
                       />
@@ -497,6 +502,7 @@ export function LoginOrRegisterForm({
                   </Box>
                   <Button
                     type="submit"
+                    aria-label="Create workspace"
                     w="full"
                     bg="accent.teal"
                     color="white"
