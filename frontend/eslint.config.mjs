@@ -140,6 +140,9 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    // NEXT_DIST_DIR variants (secondary dev servers, .next-e2e) — build output,
+    // not source. Mirrors the .gitignore entry; ESLint does not read .gitignore.
+    ".next-*/**",
     "out/**",
     "build/**",
     "next-env.d.ts",
