@@ -45,35 +45,64 @@ setup('authenticate qa user', async ({ page, request }) => {
 
     // Model config is DB-only (no env tier in the app). Seed the in-app LLM
     // config through the same /api/configs path a real admin uses, so
-    // real-LLM flows can run against the fresh workspace. The runner-side
-    // ANALYST_AGENT_MODEL_CONFIG JSON ({provider, model, options?, apiKey?,
-    // awsRegion?} — the CI secret) picks the exact model. A self-contained
-    // config carries its own apiKey and works for ANY provider; without one,
-    // the ANTHROPIC_API_KEY / AWS_BEARER_TOKEN_BEDROCK runner credentials
-    // cover the two default providers as before.
+    // real-LLM flows can run against the fresh workspace.
+    //
+    // Two runner-side env shapes, checked in order:
+    //   AGENT_MODEL_CONFIG          — GRADE-KEYED: {lite?, core?, advanced?},
+    //     each value a {provider, model, options?, apiKey?, awsRegion?}. Every
+    //     grade may use a different provider/model (e.g. a mini model on lite,
+    //     which is what micro tasks run). A grade without an entry falls back
+    //     to `core`, then to the flat config below.
+    //   ANALYST_AGENT_MODEL_CONFIG  — flat single choice (the CI secret),
+    //     applied to every grade. Kept for compatibility.
+    //
+    // A choice that carries its own apiKey is self-contained and works for ANY
+    // provider; without one, the ANTHROPIC_API_KEY / AWS_BEARER_TOKEN_BEDROCK
+    // runner credentials cover the two default providers as before. Providers
+    // are deduped by (provider, apiKey, awsRegion), so three grades on one
+    // account yield one provider entry.
+    type ModelChoice = { provider?: string; model?: string; options?: Record<string, unknown>; apiKey?: string; awsRegion?: string };
+    const parse = (env?: string): Record<string, ModelChoice> | ModelChoice | null => {
+      try {
+        return env ? JSON.parse(env) : null;
+      } catch {
+        return null; // malformed — fall through to defaults
+      }
+    };
+    const GRADES = ['lite', 'core', 'advanced'] as const;
+    const graded = parse(process.env.AGENT_MODEL_CONFIG) as Record<string, ModelChoice> | null;
+    const flat = (parse(process.env.ANALYST_AGENT_MODEL_CONFIG) ?? {}) as ModelChoice;
     const anthropicKey = process.env.ANTHROPIC_API_KEY;
     const bedrockKey = process.env.AWS_BEARER_TOKEN_BEDROCK;
-    let hint: { provider?: string; model?: string; options?: Record<string, unknown>; apiKey?: string; awsRegion?: string } = {};
-    try {
-      hint = JSON.parse(process.env.ANALYST_AGENT_MODEL_CONFIG || '{}');
-    } catch { /* malformed hint — fall through to defaults */ }
-    if (anthropicKey || bedrockKey || hint.apiKey) {
-      const slug = hint.provider ?? (anthropicKey ? 'anthropic' : 'amazon-bedrock');
-      const apiKey = hint.apiKey ?? (slug === 'amazon-bedrock' ? bedrockKey : anthropicKey);
-      if (!apiKey) {
-        throw new Error(`qa llm config: no API key for provider '${slug}' (set apiKey in ANALYST_AGENT_MODEL_CONFIG or the matching runner credential)`);
-      }
-      const provider = {
-        name: `qa-${slug}`,
-        provider: slug,
-        apiKey,
-        ...(slug === 'amazon-bedrock' ? { awsRegion: hint.awsRegion ?? process.env.AWS_REGION ?? 'us-east-1' } : {}),
+
+    const hintFor = (grade: (typeof GRADES)[number]): ModelChoice => graded?.[grade] ?? graded?.core ?? flat;
+    const anyKey = GRADES.some((g) => hintFor(g).apiKey) || anthropicKey || bedrockKey;
+    if (anyKey) {
+      const providers: Array<{ name: string; provider: string; apiKey: string; awsRegion?: string }> = [];
+      const providerName = (slug: string, apiKey: string, awsRegion?: string): string => {
+        const existing = providers.find((p) => p.provider === slug && p.apiKey === apiKey && p.awsRegion === awsRegion);
+        if (existing) return existing.name;
+        const dupes = providers.filter((p) => p.provider === slug).length;
+        const name = dupes === 0 ? `qa-${slug}` : `qa-${slug}-${dupes + 1}`;
+        providers.push({ name, provider: slug, apiKey, ...(awsRegion ? { awsRegion } : {}) });
+        return name;
       };
-      const model = hint.model ?? (slug === 'amazon-bedrock' ? 'anthropic.claude-sonnet-4-6' : 'claude-sonnet-4-6');
-      const choice = { providerName: provider.name, model, options: hint.options ?? { reasoning: 'low' } };
-      const llmRes = await page.request.post('/api/configs', {
-        data: { llm: { providers: [provider], grades: { lite: choice, core: choice, advanced: choice } } },
-      });
+
+      const grades = Object.fromEntries(
+        GRADES.map((grade) => {
+          const hint = hintFor(grade);
+          const slug = hint.provider ?? (anthropicKey ? 'anthropic' : 'amazon-bedrock');
+          const apiKey = hint.apiKey ?? (slug === 'amazon-bedrock' ? bedrockKey : anthropicKey);
+          if (!apiKey) {
+            throw new Error(`qa llm config: no API key for provider '${slug}' on grade '${grade}' (set apiKey in the config or the matching runner credential)`);
+          }
+          const awsRegion = slug === 'amazon-bedrock' ? (hint.awsRegion ?? process.env.AWS_REGION ?? 'us-east-1') : undefined;
+          const model = hint.model ?? (slug === 'amazon-bedrock' ? 'anthropic.claude-sonnet-4-6' : 'claude-sonnet-4-6');
+          return [grade, { providerName: providerName(slug, apiKey, awsRegion), model, options: hint.options ?? { reasoning: 'low' } }];
+        }),
+      );
+
+      const llmRes = await page.request.post('/api/configs', { data: { llm: { providers, grades } } });
       if (!llmRes.ok()) {
         throw new Error(`qa llm config seed failed: ${llmRes.status()} ${await llmRes.text()}`);
       }
