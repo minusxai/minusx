@@ -268,8 +268,9 @@ assuming any route is static.
 - **→ `lib/data/*.server.ts`**: the sole data boundary. `lib/data/files.server.ts` enforces ACLs, so a
   route omitting a role check is not necessarily a hole.
 - **→ `lib/app-event-registry`**: routes publish (`QUERY_EXECUTED`, `FILE_VIEWED`, `FEEDBACK`, `ERROR`,
-  `SHARE_OPEN`, `SHARE_LEAD`, `CREDIT_RESET`, `USER_MESSAGE`); analytics handlers subscribe centrally.
-  Never call analytics directly from a route.
+  `SHARE_OPEN`, `SHARE_LEAD`, `CREDIT_RESET`, `USER_MESSAGE`, `USER_CREATED/UPDATED/DELETED`, and
+  `ADMIN_ACTION` via `publishAdminAction` on the destructive admin routes); analytics handlers
+  subscribe centrally. Never call analytics directly from a route.
 - **← `middleware.ts`**: upstream contract for `x-user-id` / `x-mode` / `x-view` / `x-request-id`.
   Anything not in the middleware allowlist is session-gated before the handler ever runs, which is why
   several routes carry no in-route auth.

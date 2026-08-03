@@ -1,5 +1,5 @@
-// Shared chat orchestration core — builds the orchestrator from a saved pi log
-// (`setupOrchestration`), records LLM calls (`recordLlmCalls`), previews the next
+// Shared chat orchestration core — builds the tracked orchestrator from a saved
+// pi log (`setupOrchestration`, via `createTrackedOrchestrator`), previews the next
 // turn's context (`previewNextChatContext`), and exposes the tool/agent registries
 // (`REGISTRABLES` / `HEADLESS_REGISTRABLES`). Consumed by the v3 turn runner
 // (`lib/chat/conversation-turn.server.ts`) for ALL chat — browser (Explore/side-chat/
@@ -8,9 +8,8 @@
 // ChatRequest into an orchestrator message/resume via `lib/chat-translator`.
 
 import 'server-only';
-import { Orchestrator } from '@/orchestrator/orchestrator';
-import { creditEnforcer } from '@/lib/analytics/credit-usage.server';
-import { buildLlmPlanResolver } from '@/lib/llm/llm-plan.server';
+import type { Orchestrator } from '@/orchestrator/orchestrator';
+import { createTrackedOrchestrator } from '@/lib/chat/tracked-orchestrator.server';
 import type {
   ConversationLog,
   ConversationLogEntry as PiLogEntry,
@@ -67,13 +66,9 @@ import {
   legacyToolResultToPi,
 } from '@/lib/chat-translator';
 import { getConversation as getV3Conversation, loadLog as loadV3Log } from '@/lib/data/conversations.server';
-import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
-import { recordLlmRequest, recordLlmResponse, recordLlmCallEvent } from '@/lib/analytics/file-analytics.db';
-import { UNKNOWN_TRIGGER } from '@/lib/analytics/credits.types';
-import { buildLlmCallDetail } from '@/lib/chat/headless-llm-tracking.server';
+import { recordLlmRequest, recordLlmResponse } from '@/lib/analytics/file-analytics.db';
 import { setLlmCallRecorder } from '@/orchestrator/llm';
-import type { AssistantMessage, Context } from '@/orchestrator/llm';
-import type { LLMCallDetail } from '@/lib/chat/chat-types';
+import type { Context } from '@/orchestrator/llm';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import type {
   ChatRequest,
@@ -256,6 +251,12 @@ export interface OrchestrationSetup {
   fatalError?: string;
   /** Surface the turn ran on (explore/question/dashboard/…) — recorded as the LLM-call `trigger`. */
   pageType?: string | null;
+  /**
+   * Record the turn's LLM usage (from `createTrackedOrchestrator`, bound to this
+   * conversation + surface). The turn runner calls it with the turn's log DIFF.
+   * Absent only on the fatal-error paths that never built an orchestrator run.
+   */
+  recordUsage?: (entries?: PiLogEntry[]) => Promise<void>;
 }
 
 /**
@@ -470,15 +471,16 @@ export async function setupOrchestration(
       : isSlackRoot
         ? HEADLESS_REGISTRABLES
         : REGISTRABLES;
-  const orch = new Orchestrator(registrables, [...savedLog]);
-  // Enforce per-user credit limits deep at the LLM call site (no-op unless
-  // ENFORCE_CREDIT_LIMITS). Covers every agent/sub-agent/resume hop in this run.
-  orch.beforeLlmCall = creditEnforcer(user);
-  // DB-backed model config (workspace-level — every mode shares the org
-  // config's `llm` providers): resolve the agent's grade → model plan on every
-  // call; unconfigured workspaces default to the MinusX gateway. A custom
-  // agent's gradeOverride is the DEFAULT — an explicit user pick always wins.
-  orch.resolveLlmPlan = buildLlmPlanResolver(gradeOverride ?? serverArgs.custom_agent?.resolved.gradeOverride);
+  // The factory pre-wires the credit gate, the DB-backed model-plan resolver
+  // (a custom agent's gradeOverride is the DEFAULT — an explicit user pick
+  // always wins) and usage recording bound to this conversation + surface.
+  const { orch, recordUsage } = createTrackedOrchestrator({
+    registrables,
+    savedLog: [...savedLog],
+    user,
+    tracking: { conversationId, source: pageType },
+    gradeOverride: gradeOverride ?? serverArgs.custom_agent?.resolved.gradeOverride,
+  });
 
   // Resume path: frontend sends back [ToolCall, ToolMessage][] tuples.
   // ToolMessage (from Redux/executeToolCall) lacks .function — patch it from
@@ -500,6 +502,7 @@ export async function setupOrchestration(
       orchestrator: orch,
       rawStream: orch.resume(piResults),
       pageType,
+      recordUsage,
     };
   }
 
@@ -539,6 +542,7 @@ export async function setupOrchestration(
         rootAgent: agent,
         rawStream: options?.preview ? null : orch.run(agent),
         pageType,
+        recordUsage,
       };
     }
     // Slack must discover connections itself (it has ListDBConnections + no
@@ -610,6 +614,7 @@ export async function setupOrchestration(
       rootAgent: agent,
       rawStream: options?.preview ? null : orch.run(agent),
       pageType,
+      recordUsage,
     };
   }
 
@@ -657,76 +662,7 @@ export async function previewNextChatContext(
   return setup.orchestrator.previewRootContext(setup.rootAgent);
 }
 
-/**
- * Record this turn's LLM calls out-of-band, from the turn's new log entries:
- * write per-call stats to `llm_call_events` and fill the response into the
- * `llm_logs` row whose request was already written when the call was made
- * (LOCAL only — never forwarded), then publish `AppEvents.LLM_CALL` for the
- * best-effort central stats forward. The call id + duration are the ones the
- * engine already stamps onto each message. Best-effort.
- */
-export async function recordLlmCalls(piDiff: PiLogEntry[], conversationId: number, user: EffectiveUser, source?: string | null): Promise<void> {
-  try {
-    const userId = typeof user.userId === 'number' ? user.userId : null;
-    const llmCalls: Record<string, LLMCallDetail> = {};
-    for (const entry of piDiff) {
-      const msg = entry as unknown as AssistantMessage;
-      const built = buildLlmCallDetail(msg);
-      if (!built) continue;
-      const { callId, detail } = built;
-      llmCalls[callId] = detail;
-
-      // LOCAL writes are AWAITED so they persist before the handler returns
-      // (a standalone prod build won't keep fire-and-forget promises alive).
-      await recordLlmCallEvent({
-        conversationId,
-        llmCallId: callId,
-        provider: detail.provider,
-        model: detail.model,
-        mode: user.mode,
-        totalTokens: detail.total_tokens,
-        promptTokens: detail.prompt_tokens,
-        completionTokens: detail.completion_tokens,
-        cachedTokens: detail.cached_tokens,
-        cacheCreationTokens: detail.cache_creation_tokens,
-        cost: detail.cost,
-        durationS: detail.duration,
-        stream: true,
-        finishReason: detail.finish_reason,
-        // Never empty — a conversation surface (explore/question/…), else 'unknown'.
-        trigger: source && source.length > 0 ? source : UNKNOWN_TRIGGER,
-        userId,
-        grade: detail.grade,
-        agent: detail.agent,
-      });
-
-      // The request row was written when the call was made; fill in the
-      // response (or the error message + error column for a failed call).
-      await recordLlmResponse({
-        callId,
-        userId,
-        provider: msg.provider,
-        model: msg.model,
-        responseJson: JSON.stringify(msg),
-        error: msg.stopReason === 'error' ? (msg.errorMessage ?? 'error') : null,
-      });
-    }
-    if (Object.keys(llmCalls).length === 0) return;
-    // Best-effort central forward: the app-event registry stores it in `app_events` and fans
-    // it to matching webhooks. Fire-and-forget — `publish` returns void and never throws.
-    appEventRegistry.publish(AppEvents.LLM_CALL, {
-      mode: user.mode,
-      conversationId,
-      llmCalls,
-      userId: userId ?? undefined,
-      userEmail: user.email,
-      userRole: user.role,
-    });
-  } catch (e) {
-    console.error('[v2/chat] failed to record LLM calls:', e);
-  }
-}
-
-// Headless usage tracking (feed-summary, micro-tasks, …) lives in a leaf module so
-// lightweight callers don't import this registrables hub. Re-exported for back-compat.
-export { recordHeadlessLlmCalls } from '@/lib/chat/headless-llm-tracking.server';
+// LLM usage recording lives in `lib/chat/tracked-orchestrator.server.ts` (the
+// factory every production orchestrator is built through); the headless recorder
+// stays in `lib/chat/headless-llm-tracking.server.ts`. Both are leaf modules so
+// lightweight callers don't import this registrables hub.

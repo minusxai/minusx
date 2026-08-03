@@ -360,6 +360,7 @@ export async function runAutoContextForSlot(
   // 3. Run AutoContextAgent in its own Orchestrator. `contextDocs` carries
   //    the dataset documentation (incl. HINTS), which the prompt instructs
   //    the agent to read first — join semantics often live there.
+  // eslint-disable-next-line no-restricted-syntax -- benchmark-CLI only (runner pre-step): deliberately untracked, same as benchmarks/runner.ts
   const orch = new Orchestrator(registrables);
   const ctx: BenchmarkAnalystContext = { connections, datasetKey, catalogKey, contextDocs };
   const agent = new AutoContextAgent(orch, { userMessage: catalogText }, ctx);

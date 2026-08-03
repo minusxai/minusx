@@ -3,6 +3,7 @@ import { clearLlmLogsBefore } from '@/lib/analytics/file-analytics.db';
 import { handleApiError, ApiErrors } from '@/lib/http/api-responses';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 import { isAdmin } from '@/lib/auth/role-helpers';
+import { publishAdminAction } from '@/lib/app-event-registry';
 
 /**
  * Clear raw LLM logs (the `llm_logs` blob table only — never the stats in
@@ -19,6 +20,7 @@ export async function DELETE(request: NextRequest) {
     if (Number.isNaN(before.getTime())) return ApiErrors.badRequest('Invalid `before` date');
 
     const removed = await clearLlmLogsBefore(before);
+    publishAdminAction(user, 'clear-llm-logs', { removed, before: before.toISOString() });
     return NextResponse.json({ removed });
   } catch (error) {
     return handleApiError(error);

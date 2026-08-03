@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { successResponse, handleApiError, ApiErrors } from '@/lib/http/api-responses';
 import { withAuth } from '@/lib/http/with-auth';
 import { migrateConversationsToV3 } from '@/lib/data/migrate-conversations-v3.server';
+import { publishAdminAction } from '@/lib/app-event-registry';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -16,6 +17,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     if (user.role !== 'admin') return ApiErrors.forbidden('admin only');
     const dry = request.nextUrl.searchParams.get('dry') === '1';
     const report = await migrateConversationsToV3({ dry });
+    if (!dry) publishAdminAction(user, 'migrate-conversations-v3');
     return successResponse(report);
   } catch (error) {
     return handleApiError(error);

@@ -169,6 +169,10 @@ export const LLM_CALL_EVENTS = {
     { name: 'total_tokens', type: 'BIGINT', notNull: true, default: '0' },
     { name: 'prompt_tokens', type: 'BIGINT', notNull: true, default: '0' },
     { name: 'completion_tokens', type: 'BIGINT', notNull: true, default: '0' },
+    // RESERVED — no writer populates these today (always 0): the pi Usage shape
+    // carries no reasoning/system-prompt/app-state split, and tool calls are not
+    // counted per call. Kept for schema stability; see `reasoning_tokens` below
+    // (also reserved) before assuming any of them holds data.
     { name: 'system_prompt_tokens', type: 'INTEGER', notNull: true, default: '0' },
     { name: 'app_state_tokens', type: 'INTEGER', notNull: true, default: '0' },
     { name: 'total_tool_calls', type: 'INTEGER', notNull: true, default: '0' },
@@ -185,6 +189,8 @@ export const LLM_CALL_EVENTS = {
     { name: 'mode', type: 'VARCHAR' },
     { name: 'cached_tokens', type: 'BIGINT', notNull: true, default: '0' },
     { name: 'cache_creation_tokens', type: 'BIGINT', notNull: true, default: '0' },
+    // RESERVED — plumbed through the recorders but never set: `buildLlmCallDetail`
+    // has no source for it (the pi `Usage` shape carries no reasoning-token count).
     { name: 'reasoning_tokens', type: 'BIGINT', notNull: true, default: '0' },
     { name: 'stream', type: 'BOOLEAN', notNull: true, default: 'false' },
     { name: 'grade', type: 'VARCHAR' },

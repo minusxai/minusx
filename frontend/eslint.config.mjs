@@ -81,6 +81,16 @@ const RESTRICT_VIEW_REDUX = [
   },
 ];
 
+// A bare `new Orchestrator(...)` skips the three per-run obligations the factory
+// pre-wires (credit gate, DB-backed model plan, usage recording) — report and eval
+// each shipped missing one or more of them exactly this way. Exemptions: the factory
+// itself (config below), tests (no-restricted-syntax is off there), and non-LLM /
+// CLI constructions that suppress inline with a justification.
+const RESTRICT_BARE_ORCHESTRATOR = {
+  selector: "NewExpression[callee.name='Orchestrator']",
+  message: "Construct orchestrators through createTrackedOrchestrator (lib/chat/tracked-orchestrator.server.ts) so the credit gate, model-plan resolver and usage recording are pre-wired. A construction that genuinely runs no LLM loop may disable inline with a justification.",
+};
+
 // Shared no-restricted-syntax selectors — reused across multiple file-scoped overrides
 // so that per-file configs can extend rather than replace the base rules.
 const BASE_RESTRICTED_SYNTAX = [
@@ -120,6 +130,7 @@ const BASE_RESTRICTED_SYNTAX = [
     selector: "LogicalExpression[operator='&&'][left.type='BinaryExpression'][left.operator='!=='][right.type='BinaryExpression'][right.operator='!==']:matches([left.right.type='Literal'][left.right.raw='null'][right.right.type='Identifier'][right.right.name='undefined'], [left.right.type='Identifier'][left.right.name='undefined'][right.right.type='Literal'][right.right.raw='null'])",
     message: "Use `!= null` instead of `!== null && !== undefined`. `!= null` catches both.",
   },
+  RESTRICT_BARE_ORCHESTRATOR,
 ];
 
 const eslintConfig = defineConfig([
@@ -461,6 +472,18 @@ const eslintConfig = defineConfig([
     files: ["orchestrator/llm/**/*.ts"],
     rules: {
       "no-restricted-imports": ["error", { paths: [RESTRICT_DOCUMENTS_DB, RESTRICT_ADAPTER_FACTORY] }],
+    },
+  },
+  // The tracked-orchestrator factory is the one sanctioned `new Orchestrator(...)`
+  // site in app code — it exists to pre-wire what the ban protects. Must come after
+  // every config that spreads BASE_RESTRICTED_SYNTAX (last matching config wins).
+  {
+    files: ["lib/chat/tracked-orchestrator.server.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        ...BASE_RESTRICTED_SYNTAX.filter((r) => r !== RESTRICT_BARE_ORCHESTRATOR),
+      ],
     },
   },
 ]);

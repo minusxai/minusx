@@ -9,6 +9,26 @@ import { reportErrorToSentry } from './sentry-error-handler';
 export { AppEvents } from './events';
 export { appEventRegistry } from './registry';
 
+/**
+ * Audit-trail helper for destructive / high-privilege admin operations
+ * (data import, DB migration, tutorial reset, cache clear, LLM-log purge).
+ * `action` is a stable kebab-case slug; `details` must never carry secrets.
+ */
+export function publishAdminAction(
+  user: { mode: string; userId?: number | string; email?: string; role?: string },
+  action: string,
+  details?: Record<string, unknown>,
+): void {
+  appEventRegistry.publish(AppEvents.ADMIN_ACTION, {
+    mode: user.mode,
+    action,
+    ...(details ? { details } : {}),
+    userId: typeof user.userId === 'number' ? user.userId : undefined,
+    userEmail: user.email,
+    userRole: user.role,
+  });
+}
+
 // Register handlers — runs once when this module is first imported.
 // To add a new handler (Slack, Sentry, etc.), add another subscribe() call here.
 appEventRegistry.subscribe(AppEvents.FILE_CREATED,             p => trackFileEvent({ eventType: FileEventType.CREATED,           fileId: p.fileId, fileVersion: p.fileVersion, userId: p.userId }));

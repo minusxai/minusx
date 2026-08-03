@@ -21,6 +21,7 @@ import { applyMigrations } from '@/lib/database/migrations';
 import { MINIMUM_SUPPORTED_DATA_VERSION } from '@/lib/database/constants';
 import { gunzip } from 'zlib';
 import { promisify } from 'util';
+import { publishAdminAction } from '@/lib/app-event-registry';
 
 const gunzipAsync = promisify(gunzip);
 
@@ -103,6 +104,10 @@ export const POST = withAuth(async (request: NextRequest, user) => {
 
     await atomicImport(importData);
 
+    publishAdminAction(user, 'import-data', {
+      users: importData.users?.length ?? 0,
+      documents: importData.documents?.length ?? 0,
+    });
     return NextResponse.json({
       success: true,
       message: 'Data imported successfully',

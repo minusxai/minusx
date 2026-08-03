@@ -233,6 +233,7 @@ export async function executeRemoteToolCall(
   const rootId = findSessionRootId(log);
   if (!rootId) return { kind: 'invalid', message: 'session root invocation missing — re-mint the session' };
 
+  // eslint-disable-next-line no-restricted-syntax -- no LLM loop: a remote session only dispatches leaf tools (never run()/resume()), so gate/plan/recording don't apply; REMOTE_TOOL_CALL app events are the metering here
   const orch = new Orchestrator(REMOTE_REGISTRABLES, [...log]);
   const rootAgent = orch.reconstructAgent(rootId) as MXAgent;
 

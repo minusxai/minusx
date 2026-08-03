@@ -114,6 +114,16 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       return ApiErrors.notFound('User');
     }
 
+    // Audit trail: field NAMES only, never values (password_hash, phone, …).
+    appEventRegistry.publish(AppEvents.USER_UPDATED, {
+      mode: 'org',
+      userId,
+      userEmail: updatedUser.email,
+      role: updatedUser.role,
+      changedFields: Object.keys(body),
+      updatedBy: session.user.email ?? undefined,
+    });
+
     // Return updated user without password_hash
     const safeUser = {
       id: updatedUser.id,

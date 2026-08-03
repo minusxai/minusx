@@ -11,7 +11,7 @@
  * The client never receives output from here — it reads the resumable GET …/stream. This fn just
  * produces durable rows + wakeups. See CLAUDE.md "Chat serving".
  */
-import { setupOrchestration, recordLlmCalls } from '@/lib/chat/orchestration-core.server';
+import { setupOrchestration } from '@/lib/chat/orchestration-core.server';
 import type { ChatRequest } from '@/lib/chat/chat-types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { ConversationLog, PendingToolCall } from '@/orchestrator/types';
@@ -22,6 +22,7 @@ import {
 } from '@/lib/data/conversations.server';
 import type { Conversation } from '@/lib/data/conversations.types';
 import { notifyMessage, notifyDelta, notifyStatus, subscribe } from './conversation-stream.server';
+import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { truncateMessageForName } from '@/lib/conversations-utils';
 import { runMicroTask } from '@/lib/chat/run-micro-task.server';
 import { randomUUID } from 'crypto';
@@ -165,6 +166,31 @@ export async function runConversationTurn(
   body: ChatRequest,
   opts: { autoRetry?: boolean } = {},
 ): Promise<TurnResult> {
+  const turnStartedAt = Date.now();
+  // The runner is DETACHED from the HTTP request (`void runConversationTurn`),
+  // so `withAuth` never observes a turn's outcome — this is the only place
+  // chat:turn / turn ERROR events can be published.
+  const publishTurnEnd = (status: 'ok' | 'error' | 'paused', source: string | null | undefined, error?: string): void => {
+    appEventRegistry.publish(AppEvents.CHAT_TURN, {
+      mode: user.mode,
+      conversationId,
+      status,
+      durationMs: Date.now() - turnStartedAt,
+      source,
+      ...(error ? { error } : {}),
+      userId: typeof user.userId === 'number' ? user.userId : undefined,
+      userEmail: user.email,
+    });
+    if (status === 'error' && error) {
+      appEventRegistry.publish(AppEvents.ERROR, {
+        mode: user.mode,
+        source: 'chat-turn',
+        message: error,
+        context: { conversationId },
+      });
+    }
+  };
+
   // Benchmark conversations carry their per-conversation connection configs in meta.benchmark_connections;
   // hand it to setupOrchestration so continuation can wire NodeConnector-backed executors.
   const conv = await getConversation(conversationId);
@@ -174,6 +200,7 @@ export async function runConversationTurn(
     if (!prep.ok) {
       await releaseRunLease(conversationId, 'error');
       await notifyStatus(conversationId, 'error', prep.seq);
+      publishTurnEnd('error', null, prep.reason);
       return { conversationId, runStatus: 'error', pendingToolCalls: [], finalSeq: prep.seq, error: prep.reason };
     }
     // Replay as a fresh user-message turn from the rolled-back point.
@@ -191,7 +218,22 @@ export async function runConversationTurn(
     await appendError(conversationId, { source: 'session', message: setup.fatalError });
     await releaseRunLease(conversationId, 'error');
     await notifyStatus(conversationId, 'error', startSeq);
+    publishTurnEnd('error', setup.pageType, setup.fatalError);
     return { conversationId, runStatus: 'error', pendingToolCalls: [], finalSeq: startSeq, error: setup.fatalError };
+  }
+
+  // Browser user messages get their USER_MESSAGE event here (Slack and MCP
+  // publish their own with their surface as `source`). An auto-retry replays a
+  // message that was already counted on its original attempt.
+  if (body.user_message && body.agent !== 'SlackAgent' && !opts.autoRetry) {
+    appEventRegistry.publish(AppEvents.USER_MESSAGE, {
+      mode: user.mode,
+      source: setup.pageType === 'explore' ? 'explore' : 'side_chat',
+      conversationId,
+      userId: typeof user.userId === 'number' ? user.userId : undefined,
+      userEmail: user.email,
+      messagePreview: body.user_message.slice(0, 200),
+    });
   }
 
   // Claim the lease + heartbeat so a reconnect can tell a live turn from an orphaned one (crash).
@@ -276,9 +318,10 @@ export async function runConversationTurn(
   const piDiff = setup.orchestrator.log.slice(startSeq) as ConversationLog;
   const finalSeq = committedSeq;
   await mirrorErrors(conversationId, piDiff, runError);
-  // `setup.pageType` (explore/question/dashboard/…) is recorded as the LLM-call `trigger`
-  // so usage can be split by surface.
-  await recordLlmCalls(piDiff, conversationId, user, setup.pageType);
+  // Usage recording comes pre-bound from the tracked-orchestrator factory
+  // (conversation id + surface: `setup.pageType` becomes the LLM-call `trigger`
+  // so usage can be split by surface). Passed the turn's log DIFF, not the full log.
+  await setup.recordUsage?.(piDiff);
   // Stamp the turn's final context size (last call's totalTokens) for the client's
   // "conversation too long" gate. Best-effort — never fails the turn.
   const lastUsage = [...piDiff].reverse().find(
@@ -306,6 +349,7 @@ export async function runConversationTurn(
   }
 
   await notifyStatus(conversationId, runStatus, finalSeq);
+  publishTurnEnd(runStatus === 'idle' ? 'ok' : runStatus, setup.pageType, runError);
 
   return { conversationId, runStatus, pendingToolCalls, finalSeq, error: runError };
 }

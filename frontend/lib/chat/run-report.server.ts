@@ -8,12 +8,12 @@
  * the orchestrator in-memory and read the structured result off the agent.
  */
 import 'server-only';
-import { Orchestrator } from '@/orchestrator/orchestrator';
 import type { RegistrableClass } from '@/orchestrator/types';
 import { HEADLESS_REGISTRABLES } from '@/lib/chat/orchestration-core.server';
+import { createTrackedOrchestrator } from '@/lib/chat/tracked-orchestrator.server';
 import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
 import { ReportAgent, type ReportAgentContext } from '@/agents/report/report-agent';
-import { buildLlmPlanResolver } from '@/lib/llm/llm-plan.server';
+import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { ReportRunContent } from '@/lib/types';
 
 /**
@@ -34,17 +34,20 @@ const REPORT_REGISTRABLES: RegistrableClass[] = [
  * Execute a report end-to-end and return its structured run payload.
  *
  * @param ctx - Report inputs (references, prompt, ids) plus the analyst context
- *              (connection, schema, whitelist, effectiveUser, …).
+ *              (connection, schema, whitelist, …). `effectiveUser` is required
+ *              here (narrowed from the optional base field) — it drives the
+ *              run's credit gate and usage attribution.
  */
-export async function runReportV2(ctx: ReportAgentContext): Promise<ReportRunContent> {
-  const orch = new Orchestrator(REPORT_REGISTRABLES, []);
-  // DB-backed model config (Settings → Models): resolve the plan on every call —
-  // same wiring as chat turns (see orchestration-core). Without it, report runs
-  // use the agents' static MinusX-gateway model, which has no key. The report's
+export async function runReportV2(ctx: ReportAgentContext & { effectiveUser: EffectiveUser }): Promise<ReportRunContent> {
+  // Pre-wired: credit gate, DB-backed model plan, usage recording. The report's
   // LLM calls come from its dispatched analyst sub-agent, so every call in the
-  // run is pinned to the `report` agent grade policy.
-  const resolve = buildLlmPlanResolver();
-  orch.resolveLlmPlan = (selector) => resolve({ ...selector, agent: 'report' });
+  // run is pinned to the `report` agent grade policy via `llmAgent`.
+  const { orch, recordUsage } = createTrackedOrchestrator({
+    registrables: REPORT_REGISTRABLES,
+    user: ctx.effectiveUser,
+    tracking: { task: 'report' },
+    llmAgent: 'report',
+  });
   const agent = new ReportAgent(orch, { userMessage: `Execute report: ${ctx.reportName}` }, ctx);
 
   const stream = orch.run(agent);
@@ -55,6 +58,8 @@ export async function runReportV2(ctx: ReportAgentContext): Promise<ReportRunCon
     }
   }
   await stream.result();
+  // Record usage even for a failed/blocked run — the ledger is the complete record.
+  await recordUsage();
 
   return agent.runResult;
 }

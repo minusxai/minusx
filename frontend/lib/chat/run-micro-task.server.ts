@@ -2,20 +2,17 @@
  * Headless v=2 micro-task execution.
  *
  * Runs the no-tools `MicroAgent` for a named task (title/description/summary/…)
- * in-process via the TypeScript orchestrator (no conversation file) and returns
+ * in-process via the tracked orchestrator (no conversation file) and returns
  * the generated text. Token usage + the raw response are tracked out-of-band via
- * `recordHeadlessLlmCalls` (tagged by task, no conversationId — see
- * `lib/chat/orchestration-core.server.ts`).
+ * the factory's `recordUsage` (tagged by task, no conversationId — see
+ * `lib/chat/tracked-orchestrator.server.ts`).
  */
 import 'server-only';
-import { Orchestrator } from '@/orchestrator/orchestrator';
-import { creditEnforcer } from '@/lib/analytics/credit-usage.server';
+import { createTrackedOrchestrator } from '@/lib/chat/tracked-orchestrator.server';
 import type { AssistantMessage, TextContent, ImageContent } from '@/orchestrator/llm';
 import { MicroAgent } from '@/agents/micro/micro-agent';
 import { getMicroTask } from '@/agents/micro/micro-tasks';
 import type { MicroAgentContext } from '@/agents/micro/types';
-import { recordHeadlessLlmCalls } from '@/lib/chat/headless-llm-tracking.server';
-import { buildLlmPlanResolver } from '@/lib/llm/llm-plan.server';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 
 /**
@@ -34,14 +31,12 @@ export async function runMicroTask(
   // Validate the task up-front so an unknown key throws before any LLM call.
   getMicroTask(taskKey);
 
-  const orch = new Orchestrator([MicroAgent]);
-  // Enforce per-user credit limits here too (no-op unless enforced): an over-limit
-  // user spends ZERO credits anywhere — micro-tasks included, no exempt path.
-  orch.beforeLlmCall = creditEnforcer(user);
-  // DB-backed model config (Settings → Models): resolve the per-use-case plan on
-  // every call — same wiring as chat turns (see orchestration-core). Without it,
-  // micro-tasks run on MicroAgent's static MinusX-gateway model, which has no key.
-  orch.resolveLlmPlan = buildLlmPlanResolver();
+  // Pre-wired: credit gate, DB-backed model plan, usage recording tagged by task.
+  const { orch, recordUsage } = createTrackedOrchestrator({
+    registrables: [MicroAgent],
+    user,
+    tracking: { task: taskKey },
+  });
   const ctx: MicroAgentContext = {
     userId: String(user.userId ?? user.email),
     mode: user.mode === 'tutorial' ? 'tutorial' : 'org',
@@ -70,7 +65,7 @@ export async function runMicroTask(
   // than returning an empty string the caller would silently write as a title.
   const final = (await stream.result()) as AssistantMessage | null;
 
-  await recordHeadlessLlmCalls(orch.log, user, taskKey);
+  await recordUsage();
 
   const text = (final?.content ?? [])
     .filter((c): c is TextContent => c.type === 'text')

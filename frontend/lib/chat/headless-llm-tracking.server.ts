@@ -59,6 +59,38 @@ export function buildLlmCallDetail(msg: AssistantMessage): { callId: string; det
 }
 
 /**
+ * Every recordable LLM call in a log slice, deduped by call id. Two places a
+ * call's assistant message can live:
+ *  - as a TOP-LEVEL log entry (the root agent's messages, and any sub-agent
+ *    message that requested tool calls);
+ *  - folded INSIDE a dispatch toolResult as `details.assistantMessage`
+ *    (`type: 'mx_agent'`) — a sub-agent's FINAL reply never appears top-level
+ *    (see `Orchestrator.appendAgentResult`), so a scan of entries alone
+ *    silently drops the last call of every dispatched sub-agent.
+ */
+export function collectLlmCallDetails(
+  log: PiLogEntry[],
+): { callId: string; detail: LLMCallDetail; msg: AssistantMessage }[] {
+  const out: { callId: string; detail: LLMCallDetail; msg: AssistantMessage }[] = [];
+  const seen = new Set<string>();
+  const consider = (candidate: unknown): void => {
+    const msg = candidate as AssistantMessage;
+    const built = buildLlmCallDetail(msg);
+    if (!built || seen.has(built.callId)) return;
+    seen.add(built.callId);
+    out.push({ ...built, msg });
+  };
+  for (const entry of log) {
+    consider(entry);
+    const e = entry as { role?: string; details?: { type?: string; assistantMessage?: unknown } };
+    if (e.role === 'toolResult' && e.details?.type === 'mx_agent' && e.details.assistantMessage) {
+      consider(e.details.assistantMessage);
+    }
+  }
+  return out;
+}
+
+/**
  * Record a headless run's LLM calls out-of-band: fill the `llm_logs` response blob (the
  * request row was already written by the global `setLlmCallRecorder`) and publish
  * `AppEvents.LLM_CALL` (tagged by `task`, no conversationId) for the central stats forward.
@@ -68,11 +100,7 @@ export async function recordHeadlessLlmCalls(piDiff: PiLogEntry[], user: Effecti
   try {
     const userId = typeof user.userId === 'number' ? user.userId : null;
     const llmCalls: Record<string, LLMCallDetail> = {};
-    for (const entry of piDiff) {
-      const msg = entry as unknown as AssistantMessage;
-      const built = buildLlmCallDetail(msg);
-      if (!built) continue;
-      const { callId, detail } = built;
+    for (const { callId, detail, msg } of collectLlmCallDetails(piDiff)) {
       llmCalls[callId] = detail;
 
       // Record per-call stats into llm_call_events (the complete usage ledger).

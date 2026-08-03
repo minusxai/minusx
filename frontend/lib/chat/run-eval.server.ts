@@ -5,7 +5,7 @@
  * agent's submitted answer. Used by the eval harness (`lib/evals/server.ts`).
  */
 import 'server-only';
-import { Orchestrator } from '@/orchestrator/orchestrator';
+import { createTrackedOrchestrator } from '@/lib/chat/tracked-orchestrator.server';
 import type { ToolResultMessage } from '@/orchestrator/llm';
 import type { RegistrableClass } from '@/orchestrator/types';
 import {
@@ -85,7 +85,13 @@ export async function runEvalV2(params: RunEvalV2Params): Promise<EvalSubmission
     assertionType: params.assertionType,
   };
 
-  const orch = new Orchestrator(EVAL_REGISTRABLES);
+  // Pre-wired: credit gate, DB-backed model plan (eval calls resolve under the
+  // agent's own `llmAgent` policy), usage recording tagged 'eval'.
+  const { orch, recordUsage } = createTrackedOrchestrator({
+    registrables: EVAL_REGISTRABLES,
+    user: params.user,
+    tracking: { task: 'eval' },
+  });
   const agent = new EvalAnalystAgent(orch, { userMessage: params.goal }, ctx);
 
   const stream = orch.run(agent);
@@ -95,6 +101,8 @@ export async function runEvalV2(params: RunEvalV2Params): Promise<EvalSubmission
     }
   }
   await stream.result();
+  // Record usage even for a failed/blocked run — the ledger is the complete record.
+  await recordUsage();
 
   // Find the last Submit tool result in the log.
   for (let i = orch.log.length - 1; i >= 0; i--) {
