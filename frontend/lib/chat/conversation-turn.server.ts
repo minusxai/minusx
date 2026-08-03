@@ -11,7 +11,7 @@
  * The client never receives output from here — it reads the resumable GET …/stream. This fn just
  * produces durable rows + wakeups. See CLAUDE.md "Chat serving".
  */
-import { setupOrchestration, recordLlmCalls } from '@/lib/chat/orchestration-core.server';
+import { setupOrchestration } from '@/lib/chat/orchestration-core.server';
 import type { ChatRequest } from '@/lib/chat/chat-types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { ConversationLog, PendingToolCall } from '@/orchestrator/types';
@@ -276,9 +276,10 @@ export async function runConversationTurn(
   const piDiff = setup.orchestrator.log.slice(startSeq) as ConversationLog;
   const finalSeq = committedSeq;
   await mirrorErrors(conversationId, piDiff, runError);
-  // `setup.pageType` (explore/question/dashboard/…) is recorded as the LLM-call `trigger`
-  // so usage can be split by surface.
-  await recordLlmCalls(piDiff, conversationId, user, setup.pageType);
+  // Usage recording comes pre-bound from the tracked-orchestrator factory
+  // (conversation id + surface: `setup.pageType` becomes the LLM-call `trigger`
+  // so usage can be split by surface). Passed the turn's log DIFF, not the full log.
+  await setup.recordUsage?.(piDiff);
   // Stamp the turn's final context size (last call's totalTokens) for the client's
   // "conversation too long" gate. Best-effort — never fails the turn.
   const lastUsage = [...piDiff].reverse().find(

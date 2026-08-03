@@ -73,6 +73,7 @@ export async function executeRegisteredTool(
     return { executable: false, error: `Tool '${toolName}' is not re-executable from the browser` };
   }
 
+  // eslint-disable-next-line no-restricted-syntax -- no LLM loop: the inspector executes ONE leaf tool directly (admin debug), never an agent run
   const orchestrator = new Orchestrator(REGISTRABLES, []);
   const context = { effectiveUser: user };
 

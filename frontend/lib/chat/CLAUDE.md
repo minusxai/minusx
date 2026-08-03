@@ -29,14 +29,14 @@ runConversationTurn                        (lib/chat/conversation-turn.server.ts
   │      └─ lib/chat/orchestration-core.server.ts
   │           ├─ buildServerAgentArgs  (lib/chat/agent-args.server.ts) — schema/context/connection
   │           ├─ pick registrables (prod / benchmark-V1 / benchmark-V2 / headless)
-  │           ├─ new Orchestrator(registrables, [...savedLog])
-  │           ├─ orch.beforeLlmCall  = creditEnforcer(user)
-  │           ├─ orch.resolveLlmPlan = buildLlmPlanResolver(gradeOverride)  ← lib/llm/llm-plan.server.ts
+  │           ├─ createTrackedOrchestrator({registrables, savedLog, user, tracking, gradeOverride})
+  │           │      └─ lib/chat/tracked-orchestrator.server.ts — pre-wires beforeLlmCall
+  │           │        (creditEnforcer), resolveLlmPlan (buildLlmPlanResolver) and recordUsage
   │           └─ orch.run(rootAgent)  |  orch.resume(piToolResults)
   ├─ for each stream event: buffer text/thinking deltas → notifyDelta
   │                         commitNew() → appendMessages + notifyMessage
   ├─ mirrorErrors → appendError (kind='error' rows)
-  ├─ recordLlmCalls (llm_call_events + llm_logs + AppEvents.LLM_CALL)
+  ├─ setup.recordUsage(piDiff) (llm_call_events + llm_logs + AppEvents.LLM_CALL)
   └─ releaseRunLease(idle|paused|error) + notifyStatus
 
 GET /api/conversations/:id/stream?since=N  (app/api/conversations/[id]/stream/route.ts)
@@ -50,12 +50,21 @@ fanned out to in-process subscribers from a module-global `Map`.
 
 ## What each module owns
 
+**`frontend/lib/chat/tracked-orchestrator.server.ts`** — the ONE sanctioned way to construct an
+`Orchestrator` for a production LLM run. `createTrackedOrchestrator` pre-wires the three per-run
+obligations (credit gate, DB-backed model-plan resolver, usage recording bound to a
+conversation-or-task attribution) that were previously hand-copied — and forgotten — per runner.
+A bare `new Orchestrator(...)` in app code is a lint error (`eslint.config.mjs`); constructions
+that genuinely run no LLM loop (remote-session-engine, tool-inspector) and the deliberately
+untracked benchmark CLI suppress inline with a justification. Also owns the conversation-bound
+recorder `recordLlmCalls`. A leaf module on purpose: it must never import the registrables hub.
+
 **`frontend/lib/chat/orchestration-core.server.ts`** — the registry hub and the agent/context build.
-It owns `REGISTRABLES` / `HEADLESS_REGISTRABLES`, `setupOrchestration`, `previewNextChatContext`, and
-`recordLlmCalls`. It does *not* own persistence, streaming, or the HTTP layer: it returns an
-`Orchestrator` plus a raw stream and lets the caller drive it. Importing this module has a side
-effect — it calls `setLlmCallRecorder` (from `@/orchestrator/llm`) once, which persists every LLM
-request row at call time.
+It owns `REGISTRABLES` / `HEADLESS_REGISTRABLES`, `setupOrchestration` and `previewNextChatContext`.
+It does *not* own persistence, streaming, or the HTTP layer: it returns an
+`Orchestrator` plus a raw stream (and the factory's `recordUsage`) and lets the caller drive it.
+Importing this module has a side effect — it calls `setLlmCallRecorder` (from `@/orchestrator/llm`)
+once, which persists every LLM request row at call time.
 
 **`frontend/lib/chat/conversation-turn.server.ts`** — one turn segment end to end: lease, commit,
 delta buffering, error mirroring, usage recording, auto-retry of a crash-interrupted turn, and the
@@ -76,11 +85,15 @@ inlining auth-gated object-store URLs as base64). They own no LLM loop: a remote
 an agent's `run()`.
 
 **Headless runners** — `frontend/lib/chat/run-report.server.ts` (`ReportAgent`, result read off
-`agent.runResult`), `frontend/lib/chat/run-eval.server.ts` (`EvalAnalystAgent`, returns the last
+`agent.runResult`; every call in the run pinned to the `report` agent policy via the factory's
+`llmAgent`), `frontend/lib/chat/run-eval.server.ts` (`EvalAnalystAgent`, returns the last
 Submit tool result), `frontend/lib/chat/run-micro-task.server.ts` (`MicroAgent`, no tools, returns
-text). `frontend/lib/chat/headless-llm-tracking.server.ts` holds `buildLlmCallDetail` +
-`recordHeadlessLlmCalls` in a leaf module so `runMicroTask` can record usage without importing the
-registrables hub (that import cycle is why it exists).
+text). All three build through `createTrackedOrchestrator` with `tracking: {task}` — gate, plan and
+recording come pre-wired. `frontend/lib/chat/headless-llm-tracking.server.ts` holds
+`buildLlmCallDetail`, `collectLlmCallDetails` (which also finds sub-agent final replies folded into
+`mx_agent` toolResults — a plain entry scan silently drops each dispatched sub-agent's last call)
+and `recordHeadlessLlmCalls` in a leaf module so `runMicroTask` can record usage without importing
+the registrables hub (that import cycle is why it exists).
 
 **Shared chat helpers in `frontend/lib/chat/`** — `agent-args.server.ts` (server-side resolution of
 connection + whitelisted schema + context docs, the single source for every server-initiated
@@ -337,6 +350,7 @@ sees *and* what Redux stores.
 
 | Task | File |
 |---|---|
+| Construct an orchestrator (gate/plan/recording pre-wired) | `frontend/lib/chat/tracked-orchestrator.server.ts` |
 | Add/remove a tool or agent from chat | `frontend/lib/chat/orchestration-core.server.ts` (`REGISTRABLES`) |
 | Change what a turn persists / when it notifies | `frontend/lib/chat/conversation-turn.server.ts` |
 | Change the wakeup bus or channel naming | `frontend/lib/chat/conversation-stream.server.ts` |

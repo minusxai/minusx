@@ -717,6 +717,7 @@ export async function runBenchmark(config: BenchmarkRunConfig): Promise<DatasetR
     if (ws <= 0) state.activityCounts.delete('waiting-slot');
     else state.activityCounts.set('waiting-slot', ws);
 
+    // eslint-disable-next-line no-restricted-syntax -- benchmark CLI: deliberately untracked (no app DB, no credit gate; models come from the benchmark config, not workspace settings)
     const orch = new Orchestrator(config.registrables);
     // Wire activity tracking: increment/decrement counters so the
     // progress display shows an accurate breakdown of what all
