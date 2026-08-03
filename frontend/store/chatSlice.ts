@@ -369,6 +369,40 @@ const chatSlice = createSlice({
       conv.errorRetryability = undefined;
     },
 
+    // Delete a past user message and everything after it, as a FORK from that
+    // point (the original conversation is never mutated server-side — same
+    // append-only contract as editAndForkMessage, same fork endpoint). Unlike
+    // edit, nothing runs afterwards: the fork lands idle with an empty
+    // composer. The listener forks at log_index and navigates.
+    deleteAndForkMessage(state, action: PayloadAction<{
+      conversationID: number;
+      logIndex: number;   // The log array index to fork from (this message and everything after is dropped)
+    }>) {
+      const { conversationID, logIndex } = action.payload;
+      const conv = state.conversations[conversationID];
+      if (!conv) return;
+
+      // Truncate at the first message with logIndex >= fork point (same rule
+      // as editAndForkMessage: non-user rows before it are kept in order).
+      let cutAt = conv.messages.length;
+      for (let i = 0; i < conv.messages.length; i++) {
+        const m = conv.messages[i];
+        if (m.role === 'user') {
+          const ui = m as UserMessage;
+          if (ui.logIndex !== undefined && ui.logIndex >= logIndex) {
+            cutAt = i;
+            break;
+          }
+        }
+      }
+
+      conv.messages = conv.messages.slice(0, cutAt);
+      conv.log_index = logIndex;
+      conv.executionState = 'FINISHED';
+      conv.error = undefined;
+      conv.errorRetryability = undefined;
+    },
+
     // Update agent_args (e.g., to refresh app_state before sending new message)
     updateAgentArgs(state, action: PayloadAction<{
       conversationID: number;
@@ -726,6 +760,7 @@ export const {
   clearQueuedMessages,
   flushQueuedMessages,
   editAndForkMessage,
+  deleteAndForkMessage,
   updateAgentArgs,
   updateConversation,
   completeToolCall,

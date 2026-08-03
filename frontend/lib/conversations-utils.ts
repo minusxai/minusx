@@ -162,7 +162,9 @@ export function parseLogToMessages(log: ConversationLogEntry[], errors?: ErrorLo
           role: 'user',
           content: userMessage,
           created_at: entry.created_at,
-          logIndex: i,
+          // The PI seq when this log came through piLogToLegacy (fork atSeq is
+          // seq-space); legacy position only for genuinely legacy (v1) logs.
+          logIndex: entry._piIndex ?? i,
           ...(attachments?.length > 0 ? { attachments } : {}),
         });
       }

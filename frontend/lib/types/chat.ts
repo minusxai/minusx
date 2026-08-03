@@ -187,6 +187,11 @@ export interface TaskLogEntry {
   _parent_unique_id?: string | null;
   _previous_unique_id?: string | null;
   _run_id: string;
+  /** Index of the source entry in the PI log (= server message seq). Stamped by
+   * piLogToLegacy on root-invocation tasks so user messages can carry the seq
+   * the fork endpoint's atSeq expects — legacy-log positions do NOT match seqs
+   * (each assistant turn expands into several legacy entries). */
+  _piIndex?: number;
   agent: string;
   args: any;
   unique_id: string;
