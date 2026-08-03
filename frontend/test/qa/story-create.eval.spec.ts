@@ -13,8 +13,8 @@
  */
 import {
   expect, findFile, openFileByClick, openSideChat, sendChat, saveDraft,
-  awaitReplyAnsweringClarifications, assertTutorialMode, latestConversationId, hasLlm, QA_MODE,
-  fitViewportToSurface,
+  awaitReplyAnsweringClarifications, assertTutorialMode, latestConversationId, conversationUsage,
+  hasLlm, fitViewportToSurface,
 } from './flows';
 import { test } from './metrics';
 
@@ -69,23 +69,16 @@ test.describe('eval: story creation', () => {
       .toBeTruthy();
     expect(story!.path.startsWith('/tutorial'), `story ${story!.path} must live under /tutorial`).toBe(true);
 
-    // Token cost of the WHOLE conversation (analyst turn + any micro calls).
+    // Usage of the WHOLE conversation (analyst turn + any micro calls), from
+    // the app's own recorded call stats. Cost first: provider-reported and
+    // cache-aware, the honest spend comparand for a 30+-call agentic turn.
     const conversationId = await latestConversationId(page);
     expect(conversationId, 'the turn should produce a conversation').toBeTruthy();
-    let totalTokens = 0;
-    await expect
-      .poll(
-        async () => {
-          const res = await request.get(`/api/conversations/${conversationId}/llm-calls?mode=${QA_MODE}`);
-          if (!res.ok()) return false;
-          const calls: Array<{ stats?: { total_tokens?: number } }> = (await res.json())?.calls ?? [];
-          totalTokens = calls.reduce((sum, c) => sum + Number(c.stats?.total_tokens ?? 0), 0);
-          return totalTokens > 0;
-        },
-        { message: 'no recorded LLM call stats with tokens for the conversation', timeout: 60_000 },
-      )
-      .toBe(true);
-    metrics.record(FLOW, 'total_tokens', totalTokens);
+    const usage = await conversationUsage(request, conversationId!);
+    metrics.record(FLOW, 'cost_usd', usage.cost);
+    metrics.record(FLOW, 'input_cached_tokens', usage.inputCachedTokens);
+    metrics.record(FLOW, 'input_uncached_tokens', usage.inputUncachedTokens);
+    metrics.record(FLOW, 'output_tokens', usage.outputTokens);
 
     // Make sure the story is open (the agent usually already navigated there;
     // otherwise open it like a user, folder → tile click) and wait for the

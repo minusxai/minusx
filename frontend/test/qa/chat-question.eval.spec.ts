@@ -13,7 +13,7 @@
  */
 import {
   expect, e2eUrl, waitForStore, sendChat, assertChatReplied,
-  latestConversationId, hasLlm, QA_MODE,
+  latestConversationId, conversationUsage, hasLlm,
 } from './flows';
 import { test } from './metrics';
 
@@ -39,22 +39,14 @@ test.describe('eval: chat question', () => {
     const id = await latestConversationId(page);
     expect(id, 'the turn should produce a conversation').toBeTruthy();
 
-    // Sum this conversation's real token usage from the recorded LLM calls
-    // (admin-only endpoint; the QA account is the workspace admin).
-    let totalTokens = 0;
-    await expect
-      .poll(
-        async () => {
-          const res = await request.get(`/api/conversations/${id}/llm-calls?mode=${QA_MODE}`);
-          if (!res.ok()) return false;
-          const calls: Array<{ stats?: { total_tokens?: number } }> = (await res.json())?.calls ?? [];
-          totalTokens = calls.reduce((sum, c) => sum + Number(c.stats?.total_tokens ?? 0), 0);
-          return totalTokens > 0;
-        },
-        { message: 'no recorded LLM call stats with tokens for the conversation', timeout: 60_000 },
-      )
-      .toBe(true);
-    metrics.record(FLOW, 'total_tokens', totalTokens);
+    // Usage from the app's own recorded call stats (the /debug batch source),
+    // split the way /debug splits it. Cost first: provider-reported and
+    // cache-aware, the spend comparand; the token rows show HOW it was spent.
+    const usage = await conversationUsage(request, id!);
+    metrics.record(FLOW, 'cost_usd', usage.cost);
+    metrics.record(FLOW, 'input_cached_tokens', usage.inputCachedTokens);
+    metrics.record(FLOW, 'input_uncached_tokens', usage.inputUncachedTokens);
+    metrics.record(FLOW, 'output_tokens', usage.outputTokens);
     // No screenshot here: the image rows of the report are for comparing
     // AUTHORED ARTIFACTS (see story-create), not chat transcripts.
   });
