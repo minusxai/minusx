@@ -152,9 +152,14 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
   });
   const isDone = outcome === 'done';
   const isFailed = outcome === 'failed';
+  // RENDER off `isRunning`, never the raw `isGenerating`. An error is recorded on the conversation
+  // before the run status settles, so those two disagree for a window — and in that window the raw
+  // flag would show a shimmering progress bar with every control hidden, under a subtitle telling
+  // the user to try again. `isGenerating` stays the local flag the effects drive.
+  const isRunning = outcome === 'running';
 
   // Progress bar + auto-collapse trace
-  const agentProgress = useAgentProgress(isGenerating, isDone, GENERATING_TAU);
+  const agentProgress = useAgentProgress(isRunning, isDone, GENERATING_TAU);
   const wasGeneratingRef = useRef(false);
   useEffect(() => {
     // Collapse the trace once the agent finishes — but NOT when it failed, since the error banner
@@ -304,7 +309,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
           </Heading>
         ) : (
           <Heading size="lg" fontFamily="mono" fontWeight="400">
-            {isFailed ? "Couldn't build your dashboard" : isDone ? 'Your dashboard is ready!' : isGenerating ? 'Building your dashboard...' : 'Build a starter dashboard'}
+            {isFailed ? "Couldn't build your dashboard" : isDone ? 'Your dashboard is ready!' : isRunning ? 'Building your dashboard...' : 'Build a starter dashboard'}
           </Heading>
         )}
         <Text color={isFailed ? 'accent.danger' : 'fg.muted'} fontSize="sm">
@@ -312,7 +317,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
             ? `${agentName} stopped before it finished — the reason is in the agent trace below. Fix it and try again, or continue and build the dashboard later.`
             : isDone
               ? 'Done! Go check out your awesome new dashboard.'
-              : isGenerating
+              : isRunning
                 ? `${agentName} is writing queries, building visualizations and assembling a fantastic dashboard for you.`
                 : `${agentName} will analyze your schema and create a dashboard with interesting queries automatically.`
           }
@@ -338,7 +343,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
       {/* Action buttons + progress */}
       <VStack gap={2} align="stretch">
         <HStack justify="center" gap={4}>
-          {!isGenerating && !isDone && (
+          {!isRunning && !isDone && (
             <VStack gap={2}>
               <Button
                 bg="accent.teal"
@@ -398,7 +403,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
         </HStack>
 
         {/* Progress bar while generating */}
-        {isGenerating && (
+        {isRunning && (
           <VStack gap={2} align="stretch">
             <Text fontSize="xs" fontFamily="mono" color="accent.teal">
               {getProgressMessage(agentProgress, [
@@ -461,7 +466,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
 
       {/* Agent trace — collapsible, auto-opens on generate, auto-closes on done. Kept mounted on
           failure too: the error banner the user needs to act on lives inside it. */}
-      {(isGenerating || isDone || isFailed) && (
+      {(isRunning || isDone || isFailed) && (
         <Collapsible.Root open={showTrace} onOpenChange={(e) => setShowTrace(e.open)}>
           <Collapsible.Trigger asChild>
             <HStack
@@ -481,7 +486,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
                 </Text>
               </HStack>
               <HStack>
-                {isGenerating && (
+                {isRunning && (
                   <Text fontSize="xs" fontFamily="mono" color="fg.subtle">
                     Exploring data & building visualizations (~1 min)
                   </Text>
