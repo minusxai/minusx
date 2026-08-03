@@ -62,6 +62,11 @@ const TERMINAL_PATTERNS: { reason: TerminalErrorReason; patterns: RegExp[] }[] =
       /invalid[_ ]?api[_ ]?key/i,
       /invalid x-api-key/i,
       /\bunauthorized\b/i,
+      // NO credential at all, e.g. `No API key for provider: minusx`. pi-ai raises this before it
+      // ever reaches the provider, so none of the status-shaped patterns above see it — yet it is
+      // the most deterministic auth failure there is, and the one a workspace whose provider was
+      // saved without a key hits on every single call.
+      /(no|missing)[_ ]api[_ ]?key/i,
     ],
   },
   { reason: 'permission', patterns: [/permission[_ ]error/i, /\bforbidden\b/i] },

@@ -20,7 +20,7 @@ import { useConfigs, updateConfig } from '@/lib/hooks/useConfigs';
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import { useAppSelector } from '@/store/hooks';
 import ConnectionWizard from '@/components/connection-wizard/ConnectionWizard';
-import type { ConnectionWizardStep, QuestionnaireAnswers } from '@/components/connection-wizard/ConnectionWizardTypes';
+import { asWizardStep, type ConnectionWizardStep, type QuestionnaireAnswers } from '@/components/connection-wizard/ConnectionWizardTypes';
 
 const TYPEWRITER_SPEED = 35; // ms per character
 
@@ -366,7 +366,7 @@ export function HelloWorldContent() {
       {isWizard && !isComplete && (
         <Box position="relative" zIndex={1} w="100%" maxW="1060px" mx="auto">
           <ConnectionWizard
-            initialStep={(savedWizard?.step as ConnectionWizardStep) ?? (includeModelsStep ? 'models' : 'connection')}
+            initialStep={asWizardStep(savedWizard?.step) ?? (includeModelsStep ? 'models' : 'connection')}
             initialConnectionId={savedWizard?.connectionId}
             initialConnectionName={savedWizard?.connectionName}
             initialContextFileId={savedWizard?.contextFileId}
@@ -377,13 +377,17 @@ export function HelloWorldContent() {
             showSkipConnection
             showSlackStep
             showModelsStep={includeModelsStep}
+            // Unnumbered on purpose. The step indicator numbers the steps, and it numbers them
+            // DYNAMICALLY — the AI-model step is only present when no provider can authenticate, so
+            // any number written into a heading here is wrong in one of the two configurations. It
+            // was wrong in both: every heading ran one behind the bar above it.
             greetings={{
               models: 'Connect an AI model.',
-              connection: "Step 1: Let's connect your data.",
+              connection: "Let's connect your data.",
               questionnaire: "Tell us about your data.",
-              context: "Step 2: Let's create a Knowledge Base.",
-              generating: "Step 3: Let's build your first dashboard.",
-              slack: "Step 4: Connect Slack.",
+              context: "Let's create a Knowledge Base.",
+              generating: "Let's build your first dashboard.",
+              slack: "Connect Slack.",
             }}
           />
         </Box>

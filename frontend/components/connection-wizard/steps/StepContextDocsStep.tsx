@@ -14,6 +14,9 @@ import SaveProgressBar from './StepContextSaveProgressBar';
 
 interface StepContextDocsStepProps {
   isAgentRunning: boolean;
+  /** The agent stopped carrying an error. Separate from `!isAgentRunning`, which a crashed run
+   *  also satisfies — see `wizardAgentOutcome`. */
+  isAgentFailed: boolean;
   docContent: string;
   hadExistingDocs: boolean;
   showAgentFeed: boolean;
@@ -38,7 +41,7 @@ interface StepContextDocsStepProps {
 
 /** Sub-step 2: Add Data Context (text + agent) */
 export default function StepContextDocsStep({
-  isAgentRunning, docContent, hadExistingDocs, showAgentFeed, allDocs, onDocsChange,
+  isAgentRunning, isAgentFailed, docContent, hadExistingDocs, showAgentFeed, allDocs, onDocsChange,
   expandedDocIndices, onExpandedChange, knowledgeCounts, error, agentProgress, onSkip,
   saving, onBack, onAgentDescribe, onSave, connectionName, contextPath, showDebug,
   realFileId, reduxState,
@@ -208,7 +211,7 @@ export default function StepContextDocsStep({
 
       {/* Agent activity feed */}
       {showAgentFeed && (
-        <AgentFeedCollapsible connectionName={connectionName} contextPath={contextPath} isRunning={isAgentRunning} />
+        <AgentFeedCollapsible connectionName={connectionName} contextPath={contextPath} isRunning={isAgentRunning} hasFailed={isAgentFailed} />
       )}
 
       {/* Debug: appState */}

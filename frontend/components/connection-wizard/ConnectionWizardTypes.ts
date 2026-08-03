@@ -9,6 +9,18 @@ export const WIZARD_STEP_LABELS: Record<ConnectionWizardStep, { number: number; 
   slack: { number: 4, label: 'Slack' },
 };
 
+/**
+ * Narrow a persisted `setupWizard.step` to a step this wizard can render, or `undefined`.
+ *
+ * The stored value is wider than this union — `hello-world` tracks a `'welcome'` screen the wizard
+ * knows nothing about, and the document is user-editable — and `ConnectionWizard` renders every
+ * step behind an `===` check, so an unrecognized value produces a silent empty card rather than an
+ * error. Callers pass the result through `??` to their own default.
+ */
+export function asWizardStep(step: string | undefined | null): ConnectionWizardStep | undefined {
+  return step && step in WIZARD_STEP_LABELS ? (step as ConnectionWizardStep) : undefined;
+}
+
 export interface QuestionnaireAnswers {
   datasetDescription: string;
   keyMetrics: string;

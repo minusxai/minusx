@@ -18,6 +18,7 @@ import { useContext } from '@/lib/hooks/useContext';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import ChatInterface from '@/components/explore/ChatInterface';
 import { useAgentProgress, getProgressMessage } from '../useAgentProgress';
+import { wizardAgentOutcome } from '../agent-outcome';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import type { QuestionnaireAnswers } from '../ConnectionWizardTypes';
 
@@ -142,18 +143,28 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
     setIsGenerating(false);
   }, [isGenerating, conversation]);
 
-  const isDone = !isGenerating && hasStarted;
+  // A crashed run stops exactly like a successful one, so "no longer running" is not "done" — see
+  // `wizardAgentOutcome`. Every success string below is gated on `isDone`, never on `hasStarted`.
+  const outcome = wizardAgentOutcome({
+    started: hasStarted,
+    running: isGenerating,
+    error: conversation?.error,
+  });
+  const isDone = outcome === 'done';
+  const isFailed = outcome === 'failed';
 
   // Progress bar + auto-collapse trace
   const agentProgress = useAgentProgress(isGenerating, isDone, GENERATING_TAU);
   const wasGeneratingRef = useRef(false);
   useEffect(() => {
-    if (wasGeneratingRef.current && !isGenerating && hasStarted) {
-       
+    // Collapse the trace once the agent finishes — but NOT when it failed, since the error banner
+    // the user has to act on is inside the trace.
+    if (wasGeneratingRef.current && !isGenerating && hasStarted && !isFailed) {
+
       setShowTrace(false);
     }
     wasGeneratingRef.current = isGenerating;
-  }, [isGenerating, hasStarted]);
+  }, [isGenerating, hasStarted, isFailed]);
 
   const handleGenerate = useCallback(async () => {
     if (hasStarted || !virtualDashboardId) return;
@@ -293,15 +304,17 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
           </Heading>
         ) : (
           <Heading size="lg" fontFamily="mono" fontWeight="400">
-            {isDone ? 'Your dashboard is ready!' : isGenerating ? 'Building your dashboard...' : 'Build a starter dashboard'}
+            {isFailed ? "Couldn't build your dashboard" : isDone ? 'Your dashboard is ready!' : isGenerating ? 'Building your dashboard...' : 'Build a starter dashboard'}
           </Heading>
         )}
-        <Text color="fg.muted" fontSize="sm">
-          {isDone
-            ? 'Done! Go check out your awesome new dashboard.'
-            : isGenerating
-              ? `${agentName} is writing queries, building visualizations and assembling a fantastic dashboard for you.`
-              : `${agentName} will analyze your schema and create a dashboard with interesting queries automatically.`
+        <Text color={isFailed ? 'accent.danger' : 'fg.muted'} fontSize="sm">
+          {isFailed
+            ? `${agentName} stopped before it finished — the reason is in the agent trace below. Fix it and try again, or continue and build the dashboard later.`
+            : isDone
+              ? 'Done! Go check out your awesome new dashboard.'
+              : isGenerating
+                ? `${agentName} is writing queries, building visualizations and assembling a fantastic dashboard for you.`
+                : `${agentName} will analyze your schema and create a dashboard with interesting queries automatically.`
           }
         </Text>
       </VStack>
@@ -337,8 +350,22 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
                 disabled={!virtualDashboardId}
               >
                 <LuSparkles size={14} />
-                Auto-generate dashboard
+                {isFailed ? 'Try again' : 'Auto-generate dashboard'}
               </Button>
+              {/* The failure copy above offers to "continue and build the dashboard later", so the
+                  control has to exist. Without it a failed build could only retry or leave, and the
+                  remaining steps became unreachable. */}
+              {isFailed && showSlackStep && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  fontFamily="mono"
+                  color="fg.muted"
+                  onClick={() => onComplete?.()}
+                >
+                  Connect Slack &rarr;
+                </Button>
+              )}
               <SkipLinks onSkip={handleSkip} onGoHome={handleGoHome} />
             </VStack>
           )}
@@ -432,8 +459,9 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
         </Collapsible.Root>
       )}
 
-      {/* Agent trace — collapsible, auto-opens on generate, auto-closes on done */}
-      {(isGenerating || isDone) && (
+      {/* Agent trace — collapsible, auto-opens on generate, auto-closes on done. Kept mounted on
+          failure too: the error banner the user needs to act on lives inside it. */}
+      {(isGenerating || isDone || isFailed) && (
         <Collapsible.Root open={showTrace} onOpenChange={(e) => setShowTrace(e.open)}>
           <Collapsible.Trigger asChild>
             <HStack
@@ -461,6 +489,11 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
                 {isDone && (
                   <Text fontSize="xs" fontFamily="mono" color="accent.teal">
                     Done!
+                  </Text>
+                )}
+                {isFailed && (
+                  <Text fontSize="xs" fontFamily="mono" color="accent.danger">
+                    Failed
                   </Text>
                 )}
                 <Icon
