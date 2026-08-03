@@ -9,6 +9,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { generateFileUrl } from '@/lib/slug-utils';
 import { Link } from '@/components/ui/Link';
 import DashboardUsageBadge from '../banners/DashboardUsageBadge';
+import FileTagBadges from './FileTagBadges';
 
 type SectionKey = 'context' | 'dashboard' | 'story' | 'folder' | 'question' | '_other';
 
@@ -117,6 +118,7 @@ export default function FileListRow({
           )}
           {/* Icon + Name */}
           <HStack flex="1" gap={3} minW={0}>
+            <FileTagBadges meta={file.meta} compact />
             <Icon
               as={getFileTypeMetadata(file.type).icon}
               boxSize={5}

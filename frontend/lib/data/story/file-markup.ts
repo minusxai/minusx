@@ -88,6 +88,22 @@ export function isLegacyStoryContent(content: unknown): boolean {
   return DATA_C_ATTR_RE.test(story) || story.trim() !== '';
 }
 
+/**
+ * True unless a story's stored content is on the MODERN authoring model:
+ * `format: 'jsx'` AND Tailwind-only (no `<style>` blocks, no `style=`/`labelStyle=`
+ * attrs). Everything else — the pre-shadcn HTML pipeline, styled JSX on the
+ * compat path, and empty/absent content — is legacy.
+ *
+ * This is the classifier behind the `legacy-story` file tag
+ * (`FILE_TAG_LEGACY_STORY`); it is broader than `isLegacyStoryContent`, which
+ * only answers "does the SAVE path route this through the old compile pipeline".
+ */
+export function isLegacyStory(content: unknown): boolean {
+  if (!content || typeof content !== 'object') return true;
+  if ((content as { format?: unknown }).format !== 'jsx') return true;
+  return hasAuthoredStoryStyles(content);
+}
+
 /** The `*Content` JSON-Schema that drives conversion for a file type — undefined ⇒ schemaless. */
 function schemaFor(type: FileType): JsonSchema {
   const def: Partial<Record<FileType, string>> = {

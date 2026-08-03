@@ -419,6 +419,7 @@ connector on first use. After adding a migration, `npm run update-workspace-temp
 | Add a credential-bearing config field | `lib/secrets/config-secret-specs.ts` (`CONFIG_SECRET_SPECS`) |
 | Resolve a credential server-side | `lib/secrets/connection-secrets.server.ts`, `config-secrets.server.ts` |
 | Public share links | `lib/data/shares/shares.server.ts` + `files.meta.shares[]` + `idx_files_meta_shares` |
+| System file tags (`files.meta.tags` → browser badges) | `lib/types/files.ts` (`getFileTags`, `FILE_TAG_LEGACY_STORY`) · stamped by V39 in `lib/database/migrations.ts` (`isLegacyStory`) · rendered by `components/file-browser/FileTagBadges.tsx`. System-written only — no user or save-path writer; re-running the migration transform is the refresh |
 | Understand draft/publish semantics | `lib/database/__tests__/draft-path-uniqueness.test.ts`, `lib/data/__tests__/draft-folder-visibility.test.ts` |
 
 ---

@@ -35,7 +35,23 @@ export interface BaseFileMetadata extends BaseEntity {
   version: number;            // OCC version counter (incremented on each update); default 1
   last_edit_id: string | null;  // Last edit idempotency key (for OCC); null if not set
   draft?: boolean;               // true until first real save (invisible in listings); undefined = false
-  meta?: Record<string, unknown> | null;  // arbitrary file-level metadata (future use)
+  // Arbitrary file-level metadata, out-of-band from content. Known keys: `shares`, `preview`
+  // (see lib/data/shares), and `tags` — SYSTEM-written string markers (scripts/programmatic
+  // only, never user-edited) rendered as badges in the file browser. See getFileTags.
+  meta?: Record<string, unknown> | null;
+}
+
+/** System tag: story authored on a pre-Tailwind-only pipeline (legacy HTML or styled JSX). */
+export const FILE_TAG_LEGACY_STORY = 'legacy-story';
+
+/**
+ * The system tags on a file's meta (`meta.tags`), tolerant of absent/malformed meta.
+ * Tags are SYSTEM-written markers (backfill scripts / programmatic writers) — there is
+ * deliberately no user or save-path writer today.
+ */
+export function getFileTags(meta: Record<string, unknown> | null | undefined): string[] {
+  const tags = meta?.tags;
+  return Array.isArray(tags) ? tags.filter((t): t is string => typeof t === 'string') : [];
 }
 
 // Named alias for the discriminated union (inlined in generated DashboardContent.assets)

@@ -83,6 +83,7 @@ export interface DocumentHeaderProps {
 
   // Optional customization
   additionalBadges?: ReactNode;  // Additional badges to show next to type badge
+  preTypeBadges?: ReactNode;     // Badges to show BEFORE the type badge (e.g. the legacy-story marker)
   headerActions?: ReactNode;     // Extra controls in the always-visible Actions row (both edit + view mode)
   readOnlyName?: boolean;        // If true, name cannot be edited
   hideDescription?: boolean;     // If true, description field is not shown
@@ -133,6 +134,7 @@ export default function DocumentHeader({
   isGeneratingName = false,
   isGeneratingDescription = false,
   additionalBadges,
+  preTypeBadges,
   headerActions,
   readOnlyName = false,
   hideDescription = false,
@@ -337,6 +339,7 @@ export default function DocumentHeader({
                 control — no badges, no edit/save/tools — for a clean fullscreen. */}
             {!isPresenting && (
               <HStack gap={1.5} flexWrap="wrap" justify="flex-end">
+                {preTypeBadges}
                 <FileTypeBadge fileType={fileType} />
                 {additionalBadges}
               </HStack>

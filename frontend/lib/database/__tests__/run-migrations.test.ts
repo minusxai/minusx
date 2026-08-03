@@ -111,7 +111,11 @@ describe('v37 rowMigration (registry contract)', () => {
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe('runMigrationsIfNeeded — row path (v36 → v37)', () => {
-  it('migrates via row updates WITHOUT exporting the whole DB', async () => {
+  it('falls back to the whole-DB export path (V39 is dataMigration-only: it writes meta, which the streaming row contract cannot)', async () => {
+    // The streaming row path runs ONLY when every pending migration declares a
+    // rowMigration. V39 (legacy-story tags) deliberately does not — RowMigration
+    // rewrites `content`, and tags live in `meta` — so a chain that includes it
+    // takes export → applyMigrations → import, and the rows still land migrated.
     const qId = await DocumentDB.create('Legacy Q', '/org/legacy-q', 'question',
       structuredClone(legacyQuestionContent) as any, []);
     const nbId = await DocumentDB.create('Legacy NB', '/org/legacy-nb', 'notebook',
@@ -125,7 +129,7 @@ describe('runMigrationsIfNeeded — row path (v36 → v37)', () => {
     await runMigrationsIfNeeded();
 
     expect(await getDataVersion()).toBe(LATEST_DATA_VERSION);
-    expect(exportDatabase).not.toHaveBeenCalled();
+    expect(exportDatabase).toHaveBeenCalled();
 
     const q = (await DocumentDB.getById(qId))!.content as any;
     expect(q.viz?.version).toBe(2);

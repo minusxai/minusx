@@ -5,6 +5,8 @@
 
 import { InitData, OrgData } from './import-export';
 import { LATEST_DATA_VERSION, LATEST_SCHEMA_VERSION, MINIMUM_SUPPORTED_DATA_VERSION } from './constants';
+import { isLegacyStory } from '@/lib/data/story/file-markup';
+import { FILE_TAG_LEGACY_STORY, getFileTags } from '@/lib/types/files';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import workspaceTemplate from './workspace-template.json';
 import { remapStoryQuestionIds } from '@/lib/data/story/story-question';
@@ -248,6 +250,31 @@ function v38StripRetiredConfigDrift(data: InitData): InitData {
   return { ...data, documents };
 }
 
+/**
+ * V39: stamp the `legacy-story` tag (`meta.tags`) on every story whose content
+ * is not on the modern authoring model (`format:'jsx'` AND Tailwind-only — see
+ * `isLegacyStory`), and remove a stale tag from stories that are. Idempotent;
+ * other meta keys (`shares`, `preview`, …) are preserved. Tags are SYSTEM-written
+ * markers rendered as file-browser badges — there is deliberately no user or
+ * save-path writer; a re-run of this transform is the sanctioned refresh.
+ *
+ * `dataMigration`-only on purpose: the streaming row form can only rewrite
+ * `content`, and this migration writes `meta`.
+ */
+export function v39TagLegacyStories(data: InitData): InitData {
+  const documents = (data.documents ?? []).map(doc => {
+    if (doc.type !== 'story') return doc;
+    const meta = (doc.meta && typeof doc.meta === 'object' ? doc.meta : {}) as Record<string, unknown>;
+    const tags = getFileTags(meta);
+    const has = tags.includes(FILE_TAG_LEGACY_STORY);
+    const should = isLegacyStory(doc.content);
+    if (has === should) return doc;
+    const nextTags = should ? [...tags, FILE_TAG_LEGACY_STORY] : tags.filter(t => t !== FILE_TAG_LEGACY_STORY);
+    return { ...doc, meta: { ...meta, tags: nextTags } };
+  });
+  return { ...data, documents };
+}
+
 export const MIGRATIONS: MigrationEntry[] = [
   {
     dataVersion: 36,
@@ -265,6 +292,11 @@ export const MIGRATIONS: MigrationEntry[] = [
     description: 'Strip retired config drift: remove retired file types (conversation) from supportedFileTypes/accessRules and drop the retired llm.assignments shape',
     dataMigration: v38StripRetiredConfigDrift,
     rowMigration: { types: ['config'], migrateContent: v38MigrateRowContent },
+  },
+  {
+    dataVersion: 39,
+    description: 'Tag legacy stories: stamp meta.tags with legacy-story on every story not on the modern format:jsx + Tailwind-only model (badge rendered in the file browser)',
+    dataMigration: v39TagLegacyStories,
   },
 ];
 

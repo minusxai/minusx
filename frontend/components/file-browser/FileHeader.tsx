@@ -33,6 +33,7 @@ import { canCreateFileByRole } from '@/lib/auth/access-rules.client';
 import { useSaveDecision } from '@/lib/hooks/file-state-hooks';
 import DocumentHeader from './DocumentHeader';
 import { FileHealthBadge } from './FileHealthPanel';
+import FileTagBadges from './FileTagBadges';
 import PublishModal from '../modals/PublishModal';
 import SaveFileModal from '../modals/SaveFileModal';
 import { useFileToolbar } from '../file-toolbar/FileToolbarContext';
@@ -54,6 +55,8 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
   const router = useRouter();
 
   const isDraft = useAppSelector(state => selectFile(state, fileId)?.draft === true);
+  // System tags (meta.tags) ride FileState via the dbFileToFileState spread.
+  const fileMeta = useAppSelector(state => (selectFile(state, fileId) as { meta?: Record<string, unknown> | null } | undefined)?.meta);
   const effectiveName = useAppSelector(state => selectEffectiveName(state, fileId)) ?? '';
   const effectivePath = useAppSelector(state => selectEffectivePath(state, fileId)) ?? '';
   const parentFolder = effectivePath.substring(0, effectivePath.lastIndexOf('/')) || '/';
@@ -319,6 +322,7 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
         viewMode={viewMode}
         onViewModeChange={(m) => dispatch(setFileViewMode({ fileId, mode: m }))}
         headerActions={headerActionsNode}
+        preTypeBadges={<FileTagBadges meta={fileMeta} labeled />}
         additionalBadges={(
           <>
             {questionCount !== undefined && (
