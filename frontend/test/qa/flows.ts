@@ -96,17 +96,22 @@ export async function waitForTutorialData(request: APIRequestContext, timeoutMs 
 
 /**
  * Discover an existing file of `type` in tutorial mode on the deployment.
- * For questions, prefers one with a SQL query. Returns { id, name }, or null.
- * The name lets flows open the file by *clicking* its tile (real navigation).
+ * For questions, prefers one with a SQL query; `preferName` (exact match)
+ * picks a specific file when the deployment has it, falling back to the
+ * default choice. Returns { id, name }, or null. The name lets flows open
+ * the file by *clicking* its tile (real navigation).
  */
 export async function findFile(
   request: APIRequestContext,
-  type: 'question' | 'dashboard',
+  type: 'question' | 'dashboard' | 'story',
+  preferName?: string,
 ): Promise<{ id: number; name: string; path: string } | null> {
   const res = await request.get(`/api/files?type=${type}&depth=10&includeContent=true&mode=${QA_MODE}`);
   if (!res.ok()) return null;
   const files: any[] = (await res.json())?.data ?? [];
-  const file = type === 'question' ? (files.find((f) => f?.content?.query) ?? files[0]) : files[0];
+  const file =
+    (preferName && files.find((f) => f?.name === preferName)) ||
+    (type === 'question' ? (files.find((f) => f?.content?.query) ?? files[0]) : files[0]);
   return file ? { id: file.id, name: file.name, path: file.path } : null;
 }
 
@@ -140,7 +145,7 @@ const COLLAPSED_SECTION_LABEL: Partial<Record<string, string>> = {
  */
 export async function openFileByClick(
   page: Page,
-  type: 'question' | 'dashboard' | 'connection',
+  type: 'question' | 'dashboard' | 'connection' | 'story',
   file: { name: string; path: string },
 ): Promise<void> {
   const parent =
@@ -428,32 +433,94 @@ export async function sendChat(page: Page, message: string): Promise<boolean> {
  * and at least one non-user reply. Generous timeout — a real model call is slower
  * than the faux channel.
  */
-export async function assertChatReplied(page: Page, minUserTurns = 1): Promise<void> {
+/**
+ * The one definition of "this chat legitimately answered": a FINISHED
+ * conversation with >= minUserTurns user messages and a non-error assistant
+ * message carrying real text. (Without the text check, an LLM failure that
+ * still lands a non-user message — e.g. the chart-image "Only HTTPS URLs"
+ * 400 — could green a flow that never actually answered.) Shared by
+ * assertChatReplied and awaitReplyAnsweringClarifications so their notions
+ * of "done" can never drift apart — a looser waiter would exit on some OTHER
+ * finished conversation already sitting in Redux (past conversations load
+ * with the page) while the flow's own turn is still running.
+ */
+function hasFinishedReply(s: any, minUserTurns: number): boolean {
+  const convs = Object.values(s?.chat?.conversations ?? {}) as any[];
+  return convs.some((c) => {
+    if (c.executionState !== 'FINISHED') return false;
+    const msgs: any[] = c.messages ?? [];
+    const userTurns = msgs.filter((m) => m.role === 'user').length;
+    const replied = msgs.some((m) => {
+      if (!m.role || m.role === 'user') return false;
+      if (m.stopReason === 'error' || m.errorMessage) return false;
+      const text = Array.isArray(m.content)
+        ? m.content.filter((b: any) => b?.type === 'text').map((b: any) => b?.text ?? '').join('')
+        : typeof m.content === 'string' ? m.content : '';
+      return text.trim().length > 0;
+    });
+    return userTurns >= minUserTurns && replied;
+  });
+}
+
+export async function assertChatReplied(page: Page, minUserTurns = 1, timeout = 120_000): Promise<void> {
   await assertRedux(
     page,
-    (s: any) => {
-      const convs = Object.values(s?.chat?.conversations ?? {}) as any[];
-      return convs.some((c) => {
-        if (c.executionState !== 'FINISHED') return false;
-        const msgs: any[] = c.messages ?? [];
-        const userTurns = msgs.filter((m) => m.role === 'user').length;
-        // A LEGIT reply, not a vacuous pass: an assistant message that did not
-        // error and carries real text. (Without this, an LLM failure that still
-        // lands a non-user message — e.g. the chart-image "Only HTTPS URLs"
-        // 400 — could green a flow that never actually answered.)
-        const replied = msgs.some((m) => {
-          if (!m.role || m.role === 'user') return false;
-          if (m.stopReason === 'error' || m.errorMessage) return false;
-          const text = Array.isArray(m.content)
-            ? m.content.filter((b: any) => b?.type === 'text').map((b: any) => b?.text ?? '').join('')
-            : typeof m.content === 'string' ? m.content : '';
-          return text.trim().length > 0;
-        });
-        return userTurns >= minUserTurns && replied;
-      });
-    },
-    { message: `chat did not finish with ${minUserTurns} user turn(s) + a non-empty, non-error reply`, timeout: 120_000 },
+    (s: any) => hasFinishedReply(s, minUserTurns),
+    { message: `chat did not finish with ${minUserTurns} user turn(s) + a non-empty, non-error reply`, timeout },
   );
+}
+
+/**
+ * Wait for the turn to FINISH while answering any user-input pause the agent
+ * raises: clarifications are answered with "Figure it out" (the agent-decides
+ * choice a human picks when they have no preference) + Submit, and navigation
+ * requests are Allowed. These tools PAUSE the orchestrator until a real click
+ * (there is no auto-answer anywhere in the app), so a flow that can trigger
+ * one — story creation asks for design/template, then asks to navigate to the
+ * new story — must run its wait through here or it hangs until the test
+ * times out. Ends with the same legit-reply assertion as assertChatReplied.
+ */
+export async function awaitReplyAnsweringClarifications(page: Page, timeout = 600_000): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < timeout) {
+    if (hasFinishedReply(await getState(page), 1)) break;
+    // Selecting the option is not enough — the clarification card has its own
+    // Submit; without it the selection just sits highlighted and the agent
+    // stays paused at "Waiting for your input" (observed live).
+    const figureItOut = page.getByLabel('Figure it out').filter({ visible: true }).first();
+    if (await figureItOut.isVisible().catch(() => false)) {
+      await figureItOut.click().catch(() => {}); // race with the turn resuming is fine — re-checked next tick
+      const submit = page.getByLabel('Submit clarification').filter({ visible: true }).first();
+      await submit.click({ timeout: 3_000 }).catch(() => {}); // some variants submit on select — absent Submit is fine
+    }
+    // Navigation-request card ("The agent wants to navigate to …. Allow?").
+    // Its buttons carry no aria-label; the text IS the accessible name.
+    const allow = page.getByRole('button', { name: 'Allow', exact: true }).filter({ visible: true }).first();
+    if (await allow.isVisible().catch(() => false)) {
+      await allow.click().catch(() => {});
+    }
+    await page.waitForTimeout(1_000);
+  }
+  await assertChatReplied(page, 1, 15_000);
+}
+
+/**
+ * Grow the viewport to fit a tall surface (story page) fully on-screen, so an
+ * element capture paints ALL of it. Chromium does not composite iframe
+ * content beyond the viewport — an element screenshot of a surface taller
+ * than the window comes back black below the fold, no matter how much was
+ * scrolled first. Height is clamped to keep the raster within sane limits.
+ * Returns a restore function.
+ */
+export async function fitViewportToSurface(
+  page: Page,
+  surface: ReturnType<Page['locator']>,
+): Promise<() => Promise<void>> {
+  const original = page.viewportSize() ?? { width: 1280, height: 720 };
+  const box = await surface.boundingBox();
+  const height = Math.min(Math.ceil(box?.height ?? original.height) + 200, 16_000);
+  await page.setViewportSize({ width: original.width, height });
+  return async () => page.setViewportSize(original);
 }
 
 /** Assert a finished conversation that actually invoked web search (structural). */

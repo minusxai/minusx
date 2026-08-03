@@ -16,7 +16,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Page, TestInfo } from '@playwright/test';
+import type { Locator, Page, TestInfo } from '@playwright/test';
 import { test as qaTest } from './flows';
 
 export const METRICS_DIR = path.join(process.cwd(), 'test/qa/.metrics');
@@ -62,11 +62,24 @@ export class MetricsRecorder {
     this.rows.push({ flow, metric, value, kind });
   }
 
-  /** Capture a screenshot under the metrics dir and record it as an image row. */
-  async screenshot(page: Page, flow: string, name: string): Promise<void> {
+  /**
+   * Capture a screenshot under the metrics dir and record it as an image row.
+   *
+   * Pass `target` to capture one ELEMENT in full — artifact surfaces
+   * (stories) size their iframe to content inside an inner scroll container,
+   * so neither a viewport shot (crops below the fold) nor fullPage (the app
+   * shell's BODY doesn't scroll) sees the whole document; an element capture
+   * of the surface iframe does. Without `target`, captures the full page.
+   */
+  async screenshot(page: Page, flow: string, name: string, target?: Locator): Promise<void> {
     fs.mkdirSync(SCREENS_DIR, { recursive: true });
     const rel = path.join('screens', `${slug(flow)}-${slug(name)}.png`);
-    await page.screenshot({ path: path.join(METRICS_DIR, rel), fullPage: false });
+    const file = path.join(METRICS_DIR, rel);
+    if (target) {
+      await target.screenshot({ path: file });
+    } else {
+      await page.screenshot({ path: file, fullPage: true });
+    }
     this.record(flow, name, rel, 'image');
   }
 
