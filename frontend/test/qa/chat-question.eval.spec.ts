@@ -55,7 +55,7 @@ test.describe('eval: chat question', () => {
       )
       .toBe(true);
     metrics.record(FLOW, 'total_tokens', totalTokens);
-
-    await metrics.screenshot(page, FLOW, 'conversation');
+    // No screenshot here: the image rows of the report are for comparing
+    // AUTHORED ARTIFACTS (see story-create), not chat transcripts.
   });
 });

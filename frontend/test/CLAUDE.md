@@ -202,7 +202,13 @@ pass/fail row is auto-recorded from `testInfo.status` for every flow declared vi
 `meta.json` from `QA_RUN_LABEL`/`QA_BASE_URL`. `npm run qa-report` merges any number of such run
 dirs into one comparison table. The filename convention is the selection mechanism: a harness that
 measures runs exactly `playwright test test/qa/*.eval.spec.ts`, and "this file deliberately spends
-real LLM tokens" is visible at a glance.
+real LLM tokens" is visible at a glance. Two helpers exist because agentic flows hit real product
+pauses and rendering limits: `awaitReplyAnsweringClarifications` (user-input tools PAUSE the
+orchestrator with no auto-answer anywhere in the app — it clicks "Figure it out" + Submit and
+Allows navigation requests while waiting for the reply) and `fitViewportToSurface` (Chromium only
+composites iframe content inside the viewport, so a full-artifact element capture of a story must
+grow the viewport to the surface height first — otherwise everything below the fold captures
+black).
 
 **QA workspace provisioning (`test/qa/provision.setup.ts`).** Env-gated head of the setup chain:
 a no-op unless `QA_PROVISION_WORKSPACE` is set, in which case it registers a FRESH workspace
