@@ -16,6 +16,7 @@ import { validateInitData } from '@/lib/database/validation';
 import { getDataVersion, getSchemaVersion, setDataVersion, setSchemaVersion } from '@/lib/database/config-store';
 import { applyMigrations, getTargetVersions, needsSchemaMigration, MIGRATIONS } from '@/lib/database/migrations';
 import { LATEST_SCHEMA_VERSION } from '@/lib/database/constants';
+import { publishAdminAction } from '@/lib/app-event-registry';
 
 // Exempt from the data-version gate on purpose: this is the route that CLEARS a failing
 // gate, so gating it would make the refusal unescapable.
@@ -86,6 +87,12 @@ export const POST = withAuthSkippingDataVersionGate(async (request: NextRequest,
 
     await setDataVersion(targetDataVersion);
     await setSchemaVersion(LATEST_SCHEMA_VERSION);
+
+    publishAdminAction(user, 'migrate-db', {
+      migrations: appliedMigrations,
+      dataVersion: targetDataVersion,
+      schemaVersion: targetSchemaVersion,
+    });
 
     const isEmptyMigration = force && appliedMigrations.length === 0;
     const successMessage = isEmptyMigration

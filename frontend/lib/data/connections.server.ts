@@ -9,6 +9,12 @@ import 'server-only';
 
 import { DocumentDB } from '@/lib/database/documents-db';
 import { hashContent } from '@/lib/utils/query-hash';
+// Deep imports on purpose (registry + events are leaf modules): the BARREL wires the
+// subscribeAll sink, which imports next/headers — poison for the setup-CLI bundle that
+// transitively includes this file. Handler wiring is still guaranteed in the app: every
+// server entry (lib/http/with-auth.ts, the chat-runtime boot warm) imports the barrel.
+import { appEventRegistry } from '@/lib/app-event-registry/registry';
+import { AppEvents } from '@/lib/app-event-registry/events';
 import { ConnectionContent, DatabaseSchema } from '@/lib/types';
 import {
   IConnectionsDataLayer,
@@ -165,6 +171,17 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
       throw new Error('Failed to create connection');
     }
 
+    // Audit trail: connection creation bypasses FilesAPI (no file event fires).
+    // Name + type only — the config carries credentials.
+    appEventRegistry.publish(AppEvents.CONNECTION_CREATED, {
+      mode: user.mode,
+      connectionName: input.name,
+      connectionType: input.type,
+      userId: typeof user.userId === 'number' ? user.userId : undefined,
+      userEmail: user.email,
+      userRole: user.role,
+    });
+
     const createdContent = created.content as ConnectionContent;
     return {
       connection: {
@@ -230,6 +247,13 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
     }
 
     await DocumentDB.deleteByIds([conn.id]);
+    appEventRegistry.publish(AppEvents.CONNECTION_DELETED, {
+      mode: user.mode,
+      connectionName: name,
+      userId: typeof user.userId === 'number' ? user.userId : undefined,
+      userEmail: user.email,
+      userRole: user.role,
+    });
     // Note: managed-warehouse data files (CSV / Google Sheets parquet) are no
     // longer cleaned up here. The connection document is removed; orphaned data
     // files (if any) are a separate concern.

@@ -31,6 +31,10 @@ export async function enrichEventPayload(
     // Session unavailable.
   }
 
+  // Precedence is DELIBERATE: the payload spreads LAST, so a publisher's own
+  // attribution wins over session-derived enrichment (e.g. share:lead sets
+  // userEmail to the GUEST's email; the session here would be absent or wrong).
+  // Enrichment only fills fields the publisher left unset.
   return {
     type: eventType,
     ...(requestPath ? { requestPath } : {}),
@@ -45,12 +49,24 @@ function isSlackWebhook(url: string): boolean {
   return /hooks\.slack\.com/.test(url);
 }
 
-/** Render an event as a Slack message (`*type*` header + bulleted fields). */
+/** Per-field cap for Slack rendering — a notification, not a data dump. */
+const SLACK_FIELD_MAX_CHARS = 300;
+
+/**
+ * Render an event as a Slack message (`*type*` header + bulleted fields).
+ * Each field's value is truncated: bulky payloads (an `llm:call`'s per-call map,
+ * an `error`'s context object) previously arrived as an unreadable JSON wall
+ * and could leak internals into the channel.
+ */
 function toSlackText(eventType: string, payload: Record<string, unknown>): string {
   const lines = [`*${eventType}*`];
   for (const [k, v] of Object.entries(payload)) {
     if (k === 'type' || v == null) continue;
-    lines.push(`• ${k}: ${typeof v === 'object' ? JSON.stringify(v) : String(v)}`);
+    const rendered = typeof v === 'object' ? JSON.stringify(v) : String(v);
+    const clipped = rendered.length > SLACK_FIELD_MAX_CHARS
+      ? `${rendered.slice(0, SLACK_FIELD_MAX_CHARS)}… (${rendered.length} chars)`
+      : rendered;
+    lines.push(`• ${k}: ${clipped}`);
   }
   return lines.join('\n');
 }

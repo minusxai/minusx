@@ -10,6 +10,12 @@ import { UserFacingError, AccessPermissionError, FileNotFoundError } from '@/lib
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { getConfigs } from '@/lib/data/configs.server';
 import type { AccessRulesOverride } from '@/lib/branding/whitelabel';
+// Deep imports on purpose (registry + events are leaf modules): the BARREL wires the
+// subscribeAll sink, which imports next/headers — poison for the setup-CLI bundle that
+// transitively includes this file. Handler wiring is still guaranteed in the app: every
+// server entry (lib/http/with-auth.ts, the chat-runtime boot warm) imports the barrel.
+import { appEventRegistry } from '@/lib/app-event-registry/registry';
+import { AppEvents } from '@/lib/app-event-registry/events';
 
 /**
  * Server-side implementation of the shares data layer.
@@ -69,6 +75,16 @@ class SharesDataLayerServer implements ISharesDataLayer {
     const file = await this._loadStoryForShareAdmin(fileId, user);
     const { shareableId, record } = createShareLink(file.name, user.userId, label);
     await this._writeShares(file, [...this._readShares(file), record]);
+    // Audit trail: a new PUBLIC link to workspace content now exists.
+    appEventRegistry.publish(AppEvents.SHARE_CREATED, {
+      mode: user.mode,
+      fileId,
+      nonce: record.nonce,
+      ...(label ? { label } : {}),
+      userId: typeof user.userId === 'number' ? user.userId : undefined,
+      userEmail: user.email,
+      userRole: user.role,
+    });
     return { shareableId, path: `/l/${shareableId}`, record };
   }
 
@@ -84,7 +100,17 @@ class SharesDataLayerServer implements ISharesDataLayer {
       }
       return s;
     });
-    if (revoked) await this._writeShares(file, next);
+    if (revoked) {
+      await this._writeShares(file, next);
+      appEventRegistry.publish(AppEvents.SHARE_REVOKED, {
+        mode: user.mode,
+        fileId,
+        nonce,
+        userId: typeof user.userId === 'number' ? user.userId : undefined,
+        userEmail: user.email,
+        userRole: user.role,
+      });
+    }
     return revoked;
   }
 

@@ -8,6 +8,12 @@ import { Mode, DEFAULT_MODE } from '@/lib/mode/mode-types';
 import { validateOrgConfig } from '@/lib/validation/config-validators';
 import { extractConfigSecrets } from '@/lib/secrets/config-secrets.server';
 import { restoreRedactedConfigSecrets } from '@/lib/secrets/config-secret-specs';
+// Deep imports on purpose (registry + events are leaf modules): the BARREL wires the
+// subscribeAll sink, which imports next/headers — poison for the setup-CLI bundle that
+// transitively includes this file. Handler wiring is still guaranteed in the app: every
+// server entry (lib/http/with-auth.ts, the chat-runtime boot warm) imports the barrel.
+import { appEventRegistry } from '@/lib/app-event-registry/registry';
+import { AppEvents } from '@/lib/app-event-registry/events';
 export { validateOrgConfig } from '@/lib/validation/config-validators';
 
 export interface GetConfigsResult {
@@ -72,6 +78,18 @@ class ConfigsDataLayerServer {
     } else {
       id = await DocumentDB.create('config.json', configPath, 'config', mergedContent as any, [], undefined, false);
     }
+
+    // Audit trail: this write bypasses FilesAPI (deliberately — FilesAPI's
+    // permission gate READS this document), so no file event fires for it.
+    // KEY NAMES only, never values: the incoming partial may carry credentials.
+    appEventRegistry.publish(AppEvents.CONFIG_UPDATED, {
+      mode: user.mode,
+      configId: id,
+      changedKeys: Object.keys(incoming),
+      userId: typeof user.userId === 'number' ? user.userId : undefined,
+      userEmail: user.email,
+      userRole: user.role,
+    });
 
     const { config } = await this._loadConfigs(user.mode);
     return { id, config };

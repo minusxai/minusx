@@ -38,6 +38,9 @@ runConversationTurn                        (lib/chat/conversation-turn.server.ts
   ├─ mirrorErrors → appendError (kind='error' rows)
   ├─ setup.recordUsage(piDiff) (llm_call_events + llm_logs + AppEvents.LLM_CALL)
   └─ releaseRunLease(idle|paused|error) + notifyStatus
+     + app events: USER_MESSAGE (browser turns — Slack/MCP publish their own),
+       one CHAT_TURN per segment (status + durationMs), ERROR on a failed turn
+       (the runner is detached, so withAuth never sees turn outcomes)
 
 GET /api/conversations/:id/stream?since=N  (app/api/conversations/[id]/stream/route.ts)
   catch-up SELECT past cursor → subscribe(conversationId) → tail wakeups → done

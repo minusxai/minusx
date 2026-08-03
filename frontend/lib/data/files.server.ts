@@ -1027,6 +1027,19 @@ class FilesDataLayerServer implements IFilesDataLayer {
       }
     }
 
+    // A move/rename mutates the file row without touching content, so the
+    // saveFile publish never fires for it — publish the update here.
+    appEventRegistry.publish(AppEvents.FILE_UPDATED, {
+      mode: user.mode,
+      fileId: id,
+      fileType: file.type,
+      filePath: newPath,
+      fileName: name,
+      userId: typeof user.userId === 'number' ? user.userId : undefined,
+      userEmail: user.email,
+      userRole: user.role,
+    });
+
     return { id, name, path: newPath, oldPath };
   }
 

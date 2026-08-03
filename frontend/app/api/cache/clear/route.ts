@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { successResponse, handleApiError, ApiErrors } from '@/lib/http/api-responses';
 import { withAuth } from '@/lib/http/with-auth';
 import { revalidateTag } from 'next/cache';
+import { publishAdminAction } from '@/lib/app-event-registry';
 
 /**
  * POST /api/cache/clear
@@ -23,6 +24,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
 
     console.log('[Cache] All caches cleared successfully');
 
+    publishAdminAction(user, 'cache-clear', { clearedTags: ['database-schema'] });
     return successResponse({
       message: 'Cache cleared successfully. Database schemas will be re-introspected on next load.',
       clearedTags: ['database-schema']

@@ -19,6 +19,7 @@ import { getModules } from '@/lib/modules/registry';
 import { DEFAULT_STYLES } from '@/lib/branding/whitelabel';
 import { DEFAULT_DB_TYPE } from '@/lib/config';
 import workspaceTemplate from '@/lib/database/workspace-template.json';
+import { publishAdminAction } from '@/lib/app-event-registry';
 
 export const POST = withAuth(async (_request: NextRequest, user) => {
   if (!isAdmin(user.role)) {
@@ -96,6 +97,7 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
     // Sample data needs no re-copy: the tutorial connection's `dataset` entries are
     // read from the published source by the CSV connector on first use.
 
+    publishAdminAction(user, 'reset-tutorial', { documentsCreated: seedDocs.length });
     return NextResponse.json({
       success: true,
       message: 'Workspace template reset to pristine state (user-created files preserved)',
