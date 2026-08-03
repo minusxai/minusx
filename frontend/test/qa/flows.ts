@@ -353,11 +353,16 @@ export function hasLlm(): boolean {
   // Model config is DB-only in the app — auth.setup seeds the workspace's
   // in-app LLM config from these RUNNER env credentials (CI secrets), via the
   // same /api/configs path an admin uses. True when any supported credential
-  // is present: Anthropic-direct, Bedrock, or a self-contained
-  // ANALYST_AGENT_MODEL_CONFIG carrying its own apiKey (any provider).
+  // is present: Anthropic-direct, Bedrock, a self-contained flat
+  // ANALYST_AGENT_MODEL_CONFIG carrying its own apiKey (any provider), or a
+  // grade-keyed AGENT_MODEL_CONFIG with an apiKey on any grade.
   if (process.env.ANTHROPIC_API_KEY || process.env.AWS_BEARER_TOKEN_BEDROCK) return true;
   try {
-    return !!JSON.parse(process.env.ANALYST_AGENT_MODEL_CONFIG || '{}').apiKey;
+    if (JSON.parse(process.env.ANALYST_AGENT_MODEL_CONFIG || '{}').apiKey) return true;
+  } catch { /* malformed — keep checking */ }
+  try {
+    const graded = JSON.parse(process.env.AGENT_MODEL_CONFIG || '{}');
+    return Object.values(graded as Record<string, { apiKey?: string }>).some((c) => !!c?.apiKey);
   } catch {
     return false;
   }

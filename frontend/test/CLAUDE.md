@@ -211,10 +211,15 @@ default baseURL) with the `QA_EMAIL`/`QA_PASSWORD` credentials before auth.setup
 is either the server redirect landing on `QA_BASE_URL`'s host (deployments that serve each
 workspace on its own host) or the in-place "created successfully" notice (single-workspace
 bootstrap) — one spec QAs both. When provisioning ran, auth.setup treats the external target like
-a fresh local one: it marks onboarding complete and seeds the LLM config.
-`ANALYST_AGENT_MODEL_CONFIG` may carry an inline `apiKey` (+ `awsRegion`), making the config
-self-contained for ANY provider; without one the runner-level
-`ANTHROPIC_API_KEY`/`AWS_BEARER_TOKEN_BEDROCK` credentials cover the two defaults as before.
+a fresh local one: it marks onboarding complete and seeds the LLM config. Two runner env shapes:
+`AGENT_MODEL_CONFIG` is grade-keyed (`{lite?, core?, advanced?}`, each a
+`{provider, model, options?, apiKey?, awsRegion?}` — so e.g. `lite`, which micro tasks run on,
+can be a mini model on a different provider than `core`; missing grades fall back to `core`, then
+to the flat config); `ANALYST_AGENT_MODEL_CONFIG` is the legacy flat single choice applied to
+every grade (the CI secret). An inline `apiKey` (+ `awsRegion`) makes a choice self-contained for
+ANY provider; without one the runner-level `ANTHROPIC_API_KEY`/`AWS_BEARER_TOKEN_BEDROCK`
+credentials cover the two defaults as before. Providers are deduped by
+(provider, apiKey, awsRegion) across grades.
 
 That asymmetry explains the rest: there is no faux-assertion helper on the QA side, `qa.yml` must
 supply a real provider credential, and `test/qa/runtime-gate.spec.ts` exists purely to prove the
