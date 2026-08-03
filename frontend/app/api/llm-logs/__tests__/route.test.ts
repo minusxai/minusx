@@ -47,4 +47,23 @@ describe('DELETE /api/llm-logs', () => {
     (getEffectiveUser as Mock).mockResolvedValue({ role: 'admin', userId: 1 });
     expect((await del('?before=not-a-date')).status).toBe(400);
   });
+
+  it('publishes an admin:action audit event on a successful purge', async () => {
+    const captured: { event: string; payload: Record<string, unknown> }[] = [];
+    const { appEventRegistry, AppEvents } = await import('@/lib/app-event-registry');
+    appEventRegistry.subscribeAll((event, payload) => {
+      captured.push({ event, payload: payload as unknown as Record<string, unknown> });
+    });
+    (getEffectiveUser as Mock).mockResolvedValue({ role: 'admin', userId: 1, email: 'a@x.co', mode: 'org' });
+    await seed('purgeme', '2020-01-01T00:00:00.000Z');
+
+    const res = await del('?before=2025-01-01T00:00:00.000Z');
+    expect(res.status).toBe(200);
+
+    const events = captured.filter((c) => c.event === AppEvents.ADMIN_ACTION);
+    expect(events).toHaveLength(1);
+    expect(events[0].payload.action).toBe('clear-llm-logs');
+    expect(events[0].payload.userEmail).toBe('a@x.co');
+    expect((events[0].payload.details as Record<string, unknown>).removed).toBe(1);
+  });
 });
