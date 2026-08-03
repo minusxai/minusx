@@ -25,9 +25,14 @@ const E2E_SECRET = process.env.QA_E2E_SECRET || 'local-qa-secret';
 export const test = base.extend<{ consoleGuard: void }>({
   consoleGuard: [
     async ({ page }, use, testInfo) => {
-      const assertNoConsoleErrors = installConsoleGuard(page);
+      const guard = installConsoleGuard(page);
+      // Stash the live violations getter where the metrics fixture can reach
+      // it: metrics tear down (and persist their pass/fail row) BEFORE this
+      // fixture's assert below runs, so agreeing on the verdict requires
+      // reading the same collected violations, not the test status.
+      (testInfo as { qaConsoleViolations?: () => readonly string[] }).qaConsoleViolations = guard.violations;
       await use();
-      if (testInfo.status === testInfo.expectedStatus) assertNoConsoleErrors();
+      if (testInfo.status === testInfo.expectedStatus) guard.assert();
     },
     { auto: true },
   ],
@@ -545,6 +550,52 @@ export async function firstLlmCallId(page: Page): Promise<string | null> {
   const json = JSON.stringify((await getState(page)) ?? {});
   const m = json.match(/"(?:lllm_call_id|llm_call_id|_lllmCallId)":\s*"([^"]+)"/);
   return m ? m[1] : null;
+}
+
+/**
+ * Sum a conversation's recorded LLM usage from the app's own call stats
+ * (`/api/conversations/[id]/llm-calls`, admin-only — the QA account is the
+ * workspace admin). Nothing is re-counted here: `total_tokens` and `cost` are
+ * the same `llm_call_events` values the in-app debug view shows, and `cost`
+ * is PROVIDER-reported — cache-discounted pricing included — which makes it
+ * the honest spend comparand (per-call token totals re-count the mostly
+ * cached prompt on every call of an agentic turn). Polls until stats land.
+ */
+export async function conversationUsage(
+  request: APIRequestContext,
+  conversationId: number,
+  timeout = 60_000,
+): Promise<{ cost: number; inputCachedTokens: number; inputUncachedTokens: number; outputTokens: number }> {
+  let usage = { cost: 0, inputCachedTokens: 0, inputUncachedTokens: 0, outputTokens: 0 };
+  await expect
+    .poll(
+      async () => {
+        const res = await request.get(`/api/conversations/${conversationId}/llm-calls?mode=${QA_MODE}`);
+        if (!res.ok()) return false;
+        const calls: Array<{
+          stats?: {
+            total_tokens?: number; prompt_tokens?: number; completion_tokens?: number;
+            cached_tokens?: number; cache_creation_tokens?: number; cost?: number;
+          };
+        }> = (await res.json())?.calls ?? [];
+        let total = 0;
+        usage = { cost: 0, inputCachedTokens: 0, inputUncachedTokens: 0, outputTokens: 0 };
+        for (const { stats } of calls) {
+          total += Number(stats?.total_tokens ?? 0);
+          usage.cost += Number(stats?.cost ?? 0);
+          // The exact split /debug's actualSlice uses (lib/convo-debug/costs.ts):
+          // cached input = cacheRead; uncached input = input + cacheWrite;
+          // output stands alone. All provider-reported, nothing re-derived.
+          usage.inputCachedTokens += Number(stats?.cached_tokens ?? 0);
+          usage.inputUncachedTokens += Number(stats?.prompt_tokens ?? 0) + Number(stats?.cache_creation_tokens ?? 0);
+          usage.outputTokens += Number(stats?.completion_tokens ?? 0);
+        }
+        return total > 0;
+      },
+      { message: 'no recorded LLM call stats with tokens for the conversation', timeout },
+    )
+    .toBe(true);
+  return usage;
 }
 
 /** The id of the highest-numbered conversation currently in Redux (the latest one). */

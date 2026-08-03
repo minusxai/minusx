@@ -13,6 +13,8 @@ const runA: RunData = {
   meta: { label: 'run-a', target: 'https://a.example' },
   rows: [
     { flow: 'Chat Question', metric: 'pass', value: true, kind: 'pass' },
+    { flow: 'Chat Question', metric: 'cost_usd', value: 0.0123, kind: 'number' },
+    { flow: 'Chat Question', metric: 'cost_usd', value: 0.011, kind: 'number' },
     { flow: 'Chat Question', metric: 'total_tokens', value: 100, kind: 'number' },
     { flow: 'Chat Question', metric: 'total_tokens', value: 50, kind: 'number' },
     { flow: 'Chat Question', metric: 'conversation', value: 'screens/chat.png', kind: 'image' },
@@ -68,9 +70,14 @@ describe('renderHtml', () => {
     });
     expect(html).toContain('run-a');
     expect(html).toContain('run-b');
+    // Column targets are clickable links to the runs' deployments.
+    expect(html).toContain('<a href="https://a.example"');
+    expect(html).toContain('<a href="https://b.example"');
     expect(html).toContain('PASS');
     expect(html).toContain('FAIL');
     expect(html).toContain('150');
+    // Fractional values (cost) keep enough precision to compare — never "0".
+    expect(html).toContain('0.0233');
     expect(html).toContain(`data:image/png;base64,${png.toString('base64')}`);
     // The run that has no image for the row renders a placeholder, not a broken tag.
     expect(html).toContain('—');
