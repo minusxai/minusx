@@ -85,8 +85,18 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     //
     // A question's queries are governed by ITS OWN path — the nearest context to
     // the file, not the caller's home folder — which is what makes a locked-down
-    // team folder actually lock its questions down. With no filePath there is
-    // nothing to anchor to and the query runs ungoverned (unchanged behaviour).
+    // team folder actually lock its questions down.
+    //
+    // AD-HOC SQL (/explore, no filePath) IS NOT WHITELIST-CHECKED, and closing
+    // that is NOT a one-line change: resolving a whitelist means loading the
+    // context chain, which loads connection files, which runs the connection
+    // loader — schema profiling on the query hot path. That is the exact
+    // regression `query-route-no-profiling.test.ts` exists to prevent (N parallel
+    // dashboard queries each triggering a refresh → gateway timeout → "Failed to
+    // fetch"). Governing this path needs a profiling-free resolver: read the
+    // context RAW (`skipEnrichment`) and validate against the whitelist TREE,
+    // which needs no connection schema. Until then the agent, which is anchored
+    // and checked, is held to a stricter standard here than a human typing SQL.
     let schemaContext: Array<{ schema: string; table: string; columns: string[] }> | null = null;
     let executedQuery = query;
     // Resolved once and reused — the seam already looked it up, and this route is
@@ -111,8 +121,8 @@ export const POST = withAuth(async (request: NextRequest, user) => {
         throw err;
       }
     } else if (mentionsViews(query)) {
-      // No anchor to govern by, but a `_views` reference still has to be inlined
-      // or it reaches the warehouse as a table that does not exist there.
+      // No anchor, but a `_views` reference still has to be inlined or it reaches
+      // the warehouse as a table that does not exist there.
       try {
         queryDialect = await dialectForConnection(connectionName, user.mode);
         const views = await getViewsForPath(resolvePath(user.mode, '/'), connectionName, user);
@@ -123,7 +133,6 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       }
     }
 
-    // Only for the ungoverned, view-free path — every other branch already has it.
     queryDialect ??= await dialectForConnection(connectionName, user.mode);
 
     // ── The execution thunk (runs only on miss / expired / background revalidate) ──

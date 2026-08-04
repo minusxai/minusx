@@ -147,6 +147,22 @@ difference used to be accidental: `{kind:'file', path}` governs a question by th
 **its own path** (what makes a locked-down team folder lock its questions down), `{kind:'homeFolder'}`
 governs free-form chat and MCP, which have no file in hand.
 
+**Metadata is whitelisted too.** The suggestion surfaces (`lib/data/completions/completions.server.ts`
+— mentions, table and column suggestions) resolve the whitelist server-side through
+`getWhitelistForPath` and filter the connection schema before answering. A client-supplied
+`whitelistedSchemas` is now only a **narrowing** applied on top; it used to be the source of truth,
+so a caller that omitted it got the entire warehouse. `/api/autocomplete` is exempt by construction:
+it completes against schema the client already sent, so it can reveal nothing new.
+
+**Known gap — ad-hoc SQL is not whitelist-checked.** `/api/query` with no `filePath` (the `/explore`
+editor) has no anchor and runs unvalidated. Closing it naively re-introduces the dashboard
+"Failed to fetch" storm: resolving a whitelist loads the context chain, which loads connection files,
+which runs the connection loader — schema profiling on the query hot path, which
+`app/api/query/__tests__/query-route-no-profiling.test.ts` exists to prevent. The fix is a
+profiling-free resolver: read the context RAW (`skipEnrichment`) and validate against the whitelist
+TREE, which needs no connection schema at all. Pinned as characterization in
+`app/api/views/__tests__/query-route-views.test.ts`.
+
 **`eslint.config.mjs` enforces the boundary** (`RESTRICT_RUN_QUERY`): importing
 `@/lib/connections/run-query` is an error outside the allowlist block at the bottom of that config —
 the governed surfaces, plus the paths that run already-validated SQL (semantic tier-3 probes, view
