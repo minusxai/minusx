@@ -103,7 +103,7 @@ export default function StepContext({
   const isAgentRunning = agentOutcome === 'running';
   const isAgentDone = agentOutcome === 'done';
   const isAgentFailed = agentOutcome === 'failed';
-  const agentProgress = useAgentProgress(isAgentRunning, isAgentDone);
+  const { progress: agentProgress, isSlow: agentIsSlow } = useAgentProgress(isAgentRunning, isAgentDone);
 
   // Watch the real context file in Redux for agent edits
   const { fileState: contextFile } = useFile(realFileId) ?? {};
@@ -473,6 +473,7 @@ export default function StepContext({
       knowledgeCounts={knowledgeCounts}
       error={error}
       agentProgress={agentProgress}
+      agentIsSlow={agentIsSlow}
       onSkip={handleSkip}
       saving={saving}
       onBack={() => setSubStep('tables')}

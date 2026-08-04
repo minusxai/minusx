@@ -27,6 +27,7 @@ interface StepContextDocsStepProps {
   knowledgeCounts: { metrics: number; annotations: number };
   error: string | null;
   agentProgress: number;
+  agentIsSlow: boolean;
   onSkip: () => void;
   saving: boolean;
   onBack: () => void;
@@ -42,7 +43,7 @@ interface StepContextDocsStepProps {
 /** Sub-step 2: Add Data Context (text + agent) */
 export default function StepContextDocsStep({
   isAgentRunning, isAgentFailed, docContent, hadExistingDocs, showAgentFeed, allDocs, onDocsChange,
-  expandedDocIndices, onExpandedChange, knowledgeCounts, error, agentProgress, onSkip,
+  expandedDocIndices, onExpandedChange, knowledgeCounts, error, agentProgress, agentIsSlow, onSkip,
   saving, onBack, onAgentDescribe, onSave, connectionName, contextPath, showDebug,
   realFileId, reduxState,
 }: StepContextDocsStepProps) {
@@ -126,7 +127,7 @@ export default function StepContextDocsStep({
               [50, 'Writing data documentation...'],
               [80, 'Finishing up...'],
               [100, 'Done!'],
-            ])}
+            ], agentIsSlow)}
           </Text>
           <Progress.Root size="sm" value={agentProgress} flex={1} colorPalette="teal">
             <Progress.Track borderRadius="full" overflow="hidden">

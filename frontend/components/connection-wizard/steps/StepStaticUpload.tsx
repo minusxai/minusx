@@ -23,7 +23,7 @@ function getSchemaNames(config: Record<string, unknown>): string[] {
 }
 
 function SaveConnectionProgress() {
-  const progress = useAgentProgress(true, false, 9);
+  const { progress, isSlow } = useAgentProgress(true, false, 9);
   return (
     <VStack gap={2} align="stretch" pt={2}>
       <style>{`@keyframes saveShimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }`}</style>
@@ -33,7 +33,7 @@ function SaveConnectionProgress() {
           [25, 'Registering tables...'],
           [50, 'Fetching metadata...'],
           [80, 'Almost there...'],
-        ])}
+        ], isSlow)}
       </Text>
       <Progress.Root size="sm" value={progress} colorPalette="teal">
         <Progress.Track borderRadius="full" overflow="hidden">

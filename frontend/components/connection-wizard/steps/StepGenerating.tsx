@@ -159,7 +159,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
   const isRunning = outcome === 'running';
 
   // Progress bar + auto-collapse trace
-  const agentProgress = useAgentProgress(isRunning, isDone, GENERATING_TAU);
+  const { progress: agentProgress, isSlow: agentIsSlow } = useAgentProgress(isRunning, isDone, GENERATING_TAU);
   const wasGeneratingRef = useRef(false);
   useEffect(() => {
     // Collapse the trace once the agent finishes — but NOT when it failed, since the error banner
@@ -430,7 +430,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
                 [65, 'Assembling dashboard layout...'],
                 [85, 'Final touches...'],
                 [100, 'Done!'],
-              ])}
+              ], agentIsSlow)}
             </Text>
             <Progress.Root size="sm" value={agentProgress} colorPalette="teal">
               <Progress.Track borderRadius="full" overflow="hidden">
