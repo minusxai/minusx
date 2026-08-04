@@ -67,15 +67,30 @@ test('slack step: says why it cannot connect instead of showing a dead card', as
   await expect(page.getByLabel('Skip for now')).toBeVisible();
 });
 
-test('completion screen does not claim work the workspace has not done', async ({ page }) => {
+test('completion screen reflects the workspace, and only what it can verify', async ({ page }) => {
+  // Derive the expectation from the API rather than assuming what the seed contains. The first
+  // version of this test asserted "no connection here" and failed precisely because the seeded
+  // workspace ships a `static` connection — the tick was right and the test was wrong. Reading
+  // the state also makes this the assertion worth having: that the row tracks reality.
+  const files = await (await page.request.get('/api/files')).json();
+  const list: { type: string; draft?: boolean }[] = Array.isArray(files) ? files : (files.data ?? []);
+  const hasConnection = list.some((f) => f.type === 'connection' && f.draft !== true);
+
   await setWizardComplete(page);
   await page.goto('/hello-world');
 
   const connectRow = page.locator('[data-guide-item]').filter({ hasText: 'Connect a database' });
   await expect(connectRow).toBeVisible();
-  // No connection in this workspace ⇒ no tick, and no "here's what I built" summary.
-  await expect(connectRow.getByLabel(/done/i)).toHaveCount(0);
-  await expect(page.getByLabel('What setup created')).toHaveCount(0);
+  await expect(connectRow.getByLabel(/done/i)).toHaveCount(hasConnection ? 1 : 0);
+
+  // The seeded contexts exist but hold no docs. A context FILE is not context, so this row must
+  // stay open however many of them the template creates — the distinction the whole fix rests on.
+  const contextRow = page.locator('[data-guide-item]').filter({ hasText: 'Add context about your data' });
+  await expect(contextRow.getByLabel(/done/i)).toHaveCount(0);
+
+  // Never auto-ticked, in any workspace.
+  const inviteRow = page.locator('[data-guide-item]').filter({ hasText: 'Invite colleagues' });
+  await expect(inviteRow.getByLabel(/done/i)).toHaveCount(0);
 });
 
 test('upload step does not flag the dataset name before it is filled', async ({ page }) => {
@@ -84,8 +99,23 @@ test('upload step does not flag the dataset name before it is filled', async ({ 
 
   await page.getByText('CSV', { exact: true }).click();
 
-  // The field is required — Upload stays disabled — but nothing is painted as an error yet.
-  await expect(page.getByLabel('CSV dataset name')).toBeVisible();
+  // The dataset-name field only exists once a file is staged — the panel shows the dropzone until
+  // then. Staging it is what the earlier version of this test missed.
+  await page.getByLabel('CSV file input').setInputFiles({
+    name: 'sales_orders.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from('order_id,region,revenue\n1,North,10\n2,South,20\n'),
+  });
+
+  const name = page.getByLabel('CSV dataset name');
+  await expect(name).toBeVisible();
+
+  // Required — Upload stays disabled — but untouched, so nothing is painted as an error yet.
   await expect(page.getByText('Enter a dataset name above to enable upload.')).toHaveCount(0);
   await expect(page.getByLabel('Upload files')).toBeDisabled();
+
+  // Leaving it empty is what earns the error.
+  await name.click();
+  await name.blur();
+  await expect(page.getByText('Enter a dataset name above to enable upload.')).toBeVisible();
 });
