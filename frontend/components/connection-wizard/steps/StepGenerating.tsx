@@ -244,6 +244,23 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
     }
   }, [virtualDashboardId, onFinish, router]);
 
+  /** Advance to the next step KEEPING the dashboard the agent just built. `publishAll` is not
+   *  optional here: the dashboard and each of its questions are draft files, and a draft that is
+   *  never published is invisible everywhere in the app — `/api/files` does not list it, so the
+   *  completion screen finds no dashboard to link to and opening the file by id shows an empty
+   *  "Let's build your dashboard" grid with 0 questions. Previously this button was a bare
+   *  `onComplete()`, which made "Go to dashboard" and "Connect Slack" differ by whether you kept
+   *  your dashboard at all. Publish failure must still advance — stranding the user on the final
+   *  step with no working control is worse than an unpublished draft. */
+  const handleContinueToSlack = useCallback(async () => {
+    try {
+      await publishAll();
+    } catch (err) {
+      console.error('[StepGenerating] Publish before Slack step failed:', err);
+    }
+    await onComplete?.();
+  }, [onComplete]);
+
   /** Delete EVERY draft file currently in the Redux store, not just the ones this step
    *  created — the wizard is the only surface open at this point. Note: orphan cleanup
    *  (drafts already persisted elsewhere) is a future task. */
@@ -393,7 +410,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
                   size="sm"
                   fontFamily="mono"
                   color="fg.muted"
-                  onClick={() => onComplete?.()}
+                  onClick={handleContinueToSlack}
                 >
                   Connect Slack &rarr;
                 </Button>

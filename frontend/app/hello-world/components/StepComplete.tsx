@@ -234,7 +234,11 @@ export default function StepComplete() {
   const dashboardCriteria = useMemo(() => ({ type: 'dashboard' as const }), []);
   const { files: dashboardFiles } = useFilesByCriteria({ criteria: dashboardCriteria, partial: true });
   const latestDashboard = useMemo(() => {
-    const real = dashboardFiles.filter((f) => (f.id as number) > 0);
+    // Drafts are excluded, not just synthetic negative ids. An unpublished draft dashboard keeps a
+    // real positive id in the store, so it used to satisfy this filter and render a CTA pointing at
+    // a file the server does not list — a button that looks live and goes nowhere. Only a published
+    // dashboard is something the user can actually be sent to.
+    const real = dashboardFiles.filter((f) => (f.id as number) > 0 && f.draft !== true);
     return real.length ? real.reduce((a, b) => ((a.id as number) > (b.id as number) ? a : b)) : null;
   }, [dashboardFiles]);
 
