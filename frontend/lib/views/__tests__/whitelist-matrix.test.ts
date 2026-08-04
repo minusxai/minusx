@@ -157,10 +157,16 @@ describe('whitelist × views access matrix', () => {
   // ── Case 10: mode isolation ────────────────────────────────────────────────
   it('10. a view defined in TUTORIAL is invisible and unqueryable from ORG', async () => {
     await seedContext('/tutorial/context', { views: [V] });
+    // ORG gets a REAL governing context of its own — without one the query would
+    // fail for the uninteresting reason that org has no context at all, and a
+    // regression leaking tutorial's views into org would still pass.
+    await seedContext('/org/context', { views: [] });
 
     const { status, text } = await asQuestionAt('/org/q1', 'SELECT * FROM _views.zone_revenue');
-    expect(status).toBeGreaterThanOrEqual(400);
-    expect(text).toMatch(/unknown view|whitelist|FORBIDDEN_TABLES/i);
+    expect(status).toBe(403); // not in org's whitelisted schema — it is tutorial's view
+    expect(text).toMatch(/FORBIDDEN_TABLES/i);
+    // …and org's own tables are fine, so this is isolation, not a broken context.
+    expect((await asQuestionAt('/org/q1', 'SELECT * FROM mxfood.zones')).status).toBe(200);
 
     // The chat anchor is mode-scoped the same way.
     await expect(asAgent('SELECT * FROM _views.zone_revenue')).rejects.toThrow();
@@ -205,9 +211,13 @@ describe('whitelist × views access matrix', () => {
     await seedContext('/org/context', { views: [V] });
     await seedContext('/org/team/context', { viewWhitelist: [] });
 
+    // 403, not 400: a declined view leaves the child's exposed schema, so table
+    // validation refuses it BEFORE resolution ever looks for a view body. Pinned
+    // to the exact code — "either 400 or 403" would still pass if declining
+    // stopped taking effect and the query started failing somewhere else.
     const child = await asQuestionAt('/org/team/q1', 'SELECT * FROM _views.zone_revenue');
-    expect(child.status).toBeGreaterThanOrEqual(400);
-    expect(child.text).toMatch(/unknown view|whitelist|FORBIDDEN_TABLES/i);
+    expect(child.status).toBe(403);
+    expect(child.text).toMatch(/FORBIDDEN_TABLES/i);
 
     // The parent's questions are unaffected — declining is local to the child.
     expect((await asQuestionAt('/org/q1', 'SELECT * FROM _views.zone_revenue')).status).toBe(200);

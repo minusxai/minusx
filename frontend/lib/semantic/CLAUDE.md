@@ -36,7 +36,8 @@ FilesAPI.loadFile(context)
         parentSchema × own whitelist                                   = fullSchema
         inheritedBy(childPaths) then applyNameWhitelist(...)  → parentViews/fullViews,
                                                                 parentSemanticModels/fullSemanticModels
-      injectViewsAsTables()   → each view becomes a table under the `_views` schema
+      injectViewsAsTables()   → strips any INHERITED `_views` schema, then re-injects
+                                this context's own views as tables under `_views`
                                 (a connection the whitelist fold dropped for having no
                                  whitelisted real tables is RE-ADDED carrying `_views` alone)
       boundFullSchema(fullSchema)  → names-only when > CONTEXT_BUDGETS.contextParentSchemaChars, NEVER drops a table
@@ -146,6 +147,7 @@ View resolution is no longer open-coded per surface: `resolveQueryForExecution` 
 - **Metric SQL is lexed, not parsed.** Every column reference must be qualified (`primary.x` / `<alias>.x`); bare identifiers, quoted identifiers, and references to an m2m alias are all tier-1 errors. The lexer is comment/string-aware, so parens and refs inside literals do not count — deliberately not the polyglot parser, which returns opaque `raw` columns for compound aggregates.
 - **`mentionsViews` is a substring gate, not a parse.** `SELECT '_views.x'` trips it and takes the parse path needlessly; it can never miss a genuine reference.
 - **"Expose the view and nothing else" is the canonical curated setup, and it used to delete the view.** `applyWhitelistToConnections` drops a connection whose filtered schemas are empty, and `injectViewsAsTables` could only decorate connections that survived — so a context exposing no real tables from a connection lost the very view it existed to offer, and the query seam answered 403 for it while `SearchDBSchema` (which reads `version.views`, not `fullSchema`) went on describing it. Such a connection is now re-added carrying `_views` alone; the tables it hides stay hidden (`app/api/views/__tests__/query-route-views.test.ts`, "a VIEWS-ONLY context").
+- **`_views` must never be INHERITED as a schema.** A child inherits its parent's `fullSchema`, and to the whitelist fold the parent's injected `_views` is just another schema — so it rode down the tree, and a child that DECLINED a view still carried it in its whitelisted schema. The query then failed at resolution ("unknown view") rather than being refused, which reads like a bug in the view rather than the decline working. `injectViewsAsTables` therefore strips `_views` from every connection *before* injecting this context's own.
 - **Views must be re-checked on inheritance, not just at save.** A parent narrowing its whitelist later DISABLES the dependent child view with a reason (`viewProblems`) rather than silently escalating it; `resolveViewsForContext` filters disabled views out so the query fails loudly.
 - **`lib/context/dashboard-publish-highlights.tsx`** is a React `createContext` for dashboard publish highlighting — unrelated to knowledge-base contexts, sharing only the directory name.
 

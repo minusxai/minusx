@@ -185,12 +185,17 @@ async function computeContextSchema(file: DbFile, user: EffectiveUser): Promise<
  * a connection is therefore re-added carrying its `_views` schema alone.
  */
 function injectViewsAsTables(schema: DatabaseWithSchema[], views: ViewDef[]): DatabaseWithSchema[] {
-  if (views.length === 0) return schema;
+  // Strip FIRST, unconditionally. A child inherits its parent's `fullSchema`,
+  // which already carries the parent's injected `_views` — and to the whitelist
+  // fold that is an ordinary schema, so it rode down the tree untouched. A child
+  // that DECLINED a view still had it in its whitelisted schema, and only view
+  // resolution stopped the query (a puzzling "unknown view" rather than a
+  // refusal). Each context injects its OWN views and inherits none as tables.
   const present = new Set(schema.map((db) => db.databaseName));
   const decorated = schema.map((db) => {
-    if (!views.some((v) => v.connection === db.databaseName)) return db;
-    const tables = viewsAsSchemaTables(views, db.databaseName);
     const rest = db.schemas.filter((s) => s.schema !== VIEWS_SCHEMA);
+    if (!views.some((v) => v.connection === db.databaseName)) return { ...db, schemas: rest };
+    const tables = viewsAsSchemaTables(views, db.databaseName);
     // Every view on this connection turned OFF leaves no `_views` schema at all,
     // rather than an empty one — "not a table anywhere" should read the same to
     // the picker, the agent's schema and the whitelist validator.
