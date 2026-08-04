@@ -5,6 +5,7 @@ import { Box, VStack, HStack, Text, Heading, Button, Icon } from '@chakra-ui/rea
 import { LuMessageSquare, LuExternalLink, LuCheck } from 'react-icons/lu';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { cursorBlinkKeyframes } from '@/lib/ui/animations';
+import { Link } from '@/components/ui/Link';
 import type { SlackBotConfig } from '@/lib/types';
 
 const TYPEWRITER_SPEED = 35;
@@ -19,7 +20,9 @@ export default function StepSlack({ onComplete, greeting }: StepSlackProps) {
   const slackBots = (config.bots ?? []).filter((bot): bot is SlackBotConfig => bot.type === 'slack');
   const isConnected = slackBots.length > 0;
 
+  // Two independent capabilities, three rendered states — see the block above the card below.
   const [isOAuthConfigured, setIsOAuthConfigured] = useState(false);
+  const [isSelfHostEnabled, setIsSelfHostEnabled] = useState(false);
 
   // Typewriter effect for greeting
   const [displayedText, setDisplayedText] = useState('');
@@ -43,8 +46,11 @@ export default function StepSlack({ onComplete, greeting }: StepSlackProps) {
 
   useEffect(() => {
     fetch('/api/integrations/slack/oauth-configured', { credentials: 'include' })
-      .then(r => r.ok ? r.json() : { data: { configured: false } })
-      .then((body: { data?: { configured?: boolean } }) => setIsOAuthConfigured(body.data?.configured ?? false))
+      .then(r => r.ok ? r.json() : { data: { configured: false, selfHostedEnabled: false } })
+      .then((body: { data?: { configured?: boolean; selfHostedEnabled?: boolean } }) => {
+        setIsOAuthConfigured(body.data?.configured ?? false);
+        setIsSelfHostEnabled(body.data?.selfHostedEnabled ?? false);
+      })
       .catch(() => {});
   }, []);
 
@@ -121,6 +127,7 @@ export default function StepSlack({ onComplete, greeting }: StepSlackProps) {
               <Text fontSize="sm" color="fg.muted" textAlign="center" maxW="400px">
                 Install the bot to your workspace so your team can ask questions and get answers directly in Slack.
               </Text>
+              {/* Hosted OAuth: one click, nothing to configure. */}
               {isOAuthConfigured && (
                 <Button
                   bg="accent.teal"
@@ -134,9 +141,39 @@ export default function StepSlack({ onComplete, greeting }: StepSlackProps) {
                   Add to Slack
                 </Button>
               )}
-              {!isOAuthConfigured && (
-                <Text fontSize="xs" color="fg.subtle" fontFamily="mono">
-                  Slack OAuth is not configured. You can set this up later in Settings.
+
+              {/* No hosted credentials, but Slack can reach this instance — the admin can register
+                  their own app. Signpost, don't inline: that guide spans a public-URL field, a
+                  generated manifest, a round trip to api.slack.com and two pasted secrets. It is the
+                  heaviest task in the product and belongs nowhere near the end of first-run setup,
+                  and Settings already renders it as the primary flow when OAuth is absent. */}
+              {!isOAuthConfigured && isSelfHostEnabled && (
+                <>
+                  <Text fontSize="xs" color="fg.subtle" fontFamily="mono" textAlign="center" maxW="400px">
+                    This workspace doesn&apos;t have one-click install, but you can connect your own
+                    Slack app.
+                  </Text>
+                  <Button
+                    asChild
+                    variant="outline"
+                    size="sm"
+                    fontFamily="mono"
+                  >
+                    <Link href="/settings?tab=integrations">
+                      <LuExternalLink size={14} />
+                      Set up Slack in Settings
+                    </Link>
+                  </Button>
+                </>
+              )}
+
+              {/* Neither flow can work: Slack delivers events over the public internet, and this
+                  instance has no public HTTPS URL to deliver them to. Offering a button here would
+                  send the user to a guide that 403s at its second step. */}
+              {!isOAuthConfigured && !isSelfHostEnabled && (
+                <Text fontSize="xs" color="fg.subtle" fontFamily="mono" textAlign="center" maxW="400px">
+                  Slack needs a public HTTPS URL to reach this workspace. Once this instance has one,
+                  connect Slack from Settings.
                 </Text>
               )}
             </>
