@@ -110,14 +110,29 @@ export function HelloWorldContent() {
     }
   }, []);
 
-  // Mark wizard complete in config
+  // Mark wizard complete in config.
+  //
+  // The no-usable-provider guard lives HERE, not in a caller. Only a workspace that can
+  // actually run the agent counts as SET UP, and completion is also what stops the wizard
+  // being offered — so completing without a provider leaves a "You're all set!" screen over
+  // a workspace with no route back to the step that fixes it.
+  //
+  // It sat in `handleSkipToHome` alone while this function was handed to ConnectionWizard as
+  // `onComplete`, which the wizard calls from the step-indicator Skip, StepSlack, StepContext
+  // and StepGenerating. Every one of those walked past the guard. A guard in one caller is a
+  // guard the next caller forgets; in the completion path itself the bypass is unrepresentable.
   const handleComplete = useCallback(async () => {
+    if (!hasUsableLlmProvider(config.llm)) {
+      setStep('models');
+      persistStep('models');
+      return;
+    }
     try {
       await updateConfig({ setupWizard: { status: 'complete' } });
     } catch (err) {
       console.error('[HelloWorldContent] Failed to mark onboarding complete:', err);
     }
-  }, []);
+  }, [config.llm, persistStep]);
 
   // Show the AI-model step until a provider can actually AUTHENTICATE. Testing for a provider
   // ENTRY instead is what let a credential-less row hide this step: `Add provider` writes a
@@ -132,22 +147,15 @@ export function HelloWorldContent() {
     persistStep(first);
   }, [persistStep, includeModelsStep]);
 
-  // Skipping leaves the wizard, but only a workspace that can actually run the agent counts as
-  // SET UP. Marking it complete regardless is what produced a "You're all set!" screen over a
-  // workspace with no usable provider — and, because completion also stops the wizard being
-  // offered, no route back to the step that fixes it.
+  // "Skip Setup" is now just completion — the provider guard it used to carry moved into
+  // `handleComplete`, where every other exit from the wizard passes through it too.
   const handleSkipToHome = useCallback(async () => {
-    if (!hasUsableLlmProvider(config.llm)) {
-      setStep('models');
-      persistStep('models');
-      return;
-    }
     try {
       await handleComplete();
     } catch (err) {
       console.error('[HelloWorldContent] Skip setup failed to mark complete:', err);
     }
-  }, [handleComplete, config.llm, persistStep]);
+  }, [handleComplete]);
 
   // Skip Step 1 by reusing the first existing connection
   const handleSkipConnection = useCallback(() => {

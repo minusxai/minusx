@@ -18,14 +18,19 @@ const stepperKeyframes = `
   }
 `;
 
+// No skip affordance here on purpose. This bar used to carry a bare "Skip" link at its right
+// edge, which read as "skip this step" from its position but ended the ENTIRE wizard — the same
+// outcome as the "Skip Setup" button already sitting in the top-right corner. Two controls, one
+// meaning, and the ambiguous one was the destructive-looking-cheaper of the two. Per-step escapes
+// live on the steps that have them ("Skip & figure out later", "Build dashboard manually"), where
+// their scope is unmistakable.
 interface StepIndicatorBarProps {
   currentStep: ConnectionWizardStep;
   showSlackStep?: boolean;
   showModelsStep?: boolean;
-  onSkip?: () => void;
 }
 
-export default function StepIndicatorBar({ currentStep, showSlackStep = false, showModelsStep = false, onSkip }: StepIndicatorBarProps) {
+export default function StepIndicatorBar({ currentStep, showSlackStep = false, showModelsStep = false }: StepIndicatorBarProps) {
   const STEPS: ConnectionWizardStep[] = [
     ...(showModelsStep ? (['models'] as ConnectionWizardStep[]) : []),
     ...BASE_STEPS,
@@ -168,21 +173,6 @@ export default function StepIndicatorBar({ currentStep, showSlackStep = false, s
           })}
         </HStack>
 
-        {onSkip && (
-          <Text
-            as="button"
-            position="absolute"
-            right={6}
-            fontSize="xs"
-            fontFamily="mono"
-            color="fg.subtle"
-            cursor="pointer"
-            _hover={{ color: 'fg.muted', textDecoration: 'underline' }}
-            onClick={onSkip}
-          >
-            Skip
-          </Text>
-        )}
       </Flex>
     </>
   );
