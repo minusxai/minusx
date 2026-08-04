@@ -23,7 +23,7 @@ function getSchemaNames(config: Record<string, unknown>): string[] {
 }
 
 function SaveConnectionProgress() {
-  const progress = useAgentProgress(true, false, 9);
+  const { progress, isSlow } = useAgentProgress(true, false, 9);
   return (
     <VStack gap={2} align="stretch" pt={2}>
       <style>{`@keyframes saveShimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }`}</style>
@@ -32,8 +32,7 @@ function SaveConnectionProgress() {
           [0, 'Saving connection...'],
           [25, 'Registering tables...'],
           [50, 'Fetching metadata...'],
-          [80, 'Almost there...'],
-        ])}
+        ], isSlow)}
       </Text>
       <Progress.Root size="sm" value={progress} colorPalette="teal">
         <Progress.Track borderRadius="full" overflow="hidden">
@@ -148,7 +147,9 @@ export default function StepStaticUpload({ tab, onComplete, onBack }: StepStatic
           <LuArrowLeft size={20} />
         </Button>
         <Box>
-          <Heading fontSize="2xl" fontWeight="900" letterSpacing="-0.02em">
+          {/* Mono at weight 400, matching every other wizard heading. This screen shipped in a
+              proportional sans at weight 900 and read as though it belonged to a different app. */}
+          <Heading fontSize="2xl" fontFamily="mono" fontWeight="400" letterSpacing="-0.02em">
             {tab === 'csv' ? 'Upload a data file' : 'Import Google Sheets'}
           </Heading>
           <Text color="fg.muted" fontSize="sm">

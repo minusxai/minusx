@@ -24,6 +24,15 @@ import type { ActivePanel } from './StaticConnectionConfig';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+/**
+ * Whether the dataset-name error has EARNED the right to be shown. The field is required from
+ * the first frame, but presenting it as an error before the user has had a chance to fill it
+ * accuses them of a mistake they have not made — and this panel is the first screen of first-run
+ * setup, where that reads as "you broke something".
+ *
+ * Requiredness (the asterisk, the disabled Upload button) is unconditional; only the red styling
+ * and the warning line wait for a blur or a rejected upload attempt.
+ */
 interface PendingFile {
   file: File;
   schemaName: string;
@@ -63,6 +72,10 @@ export function CsvUploadPanel({
 }: CsvUploadPanelProps) {
   // ── CSV upload state ──────────────────────────────────────────────────────
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
+  const [schemaNameTouched, setSchemaNameTouched] = useState(false);
+  const missingSchemaName = !pendingFiles[0]?.schemaName;
+  /** Required is not the same as "show the error" — see the note above PendingFile. */
+  const showSchemaNameError = missingSchemaName && schemaNameTouched;
   const [uploadStage, setUploadStage] = useState<string>('');
 
   // Notify parent when pending files change
@@ -224,12 +237,13 @@ export function CsvUploadPanel({
         <VStack align="stretch" gap={3}>
           {/* Dataset name — shared across all files in this upload */}
           <Box>
-            <Text fontSize="xs" fontWeight="600" mb={1}>Dataset Name {!pendingFiles[0]?.schemaName && <Text as="span" color="accent.danger">*</Text>}</Text>
+            <Text fontSize="xs" fontWeight="600" mb={1}>Dataset Name {missingSchemaName && <Text as="span" color={showSchemaNameError ? 'accent.danger' : 'fg.muted'}>*</Text>}</Text>
             <Input
               size="sm"
               fontFamily="mono"
-              borderColor={!pendingFiles[0]?.schemaName ? 'accent.danger' : undefined}
-              _focus={!pendingFiles[0]?.schemaName ? { borderColor: 'accent.danger', boxShadow: '0 0 0 1px var(--chakra-colors-accent-danger)' } : undefined}
+              borderColor={showSchemaNameError ? 'accent.danger' : undefined}
+              _focus={showSchemaNameError ? { borderColor: 'accent.danger', boxShadow: '0 0 0 1px var(--chakra-colors-accent-danger)' } : undefined}
+              onBlur={() => setSchemaNameTouched(true)}
               value={pendingFiles[0]?.schemaName ?? ''}
               onChange={(e) => {
                 const v = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_');
@@ -327,7 +341,7 @@ export function CsvUploadPanel({
           >
             <LuUpload size={14} /> Upload
           </Button>
-          {!pendingFiles[0]?.schemaName && (
+          {showSchemaNameError && (
             <Text fontSize="2xs" color="accent.warning">
               Enter a dataset name above to enable upload.
             </Text>

@@ -14,6 +14,7 @@ import {
   rotateBorderKeyframes,
   cursorBlinkKeyframes,
 } from '@/lib/ui/animations';
+import { useTypewriter } from '@/lib/ui/use-typewriter';
 import { type WizardStep } from './onboarding-state';
 import StepComplete from './components/StepComplete';
 import { useConfigs, updateConfig } from '@/lib/hooks/useConfigs';
@@ -22,7 +23,6 @@ import { useAppSelector } from '@/store/hooks';
 import ConnectionWizard from '@/components/connection-wizard/ConnectionWizard';
 import { asWizardStep, type ConnectionWizardStep, type QuestionnaireAnswers } from '@/components/connection-wizard/ConnectionWizardTypes';
 
-const TYPEWRITER_SPEED = 35; // ms per character
 
 export function HelloWorldContent() {
   const dispatch = useAppDispatch();
@@ -47,10 +47,20 @@ export function HelloWorldContent() {
   const savedWizard = config.setupWizard;
   const isComplete = savedWizard?.status === 'complete';
   const [step, setStep] = useState<WizardStep>(() => savedWizard?.step ?? 'welcome');
+  /**
+   * A step this component FORCES the wizard onto, overriding both its mounted state and the
+   * persisted one. ConnectionWizard seeds its step with `useState(initialStep)`, so a changed prop
+   * is ignored once mounted; and `persistStep` is async, so a remount keyed off config would race
+   * the write and re-read the step we are trying to leave. Only the completion guard uses this —
+   * without it, a refused completion left the user on the screen they had just tried to leave with
+   * the button apparently doing nothing.
+   */
+  const [forcedStep, setForcedStep] = useState<ConnectionWizardStep | null>(null);
 
-  // Typewriter state
-  const [displayedText, setDisplayedText] = useState('');
-  const [typingDone, setTypingDone] = useState(false);
+  // Only the welcome screen types; the wizard steps run their own headings.
+  const { displayed: displayedText, done: typingDone } = useTypewriter(
+    step === 'welcome' ? fullGreeting : undefined
+  );
   const [cardsVisible, setCardsVisible] = useState(false);
 
   // Orb movement
@@ -80,21 +90,13 @@ export function HelloWorldContent() {
     return () => { clearInterval(i1); clearInterval(i2); clearInterval(i3); };
   }, [moveOrb]);
 
-  // Typewriter effect
+  // The action cards fade in a beat after the greeting lands — including when the user cuts the
+  // typing short, which is the whole point of being able to.
   useEffect(() => {
-    if (step !== 'welcome') return;
-    let i = 0;
-    const interval = setInterval(() => {
-      i++;
-      setDisplayedText(fullGreeting.slice(0, i));
-      if (i >= fullGreeting.length) {
-        clearInterval(interval);
-        setTypingDone(true);
-        setTimeout(() => setCardsVisible(true), 300);
-      }
-    }, TYPEWRITER_SPEED);
-    return () => clearInterval(interval);
-  }, [step, fullGreeting]);
+    if (step !== 'welcome' || !typingDone) return;
+    const t = setTimeout(() => setCardsVisible(true), 300);
+    return () => clearTimeout(t);
+  }, [step, typingDone]);
 
   // Persist wizard step to config so it survives page refresh
   const persistStep = useCallback(async (
@@ -110,14 +112,30 @@ export function HelloWorldContent() {
     }
   }, []);
 
-  // Mark wizard complete in config
+  // Mark wizard complete in config.
+  //
+  // The no-usable-provider guard lives HERE, not in a caller. Only a workspace that can
+  // actually run the agent counts as SET UP, and completion is also what stops the wizard
+  // being offered — so completing without a provider leaves a "You're all set!" screen over
+  // a workspace with no route back to the step that fixes it.
+  //
+  // It sat in `handleSkipToHome` alone while this function was handed to ConnectionWizard as
+  // `onComplete`, which the wizard calls from the step-indicator Skip, StepSlack, StepContext
+  // and StepGenerating. Every one of those walked past the guard. A guard in one caller is a
+  // guard the next caller forgets; in the completion path itself the bypass is unrepresentable.
   const handleComplete = useCallback(async () => {
+    if (!hasUsableLlmProvider(config.llm)) {
+      setForcedStep('models');
+      setStep('models');
+      persistStep('models');
+      return;
+    }
     try {
       await updateConfig({ setupWizard: { status: 'complete' } });
     } catch (err) {
       console.error('[HelloWorldContent] Failed to mark onboarding complete:', err);
     }
-  }, []);
+  }, [config.llm, persistStep]);
 
   // Show the AI-model step until a provider can actually AUTHENTICATE. Testing for a provider
   // ENTRY instead is what let a credential-less row hide this step: `Add provider` writes a
@@ -127,27 +145,21 @@ export function HelloWorldContent() {
   const [includeModelsStep] = useState(() => !hasUsableLlmProvider(config.llm));
 
   const handleStartConnection = useCallback(() => {
+    setForcedStep(null);
     const first = includeModelsStep ? 'models' : 'connection';
     setStep(first);
     persistStep(first);
   }, [persistStep, includeModelsStep]);
 
-  // Skipping leaves the wizard, but only a workspace that can actually run the agent counts as
-  // SET UP. Marking it complete regardless is what produced a "You're all set!" screen over a
-  // workspace with no usable provider — and, because completion also stops the wizard being
-  // offered, no route back to the step that fixes it.
+  // "Skip Setup" is now just completion — the provider guard it used to carry moved into
+  // `handleComplete`, where every other exit from the wizard passes through it too.
   const handleSkipToHome = useCallback(async () => {
-    if (!hasUsableLlmProvider(config.llm)) {
-      setStep('models');
-      persistStep('models');
-      return;
-    }
     try {
       await handleComplete();
     } catch (err) {
       console.error('[HelloWorldContent] Skip setup failed to mark complete:', err);
     }
-  }, [handleComplete, config.llm, persistStep]);
+  }, [handleComplete]);
 
   // Skip Step 1 by reusing the first existing connection
   const handleSkipConnection = useCallback(() => {
@@ -214,6 +226,7 @@ export function HelloWorldContent() {
           color="white"
           fontFamily="mono"
           _hover={{ opacity: 0.9 }}
+          aria-label="Skip setup"
           onClick={handleSkipToHome}
         >
           Skip Setup &rarr;
@@ -275,6 +288,7 @@ export function HelloWorldContent() {
                   borderRadius="xl"
                   cursor="pointer"
                   transition="transform 0.2s ease-out"
+                  aria-label="Connect your data"
                   onClick={handleStartConnection}
                   _hover={{ transform: 'translateY(-4px)' }}
                   css={{ animation: 'fadeInUp 0.5s ease-out forwards', opacity: 0 }}
@@ -311,6 +325,7 @@ export function HelloWorldContent() {
                   borderRadius="xl"
                   cursor="pointer"
                   transition="transform 0.2s ease-out"
+                  aria-label="Try demo"
                   onClick={() => switchMode('tutorial')}
                   _hover={{ transform: 'translateY(-4px)' }}
                   css={{ animation: 'fadeInUp 0.5s ease-out 0.1s forwards', opacity: 0 }}
@@ -366,7 +381,14 @@ export function HelloWorldContent() {
       {isWizard && !isComplete && (
         <Box position="relative" zIndex={1} w="100%" maxW="1060px" mx="auto">
           <ConnectionWizard
-            initialStep={asWizardStep(savedWizard?.step) ?? (includeModelsStep ? 'models' : 'connection')}
+            // Keyed so a step this component FORCES actually takes effect. ConnectionWizard seeds
+            // its own step with `useState(initialStep)`, so once mounted a changed prop is ignored
+            // — the completion guard could write `step: 'models'` and leave the user staring at the
+            // screen they just tried to leave, with the button apparently doing nothing. `step`
+            // only changes on the three jumps this component owns (start, skip-connection, guard),
+            // never on ordinary wizard progression, so this remounts exactly when it should.
+            key={forcedStep ?? 'wizard'}
+            initialStep={forcedStep ?? asWizardStep(savedWizard?.step) ?? (includeModelsStep ? 'models' : 'connection')}
             initialConnectionId={savedWizard?.connectionId}
             initialConnectionName={savedWizard?.connectionName}
             initialContextFileId={savedWizard?.contextFileId}

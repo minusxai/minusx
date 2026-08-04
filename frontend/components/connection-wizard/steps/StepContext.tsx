@@ -18,13 +18,13 @@ import { compressAugmentedFile } from '@/lib/chat/compress-augmented';
 import { mergeWhitelist } from '@/lib/context/context-utils';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import type { ContextContent, Whitelist, WhitelistNode, DocEntry } from '@/lib/types';
+import { useTypewriter } from '@/lib/ui/use-typewriter';
 import { useAgentProgress } from '../useAgentProgress';
 import { wizardAgentOutcome } from '../agent-outcome';
 import type { QuestionnaireAnswers } from '../ConnectionWizardTypes';
 import StepContextTablesStep from './StepContextTablesStep';
 import StepContextDocsStep from './StepContextDocsStep';
 
-const TYPEWRITER_SPEED = 35;
 
 const AGENT_DESCRIBE_MESSAGE = 'Write the data documentation for this database.';
 
@@ -68,25 +68,7 @@ export default function StepContext({
   const [error, setError] = useState<string | null>(null);
   const [showAgentFeed, setShowAgentFeed] = useState(false);
   const [subStep, setSubStep] = useState<ContextSubStep>('tables');
-  // Typewriter effect for greeting
-  const [displayedText, setDisplayedText] = useState('');
-  const [typingDone, setTypingDone] = useState(!greeting);
-
-  useEffect(() => {
-    if (!greeting) return;
-    let i = 0;
-    setDisplayedText('');
-    setTypingDone(false);
-    const interval = setInterval(() => {
-      i++;
-      setDisplayedText(greeting.slice(0, i));
-      if (i >= greeting.length) {
-        clearInterval(interval);
-        setTypingDone(true);
-      }
-    }, TYPEWRITER_SPEED);
-    return () => clearInterval(interval);
-  }, [greeting]);
+  const { displayed: displayedText, done: typingDone } = useTypewriter(greeting);
 
   // Track if agent is still running
   const activeConvId = useAppSelector(selectActiveConversation);
@@ -103,7 +85,7 @@ export default function StepContext({
   const isAgentRunning = agentOutcome === 'running';
   const isAgentDone = agentOutcome === 'done';
   const isAgentFailed = agentOutcome === 'failed';
-  const agentProgress = useAgentProgress(isAgentRunning, isAgentDone);
+  const { progress: agentProgress, isSlow: agentIsSlow } = useAgentProgress(isAgentRunning, isAgentDone);
 
   // Watch the real context file in Redux for agent edits
   const { fileState: contextFile } = useFile(realFileId) ?? {};
@@ -473,6 +455,7 @@ export default function StepContext({
       knowledgeCounts={knowledgeCounts}
       error={error}
       agentProgress={agentProgress}
+      agentIsSlow={agentIsSlow}
       onSkip={handleSkip}
       saving={saving}
       onBack={() => setSubStep('tables')}

@@ -20,9 +20,9 @@ import ChatInterface from '@/components/explore/ChatInterface';
 import { useAgentProgress, getProgressMessage } from '../useAgentProgress';
 import { wizardAgentOutcome } from '../agent-outcome';
 import { useConfigs } from '@/lib/hooks/useConfigs';
+import { useTypewriter } from '@/lib/ui/use-typewriter';
 import type { QuestionnaireAnswers } from '../ConnectionWizardTypes';
 
-const TYPEWRITER_SPEED = 35;
 const GENERATING_TAU = 40; // ~90% at ~92s — feels like about a minute
 
 const DASHBOARD_PROMPT = `Let's build the dashboard!`;
@@ -85,25 +85,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
   const [ownConvId, setOwnConvId] = useState<number | null>(null);
   const [userPreference, setUserPreference] = useState(initialPreference ?? '');
 
-  // Typewriter effect for greeting
-  const [displayedText, setDisplayedText] = useState('');
-  const [typingDone, setTypingDone] = useState(!greeting);
-
-  useEffect(() => {
-    if (!greeting) return;
-    let i = 0;
-    setDisplayedText('');
-    setTypingDone(false);
-    const interval = setInterval(() => {
-      i++;
-      setDisplayedText(greeting.slice(0, i));
-      if (i >= greeting.length) {
-        clearInterval(interval);
-        setTypingDone(true);
-      }
-    }, TYPEWRITER_SPEED);
-    return () => clearInterval(interval);
-  }, [greeting]);
+  const { displayed: displayedText, done: typingDone } = useTypewriter(greeting);
 
   // Create draft dashboard file on mount
   const hasCreatedDraft = useRef(false);
@@ -139,7 +121,10 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
   useEffect(() => {
     if (!isGenerating || !conversation) return;
     if (conversation.executionState !== 'FINISHED') return;
-     
+    // Syncing a local flag FROM an external system (the Redux conversation), which is what an
+    // effect is for. Deriving it during render instead would lose the distinction the comment
+    // below depends on: `isGenerating` is the flag the effects drive, `isRunning` is the outcome.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsGenerating(false);
   }, [isGenerating, conversation]);
 
@@ -159,13 +144,14 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
   const isRunning = outcome === 'running';
 
   // Progress bar + auto-collapse trace
-  const agentProgress = useAgentProgress(isRunning, isDone, GENERATING_TAU);
+  const { progress: agentProgress, isSlow: agentIsSlow } = useAgentProgress(isRunning, isDone, GENERATING_TAU);
   const wasGeneratingRef = useRef(false);
   useEffect(() => {
     // Collapse the trace once the agent finishes — but NOT when it failed, since the error banner
     // the user has to act on is inside the trace.
     if (wasGeneratingRef.current && !isGenerating && hasStarted && !isFailed) {
-
+      // Collapse on the TRANSITION out of generating, which only a ref comparison can see.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowTrace(false);
     }
     wasGeneratingRef.current = isGenerating;
@@ -226,6 +212,9 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
     if (hasAutoTriggered.current || !initialPreference?.trim() || !virtualDashboardId || hasStarted) return;
     if (databases.length === 0) return; // schema not loaded yet
     hasAutoTriggered.current = true;
+    // Kicks off the agent run — the setState inside is the START of external work, not a render
+    // derivation. The ref guard is what keeps it to exactly one dispatch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     handleGenerate();
   }, [initialPreference, virtualDashboardId, hasStarted, handleGenerate, databases.length]);
 
@@ -244,6 +233,23 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
     }
   }, [virtualDashboardId, onFinish, router]);
 
+  /** Advance to the next step KEEPING the dashboard the agent just built. `publishAll` is not
+   *  optional here: the dashboard and each of its questions are draft files, and a draft that is
+   *  never published is invisible everywhere in the app — `/api/files` does not list it, so the
+   *  completion screen finds no dashboard to link to and opening the file by id shows an empty
+   *  "Let's build your dashboard" grid with 0 questions. Previously this button was a bare
+   *  `onComplete()`, which made "Go to dashboard" and "Connect Slack" differ by whether you kept
+   *  your dashboard at all. Publish failure must still advance — stranding the user on the final
+   *  step with no working control is worse than an unpublished draft. */
+  const handleContinueToSlack = useCallback(async () => {
+    try {
+      await publishAll();
+    } catch (err) {
+      console.error('[StepGenerating] Publish before Slack step failed:', err);
+    }
+    await onComplete?.();
+  }, [onComplete]);
+
   /** Delete EVERY draft file currently in the Redux store, not just the ones this step
    *  created — the wizard is the only surface open at this point. Note: orphan cleanup
    *  (drafts already persisted elsewhere) is a future task. */
@@ -257,16 +263,27 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
     }
   }, []);
 
-  /** Skip: interrupt agent, mark wizard complete, go home */
+  /**
+   * "Build dashboard manually": interrupt the agent, but KEEP what it produced and open it.
+   *
+   * This used to be byte-identical to `handleGoHome` — discard every draft and land on the home
+   * folder — so the control offering to let you finish the dashboard yourself deleted the
+   * dashboard first. Whatever the agent managed before the interrupt is the starting point the
+   * label promises, and a partial dashboard is strictly more use than an empty folder.
+   */
   const handleSkip = useCallback(async () => {
     const convToInterrupt = ownConvId ?? activeConvId;
     if (convToInterrupt) {
       dispatch(interruptChat({ conversationID: convToInterrupt }));
     }
-    discardDraftFiles();
+    try {
+      await publishAll();
+    } catch (err) {
+      console.error('[StepGenerating] Publish before manual build failed:', err);
+    }
     if (onComplete) await onComplete();
-    router.push(preserveModeParam('/p/org'));
-  }, [ownConvId, activeConvId, dispatch, router, onComplete, discardDraftFiles]);
+    router.push(preserveModeParam(virtualDashboardId ? `/f/${virtualDashboardId}` : '/p/org'));
+  }, [ownConvId, activeConvId, dispatch, router, onComplete, virtualDashboardId]);
 
   /** Skip everything and go home */
   const handleGoHome = useCallback(async () => {
@@ -393,7 +410,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
                   size="sm"
                   fontFamily="mono"
                   color="fg.muted"
-                  onClick={() => onComplete?.()}
+                  onClick={handleContinueToSlack}
                 >
                   Connect Slack &rarr;
                 </Button>
@@ -413,7 +430,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
                 [65, 'Assembling dashboard layout...'],
                 [85, 'Final touches...'],
                 [100, 'Done!'],
-              ])}
+              ], agentIsSlow)}
             </Text>
             <Progress.Root size="sm" value={agentProgress} colorPalette="teal">
               <Progress.Track borderRadius="full" overflow="hidden">

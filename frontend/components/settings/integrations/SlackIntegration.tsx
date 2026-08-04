@@ -43,7 +43,7 @@ function StepBadge({ n, done }: { n: number; done?: boolean }) {
   );
 }
 
-function SlackSetupGuide({ isOAuthConfigured }: { isOAuthConfigured: boolean }) {
+function SlackSetupGuide({ isOAuthConfigured, isSelfHostEnabled }: { isOAuthConfigured: boolean; isSelfHostEnabled: boolean }) {
   const { config } = useConfigs();
   const [baseUrl, setBaseUrl] = useState(() => {
     if (typeof window === 'undefined') return '';
@@ -246,7 +246,7 @@ function SlackSetupGuide({ isOAuthConfigured }: { isOAuthConfigured: boolean }) 
           )}
 
           {/* Manual setup — primary when no OAuth; collapsible toggle when OAuth available */}
-          {isOAuthConfigured && (
+          {isOAuthConfigured && isSelfHostEnabled && (
             <Button
               variant="ghost"
               size="xs"
@@ -260,7 +260,24 @@ function SlackSetupGuide({ isOAuthConfigured }: { isOAuthConfigured: boolean }) 
             </Button>
           )}
 
-          {(!isOAuthConfigured || manualExpanded) && (
+          {/* Slack delivers events over the public internet, so the manual flow needs a public
+              HTTPS base URL — exactly what `manifest` and `manual-install` 403 without. Without
+              this gate the whole guide rendered on a localhost install and the truth only surfaced
+              as a 403 at "Generate manifest", two steps in. */}
+          {!isOAuthConfigured && !isSelfHostEnabled && (
+            <Box borderWidth="1px" borderColor="border" borderRadius="md" p={4}>
+              <Text fontSize="sm" fontWeight="semibold" fontFamily="mono" mb={1}>
+                Slack needs a public HTTPS URL
+              </Text>
+              <Text fontSize="xs" color="fg.muted" fontFamily="mono">
+                Slack delivers events over the public internet, so it cannot reach this instance at
+                its current address. Once it is served over a public HTTPS URL, you can install the
+                bot from here.
+              </Text>
+            </Box>
+          )}
+
+          {isSelfHostEnabled && (!isOAuthConfigured || manualExpanded) && (
             <>
               {/* Step 1: Instance URL (dev only) */}
               {IS_DEV && (
@@ -519,6 +536,11 @@ function SlackSetupGuide({ isOAuthConfigured }: { isOAuthConfigured: boolean }) 
 
 export function SlackIntegration() {
   const [isOAuthConfigured, setIsOAuthConfigured] = useState(false);
+  // Optimistic on an unknown answer. A failed probe is not a "no": this endpoint 502'd twice
+  // against a real deployment, and pessimism here would hide the whole Slack setup UI and tell an
+  // admin their instance has no public URL when we simply never asked. If it truly is unavailable,
+  // `manifest` and `manual-install` still refuse with a 403 that says so.
+  const [isSelfHostEnabled, setIsSelfHostEnabled] = useState(true);
   const { config } = useConfigs();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -529,8 +551,12 @@ export function SlackIntegration() {
 
   useEffect(() => {
     fetch('/api/integrations/slack/oauth-configured', { credentials: 'include' })
-      .then(r => r.ok ? r.json() : { data: { configured: false } })
-      .then((body: { data?: { configured?: boolean } }) => setIsOAuthConfigured(body.data?.configured ?? false))
+      .then(r => r.ok ? r.json() : null)
+      .then((body: { data?: { configured?: boolean; selfHostedEnabled?: boolean } } | null) => {
+        if (!body?.data) return; // keep the optimistic default
+        setIsOAuthConfigured(body.data.configured ?? false);
+        setIsSelfHostEnabled(body.data.selfHostedEnabled ?? false);
+      })
       .catch(() => {});
   }, []);
 
@@ -581,7 +607,7 @@ export function SlackIntegration() {
       </HStack>
       {expanded && (
         <Box p={4} borderTopWidth="1px" borderTopColor="border">
-          <SlackSetupGuide isOAuthConfigured={isOAuthConfigured} />
+          <SlackSetupGuide isOAuthConfigured={isOAuthConfigured} isSelfHostEnabled={isSelfHostEnabled} />
         </Box>
       )}
     </Box>

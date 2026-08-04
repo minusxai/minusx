@@ -6,7 +6,7 @@ import { useAgentProgress, getProgressMessage } from '../useAgentProgress';
 const SAVE_TAU = 9; // ~80% at 15s
 
 export default function SaveProgressBar() {
-  const progress = useAgentProgress(true, false, SAVE_TAU);
+  const { progress, isSlow } = useAgentProgress(true, false, SAVE_TAU);
   return (
     <VStack gap={2} align="stretch" pt={2}>
       <style>{`@keyframes saveShimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }`}</style>
@@ -15,8 +15,7 @@ export default function SaveProgressBar() {
           [0, 'Saving context...'],
           [30, 'Building knowledge base...'],
           [60, 'Syncing schema metadata...'],
-          [80, 'Almost there...'],
-        ])}
+        ], isSlow)}
       </Text>
       <Progress.Root size="sm" value={progress} colorPalette="teal">
         <Progress.Track borderRadius="full" overflow="hidden">
