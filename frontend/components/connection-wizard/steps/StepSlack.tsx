@@ -21,19 +21,28 @@ export default function StepSlack({ onComplete, greeting }: StepSlackProps) {
   const isConnected = slackBots.length > 0;
 
   // Two independent capabilities, three rendered states — see the block above the card below.
-  const [isOAuthConfigured, setIsOAuthConfigured] = useState(false);
-  const [isSelfHostEnabled, setIsSelfHostEnabled] = useState(false);
+  // `null` is a FOURTH state and a distinct one: not "both false" but "we have not been told".
+  // This probe returned 502 twice against a real deployment, and treating a failed probe as a
+  // definitive answer states a falsehood about the user's own instance and hides a flow that may
+  // work perfectly well. While unknown, the card claims nothing.
+  const [capabilities, setCapabilities] = useState<{ configured: boolean; selfHostedEnabled: boolean } | null>(null);
+  const isOAuthConfigured = capabilities?.configured === true;
+  const isSelfHostEnabled = capabilities?.selfHostedEnabled === true;
+  const capabilitiesKnown = capabilities !== null;
 
   const { displayed: displayedText, done: typingDone } = useTypewriter(greeting);
 
   useEffect(() => {
     fetch('/api/integrations/slack/oauth-configured', { credentials: 'include' })
-      .then(r => r.ok ? r.json() : { data: { configured: false, selfHostedEnabled: false } })
-      .then((body: { data?: { configured?: boolean; selfHostedEnabled?: boolean } }) => {
-        setIsOAuthConfigured(body.data?.configured ?? false);
-        setIsSelfHostEnabled(body.data?.selfHostedEnabled ?? false);
+      .then(r => r.ok ? r.json() : null)
+      .then((body: { data?: { configured?: boolean; selfHostedEnabled?: boolean } } | null) => {
+        if (!body?.data) return; // stays unknown
+        setCapabilities({
+          configured: body.data.configured ?? false,
+          selfHostedEnabled: body.data.selfHostedEnabled ?? false,
+        });
       })
-      .catch(() => {});
+      .catch(() => {}); // stays unknown
   }, []);
 
   const handleAddToSlack = useCallback(() => {
@@ -152,7 +161,7 @@ export default function StepSlack({ onComplete, greeting }: StepSlackProps) {
               {/* Neither flow can work: Slack delivers events over the public internet, and this
                   instance has no public HTTPS URL to deliver them to. Offering a button here would
                   send the user to a guide that 403s at its second step. */}
-              {!isOAuthConfigured && !isSelfHostEnabled && (
+              {capabilitiesKnown && !isOAuthConfigured && !isSelfHostEnabled && (
                 <Text fontSize="xs" color="fg.subtle" fontFamily="mono" textAlign="center" maxW="400px">
                   Slack needs a public HTTPS URL to reach this workspace. Once this instance has one,
                   connect Slack from Settings.

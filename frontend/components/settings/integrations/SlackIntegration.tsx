@@ -536,7 +536,11 @@ function SlackSetupGuide({ isOAuthConfigured, isSelfHostEnabled }: { isOAuthConf
 
 export function SlackIntegration() {
   const [isOAuthConfigured, setIsOAuthConfigured] = useState(false);
-  const [isSelfHostEnabled, setIsSelfHostEnabled] = useState(false);
+  // Optimistic on an unknown answer. A failed probe is not a "no": this endpoint 502'd twice
+  // against a real deployment, and pessimism here would hide the whole Slack setup UI and tell an
+  // admin their instance has no public URL when we simply never asked. If it truly is unavailable,
+  // `manifest` and `manual-install` still refuse with a 403 that says so.
+  const [isSelfHostEnabled, setIsSelfHostEnabled] = useState(true);
   const { config } = useConfigs();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -547,10 +551,11 @@ export function SlackIntegration() {
 
   useEffect(() => {
     fetch('/api/integrations/slack/oauth-configured', { credentials: 'include' })
-      .then(r => r.ok ? r.json() : { data: { configured: false, selfHostedEnabled: false } })
-      .then((body: { data?: { configured?: boolean; selfHostedEnabled?: boolean } }) => {
-        setIsOAuthConfigured(body.data?.configured ?? false);
-        setIsSelfHostEnabled(body.data?.selfHostedEnabled ?? false);
+      .then(r => r.ok ? r.json() : null)
+      .then((body: { data?: { configured?: boolean; selfHostedEnabled?: boolean } } | null) => {
+        if (!body?.data) return; // keep the optimistic default
+        setIsOAuthConfigured(body.data.configured ?? false);
+        setIsSelfHostEnabled(body.data.selfHostedEnabled ?? false);
       })
       .catch(() => {});
   }, []);

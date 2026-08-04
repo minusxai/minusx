@@ -22,14 +22,20 @@ const CAPABILITIES: { configured: boolean; selfHostedEnabled: boolean } = {
   selfHostedEnabled: false,
 };
 
+/** When true, the capability probe fails — as it did twice against a real deployment (HTTP 502). */
+const FAIL_PROBE = { value: false };
+
 vi.mock('@/lib/hooks/useConfigs', () => ({
   useConfigs: () => ({ config: { branding: { agentName: 'MinusX' }, bots: [] }, loaded: true }),
 }));
 
-global.fetch = vi.fn(async () => new Response(
-  JSON.stringify({ success: true, data: { ...CAPABILITIES } }),
-  { status: 200, headers: { 'Content-Type': 'application/json' } },
-)) as unknown as typeof fetch;
+global.fetch = vi.fn(async () => {
+  if (FAIL_PROBE.value) throw new Error('HTTP 502: Bad Gateway');
+  return new Response(
+    JSON.stringify({ success: true, data: { ...CAPABILITIES } }),
+    { status: 200, headers: { 'Content-Type': 'application/json' } },
+  );
+}) as unknown as typeof fetch;
 
 import { screen, waitFor } from '@testing-library/react';
 import { makeStore } from '@/store/store';
@@ -41,7 +47,7 @@ function render() {
 }
 
 describe('StepSlack — one honest state per instance capability', () => {
-  beforeEach(() => { vi.clearAllMocks(); });
+  beforeEach(() => { vi.clearAllMocks(); FAIL_PROBE.value = false; });
 
   it('offers one-click install when hosted OAuth is configured', async () => {
     CAPABILITIES.configured = true;
@@ -71,6 +77,17 @@ describe('StepSlack — one honest state per instance capability', () => {
     await waitFor(() => expect(screen.getByText(/public HTTPS URL/i)).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: /Add to Slack/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Slack in Settings/i })).not.toBeInTheDocument();
+  });
+
+  it('does not claim a missing public URL when it simply could not check', async () => {
+    // "We failed to ask" is not "the answer is no". This probe 502'd twice against a real
+    // deployment; treating that as a definitive capability answer tells the user a falsehood
+    // about their own instance and hides the flow that may well work.
+    FAIL_PROBE.value = true;
+    render();
+
+    expect(await screen.findByRole('button', { name: /Skip for now/i })).toBeInTheDocument();
+    expect(screen.queryByText(/public HTTPS URL/i)).not.toBeInTheDocument();
   });
 
   it('always leaves a way forward', async () => {
