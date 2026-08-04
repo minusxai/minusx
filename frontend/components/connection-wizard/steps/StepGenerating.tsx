@@ -274,16 +274,27 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
     }
   }, []);
 
-  /** Skip: interrupt agent, mark wizard complete, go home */
+  /**
+   * "Build dashboard manually": interrupt the agent, but KEEP what it produced and open it.
+   *
+   * This used to be byte-identical to `handleGoHome` — discard every draft and land on the home
+   * folder — so the control offering to let you finish the dashboard yourself deleted the
+   * dashboard first. Whatever the agent managed before the interrupt is the starting point the
+   * label promises, and a partial dashboard is strictly more use than an empty folder.
+   */
   const handleSkip = useCallback(async () => {
     const convToInterrupt = ownConvId ?? activeConvId;
     if (convToInterrupt) {
       dispatch(interruptChat({ conversationID: convToInterrupt }));
     }
-    discardDraftFiles();
+    try {
+      await publishAll();
+    } catch (err) {
+      console.error('[StepGenerating] Publish before manual build failed:', err);
+    }
     if (onComplete) await onComplete();
-    router.push(preserveModeParam('/p/org'));
-  }, [ownConvId, activeConvId, dispatch, router, onComplete, discardDraftFiles]);
+    router.push(preserveModeParam(virtualDashboardId ? `/f/${virtualDashboardId}` : '/p/org'));
+  }, [ownConvId, activeConvId, dispatch, router, onComplete, virtualDashboardId]);
 
   /** Skip everything and go home */
   const handleGoHome = useCallback(async () => {
