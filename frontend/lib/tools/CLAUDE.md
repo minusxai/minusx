@@ -101,6 +101,13 @@ whole instruction because an error gates the score to 0.
 - **A mid-load screenshot suppresses the visual judge.** When `readiness.settled` is false,
   `reviewFile` returns the deterministic rubric plus a `renderPending` note; grading spinner
   pixels previously drove agents to delete healthy embeds.
+- **A failed auto-execute is REPORTED, never swallowed, by both `EditFile` and `CreateFile`.** Both
+  run the affected query through the file's OWN path, so it is governed by that folder's context —
+  a question created or edited inside a narrowed folder can legitimately fail there while the same
+  SQL runs fine elsewhere. The run never fails the edit/create (the file is already written), but it
+  lands in a `queryExecution` block in both the tool result and the durable `__status`, so the agent
+  learns immediately that it wrote a question that does not run. `CreateFile` used to `console.warn`
+  it and answer plain `success: true`.
 - **`CreateFile` never renders a chart image** (a created file is always a background draft) and
   refuses `dashboard`/`story` in the background unless `selectUnrestrictedMode` is on — those must
   go through `Navigate` with `newFileType`.

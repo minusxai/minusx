@@ -361,6 +361,35 @@ describe('CreateFile tool — draft file path conflict validation', () => {
     expect(questions).toHaveLength(1);
   });
 
+  // A created question's query is auto-executed through the FILE'S OWN PATH, so it
+  // is governed by that folder's context. When it fails — a table the folder does
+  // not expose, a bad column — the agent has to hear about it: it just wrote a file
+  // whose query does not run. EditFile reports this (`queryExecution`); CreateFile
+  // used to swallow it into a console.warn and answer plain `success: true`.
+  it('REPORTS a failed auto-execute instead of swallowing it', async () => {
+    const failing = vi.spyOn(await import('@/lib/file-state/file-state'), 'getQueryResult')
+      .mockRejectedValue(new Error('Query references tables outside the allowed schema: mxfood.users'));
+
+    try {
+      const result = await executeToolCall(
+        createFileTool({
+          file_type: 'question', path: '/org', name: 'Forbidden Q',
+          content: { query: 'SELECT * FROM mxfood.users', connection_name: 'static' },
+        }),
+      );
+
+      const parsed = parseContent(result);
+      // The file is still created — a failed run must not fail the create.
+      expect(parsed.success).toBe(true);
+      // …but the failure is visible to the model, naming the cause.
+      expect(JSON.stringify(parsed.queryExecution)).toMatch(/outside the allowed schema/);
+      // And it rides in the durable status block, like EditFile's.
+      expect(JSON.stringify((result.details as any).__status.queryExecution)).toMatch(/outside the allowed schema/);
+    } finally {
+      failing.mockRestore();
+    }
+  });
+
   it('creates the draft when vizSettings are valid (string columns)', async () => {
     const result = await executeToolCall(
       createFileTool({
