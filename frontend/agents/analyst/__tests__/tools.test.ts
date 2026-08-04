@@ -7,12 +7,19 @@ import {
 
 // Mock the production chokepoints. Production `SearchDBSchema` / `ExecuteQuery`
 // route here, so configuring these mocks is how tests inject schemas/rows.
-const { mockLoadSchema, mockRunQuery } = vi.hoisted(() => ({
+const { mockLoadSchema, mockRunQuery, mockLoadNearestContext } = vi.hoisted(() => ({
   mockLoadSchema: vi.fn(),
   mockRunQuery: vi.fn(),
+  mockLoadNearestContext: vi.fn(),
 }));
 vi.mock('@/lib/connections/load-schema', () => ({
   loadConnectionSchema: mockLoadSchema,
+}));
+// SearchDBSchema resolves the nearest context to surface its views as `_views`
+// tables; RunSemanticQuery shares the module. Models are irrelevant here.
+vi.mock('@/lib/semantic/models.server', () => ({
+  loadNearestContext: mockLoadNearestContext,
+  resolveModelsForContext: () => [],
 }));
 // ExecuteQuery now streams (runQueryStream) and reads BOUNDED through the durable cache
 // (getCachedResultBounded). Keep the tests driving rows via mockRunQuery: expose runQueryStream as
@@ -65,6 +72,8 @@ describe('SearchDBSchema', () => {
   beforeEach(() => {
     mockLoadSchema.mockReset();
     mockRunQuery.mockReset();
+    mockLoadNearestContext.mockReset();
+    mockLoadNearestContext.mockResolvedValue(null);
   });
 
   it('returns production-shaped {success, queryType, tableCount, results} on keyword match', async () => {
@@ -98,6 +107,93 @@ describe('SearchDBSchema', () => {
     expect(res.isError).toBe(false);
     const parsed = JSON.parse((res.content[0] as { text: string }).text);
     expect(parsed).toMatchObject({ success: true, tableCount: 0, results: [] });
+  });
+
+  // Views are VIRTUAL tables: injected into the agent's prompt schema by the
+  // context loader but absent from the connection's introspected schema. The
+  // production tool appends the nearest context's views as a `_views` schema
+  // entry so a whitelisted view is discoverable by schema search — without it,
+  // searching for a view the agent was just told about returns "no matches".
+  const contextWithView = (view: object) => ({
+    versions: [{
+      version: 1, whitelist: [], docs: [], views: [view],
+      createdAt: '', createdBy: 1,
+    }],
+    published: { all: 1 },
+  });
+  const CLEAN_KPI = {
+    name: 'clean_kpi', connection: 'main', sql: 'SELECT 1',
+    columns: [{ name: 'actual', type: 'DOUBLE' }, { name: 'target', type: 'DOUBLE' }],
+  };
+
+  it('surfaces the nearest context\'s views as searchable _views tables', async () => {
+    mockLoadSchema.mockResolvedValue(fakeSchemas);
+    mockLoadNearestContext.mockResolvedValue(contextWithView(CLEAN_KPI));
+
+    const orch = new Orchestrator([]);
+    const tool = new SearchDBSchema(orch, { connection_id: 'main', query: 'clean_kpi' }, ctx);
+    const res = await tool.run();
+
+    expect(res.isError).toBe(false);
+    const parsed = JSON.parse((res.content[0] as { text: string }).text);
+    expect(parsed.success).toBe(true);
+    const viewsEntry = parsed.results.find(
+      (r: { schema: { schema: string } }) => r.schema.schema === '_views',
+    );
+    expect(viewsEntry).toBeTruthy();
+    const table = viewsEntry.schema.tables.find((t: { table: string }) => t.table === 'clean_kpi');
+    expect(table).toBeTruthy();
+    expect(table.columns.map((c: { name: string }) => c.name)).toEqual(['actual', 'target']);
+  });
+
+  it('does not surface views belonging to a different connection', async () => {
+    mockLoadSchema.mockResolvedValue(fakeSchemas);
+    mockLoadNearestContext.mockResolvedValue(
+      contextWithView({ ...CLEAN_KPI, connection: 'other_warehouse' }),
+    );
+
+    const orch = new Orchestrator([]);
+    const tool = new SearchDBSchema(orch, { connection_id: 'main', query: 'clean_kpi' }, ctx);
+    const res = await tool.run();
+
+    const parsed = JSON.parse((res.content[0] as { text: string }).text);
+    expect(parsed).toMatchObject({ success: true, tableCount: 0, results: [] });
+  });
+
+  it('the per-run table whitelist still applies to _views tables (fail closed)', async () => {
+    mockLoadSchema.mockResolvedValue(fakeSchemas);
+    mockLoadNearestContext.mockResolvedValue(contextWithView(CLEAN_KPI));
+
+    const orch = new Orchestrator([]);
+    // Whitelist names only the physical table — the view is NOT whitelisted.
+    const restricted = { ...ctx, whitelistedTables: ['users', 'main.users'] };
+    const tool = new SearchDBSchema(orch, { connection_id: 'main', query: 'clean_kpi' }, restricted);
+    const res = await tool.run();
+
+    const parsed = JSON.parse((res.content[0] as { text: string }).text);
+    expect(parsed).toMatchObject({ success: true, tableCount: 0, results: [] });
+
+    // Whitelisted (the flattened context schema carries both bare and qualified
+    // forms) → the view is searchable.
+    const allowed = { ...ctx, whitelistedTables: ['users', 'main.users', 'clean_kpi', '_views.clean_kpi'] };
+    const tool2 = new SearchDBSchema(orch, { connection_id: 'main', query: 'clean_kpi' }, allowed);
+    const res2 = await tool2.run();
+    const parsed2 = JSON.parse((res2.content[0] as { text: string }).text);
+    expect(parsed2.tableCount).toBeGreaterThanOrEqual(1);
+    expect(parsed2.results[0].schema.schema).toBe('_views');
+  });
+
+  it('a context that fails to load degrades to the plain connection schema', async () => {
+    mockLoadSchema.mockResolvedValue(fakeSchemas);
+    mockLoadNearestContext.mockRejectedValue(new Error('db down'));
+
+    const orch = new Orchestrator([]);
+    const tool = new SearchDBSchema(orch, { connection_id: 'main' }, ctx);
+    const res = await tool.run();
+
+    expect(res.isError).toBe(false);
+    const parsed = JSON.parse((res.content[0] as { text: string }).text);
+    expect(parsed.schema).toEqual(fakeSchemas);
   });
 
   it('returns full schema when no query is provided', async () => {

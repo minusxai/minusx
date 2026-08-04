@@ -9,6 +9,8 @@
  */
 import { DocumentDB } from '@/lib/database/documents-db';
 import { FilesAPI } from '@/lib/data/files.server';
+import { Orchestrator } from '@/orchestrator/orchestrator';
+import { SearchDBSchema } from '@/agents/benchmark-analyst/db-tools.server';
 import { getScopedSemanticModels } from '@/lib/semantic/models.server';
 import { getViewsForPath } from '@/lib/views/views.server';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
@@ -107,6 +109,26 @@ describe('views as tables', () => {
     expect(table!.columns.map((c) => c.name)).toEqual(['zone_name', 'revenue', 'created_at']);
     // real tables still there
     expect(db!.schemas.some((s) => s.schema === 'mxfood')).toBe(true);
+  });
+
+  it('the agent\'s SearchDBSchema discovers the view under _views (not just the prompt schema)', async () => {
+    // The introspected connection schema has no `_views` — the production tool
+    // must merge the nearest context's views in, or a view the system prompt
+    // advertises is undiscoverable by schema search.
+    const orch = new Orchestrator([]);
+    const tool = new SearchDBSchema(orch, { connection_id: 'warehouse', query: 'zone_revenue' },
+      { connections: [], effectiveUser: admin } as never);
+    const res = await tool.run();
+
+    expect(res.isError).toBe(false);
+    const parsed = JSON.parse((res.content[0] as { text: string }).text);
+    expect(parsed.success).toBe(true);
+    const viewsEntry = parsed.results.find(
+      (r: { schema: { schema: string } }) => r.schema.schema === VIEWS_SCHEMA,
+    );
+    expect(viewsEntry).toBeTruthy();
+    const table = viewsEntry.schema.tables.find((t: { table: string }) => t.table === 'zone_revenue');
+    expect(table!.columns.map((c: { name: string }) => c.name)).toEqual(['zone_name', 'revenue', 'created_at']);
   });
 
   it('SECURITY: a column whitelist hides the column from the SEMANTIC layer too, not just queries', async () => {

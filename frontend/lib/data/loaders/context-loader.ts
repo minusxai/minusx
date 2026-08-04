@@ -11,7 +11,7 @@ import { CustomLoader } from './types';
 import { computeSchemaFromWhitelist, type ComputedContextSchema } from './context-loader-utils';
 import { boundSchema, boundFullSchema } from '@/lib/context/schema-bounding';
 import { checkViewAvailability } from '@/lib/views/integrity';
-import { exposedColumns } from '@/lib/types/views';
+import { viewsAsSchemaTables } from '@/lib/types/views';
 
 /**
  * Context Loader - Computes fullSchema and fullDocs based on published version
@@ -175,19 +175,14 @@ async function computeContextSchema(file: DbFile, user: EffectiveUser): Promise<
 
 /**
  * Add each view to its connection's schema as a table under `_views`.
- * A view with no column snapshot yet (never successfully saved) still appears —
- * as a names-only table — so it is at least visible and referenceable.
+ * The table projection (OFF-view and column-whitelist handling) is
+ * `viewsAsSchemaTables`, shared with the production SearchDBSchema tool.
  */
 function injectViewsAsTables(schema: DatabaseWithSchema[], views: ViewDef[]): DatabaseWithSchema[] {
   if (views.length === 0) return schema;
   return schema.map((db) => {
-    const mine = views.filter((v) => v.connection === db.databaseName);
-    if (mine.length === 0) return db;
-    const tables = mine
-      // A view turned OFF (whitelistedColumns explicitly []) is not a table; a
-      // view with no column snapshot YET still appears (names-only).
-      .filter((v) => !(v.whitelistedColumns && v.whitelistedColumns.length === 0))
-      .map((v) => ({ table: v.name, columns: exposedColumns(v).map((c) => ({ ...c })) }));
+    if (!views.some((v) => v.connection === db.databaseName)) return db;
+    const tables = viewsAsSchemaTables(views, db.databaseName);
     return {
       ...db,
       schemas: [...db.schemas.filter((s) => s.schema !== VIEWS_SCHEMA), { schema: VIEWS_SCHEMA, tables }],

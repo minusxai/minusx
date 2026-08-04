@@ -34,6 +34,7 @@ import { validateSemanticQuery, compileSemanticQuery, SemanticCompileError } fro
 import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
 import { resolveViewsInSql } from '@/lib/views/resolve';
 import { resolveViewsForContext } from '@/lib/views/views.server';
+import { viewsAsSchemaTables, VIEWS_SCHEMA } from '@/lib/types/views';
 import { loadNearestContext, resolveModelsForContext } from '@/lib/semantic/models.server';
 import { ConnectionsAPI } from '@/lib/data/connections.server';
 import { connectionTypeToDialect } from '@/lib/types';
@@ -133,6 +134,15 @@ export class ExecuteQuery extends BaseExecuteQuery {
  * which reads the cached schema from the connection file via FilesAPI.
  * Inherits `static schema` (and therefore `schema.name`) from
  * `BaseSearchDBSchema`.
+ *
+ * The context's views are appended as a `_views` schema entry: they are
+ * VIRTUAL tables — present in the agent's prompt schema (injected by the
+ * context loader) but absent from the connection's introspected schema — so
+ * without this a whitelisted view is undiscoverable by schema search and the
+ * agent second-guesses views it was told about. Context resolution mirrors
+ * RunSemanticQuery below (nearest context for the user's home folder), and
+ * the per-run table whitelist in `run()` applies to view tables like any
+ * other, so a view outside the whitelist stays hidden (fail closed).
  */
 export class SearchDBSchema extends BaseSearchDBSchema {
   protected override async _initialiseConnectors(): Promise<void> {
@@ -142,7 +152,22 @@ export class SearchDBSchema extends BaseSearchDBSchema {
   protected override async _loadSchemaFallback(connection: string): Promise<SchemaEntry[]> {
     const user = (this.context as { effectiveUser?: EffectiveUser }).effectiveUser;
     if (!user) return [];
-    return loadConnectionSchema(connection, user);
+    const schemas = await loadConnectionSchema(connection, user);
+
+    const basePath = (this.context as { homeFolder?: string }).homeFolder
+      ?? resolveHomeFolderSync(user.mode, user.home_folder || '');
+    let contextContent: ContextContent | null = null;
+    try {
+      contextContent = await loadNearestContext(user, basePath);
+    } catch {
+      contextContent = null; // no context is not an error — plain connection schema
+    }
+    const viewTables = viewsAsSchemaTables(
+      resolveViewsForContext(contextContent, user.userId), connection,
+    );
+    return viewTables.length > 0
+      ? [...schemas, { schema: VIEWS_SCHEMA, tables: viewTables }]
+      : schemas;
   }
 }
 

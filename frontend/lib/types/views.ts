@@ -97,3 +97,23 @@ export function exposedColumns(v: ViewDef): ViewColumn[] {
   const allowed = new Set(v.whitelistedColumns);
   return all.filter((c) => allowed.has(c.name));
 }
+
+/**
+ * A connection's views projected as ordinary schema tables — the single
+ * source for how a view renders under `_views`, shared by the context loader
+ * (the agent's prompt schema, the GUI table picker) and the production
+ * SearchDBSchema tool (so a view is discoverable by schema search too).
+ *
+ * A view turned OFF (whitelistedColumns explicitly []) is not a table; a view
+ * with no column snapshot yet (never successfully saved) still appears —
+ * names-only — so it is at least visible and referenceable.
+ */
+export function viewsAsSchemaTables(
+  views: ViewDef[],
+  connection: string,
+): Array<{ table: string; columns: ViewColumn[] }> {
+  return views
+    .filter((v) => v.connection === connection)
+    .filter((v) => !(v.whitelistedColumns && v.whitelistedColumns.length === 0))
+    .map((v) => ({ table: v.name, columns: exposedColumns(v).map((c) => ({ ...c })) }));
+}
