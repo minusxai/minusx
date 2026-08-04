@@ -1,9 +1,20 @@
 /**
+ * Column metadata as reported by the driver (pg / PGLite both expose it as
+ * `result.fields`). `dataTypeID` is the Postgres type OID.
+ */
+export interface QueryResultField {
+  name: string;
+  dataTypeID: number;
+}
+
+/**
  * Database query result with typed rows
  */
 export interface QueryResult<T = any> {
   rows: T[];
   rowCount: number;
+  /** Present on single-statement query paths; absent on the multi-statement exec path. */
+  fields?: QueryResultField[];
 }
 
 /**
