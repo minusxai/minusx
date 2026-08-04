@@ -155,13 +155,20 @@ so a caller that omitted it got the entire warehouse. `/api/autocomplete` is exe
 it completes against schema the client already sent, so it can reveal nothing new.
 
 **Known gap — ad-hoc SQL is not whitelist-checked.** `/api/query` with no `filePath` (the `/explore`
-editor) has no anchor and runs unvalidated. Closing it naively re-introduces the dashboard
-"Failed to fetch" storm: resolving a whitelist loads the context chain, which loads connection files,
-which runs the connection loader — schema profiling on the query hot path, which
-`app/api/query/__tests__/query-route-no-profiling.test.ts` exists to prevent. The fix is a
-profiling-free resolver: read the context RAW (`skipEnrichment`) and validate against the whitelist
-TREE, which needs no connection schema at all. Pinned as characterization in
+editor) has no anchor and runs unvalidated, so a user can read a withheld table by typing it there
+while the agent running the identical SQL is refused. Pinned as characterization in
 `app/api/views/__tests__/query-route-views.test.ts`.
+
+Closing it needs a **profiling-free resolver**, and the obvious version does not work. Resolving a
+whitelist today goes through the context loader, which loads connection files and can start a schema
+refresh — the regression `app/api/query/__tests__/query-route-no-profiling.test.ts` guards (N parallel
+dashboard queries → gateway timeout → "Failed to fetch"). Re-folding the whitelist from raw context
+reads (`skipEnrichment`) plus the connection's cached schema was tried and reverted: the loader's
+`fullSchema` also carries **views injected as `_views` tables**, so a whitelist-only re-fold denied
+every view query. A correct cheap resolver must additionally re-fold inherited views, `viewWhitelist`
+and disabled-view detection. `__tests__/whitelist-resolver-parity.test.ts` already pins the resolver
+against the loader across wildcards, explicit lists, narrowing children, `childPaths` and multi-level
+chains — extend it to views and the rest of that work has a safety net.
 
 **`eslint.config.mjs` enforces the boundary** (`RESTRICT_RUN_QUERY`): importing
 `@/lib/connections/run-query` is an error outside the allowlist block at the bottom of that config —

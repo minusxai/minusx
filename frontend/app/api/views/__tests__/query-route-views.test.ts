@@ -167,13 +167,20 @@ describe('/api/query with views (real route handler)', () => {
     expect(text).toMatch(/FORBIDDEN_TABLES|not.*allowed|whitelist/i);
   });
 
-  // CHARACTERIZATION, not an endorsement: ad-hoc SQL (no filePath) is NOT
-  // whitelist-checked. Governing it means resolving the context chain, which
-  // loads connection files and can trigger schema profiling on the query hot
-  // path — the regression `query-route-no-profiling.test.ts` guards. Closing it
-  // needs a profiling-free resolver (raw context read + whitelist-TREE
-  // validation, no connection schema). This test pins the current behaviour so
-  // the change is visible when it lands.
+  // CHARACTERIZATION, not an endorsement: ad-hoc SQL (/explore, no filePath) is
+  // NOT whitelist-checked, so a user can read a withheld table by typing it into
+  // the editor while the agent running the identical SQL is refused.
+  //
+  // Closing it needs a PROFILING-FREE resolver. Resolving the whitelist today
+  // goes through the context loader, which loads connection files and can start
+  // a schema refresh — the regression `query-route-no-profiling.test.ts` guards
+  // (N parallel dashboard queries → gateway timeout → "Failed to fetch"). A
+  // cheap re-fold from raw context reads was attempted and reverted: the
+  // loader's `fullSchema` also carries VIEWS injected as `_views` tables, so a
+  // whitelist-only re-fold silently denied every view query. Doing it properly
+  // means re-folding inherited views, `viewWhitelist` and disabled-view
+  // detection too — its own change, with `whitelist-resolver-parity.test.ts`
+  // extended to cover views.
   it('ad-hoc SQL with no filePath is currently UNGOVERNED (known gap)', async () => {
     await getModules().db.exec("DELETE FROM files WHERE type = 'context'", []);
     const version: ContextVersion = {
