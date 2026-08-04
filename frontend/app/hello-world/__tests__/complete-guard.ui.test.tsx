@@ -103,6 +103,21 @@ describe('HelloWorldContent — completion guard applies to every caller', () =>
     });
   });
 
+  it('actually moves the user to the models step, not just the config', async () => {
+    // The guard writing `step: 'models'` is not enough on its own: ConnectionWizard seeds its
+    // step with `useState(initialStep)`, so a later prop change never reaches it. Without a
+    // remount the click refuses to complete AND leaves the same screen on display — the user
+    // presses the button, nothing happens, and there is no way forward. Verified in a browser.
+    CONFIG_HOLDER.llm = PROVIDER_WITHOUT_KEY;
+    render();
+
+    await clickSkipForNow();
+
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /Skip for now/i })).not.toBeInTheDocument()
+    );
+  });
+
   it('completes normally once a provider can authenticate', async () => {
     CONFIG_HOLDER.llm = PROVIDER_WITH_KEY;
     render();

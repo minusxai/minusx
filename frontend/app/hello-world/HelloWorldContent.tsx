@@ -47,6 +47,15 @@ export function HelloWorldContent() {
   const savedWizard = config.setupWizard;
   const isComplete = savedWizard?.status === 'complete';
   const [step, setStep] = useState<WizardStep>(() => savedWizard?.step ?? 'welcome');
+  /**
+   * A step this component FORCES the wizard onto, overriding both its mounted state and the
+   * persisted one. ConnectionWizard seeds its step with `useState(initialStep)`, so a changed prop
+   * is ignored once mounted; and `persistStep` is async, so a remount keyed off config would race
+   * the write and re-read the step we are trying to leave. Only the completion guard uses this —
+   * without it, a refused completion left the user on the screen they had just tried to leave with
+   * the button apparently doing nothing.
+   */
+  const [forcedStep, setForcedStep] = useState<ConnectionWizardStep | null>(null);
 
   // Only the welcome screen types; the wizard steps run their own headings.
   const { displayed: displayedText, done: typingDone } = useTypewriter(
@@ -116,6 +125,7 @@ export function HelloWorldContent() {
   // guard the next caller forgets; in the completion path itself the bypass is unrepresentable.
   const handleComplete = useCallback(async () => {
     if (!hasUsableLlmProvider(config.llm)) {
+      setForcedStep('models');
       setStep('models');
       persistStep('models');
       return;
@@ -135,6 +145,7 @@ export function HelloWorldContent() {
   const [includeModelsStep] = useState(() => !hasUsableLlmProvider(config.llm));
 
   const handleStartConnection = useCallback(() => {
+    setForcedStep(null);
     const first = includeModelsStep ? 'models' : 'connection';
     setStep(first);
     persistStep(first);
@@ -370,7 +381,14 @@ export function HelloWorldContent() {
       {isWizard && !isComplete && (
         <Box position="relative" zIndex={1} w="100%" maxW="1060px" mx="auto">
           <ConnectionWizard
-            initialStep={asWizardStep(savedWizard?.step) ?? (includeModelsStep ? 'models' : 'connection')}
+            // Keyed so a step this component FORCES actually takes effect. ConnectionWizard seeds
+            // its own step with `useState(initialStep)`, so once mounted a changed prop is ignored
+            // — the completion guard could write `step: 'models'` and leave the user staring at the
+            // screen they just tried to leave, with the button apparently doing nothing. `step`
+            // only changes on the three jumps this component owns (start, skip-connection, guard),
+            // never on ordinary wizard progression, so this remounts exactly when it should.
+            key={forcedStep ?? 'wizard'}
+            initialStep={forcedStep ?? asWizardStep(savedWizard?.step) ?? (includeModelsStep ? 'models' : 'connection')}
             initialConnectionId={savedWizard?.connectionId}
             initialConnectionName={savedWizard?.connectionName}
             initialContextFileId={savedWizard?.contextFileId}
