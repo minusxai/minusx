@@ -32,7 +32,6 @@ function SaveConnectionProgress() {
           [0, 'Saving connection...'],
           [25, 'Registering tables...'],
           [50, 'Fetching metadata...'],
-          [80, 'Almost there...'],
         ], isSlow)}
       </Text>
       <Progress.Root size="sm" value={progress} colorPalette="teal">

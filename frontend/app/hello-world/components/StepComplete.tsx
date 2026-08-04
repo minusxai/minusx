@@ -265,7 +265,7 @@ export default function StepComplete() {
   const router = useRouter();
   const { config } = useConfigs();
   const agentName = config.branding.agentName;
-  const { contexts } = useContexts();
+  const { contexts, homeContext } = useContexts();
   const firstContext = contexts[0];
 
   // The onboarding "Build" step creates a dashboard ("Getting Started Dashboard"). Surface a direct
@@ -289,19 +289,28 @@ export default function StepComplete() {
 
   const setupState: SetupState = useMemo(() => {
     const connection = connectionFiles.find((f) => (f.id as number) > 0 && f.draft !== true);
-    // A context FILE is not context. The workspace seeds one per folder and several ship named
-    // "Knowledge Base" holding nothing; ticking on existence would mark this done for a user who
-    // skipped the step entirely. Only docs count.
-    const withDocs = contexts.find((c) => {
-      const docs = (c.content as { fullDocs?: unknown[] } | undefined)?.fullDocs;
-      return Array.isArray(docs) && docs.length > 0;
-    });
+
+    // Read docs off `homeContext`, NOT off the `contexts` list. That list is a `partial: true`
+    // load — metadata only, no `content` at all — so any docs check against it is always false and
+    // the row would never tick in production however many docs exist. `homeContext` is the one
+    // context useContexts fully loads, and it resolves to the direct child of the home folder,
+    // which is where the wizard writes its "Knowledge Base".
+    //
+    // Existence is deliberately not the test: the workspace seeds a context per folder and several
+    // ship named "Knowledge Base" holding nothing, so ticking on existence would mark this done for
+    // a user who skipped the step entirely. Only docs count.
+    const docs =
+      (homeContext?.content as { fullDocs?: unknown[]; versions?: { docs?: unknown[] }[] } | undefined);
+    const hasDocs =
+      (Array.isArray(docs?.fullDocs) && docs.fullDocs.length > 0) ||
+      (Array.isArray(docs?.versions?.[0]?.docs) && docs.versions[0].docs.length > 0);
+
     return {
       connectionName: connection?.name,
-      contextName: withDocs?.name,
+      contextName: hasDocs ? homeContext?.name : undefined,
       dashboardName: latestDashboard?.name,
     };
-  }, [connectionFiles, contexts, latestDashboard]);
+  }, [connectionFiles, homeContext, latestDashboard]);
 
   const builtItems = useMemo(() => [
     setupState.connectionName && { label: 'Connected', value: setupState.connectionName, icon: LuDatabase },

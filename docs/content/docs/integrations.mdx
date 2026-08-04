@@ -64,17 +64,28 @@ Connect MinusX as a Slack bot so your team can ask data questions directly in ch
 
 There are two installation modes:
 
+Both are available at **Settings → Integrations → Slack**, and the setup wizard's **Slack** step
+offers whichever applies to your instance.
+
 **OAuth (recommended)**:
 1. Go to **Settings → Integrations → Slack**
 2. Click **Add to Slack**
 3. Authorize the bot in your workspace
 4. Done — the bot appears in your workspace immediately
 
+Available when the deployment has `SLACK_CLIENT_ID` and `SLACK_CLIENT_SECRET` set. Self-hosted
+installs typically do not, and use manual setup instead.
+
 **Manual setup**:
 1. Create a Slack app from the manifest (available at Settings → Integrations → Slack)
 2. Install it to your workspace
 3. Copy the **Bot Token** and **Signing Secret**
 4. Paste them into the manual setup form in MinusX
+
+Manual setup requires MinusX to be served over a **public HTTPS URL** — Slack delivers events over
+the public internet, so it cannot reach an instance on `localhost` or a private address. Until one
+is configured, both setup options are hidden and MinusX says so rather than offering a flow that
+cannot complete. In development, an HTTPS tunnel (e.g. ngrok) satisfies this.
 
 ### Permissions
 

@@ -15,7 +15,6 @@ export default function SaveProgressBar() {
           [0, 'Saving context...'],
           [30, 'Building knowledge base...'],
           [60, 'Syncing schema metadata...'],
-          [80, 'Almost there...'],
         ], isSlow)}
       </Text>
       <Progress.Root size="sm" value={progress} colorPalette="teal">

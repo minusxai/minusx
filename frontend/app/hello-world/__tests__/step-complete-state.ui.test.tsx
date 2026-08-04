@@ -26,15 +26,23 @@ vi.mock('@/lib/hooks/useConfigs', () => ({
   useConfigs: () => ({ config: { branding: { agentName: 'MinusX' } }, loaded: true }),
 }));
 
+// Mirrors the real hook's two-tier shape, which the bug depended on: `contexts` is a
+// `partial: true` load and carries METADATA ONLY — no `content` key at all, exactly as
+// /api/files returns it — while `homeContext` is the single fully-loaded one. A mock that
+// put `content` on the list would hide the very failure this test exists to catch.
 vi.mock('@/lib/hooks/useContexts', () => ({
   useContexts: () => ({
-    contexts: STATE.contexts.map(c => ({
-      id: c.id,
-      name: c.name,
-      type: 'context',
-      content: { fullDocs: Array.from({ length: c.docCount }, (_, i) => ({ title: `doc ${i}`, content: 'x' })) },
-    })),
-    homeContext: undefined,
+    contexts: STATE.contexts.map(c => ({ id: c.id, name: c.name, type: 'context', path: `/org/${c.id}` })),
+    homeContext: STATE.contexts.length
+      ? {
+          id: STATE.contexts[0].id,
+          name: STATE.contexts[0].name,
+          type: 'context',
+          content: {
+            fullDocs: Array.from({ length: STATE.contexts[0].docCount }, (_, i) => ({ title: `doc ${i}`, content: 'x' })),
+          },
+        }
+      : undefined,
     loading: false,
     error: null,
   }),
