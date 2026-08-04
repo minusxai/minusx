@@ -89,6 +89,9 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     // nothing to anchor to and the query runs ungoverned (unchanged behaviour).
     let schemaContext: Array<{ schema: string; table: string; columns: string[] }> | null = null;
     let executedQuery = query;
+    // Resolved once and reused — the seam already looked it up, and this route is
+    // deliberately kept to one connection read (see query-route-no-profiling).
+    let queryDialect: string | undefined;
     if (filePath) {
       try {
         const governed = await resolveQueryForExecution({
@@ -96,6 +99,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
         });
         executedQuery = governed.executedQuery;
         schemaContext = governed.schemaContext;
+        queryDialect = governed.dialect;
       } catch (err) {
         if (err instanceof WhitelistViolationError) {
           return NextResponse.json(
@@ -110,19 +114,17 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       // No anchor to govern by, but a `_views` reference still has to be inlined
       // or it reaches the warehouse as a table that does not exist there.
       try {
+        queryDialect = await dialectForConnection(connectionName, user.mode);
         const views = await getViewsForPath(resolvePath(user.mode, '/'), connectionName, user);
-        executedQuery = await resolveViewsInSql(
-          query, await dialectForConnection(connectionName, user.mode), views,
-        );
+        executedQuery = await resolveViewsInSql(query, queryDialect, views);
       } catch (err) {
         if (err instanceof ViewResolutionError) return ApiErrors.badRequest(err.message);
         throw err;
       }
     }
 
-    // Dialect for param resolution below (the seam resolved its own for view
-    // inlining; this is the same lookup, off the schema-profiling path).
-    const queryDialect = await dialectForConnection(connectionName, user.mode);
+    // Only for the ungoverned, view-free path — every other branch already has it.
+    queryDialect ??= await dialectForConnection(connectionName, user.mode);
 
     // ── The execution thunk (runs only on miss / expired / background revalidate) ──
     const execute = async (): Promise<QueryStream> => {

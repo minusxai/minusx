@@ -2127,9 +2127,18 @@ const WHITELIST_MULTI: WhitelistEntry[] = [
 describe('validateQueryTablesLocal (polyglot WASM)', () => {
   // ── Empty / no-op cases ──────────────────────────────────────────────────
 
-  it('returns null for an empty whitelist (no restriction)', async () => {
+  // `null`/`undefined` = no restriction. An EMPTY ARRAY is the opposite: a
+  // context that exposes nothing. Conflating the two made "expose nothing"
+  // silently mean "expose everything" — a fail-open on an access-control
+  // decision, and the exact inverse of what an admin asked for.
+  it('DENIES everything for an empty whitelist (exposes nothing ≠ no restriction)', async () => {
     const result = await validateQueryTablesLocal('SELECT * FROM orders', []);
-    expect(result).toBeNull();
+    expect(result).toContain('orders');
+  });
+
+  it('returns null for an absent whitelist (genuinely unrestricted)', async () => {
+    expect(await validateQueryTablesLocal('SELECT * FROM orders', null as never)).toBeNull();
+    expect(await validateQueryTablesLocal('SELECT * FROM orders', undefined as never)).toBeNull();
   });
 
   // ── Allowed tables ────────────────────────────────────────────────────────

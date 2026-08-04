@@ -34,7 +34,11 @@ export async function validateQueryTablesLocal(
   sql: string,
   whitelist: WhitelistEntry[],
 ): Promise<string | null> {
-  if (!whitelist || whitelist.length === 0) return null;
+  // `null`/`undefined` means NO RESTRICTION. An empty array is the opposite —
+  // a context that exposes nothing — and must deny everything. Treating the two
+  // alike made "expose nothing" silently mean "expose everything": a fail-open
+  // on an access-control decision, delivering the exact inverse of the intent.
+  if (!whitelist) return null;
   if (!sql.trim()) return null;
 
   await ensureInit();

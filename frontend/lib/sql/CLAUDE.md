@@ -152,11 +152,18 @@ governs free-form chat and MCP, which have no file in hand.
 the governed surfaces, plus the paths that run already-validated SQL (semantic tier-3 probes, view
 column snapshots, saved-question execution). A new surface cannot silently skip governance.
 
-**Known fail-open, pre-existing:** `getWhitelistForPath` returns `null` (= unrestricted) when the
-resolved context exposes *nothing* for a connection, because "exposes nothing" and "never mentioned
-this connection" are indistinguishable at that point. A context whose whitelist is `[]` therefore
-does not deny-all. Changing it would make a connection added after a context deny-all everywhere,
-so it is deliberately left alone.
+**`null` and `[]` are opposites, and the distinction is load-bearing.** `null` means genuinely
+unrestricted — a `*` chain to the root, no context at all, or a lookup failure (which must never
+block execution). `[]` means *this context exposes nothing for this connection* and denies
+everything. Both `getWhitelistForPath` and `validateQueryTablesLocal` observe it: the resolver
+returns `[]` once it knows the chain is not all-wildcard and the connection resolves to no schemas,
+and the validator only short-circuits on a nullish whitelist, never on an empty one.
+
+Conflating them was a fail-open — an admin's "expose nothing" silently became "expose everything",
+the exact inverse of the request, on an access-control decision. The consequence of the fix is worth
+knowing: **in a workspace that curates explicitly, a connection added later is not queryable until
+some context whitelists it.** That is what an explicit list means, and it now fails loudly instead of
+quietly granting access nobody granted.
 
 ## Whitelisting and schema exposure
 

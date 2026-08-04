@@ -159,6 +159,36 @@ describe('resolveQueryForExecution', () => {
       .resolves.toBeTruthy();
   });
 
+  it('FAIL-CLOSED: an explicit whitelist that does not expose the connection denies', async () => {
+    // The context curates explicitly and never mentions this connection, so it
+    // is not exposed. This used to resolve to "unrestricted" — the resolver
+    // could not tell "exposes nothing" from "never mentioned it" and answered
+    // null (= allow everything) for both.
+    const otherConnectionOnly = [{
+      name: 'some_other_db', type: 'connection' as const,
+      children: [{ name: 'public', type: 'schema' as const, children: [{ name: 't', type: 'table' as const }] }],
+    }];
+    await getModules().db.exec('DELETE FROM files WHERE path = $1', ['/org/context']);
+    await mkPublished('context', '/org/context', 'context',
+      { versions: [version({ whitelist: otherConnectionOnly })], published: { all: 1 } } as ContextContent);
+
+    await expect(call('SELECT * FROM mxfood.orders', { kind: 'homeFolder' }))
+      .rejects.toThrow(WhitelistViolationError);
+  });
+
+  it('FAIL-CLOSED: a context exposing NO tables for the connection denies', async () => {
+    const nothingExposed = [{
+      name: 'warehouse', type: 'connection' as const,
+      children: [{ name: 'mxfood', type: 'schema' as const, children: [] }],
+    }];
+    await getModules().db.exec('DELETE FROM files WHERE path = $1', ['/org/context']);
+    await mkPublished('context', '/org/context', 'context',
+      { versions: [version({ whitelist: nothingExposed })], published: { all: 1 } } as ContextContent);
+
+    await expect(call('SELECT * FROM mxfood.orders', { kind: 'homeFolder' }))
+      .rejects.toThrow(WhitelistViolationError);
+  });
+
   it('an unrestricted workspace (chain of `*`) is unaffected', async () => {
     await getModules().db.exec('DELETE FROM files WHERE path = $1', ['/org/context']);
     await mkPublished('context', '/org/context', 'context',
