@@ -52,8 +52,14 @@ export async function getViewsForPath(
       { type: 'context', paths: [modePath], depth: -1 },
       user,
     );
-    const dir = lookupPath.substring(0, lookupPath.lastIndexOf('/')) || lookupPath;
-    const nearest = findNearestContextPath(contextFiles.map((f) => f.path), dir);
+    // The path goes in WHOLE. `findNearestContextPath` already matches a context
+    // whose serving folder is the path itself OR any ancestor of it, so it takes
+    // a file path and a folder path alike. Stripping the last segment first was
+    // right for a file and wrong for the FOLDER anchor chat and MCP use: it
+    // walked past that folder's own context, resolving views from one context
+    // while `getWhitelistForPath` — which never stripped — resolved the
+    // whitelist from another.
+    const nearest = findNearestContextPath(contextFiles.map((f) => f.path), lookupPath);
     if (!nearest) return [];
     const { data } = await FilesAPI.loadFileByPath(nearest, user);
     const views = resolveViewsForContext(data?.content as ContextContent, user.userId)

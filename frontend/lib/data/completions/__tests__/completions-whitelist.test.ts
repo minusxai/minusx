@@ -77,6 +77,24 @@ async function seed(whitelist: ContextVersion['whitelist']) {
     { versions: [version(whitelist)], published: { all: 1 } } as ContextContent);
 }
 
+/** `zones` exposed, `salaries` withheld, plus a curated view over `zones`. */
+async function seedWithView() {
+  await getModules().db.exec('DELETE FROM files', []);
+  const conn: ConnectionContent = { type: 'duckdb', config: { file_path: '../data/x.duckdb' }, schema: SCHEMA };
+  await mkPublished('warehouse', '/org/database/warehouse', 'connection', conn);
+  await mkPublished('context', '/org/context', 'context', {
+    versions: [{
+      ...version(ZONES_ONLY),
+      views: [{
+        name: 'clean_kpi', connection: 'warehouse',
+        sql: 'SELECT zone_name, zone_id AS revenue FROM mxfood.zones',
+        columns: [{ name: 'zone_name', type: 'VARCHAR' }, { name: 'revenue', type: 'DOUBLE' }],
+      }],
+    }],
+    published: { all: 1 },
+  } as ContextContent);
+}
+
 describe('completions respect the context whitelist', () => {
   setupTestDb(TEST_DB_PATH);
 
@@ -118,6 +136,29 @@ describe('completions respect the context whitelist', () => {
       whitelistedSchemas: [{ databaseName: 'warehouse', schemas: SCHEMA.schemas }],
     }, user);
     expect(JSON.stringify(forged.suggestions ?? [])).not.toContain('salaries');
+  });
+
+  // The other half of "the picker shows what the whitelist exposes": a curated
+  // view IS exposed (the loader injects it as a `_views` table and the query
+  // seam accepts it), but every suggestion endpoint starts from the CONNECTOR's
+  // introspected schema, which has no `_views` — so the one object a curated
+  // workspace most wants people to use was the one they could not find.
+  it('suggestions and mentions OFFER a curated view under _views', async () => {
+    await seedWithView();
+
+    const tables = await CompletionsAPI.getTableSuggestions({ databaseName: 'warehouse' }, user);
+    expect((tables.tables ?? []).map((t) => t.displayName)).toContain('_views.clean_kpi');
+
+    const cols = await CompletionsAPI.getColumnSuggestions(
+      { databaseName: 'warehouse', table: 'clean_kpi', schema: '_views' }, user);
+    expect((cols.columns ?? []).map((c) => c.name)).toEqual(['revenue', 'zone_name']); // sorted
+
+    const mentions = await CompletionsAPI.getMentions(
+      { prefix: 'clean', mentionType: 'all', databaseName: 'warehouse' }, user);
+    expect(JSON.stringify(mentions.suggestions ?? [])).toContain('clean_kpi');
+
+    // …and offering the view still does not offer what it hides.
+    expect((tables.tables ?? []).map((t) => t.name)).not.toContain('salaries');
   });
 
   it('an unrestricted workspace still sees everything', async () => {

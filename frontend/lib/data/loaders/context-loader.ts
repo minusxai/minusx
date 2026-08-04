@@ -177,10 +177,17 @@ async function computeContextSchema(file: DbFile, user: EffectiveUser): Promise<
  * Add each view to its connection's schema as a table under `_views`.
  * The table projection (OFF-view and column-whitelist handling) is
  * `viewsAsSchemaTables`, shared with the production SearchDBSchema tool.
+ *
+ * A connection with NO whitelisted real tables is dropped by the whitelist fold
+ * (`applyWhitelistToConnections`), so decorating only what survived would delete
+ * the views along with the tables they exist to hide — and "expose the clean
+ * view and nothing else" is the canonical curated setup, not an edge case. Such
+ * a connection is therefore re-added carrying its `_views` schema alone.
  */
 function injectViewsAsTables(schema: DatabaseWithSchema[], views: ViewDef[]): DatabaseWithSchema[] {
   if (views.length === 0) return schema;
-  return schema.map((db) => {
+  const present = new Set(schema.map((db) => db.databaseName));
+  const decorated = schema.map((db) => {
     if (!views.some((v) => v.connection === db.databaseName)) return db;
     const tables = viewsAsSchemaTables(views, db.databaseName);
     return {
@@ -188,6 +195,11 @@ function injectViewsAsTables(schema: DatabaseWithSchema[], views: ViewDef[]): Da
       schemas: [...db.schemas.filter((s) => s.schema !== VIEWS_SCHEMA), { schema: VIEWS_SCHEMA, tables }],
     };
   });
+  const viewsOnly = [...new Set(views.map((v) => v.connection))]
+    .filter((connection) => !present.has(connection))
+    .map((connection) => ({ databaseName: connection, schemas: [{ schema: VIEWS_SCHEMA, tables: viewsAsSchemaTables(views, connection) }] }))
+    .filter((db) => db.schemas[0].tables.length > 0);
+  return viewsOnly.length > 0 ? [...decorated, ...viewsOnly] : decorated;
 }
 
 

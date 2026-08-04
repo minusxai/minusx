@@ -152,7 +152,20 @@ governs free-form chat and MCP, which have no file in hand.
 `getWhitelistForPath` and filter the connection schema before answering. A client-supplied
 `whitelistedSchemas` is now only a **narrowing** applied on top; it used to be the source of truth,
 so a caller that omitted it got the entire warehouse. `/api/autocomplete` is exempt by construction:
-it completes against schema the client already sent, so it can reveal nothing new.
+it completes against schema the client already sent, so it can reveal nothing new. Those surfaces
+then **append the context's views** as a `_views` entry (`viewsAsSchemaTables`), after the narrowing
+rather than before — the client's cached whitelist enumerates real tables and would drop `_views` for
+not being in it. Filtering alone would have been half the promise: a curated view is exposed and
+queryable, but exists nowhere in the connector's introspected schema, so the object such a workspace
+most wants people to reach for was the one no picker, mention or column list would name.
+
+**Both halves of one decision must read the SAME context.** `getWhitelistForPath` takes the anchor
+path whole; `getViewsForPath` used to strip its last segment first — right for a file, wrong for the
+folder anchor chat and MCP pass, where it walked past that folder's own context. The whitelist then
+resolved from `/org/team` while the views resolved from `/org`. Both now hand the unstripped path to
+`findNearestContextPath`, which matches a serving folder that is the path itself or any ancestor of
+it, so file and folder anchors agree by construction
+(`lib/views/__tests__/views-schema.test.ts`, "a FOLDER anchor").
 
 **Known gap — ad-hoc SQL is not whitelist-checked.** `/api/query` with no `filePath` (the `/explore`
 editor) has no anchor and runs unvalidated, so a user can read a withheld table by typing it there
