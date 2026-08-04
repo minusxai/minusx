@@ -14,6 +14,7 @@ import {
   rotateBorderKeyframes,
   cursorBlinkKeyframes,
 } from '@/lib/ui/animations';
+import { useTypewriter } from '@/lib/ui/use-typewriter';
 import { type WizardStep } from './onboarding-state';
 import StepComplete from './components/StepComplete';
 import { useConfigs, updateConfig } from '@/lib/hooks/useConfigs';
@@ -22,7 +23,6 @@ import { useAppSelector } from '@/store/hooks';
 import ConnectionWizard from '@/components/connection-wizard/ConnectionWizard';
 import { asWizardStep, type ConnectionWizardStep, type QuestionnaireAnswers } from '@/components/connection-wizard/ConnectionWizardTypes';
 
-const TYPEWRITER_SPEED = 35; // ms per character
 
 export function HelloWorldContent() {
   const dispatch = useAppDispatch();
@@ -48,9 +48,10 @@ export function HelloWorldContent() {
   const isComplete = savedWizard?.status === 'complete';
   const [step, setStep] = useState<WizardStep>(() => savedWizard?.step ?? 'welcome');
 
-  // Typewriter state
-  const [displayedText, setDisplayedText] = useState('');
-  const [typingDone, setTypingDone] = useState(false);
+  // Only the welcome screen types; the wizard steps run their own headings.
+  const { displayed: displayedText, done: typingDone } = useTypewriter(
+    step === 'welcome' ? fullGreeting : undefined
+  );
   const [cardsVisible, setCardsVisible] = useState(false);
 
   // Orb movement
@@ -80,21 +81,13 @@ export function HelloWorldContent() {
     return () => { clearInterval(i1); clearInterval(i2); clearInterval(i3); };
   }, [moveOrb]);
 
-  // Typewriter effect
+  // The action cards fade in a beat after the greeting lands — including when the user cuts the
+  // typing short, which is the whole point of being able to.
   useEffect(() => {
-    if (step !== 'welcome') return;
-    let i = 0;
-    const interval = setInterval(() => {
-      i++;
-      setDisplayedText(fullGreeting.slice(0, i));
-      if (i >= fullGreeting.length) {
-        clearInterval(interval);
-        setTypingDone(true);
-        setTimeout(() => setCardsVisible(true), 300);
-      }
-    }, TYPEWRITER_SPEED);
-    return () => clearInterval(interval);
-  }, [step, fullGreeting]);
+    if (step !== 'welcome' || !typingDone) return;
+    const t = setTimeout(() => setCardsVisible(true), 300);
+    return () => clearTimeout(t);
+  }, [step, typingDone]);
 
   // Persist wizard step to config so it survives page refresh
   const persistStep = useCallback(async (

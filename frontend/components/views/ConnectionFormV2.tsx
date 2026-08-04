@@ -42,9 +42,9 @@ import { useContext as useContextHook } from '@/lib/hooks/useContext';
 import { BigQueryConfig, PostgreSQLConfig, CsvConfig, GoogleSheetsConfig, AthenaConfig, StaticConnectionConfig, DuckDBConfig, SqliteConfig, ClickHouseConfig } from './connection-configs';
 import { cursorBlinkKeyframes } from '@/lib/ui/animations';
 import { CONNECTION_TYPES } from '@/lib/ui/connection-type-options';
+import { useTypewriter } from '@/lib/ui/use-typewriter';
 import ConnectionTypePicker from '@/components/shared/ConnectionTypePicker';
 
-const TYPEWRITER_SPEED = 35;
 
 // Fallback logo/name for legacy/static connection types. CONNECTION_TYPES is consulted
 // first, so an entry here only applies if its type is dropped from the type-selector.
@@ -157,25 +157,7 @@ export default function ConnectionFormV2({
     schema?: any;
   } | null>(null);
 
-  // Typewriter effect for greeting
-  const [displayedText, setDisplayedText] = useState('');
-  const [typingDone, setTypingDone] = useState(!greeting);
-
-  useEffect(() => {
-    if (!greeting) return;
-    let i = 0;
-    setDisplayedText('');
-    setTypingDone(false);
-    const interval = setInterval(() => {
-      i++;
-      setDisplayedText(greeting.slice(0, i));
-      if (i >= greeting.length) {
-        clearInterval(interval);
-        setTypingDone(true);
-      }
-    }, TYPEWRITER_SPEED);
-    return () => clearInterval(interval);
-  }, [greeting]);
+  const { displayed: displayedText, done: typingDone } = useTypewriter(greeting);
 
   // Handle type selection from the initial screen
   const handleTypeSelect = (connType: { type: string; isStatic?: boolean; comingSoon: boolean }) => {

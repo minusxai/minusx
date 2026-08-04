@@ -20,9 +20,9 @@ import ChatInterface from '@/components/explore/ChatInterface';
 import { useAgentProgress, getProgressMessage } from '../useAgentProgress';
 import { wizardAgentOutcome } from '../agent-outcome';
 import { useConfigs } from '@/lib/hooks/useConfigs';
+import { useTypewriter } from '@/lib/ui/use-typewriter';
 import type { QuestionnaireAnswers } from '../ConnectionWizardTypes';
 
-const TYPEWRITER_SPEED = 35;
 const GENERATING_TAU = 40; // ~90% at ~92s — feels like about a minute
 
 const DASHBOARD_PROMPT = `Let's build the dashboard!`;
@@ -85,25 +85,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
   const [ownConvId, setOwnConvId] = useState<number | null>(null);
   const [userPreference, setUserPreference] = useState(initialPreference ?? '');
 
-  // Typewriter effect for greeting
-  const [displayedText, setDisplayedText] = useState('');
-  const [typingDone, setTypingDone] = useState(!greeting);
-
-  useEffect(() => {
-    if (!greeting) return;
-    let i = 0;
-    setDisplayedText('');
-    setTypingDone(false);
-    const interval = setInterval(() => {
-      i++;
-      setDisplayedText(greeting.slice(0, i));
-      if (i >= greeting.length) {
-        clearInterval(interval);
-        setTypingDone(true);
-      }
-    }, TYPEWRITER_SPEED);
-    return () => clearInterval(interval);
-  }, [greeting]);
+  const { displayed: displayedText, done: typingDone } = useTypewriter(greeting);
 
   // Create draft dashboard file on mount
   const hasCreatedDraft = useRef(false);
@@ -139,7 +121,10 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
   useEffect(() => {
     if (!isGenerating || !conversation) return;
     if (conversation.executionState !== 'FINISHED') return;
-     
+    // Syncing a local flag FROM an external system (the Redux conversation), which is what an
+    // effect is for. Deriving it during render instead would lose the distinction the comment
+    // below depends on: `isGenerating` is the flag the effects drive, `isRunning` is the outcome.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsGenerating(false);
   }, [isGenerating, conversation]);
 
@@ -165,7 +150,8 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
     // Collapse the trace once the agent finishes — but NOT when it failed, since the error banner
     // the user has to act on is inside the trace.
     if (wasGeneratingRef.current && !isGenerating && hasStarted && !isFailed) {
-
+      // Collapse on the TRANSITION out of generating, which only a ref comparison can see.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowTrace(false);
     }
     wasGeneratingRef.current = isGenerating;
@@ -226,6 +212,9 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
     if (hasAutoTriggered.current || !initialPreference?.trim() || !virtualDashboardId || hasStarted) return;
     if (databases.length === 0) return; // schema not loaded yet
     hasAutoTriggered.current = true;
+    // Kicks off the agent run — the setState inside is the START of external work, not a render
+    // derivation. The ref guard is what keeps it to exactly one dispatch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     handleGenerate();
   }, [initialPreference, virtualDashboardId, hasStarted, handleGenerate, databases.length]);
 

@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Box, VStack, HStack, Text, Heading, Button, Textarea, Icon } from '@chakra-ui/react';
 import { LuSparkles, LuX } from 'react-icons/lu';
 import { cursorBlinkKeyframes } from '@/lib/ui/animations';
 import { useConfigs } from '@/lib/hooks/useConfigs';
+import { useTypewriter } from '@/lib/ui/use-typewriter';
 import type { QuestionnaireAnswers } from '../ConnectionWizardTypes';
 
-const TYPEWRITER_SPEED = 35;
 
 interface StepQuestionnaireProps {
   onComplete: (answers: QuestionnaireAnswers) => void;
@@ -45,25 +45,7 @@ export default function StepQuestionnaire({ onComplete, greeting }: StepQuestion
   });
   const [agentKeys, setAgentKeys] = useState<Set<keyof QuestionnaireAnswers>>(new Set());
 
-  // Typewriter effect for greeting
-  const [displayedText, setDisplayedText] = useState('');
-  const [typingDone, setTypingDone] = useState(!greeting);
-
-  useEffect(() => {
-    if (!greeting) return;
-    let i = 0;
-    setDisplayedText('');
-    setTypingDone(false);
-    const interval = setInterval(() => {
-      i++;
-      setDisplayedText(greeting.slice(0, i));
-      if (i >= greeting.length) {
-        clearInterval(interval);
-        setTypingDone(true);
-      }
-    }, TYPEWRITER_SPEED);
-    return () => clearInterval(interval);
-  }, [greeting]);
+  const { displayed: displayedText, done: typingDone } = useTypewriter(greeting);
 
   const handleChange = (key: keyof QuestionnaireAnswers, value: string) => {
     setAnswers(prev => ({ ...prev, [key]: value }));

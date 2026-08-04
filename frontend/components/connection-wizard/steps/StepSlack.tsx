@@ -7,8 +7,8 @@ import { useConfigs } from '@/lib/hooks/useConfigs';
 import { cursorBlinkKeyframes } from '@/lib/ui/animations';
 import { Link } from '@/components/ui/Link';
 import type { SlackBotConfig } from '@/lib/types';
+import { useTypewriter } from '@/lib/ui/use-typewriter';
 
-const TYPEWRITER_SPEED = 35;
 
 interface StepSlackProps {
   onComplete: () => void;
@@ -24,25 +24,7 @@ export default function StepSlack({ onComplete, greeting }: StepSlackProps) {
   const [isOAuthConfigured, setIsOAuthConfigured] = useState(false);
   const [isSelfHostEnabled, setIsSelfHostEnabled] = useState(false);
 
-  // Typewriter effect for greeting
-  const [displayedText, setDisplayedText] = useState('');
-  const [typingDone, setTypingDone] = useState(!greeting);
-
-  useEffect(() => {
-    if (!greeting) return;
-    let i = 0;
-    setDisplayedText('');
-    setTypingDone(false);
-    const interval = setInterval(() => {
-      i++;
-      setDisplayedText(greeting.slice(0, i));
-      if (i >= greeting.length) {
-        clearInterval(interval);
-        setTypingDone(true);
-      }
-    }, TYPEWRITER_SPEED);
-    return () => clearInterval(interval);
-  }, [greeting]);
+  const { displayed: displayedText, done: typingDone } = useTypewriter(greeting);
 
   useEffect(() => {
     fetch('/api/integrations/slack/oauth-configured', { credentials: 'include' })
