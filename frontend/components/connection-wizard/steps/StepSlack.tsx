@@ -126,6 +126,7 @@ export default function StepSlack({ onComplete, greeting }: StepSlackProps) {
                   _hover={{ opacity: 0.9 }}
                   size="sm"
                   fontFamily="mono"
+                  aria-label="Add to Slack"
                   onClick={handleAddToSlack}
                 >
                   <LuExternalLink size={14} />
@@ -150,7 +151,7 @@ export default function StepSlack({ onComplete, greeting }: StepSlackProps) {
                     size="sm"
                     fontFamily="mono"
                   >
-                    <Link href="/settings?tab=integrations">
+                    <Link href="/settings?tab=integrations" aria-label="Set up Slack in Settings">
                       <LuExternalLink size={14} />
                       Set up Slack in Settings
                     </Link>
@@ -162,7 +163,14 @@ export default function StepSlack({ onComplete, greeting }: StepSlackProps) {
                   instance has no public HTTPS URL to deliver them to. Offering a button here would
                   send the user to a guide that 403s at its second step. */}
               {capabilitiesKnown && !isOAuthConfigured && !isSelfHostEnabled && (
-                <Text fontSize="xs" color="fg.subtle" fontFamily="mono" textAlign="center" maxW="400px">
+                <Text
+                  aria-label="Slack requires a public HTTPS URL"
+                  fontSize="xs"
+                  color="fg.subtle"
+                  fontFamily="mono"
+                  textAlign="center"
+                  maxW="400px"
+                >
                   Slack needs a public HTTPS URL to reach this workspace. Once this instance has one,
                   connect Slack from Settings.
                 </Text>
@@ -184,6 +192,7 @@ export default function StepSlack({ onComplete, greeting }: StepSlackProps) {
           _hover={isConnected ? { opacity: 0.9 } : undefined}
           size="sm"
           fontFamily="mono"
+          aria-label={isConnected ? 'Continue' : 'Skip for now'}
           onClick={onComplete}
         >
           {isConnected ? 'Continue' : 'Skip for now'} &rarr;

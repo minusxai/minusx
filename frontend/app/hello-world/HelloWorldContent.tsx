@@ -215,6 +215,7 @@ export function HelloWorldContent() {
           color="white"
           fontFamily="mono"
           _hover={{ opacity: 0.9 }}
+          aria-label="Skip setup"
           onClick={handleSkipToHome}
         >
           Skip Setup &rarr;
@@ -276,6 +277,7 @@ export function HelloWorldContent() {
                   borderRadius="xl"
                   cursor="pointer"
                   transition="transform 0.2s ease-out"
+                  aria-label="Connect your data"
                   onClick={handleStartConnection}
                   _hover={{ transform: 'translateY(-4px)' }}
                   css={{ animation: 'fadeInUp 0.5s ease-out forwards', opacity: 0 }}
@@ -312,6 +314,7 @@ export function HelloWorldContent() {
                   borderRadius="xl"
                   cursor="pointer"
                   transition="transform 0.2s ease-out"
+                  aria-label="Try demo"
                   onClick={() => switchMode('tutorial')}
                   _hover={{ transform: 'translateY(-4px)' }}
                   css={{ animation: 'fadeInUp 0.5s ease-out 0.1s forwards', opacity: 0 }}
