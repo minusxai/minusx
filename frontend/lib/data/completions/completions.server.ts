@@ -18,6 +18,9 @@ import {
 import { DatabaseWithSchema } from '@/lib/types';
 import { FilesAPI } from '@/lib/data/files.server';
 import { getWhitelistForPath } from '@/lib/sql/whitelist-resolver.server';
+import { getViewsForPath } from '@/lib/views/views.server';
+import { viewsAsSchemaTables } from '@/lib/types/views';
+import { VIEWS_SCHEMA } from '@/lib/types';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import type { SchemaEntry } from '@/lib/connections/base';
 import { getCompletionsLocal } from '@/lib/sql/autocomplete';
@@ -39,6 +42,12 @@ import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
  *
  * `null` from the resolver means genuinely unrestricted → pass everything
  * through. An empty array means the context exposes nothing → return nothing.
+ *
+ * Curated VIEWS are then appended under `_views`. They are exposed by the
+ * context that defines or inherits them and the query seam accepts them, but
+ * they exist nowhere in the connector's introspected schema — so without this
+ * the object a curated workspace most wants people to reach for was the one
+ * object no picker, mention or column list would ever name.
  */
 async function whitelistConnectionSchemas(
   schemas: SchemaEntry[],
@@ -82,7 +91,14 @@ async function whitelistConnectionSchemas(
       ?? clientNarrowing[0];
     exposed = keep(exposed, toAllowed(clientEntry?.schemas ?? []));
   }
-  return exposed;
+
+  // After the narrowing, not before: the client's cached whitelist describes
+  // real tables and would drop `_views` for not being in it.
+  const views = viewsAsSchemaTables(
+    await getViewsForPath(homeFolder, connectionName, user),
+    connectionName,
+  );
+  return views.length > 0 ? [...exposed, { schema: VIEWS_SCHEMA, tables: views }] : exposed;
 }
 
 /**

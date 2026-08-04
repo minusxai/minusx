@@ -177,17 +177,35 @@ async function computeContextSchema(file: DbFile, user: EffectiveUser): Promise<
  * Add each view to its connection's schema as a table under `_views`.
  * The table projection (OFF-view and column-whitelist handling) is
  * `viewsAsSchemaTables`, shared with the production SearchDBSchema tool.
+ *
+ * A connection with NO whitelisted real tables is dropped by the whitelist fold
+ * (`applyWhitelistToConnections`), so decorating only what survived would delete
+ * the views along with the tables they exist to hide — and "expose the clean
+ * view and nothing else" is the canonical curated setup, not an edge case. Such
+ * a connection is therefore re-added carrying its `_views` schema alone.
  */
 function injectViewsAsTables(schema: DatabaseWithSchema[], views: ViewDef[]): DatabaseWithSchema[] {
-  if (views.length === 0) return schema;
-  return schema.map((db) => {
-    if (!views.some((v) => v.connection === db.databaseName)) return db;
+  // Strip FIRST, unconditionally. A child inherits its parent's `fullSchema`,
+  // which already carries the parent's injected `_views` — and to the whitelist
+  // fold that is an ordinary schema, so it rode down the tree untouched. A child
+  // that DECLINED a view still had it in its whitelisted schema, and only view
+  // resolution stopped the query (a puzzling "unknown view" rather than a
+  // refusal). Each context injects its OWN views and inherits none as tables.
+  const present = new Set(schema.map((db) => db.databaseName));
+  const decorated = schema.map((db) => {
+    const rest = db.schemas.filter((s) => s.schema !== VIEWS_SCHEMA);
+    if (!views.some((v) => v.connection === db.databaseName)) return { ...db, schemas: rest };
     const tables = viewsAsSchemaTables(views, db.databaseName);
-    return {
-      ...db,
-      schemas: [...db.schemas.filter((s) => s.schema !== VIEWS_SCHEMA), { schema: VIEWS_SCHEMA, tables }],
-    };
+    // Every view on this connection turned OFF leaves no `_views` schema at all,
+    // rather than an empty one — "not a table anywhere" should read the same to
+    // the picker, the agent's schema and the whitelist validator.
+    return { ...db, schemas: tables.length > 0 ? [...rest, { schema: VIEWS_SCHEMA, tables }] : rest };
   });
+  const viewsOnly = [...new Set(views.map((v) => v.connection))]
+    .filter((connection) => !present.has(connection))
+    .map((connection) => ({ databaseName: connection, schemas: [{ schema: VIEWS_SCHEMA, tables: viewsAsSchemaTables(views, connection) }] }))
+    .filter((db) => db.schemas[0].tables.length > 0);
+  return viewsOnly.length > 0 ? [...decorated, ...viewsOnly] : decorated;
 }
 
 

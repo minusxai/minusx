@@ -158,6 +158,31 @@ describe('/api/query with views (real route handler)', () => {
     expect(mockRunQuery).toHaveBeenCalledTimes(2); // busted, not served stale
   });
 
+  // The canonical curated setup: expose the clean view and NOTHING else. The
+  // whitelist fold drops a connection with no whitelisted real tables, and view
+  // injection could only decorate connections that survived — so the one thing
+  // the context DID expose disappeared with the tables it was hiding.
+  it('a VIEWS-ONLY context (no real tables exposed) can still query its view', async () => {
+    await getModules().db.exec("DELETE FROM files WHERE type = 'context'", []);
+    const version: ContextVersion = {
+      version: 1, docs: [], createdAt: new Date().toISOString(), createdBy: 1,
+      // warehouse is listed, but exposes no schema at all…
+      whitelist: [{ name: 'warehouse', type: 'connection', children: [] }],
+      // …while a curated view over its tables IS offered.
+      views: [{ name: 'clean_kpi', connection: 'warehouse', sql: ZONE_REVENUE_SQL }],
+    };
+    await mk('context', '/org/context', 'context',
+      { versions: [version], published: { all: 1 } } as ContextContent);
+
+    const { status, text } = await runViaRoute('SELECT zone_name FROM _views.clean_kpi');
+    expect(status).toBe(200);
+    expect(text).not.toMatch(/FORBIDDEN_TABLES/);
+    expect(mockRunQuery.mock.calls[0][1]).toMatch(/WITH\s+_views_clean_kpi AS/i);
+
+    // …and the tables it hides are still hidden.
+    expect((await runViaRoute('SELECT * FROM mxfood.zones')).status).toBe(403);
+  });
+
   it('an UNKNOWN view under a real whitelist is REJECTED (403) — it is not an exposed table', async () => {
     // The whitelist only injects REAL views as `_views` tables, so a ghost view
     // is simply not in the whitelisted schema → caught by table validation.

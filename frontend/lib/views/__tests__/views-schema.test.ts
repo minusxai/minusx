@@ -191,6 +191,25 @@ describe('views as tables', () => {
     expect(views.map((v) => v.name)).toEqual(['zone_revenue']);
   });
 
+  it('REGRESSION: a FOLDER anchor resolves the context IN that folder, not its parent', async () => {
+    // Chat and MCP anchor on the user's home FOLDER, not on a file. Stripping the
+    // last path segment is right for a file and wrong for a folder: it walked
+    // past the folder's OWN context, so the whitelist resolved from /org/sales
+    // while the views resolved from /org — the two halves of one authorization
+    // decision reading different contexts.
+    await getModules().db.exec("DELETE FROM files WHERE path = '/org/sales/context'", []);
+    await mkPublished('context', '/org/sales/context', 'context', {
+      versions: [{
+        version: 1, whitelist: [{ name: 'warehouse', type: 'connection' }], docs: [],
+        views: [{ ...ZONE_REVENUE, name: 'sales_only' }], createdAt: '', createdBy: 1,
+      }],
+      published: { all: 1 },
+    } as ContextContent);
+
+    const views = await getViewsForPath('/org/sales', 'warehouse', admin);
+    expect(views.map((v) => v.name).sort()).toEqual(['sales_only', 'zone_revenue']);
+  });
+
   it('REGRESSION: resolves for a file path in the mode ROOT (filePath = "/org")', async () => {
     // The query route passes the question's filePath; for a file sitting directly
     // in the mode root the "directory" IS the root, which must still find the

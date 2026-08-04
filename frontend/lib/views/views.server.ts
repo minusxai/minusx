@@ -18,8 +18,15 @@ import type { HydratedView } from '@/lib/views/resolve';
 /**
  * Every view a context exposes: inherited (fullViews) + its live version's own,
  * MINUS any the loader disabled (`viewProblems` — e.g. an ancestor pulled a table
- * it reads). A disabled view must not resolve: the query fails loudly instead of
- * quietly reading data the org has since withdrawn.
+ * it reads) and any turned OFF (`whitelistedColumns: []`). Neither must resolve:
+ * the query fails loudly instead of quietly reading data the org has since
+ * withdrawn — or, for an OFF view, instead of "succeeding" against a stub.
+ *
+ * The OFF filter matches `viewsAsSchemaTables`, which already drops such a view
+ * from every schema. Without it the two disagreed in exactly one configuration:
+ * under an explicit whitelist the missing schema entry refused the query, but a
+ * `*` workspace skips table validation, so the same OFF view resolved to its
+ * `SELECT NULL AS _off` stub and returned rows. "Off" has to mean one thing.
  */
 export function resolveViewsForContext(content: ContextContent | null | undefined, userId: number): ViewDef[] {
   if (!content) return [];
@@ -27,7 +34,9 @@ export function resolveViewsForContext(content: ContextContent | null | undefine
     (v) => v.version === getPublishedVersionForUser(content, userId),
   ) ?? content.versions?.[0];
   const broken = new Set((content.viewProblems ?? []).map((p) => p.view));
-  return [...(content.fullViews ?? []), ...(version?.views ?? [])].filter((v) => !broken.has(v.name));
+  return [...(content.fullViews ?? []), ...(version?.views ?? [])]
+    .filter((v) => !broken.has(v.name))
+    .filter((v) => !(v.whitelistedColumns && v.whitelistedColumns.length === 0));
 }
 
 /**
@@ -52,8 +61,14 @@ export async function getViewsForPath(
       { type: 'context', paths: [modePath], depth: -1 },
       user,
     );
-    const dir = lookupPath.substring(0, lookupPath.lastIndexOf('/')) || lookupPath;
-    const nearest = findNearestContextPath(contextFiles.map((f) => f.path), dir);
+    // The path goes in WHOLE. `findNearestContextPath` already matches a context
+    // whose serving folder is the path itself OR any ancestor of it, so it takes
+    // a file path and a folder path alike. Stripping the last segment first was
+    // right for a file and wrong for the FOLDER anchor chat and MCP use: it
+    // walked past that folder's own context, resolving views from one context
+    // while `getWhitelistForPath` — which never stripped — resolved the
+    // whitelist from another.
+    const nearest = findNearestContextPath(contextFiles.map((f) => f.path), lookupPath);
     if (!nearest) return [];
     const { data } = await FilesAPI.loadFileByPath(nearest, user);
     const views = resolveViewsForContext(data?.content as ContextContent, user.userId)
