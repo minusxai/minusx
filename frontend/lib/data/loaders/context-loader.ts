@@ -190,10 +190,11 @@ function injectViewsAsTables(schema: DatabaseWithSchema[], views: ViewDef[]): Da
   const decorated = schema.map((db) => {
     if (!views.some((v) => v.connection === db.databaseName)) return db;
     const tables = viewsAsSchemaTables(views, db.databaseName);
-    return {
-      ...db,
-      schemas: [...db.schemas.filter((s) => s.schema !== VIEWS_SCHEMA), { schema: VIEWS_SCHEMA, tables }],
-    };
+    const rest = db.schemas.filter((s) => s.schema !== VIEWS_SCHEMA);
+    // Every view on this connection turned OFF leaves no `_views` schema at all,
+    // rather than an empty one — "not a table anywhere" should read the same to
+    // the picker, the agent's schema and the whitelist validator.
+    return { ...db, schemas: tables.length > 0 ? [...rest, { schema: VIEWS_SCHEMA, tables }] : rest };
   });
   const viewsOnly = [...new Set(views.map((v) => v.connection))]
     .filter((connection) => !present.has(connection))
