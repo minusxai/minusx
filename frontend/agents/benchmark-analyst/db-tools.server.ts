@@ -32,8 +32,8 @@ import {
 import { SemanticQuerySpec } from '@/lib/validation/atlas-schemas';
 import { validateSemanticQuery, compileSemanticQuery, SemanticCompileError } from '@/lib/semantic/compile';
 import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
-import { resolveViewsInSql } from '@/lib/views/resolve';
-import { resolveViewsForContext } from '@/lib/views/views.server';
+import { mentionsViews, resolveViewsInSql } from '@/lib/views/resolve';
+import { resolveViewsForContext, getViewsForPath } from '@/lib/views/views.server';
 import { viewsAsSchemaTables, VIEWS_SCHEMA } from '@/lib/types/views';
 import { loadNearestContext, resolveModelsForContext } from '@/lib/semantic/models.server';
 import { ConnectionsAPI } from '@/lib/data/connections.server';
@@ -42,12 +42,30 @@ import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import type { ContextContent } from '@/lib/types';
 import type { QueryIR } from '@/lib/sql/ir-types';
 
+/** Connection dialect (same seam as the semantic save gate); duckdb fallback. */
+async function dialectFor(connection: string, mode: EffectiveUser['mode']): Promise<string> {
+  try {
+    const { type } = await ConnectionsAPI.getRawByName(connection, mode);
+    return connectionTypeToDialect(type);
+  } catch {
+    return 'duckdb';
+  }
+}
+
 /**
  * Production ExecuteQuery variant. Overrides `_initialiseConnectors` to a
  * no-op (production context carries no embedded connector configs) and
  * routes the fallback through the durable query cache over `runQueryStream`,
  * which goes via `ConnectionsAPI.getRawByName` + `getNodeConnector` — the
  * standard production seam.
+ *
+ * SQL referencing `_views.x` is inlined as CTEs BEFORE the cache — same
+ * ordering as `app/api/query/route.ts`, and for the same reasons: views are
+ * virtual (the warehouse has no `_views` schema, so unresolved SQL is a
+ * guaranteed catalog error), and keying the cache on the RESOLVED SQL means
+ * editing a view's body invalidates stale results for free while agent and UI
+ * queries of the same view SQL share one entry. Non-view SQL takes the
+ * byte-identical fast path and is never parsed.
  *
  * Overrides `static schema` with the no-`timeout` variant: the production
  * path (`_executeFallback` → `runQueryStream`) does not honour the query
@@ -78,6 +96,18 @@ export class ExecuteQuery extends BaseExecuteQuery {
         'ExecuteQuery: missing effectiveUser on agent context — cannot resolve connection. This is a server bug; please report.',
       );
     }
+    // Inline `_views.x` (views are virtual — resolution mirrors the UI query
+    // route; the home-folder anchor mirrors SearchDBSchema/RunSemanticQuery).
+    // A ViewResolutionError (unknown view, cycle) propagates as the tool error,
+    // pointing at the view instead of a confusing warehouse catalog error.
+    let executedQuery = query;
+    if (mentionsViews(query)) {
+      const basePath = (this.context as { homeFolder?: string }).homeFolder
+        ?? resolveHomeFolderSync(user.mode, user.home_folder || '');
+      const views = await getViewsForPath(basePath, connectionId, user);
+      executedQuery = await resolveViewsInSql(query, await dialectFor(connectionId, user.mode), views);
+    }
+
     // Route through the SHARED durable cache (`lib/query-cache`): an agent query and a
     // UI query of the same SQL+params in the same mode hit one blob + SWR. The
     // cache is best-effort, so a DB/blob hiccup degrades to direct execution.
@@ -88,12 +118,12 @@ export class ExecuteQuery extends BaseExecuteQuery {
     const { result } = await getCachedResultBounded({
       mode: user.mode,
       connectionName: connectionId,
-      query,
+      query: executedQuery,
       params: params as Record<string, string | number | null>,
       policy: resolveCachePolicy(null),
       // The execute thunk streams; the write-through avoids a second server-side copy. Its own
       // (uncached-degrade) drain is bounded inside getCachedResultBounded.
-      execute: async () => runQueryStream(connectionId, query, params, user),
+      execute: async () => runQueryStream(connectionId, executedQuery, params, user),
     }, { maxBytes: AGENT_DRAIN_MAX_BYTES, maxRows: AGENT_DRAIN_MAX_ROWS });
     return result;
   }
@@ -310,7 +340,7 @@ export class RunSemanticQuery extends MXTool<typeof RunSemanticQueryParams, Remo
     let sql: string;
     try {
       const ir = compileSemanticQuery(spec, model) as QueryIR;
-      const dialect = await this._dialectFor(model.connection, user.mode);
+      const dialect = await dialectFor(model.connection, user.mode);
       const rawSql = irToSqlLocal(ir, dialect);
       const views = resolveViewsForContext(contextContent, user.userId)
         .filter((v) => v.connection === model.connection);
@@ -331,15 +361,5 @@ export class RunSemanticQuery extends MXTool<typeof RunSemanticQueryParams, Remo
       this.id,
     );
     return exec.run();
-  }
-
-  /** Connection dialect (same seam as the semantic save gate); duckdb fallback. */
-  private async _dialectFor(connection: string, mode: EffectiveUser['mode']): Promise<string> {
-    try {
-      const { type } = await ConnectionsAPI.getRawByName(connection, mode);
-      return connectionTypeToDialect(type);
-    } catch {
-      return 'duckdb';
-    }
   }
 }

@@ -111,7 +111,7 @@ Many-to-many compiles grain-preservingly and never through a plain join: a **gro
 
 ### View resolution at query time
 
-`app/api/query/route.ts` calls `mentionsViews(query)`; if false the SQL is returned **byte-identical** and never parsed (existing queries keep their exact text, cache keys, and any exotic SQL the parser cannot handle). Otherwise `getViewsForPath` resolves the nearest context, and `resolveViewsInSql` does a depth-first walk of the `reads.views` graph (cycles and unknown views are hard errors), emits one CTE per view in topological order, and rewrites `_views.x` table refs — including inside the user's own CTE bodies, whose SQL the IR stores raw. A view's `whitelistedColumns` is enforced by **projection**: the body is wrapped so a deselected column ceases to exist; an explicit empty list renders a `WHERE 1 = 0` stub relation.
+Two call sites, same contract: `app/api/query/route.ts` (browser queries) and the production `ExecuteQuery._executeFallback` (`agents/benchmark-analyst/db-tools.server.ts`, agent queries — anchored on the user's home-folder context rather than a file path). Both call `mentionsViews(query)`; if false the SQL is returned **byte-identical** and never parsed (existing queries keep their exact text, cache keys, and any exotic SQL the parser cannot handle). Otherwise `getViewsForPath` resolves the nearest context, and `resolveViewsInSql` does a depth-first walk of the `reads.views` graph (cycles and unknown views are hard errors), emits one CTE per view in topological order, and rewrites `_views.x` table refs — including inside the user's own CTE bodies, whose SQL the IR stores raw. A view's `whitelistedColumns` is enforced by **projection**: the body is wrapped so a deselected column ceases to exist; an explicit empty list renders a `WHERE 1 = 0` stub relation.
 
 ## Interactions with other areas
 
@@ -125,7 +125,7 @@ Many-to-many compiles grain-preservingly and never through a plain join: a **gro
 | `lib/file-state/file-edit.ts` | calls in | Same check with `saved: undefined` — advisory, every model, never blocking. |
 | `components/query-builder/SemanticExplorer.tsx` | calls in | `compileSemanticQuery` → `irToSqlLocal` in the browser; emits `(spec, sql, viz)` where the viz default comes from `infer-viz.ts` while `vizSettings.typeLocked` is falsy. |
 | `components/context/SemanticModelsEditor.tsx` | calls in | The only consumer of `derive.ts` (draft pre-fill) and `infer-join.ts` (proposed join columns); runs `edit-check` locally and `models-client.testSemanticModel` for the Test button. |
-| `agents/benchmark-analyst/db-tools.server.ts` | calls in | Headless mirror of the production path: `compileSemanticQuery` → `irToSqlLocal` → `resolveViewsInSql` → the real query executor. |
+| `agents/benchmark-analyst/db-tools.server.ts` | calls in | Headless mirror of the production path: `compileSemanticQuery` → `irToSqlLocal` → `resolveViewsInSql` → the real query executor. `ExecuteQuery` inlines `_views.*` before its cache; `SearchDBSchema` appends views via `viewsAsSchemaTables`. |
 | `lib/sql/` | calls out | `sql-to-ir` / `ir-to-sql` / `ir-types` are the only dialect-aware layer; `schema-filter.ts` owns `applyWhitelistToConnections`. |
 | `lib/connections/run-query.ts` | calls out | Tier-3 probes and view column snapshots execute through it (`SELECT * FROM (…) LIMIT 0`). |
 | `orchestrator/prompts/prompts.yaml` | consumes | `skill_semantic_models` teaches the authoring format; `SCHEMA_TEMPLATE_VARS` injects the live content schemas so the prompt cannot drift from validation. |

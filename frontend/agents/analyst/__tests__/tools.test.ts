@@ -21,6 +21,13 @@ vi.mock('@/lib/semantic/models.server', () => ({
   loadNearestContext: mockLoadNearestContext,
   resolveModelsForContext: () => [],
 }));
+// ExecuteQuery inlines `_views.x` via getViewsForPath before executing; keep the
+// pure helpers (resolveViewsForContext) real.
+const { mockGetViewsForPath } = vi.hoisted(() => ({ mockGetViewsForPath: vi.fn() }));
+vi.mock('@/lib/views/views.server', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  getViewsForPath: mockGetViewsForPath,
+}));
 // ExecuteQuery now streams (runQueryStream) and reads BOUNDED through the durable cache
 // (getCachedResultBounded). Keep the tests driving rows via mockRunQuery: expose runQueryStream as
 // a one-shot stream over its result, and stub the cache to just run the execute thunk + bounded-drain
@@ -215,6 +222,58 @@ describe('ExecuteQuery', () => {
   beforeEach(() => {
     mockLoadSchema.mockReset();
     mockRunQuery.mockReset();
+    mockGetViewsForPath.mockReset();
+    mockGetViewsForPath.mockResolvedValue([]);
+  });
+
+  // Views are virtual — the warehouse has no `_views` schema, so SQL referencing
+  // one must be inlined as a CTE before execution (the UI's /api/query does this;
+  // the agent's tool must too, or a view the agent can discover is unqueryable).
+  it('inlines _views.x as a CTE before executing (same as /api/query)', async () => {
+    mockGetViewsForPath.mockResolvedValue([{
+      name: 'zone_speed', connection: 'main',
+      sql: 'SELECT zone_name, avg_delivery_time_mins FROM mxfood.zones',
+    }]);
+    mockRunQuery.mockResolvedValue({ columns: ['zone_name'], types: ['string'], rows: [{ zone_name: 'North' }], finalQuery: '' });
+
+    const orch = new Orchestrator([]);
+    const tool = new ExecuteQuery(orch, {
+      connectionId: 'main',
+      query: 'SELECT zone_name FROM _views.zone_speed LIMIT 5',
+    }, ctx);
+    const res = await tool.run();
+
+    expect(res.isError).toBe(false);
+    const executedSql = mockRunQuery.mock.calls[0][1] as string;
+    expect(executedSql).toContain('mxfood.zones');            // view body inlined
+    expect(executedSql).not.toContain('_views.zone_speed');   // virtual ref gone
+  });
+
+  it('a query referencing an unknown view fails with a pointing error, not a warehouse error', async () => {
+    mockGetViewsForPath.mockResolvedValue([]);
+
+    const orch = new Orchestrator([]);
+    const tool = new ExecuteQuery(orch, {
+      connectionId: 'main',
+      query: 'SELECT * FROM _views.nope',
+    }, ctx);
+    const res = await tool.run();
+
+    expect(res.isError).toBe(true);
+    expect((res.content[0] as { text: string }).text).toContain('unknown view');
+    expect(mockRunQuery).not.toHaveBeenCalled();
+  });
+
+  it('non-view SQL passes through byte-identical (never parsed)', async () => {
+    mockRunQuery.mockResolvedValue({ columns: ['count'], types: ['int'], rows: [{ count: 1 }], finalQuery: '' });
+    const weird = 'SELECT count(*) FROM users -- keep\n';
+
+    const orch = new Orchestrator([]);
+    const tool = new ExecuteQuery(orch, { connectionId: 'main', query: weird }, ctx);
+    await tool.run();
+
+    expect(mockGetViewsForPath).not.toHaveBeenCalled();
+    expect(mockRunQuery.mock.calls[0][1]).toBe(weird);
   });
 
   it('returns compressed markdown + metadata on success', async () => {
