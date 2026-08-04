@@ -18,8 +18,15 @@ import type { HydratedView } from '@/lib/views/resolve';
 /**
  * Every view a context exposes: inherited (fullViews) + its live version's own,
  * MINUS any the loader disabled (`viewProblems` — e.g. an ancestor pulled a table
- * it reads). A disabled view must not resolve: the query fails loudly instead of
- * quietly reading data the org has since withdrawn.
+ * it reads) and any turned OFF (`whitelistedColumns: []`). Neither must resolve:
+ * the query fails loudly instead of quietly reading data the org has since
+ * withdrawn — or, for an OFF view, instead of "succeeding" against a stub.
+ *
+ * The OFF filter matches `viewsAsSchemaTables`, which already drops such a view
+ * from every schema. Without it the two disagreed in exactly one configuration:
+ * under an explicit whitelist the missing schema entry refused the query, but a
+ * `*` workspace skips table validation, so the same OFF view resolved to its
+ * `SELECT NULL AS _off` stub and returned rows. "Off" has to mean one thing.
  */
 export function resolveViewsForContext(content: ContextContent | null | undefined, userId: number): ViewDef[] {
   if (!content) return [];
@@ -27,7 +34,9 @@ export function resolveViewsForContext(content: ContextContent | null | undefine
     (v) => v.version === getPublishedVersionForUser(content, userId),
   ) ?? content.versions?.[0];
   const broken = new Set((content.viewProblems ?? []).map((p) => p.view));
-  return [...(content.fullViews ?? []), ...(version?.views ?? [])].filter((v) => !broken.has(v.name));
+  return [...(content.fullViews ?? []), ...(version?.views ?? [])]
+    .filter((v) => !broken.has(v.name))
+    .filter((v) => !(v.whitelistedColumns && v.whitelistedColumns.length === 0));
 }
 
 /**

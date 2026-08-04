@@ -154,6 +154,20 @@ describe('whitelist × views access matrix', () => {
     expect((await asQuestionAt('/org/q1', 'SELECT * FROM _views.zone_revenue')).status).toBe(403);
   });
 
+  it('8b. an OFF view is refused under a WILDCARD whitelist too, not served as a stub', async () => {
+    // The same view, the same "off", two different answers: under an explicit
+    // whitelist it is refused (case 8), but a `*` workspace skips table
+    // validation entirely, so resolution rendered its `SELECT NULL AS _off`
+    // stub and the query SUCCEEDED with a meaningless column. Turning a view
+    // off has to mean one thing everywhere.
+    await seedContext('/org/context', { whitelist: '*', views: [{ ...V, whitelistedColumns: [] }] });
+
+    const { status, text } = await asQuestionAt('/org/q1', 'SELECT * FROM _views.zone_revenue');
+    expect(status).toBe(400);
+    expect(text).toMatch(/unknown view/i);
+    expect(mockRunQuery).not.toHaveBeenCalled();
+  });
+
   // ── Case 10: mode isolation ────────────────────────────────────────────────
   it('10. a view defined in TUTORIAL is invisible and unqueryable from ORG', async () => {
     await seedContext('/tutorial/context', { views: [V] });
