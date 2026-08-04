@@ -44,7 +44,7 @@ import { E2E_MODE } from '@/lib/constants';
 import { DEFAULT_MODE } from '@/lib/mode/mode-types';
 import {
   LLM_AGENT_KEYS, LLM_GRADES, MINUSX_PROVIDER, CUSTOM_PROVIDER,
-  findLlmProvider, findMinusxProvider, hasLlmEndpoints, resolveAgentPolicy,
+  findLlmProvider, findMinusxProvider, hasLlmEndpoints, resolveAgentPolicy, supportsNativeWebSearch,
   type LlmAgentKey, type LlmConfig, type LlmGrade, type LlmModelChoice, type LlmProviderEntry,
 } from './llm-config-types';
 import { autoGradeProvider, compatDefaultModel } from './compat-models';
@@ -57,6 +57,11 @@ import { autoGradeProvider, compatDefaultModel } from './compat-models';
 export function buildPlanStep(entry: LlmProviderEntry, choice: LlmModelChoice, grade: LlmGrade, agent: LlmAgentKey, catalog?: ModelCatalog | null): LlmPlanStep {
   const options: Record<string, unknown> = { ...(choice.options ?? {}) };
   if (entry.apiKey) options['apiKey'] = entry.apiKey;
+  // Native web search is injected by API shape, not by provider (see
+  // NATIVE_WEB_SEARCH_PROVIDERS). Sending it to a provider that speaks the
+  // shape without implementing the tool 400s the entire request, so drop it
+  // here — this is the only layer that knows which provider a grade resolved to.
+  if (options['webSearch'] && !supportsNativeWebSearch(entry.provider)) delete options['webSearch'];
 
   if (entry.provider === MINUSX_PROVIDER) {
     // Managed gateway: OpenAI-compatible endpoint; the gateway owns model

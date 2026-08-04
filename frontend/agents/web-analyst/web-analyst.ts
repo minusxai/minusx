@@ -81,9 +81,12 @@ export class WebAnalystAgent extends RemoteAnalystAgent {
   // `reasoning: 'low'` so adaptive thinking is on out of the box; the DB model
   // plan's options merge over these per call (Settings → Models assignments).
   // `webSearch` enables native server-side web search via the pi patch —
-  // supported on Anthropic (Messages API), OpenAI (Responses API), and the
-  // MinusX gateway (default provider); a silent no-op elsewhere. Disable per
-  // workspace via the assignment's options when routing to another provider.
+  // implemented by Anthropic (Messages API), OpenAI (Responses API) and the
+  // MinusX gateway. It is NOT a no-op elsewhere: the patch injects the hosted
+  // tool by API shape, and a provider that speaks the shape without
+  // implementing the tool (fireworks, on anthropic-messages) 400s the whole
+  // request. `buildPlanStep` drops the option for any provider outside
+  // NATIVE_WEB_SEARCH_PROVIDERS, so asking for it here is always safe.
   static readonly callOptions = {
     reasoning: 'low',
     webSearch: true,
