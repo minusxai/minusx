@@ -88,6 +88,35 @@ test.describe('eval: story creation', () => {
     }
     const frame = page.frameLocator('iframe[title="Story document"]');
     await expect(frame.locator('svg[data-mx-story-svg] foreignObject')).toHaveCount(1, { timeout: 60_000 });
+    // The foreignObject existing is NOT proof the story rendered. A story whose
+    // stored source is a TEXT node (escaped markup, or markup that parsed as
+    // text) mounts a surface and renders that source verbatim
+    // (`lib/story-ui/interpreter.tsx` — a text node renders as its value), so
+    // this flow once reported pass:true while the captured artifact was a wall
+    // of `<div className=…>`. Gate on STRUCTURE instead: an interpreted story
+    // mounts hundreds of elements and never shows tag syntax as text (measured
+    // on a real story: 2344 elements / no markup text, vs 7 / markup text for
+    // the text-node failure).
+    // BOTH conditions are polled together, so a story that is merely slow to
+    // mount (embeds hydrate late, sections mount on scroll) is waited for
+    // rather than failed. Only a stable text-node render — which never
+    // resolves, because there is nothing further to mount — reaches the
+    // timeout. `textContent` via evaluate, NOT innerText: foreignObject is an
+    // SVG node and Playwright's innerText throws on it.
+    const surfaceRoot = frame.locator('svg[data-mx-story-svg] foreignObject');
+    await expect
+      .poll(
+        async () => {
+          const elements = await surfaceRoot.locator('*').count();
+          const text = await surfaceRoot.evaluate((el) => el.textContent ?? '');
+          return { interpreted: elements > 50, markupAsText: /<div|className=/.test(text) };
+        },
+        {
+          message: 'story never rendered: surface shows its markup as text instead of interpreting it',
+          timeout: 60_000,
+        },
+      )
+      .toEqual({ interpreted: true, markupAsText: false });
     // Capture the story IFRAME ELEMENT with the viewport grown to fit it:
     // Chromium paints iframe content only inside the viewport, so this is
     // what makes the FULL story render into one image (and any lazily

@@ -159,6 +159,41 @@ function coerceUnionScalar(text: string, branches: JsonSchema[]): unknown {
 const pad = (d: number) => '  '.repeat(d);
 const isJsxField = (s: JsonSchema): boolean => !!s && s.format === 'jsx';
 
+/**
+ * Security validation for a jsx field body, PLUS the body-shape rule: a body
+ * holding no elements at all is not a document.
+ *
+ * The shape rule exists because `{`<div …>`}` — the whole story wrapped in a
+ * template literal — is *legal* JSX: a static string expression is a valid
+ * child, so it parses, validates, stores, and then renders as a wall of
+ * `<div className=…>` text (`lib/story-ui/interpreter.tsx` renders a text node
+ * as its value). Nothing throws anywhere along that path. Models on the
+ * anthropic-messages API produce it routinely — it shipped a text-dump story
+ * through the QA eval as a PASS on 2026-08-04. Rejecting at save is what turns
+ * it into something the agent can see and correct, and the message is its only
+ * route to doing so (same precedent as the unknown-component error listing the
+ * registered set). Template literals INSIDE markup — the SQL/CSS escape hatch —
+ * are untouched: this only fires when the body has no element at all.
+ */
+function jsxBodyError(inner: string, ctx: SchemaCtx): string | null {
+  const errs = validateJsxSource(
+    inner,
+    ctx.jsxField?.components ?? JSX_COMPONENT_NAMES,
+    ctx.jsxField?.allowedHtmlTags,
+    ctx.jsxField?.stylePolicy,
+  );
+  if (errs.length > 0) return errs.map((e) => e.message).join('; ');
+  // An EMPTY body is the legitimate new-story scaffold (`<story></story>`) —
+  // only a body that has content but no elements is the failure.
+  const parsed = parseJsx(inner);
+  if (parsed.ok && parsed.nodes.length > 0 && !parsed.nodes.some((n) => n.type === 'element')) {
+    return 'the body contains no elements — it is a single text value. Emit raw JSX '
+      + '(`<div …>…</div>`), not the document wrapped in a template literal (`{`<div …>`}`) '
+      + 'or quotes. Template literals are only for values INSIDE markup, e.g. a query.';
+  }
+  return null;
+}
+
 /** A string element body: raw template-literal child when it contains jsx-significant chars.
  *  `}` is in the set: a bare `}` in JSXText position fails the parse just like `{`. */
 function strChild(s: string): string {
@@ -290,18 +325,14 @@ function elementToValue(node: JsxElement, schema: JsonSchema, ctx: SchemaCtx): u
     return coerceUnionScalar(text, branches);
   }
 
+  // (see `jsxBodyError` above the file's converters for the body-shape rule)
   // jsx field — serialise its inline elements back to the stored string (via the injected codec).
   // The static-JSX security rules (no <script>/event-handlers/javascript: URLs, only registered
   // components) are enforced HERE — generic to any jsx field — before it reaches the render path.
   if (isJsxField(s)) {
     const inner = serializeJsx(node.children).trim();
-    const errs = validateJsxSource(
-      inner,
-      ctx.jsxField?.components ?? JSX_COMPONENT_NAMES,
-      ctx.jsxField?.allowedHtmlTags,
-      ctx.jsxField?.stylePolicy,
-    );
-    if (errs.length > 0) throw new JsxFieldError(errs.map((e) => e.message).join('; '));
+    const bodyError = jsxBodyError(inner, ctx);
+    if (bodyError) throw new JsxFieldError(bodyError);
     return ctx.jsxField ? ctx.jsxField.fromJsx(inner) : inner;
   }
 
@@ -397,13 +428,8 @@ export function jsxToContent(jsx: string, schema: JsonSchema, ctx: SchemaCtx): J
       const adopted = parsed.nodes.filter((n) => !(n.type === 'element' && n.tag in s.properties));
       const inner = serializeJsx(adopted).trim();
       if (inner) {
-        const errs = validateJsxSource(
-          inner,
-          ctx.jsxField?.components ?? JSX_COMPONENT_NAMES,
-          ctx.jsxField?.allowedHtmlTags,
-          ctx.jsxField?.stylePolicy,
-        );
-        if (errs.length > 0) return { ok: false, error: errs.map((e) => e.message).join('; ') };
+        const bodyError = jsxBodyError(inner, ctx);
+        if (bodyError) return { ok: false, error: bodyError };
         obj[jsxKey] = ctx.jsxField ? ctx.jsxField.fromJsx(inner) : inner;
         dropped.length = 0;
       }
@@ -414,6 +440,20 @@ export function jsxToContent(jsx: string, schema: JsonSchema, ctx: SchemaCtx): J
   // hollow success (e.g. EditFile: "1 FILE EDIT" but no content change → blank story). If we dropped
   // element(s) AND recognized nothing, that's not an empty document — it's un-fielded markup; fail
   // loudly so the agent gets a truthful signal instead of a no-op success.
+  // Same trap, no dropped ELEMENT to count: a document that is only a text /
+  // static-expression node (the whole body wrapped in a template literal)
+  // recognizes nothing and drops nothing, so it parsed to `{}` — a hollow
+  // success that writes a story with no body at all. Fail it for the same
+  // reason, with the same recovery guidance as `jsxBodyError`.
+  if (dropped.length === 0 && Object.keys(obj).length === 0
+      && parsed.nodes.length > 0 && !parsed.nodes.some((n) => n.type === 'element')) {
+    return {
+      ok: false,
+      error: 'The document contains no elements — it is a single text value. Emit raw JSX '
+        + '(`<div …>…</div>`), not the document wrapped in a template literal (`{`<div …>`}`) '
+        + 'or quotes. Template literals are only for values INSIDE markup, e.g. a query.',
+    };
+  }
   if (dropped.length > 0 && Object.keys(obj).length === 0) {
     const fields = s && s.properties ? Object.keys(s.properties) : [];
     return {
