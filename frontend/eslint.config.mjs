@@ -16,6 +16,26 @@ const RESTRICT_DOCUMENTS_DB = {
     "cross-file-lookup concerns) and lib/database/** internals.",
 };
 
+// Query execution is governed: `lib/sql/governed-query.server.ts` resolves the
+// table whitelist, validates the SQL the caller wrote, and inlines `_views.*`.
+// Surfaces that execute user- or agent-authored SQL must go through it — three
+// of them independently forgot a step and drifted apart, which is how a table
+// withheld from a workspace still returned rows through the agent's tool.
+//
+// The allowlist at the bottom of this file names the legitimate direct callers:
+// the governed surfaces themselves (which call the seam and then execute), and
+// the internal paths that run ALREADY-VALIDATED SQL — semantic tier-3 probes,
+// view column snapshots, saved-question execution. A new importer has to be
+// added there deliberately rather than silently skipping governance.
+const RESTRICT_RUN_QUERY = {
+  name: "@/lib/connections/run-query",
+  message:
+    "Do not execute SQL directly. Authorize it first through resolveQueryForExecution " +
+    "(@/lib/sql/governed-query.server), which enforces the context table whitelist and inlines `_views.*` — " +
+    "then execute the returned `executedQuery`. If this module legitimately runs already-validated SQL, add it " +
+    "to the run-query allowlist block at the bottom of this config with a justification.",
+};
+
 const RESTRICT_ADAPTER_FACTORY = {
   name: "@/lib/database/adapter/factory",
   message:
@@ -213,6 +233,7 @@ const eslintConfig = defineConfig([
             RESTRICT_DOCUMENTS_DB,
             RESTRICT_ADAPTER_FACTORY,
             RESTRICT_PI_AI,
+            RESTRICT_RUN_QUERY,
           ],
           patterns: [RESTRICT_PI_AI_SUBPATHS],
         },
@@ -486,6 +507,44 @@ const eslintConfig = defineConfig([
       "no-restricted-syntax": [
         "error",
         ...BASE_RESTRICTED_SYNTAX.filter((r) => r !== RESTRICT_BARE_ORCHESTRATOR),
+      ],
+    },
+  },
+  // ── The run-query allowlist ────────────────────────────────────────────────
+  // Must come after every block that sets `no-restricted-imports` (last matching
+  // config wins). Each entry is a deliberate decision, in one of two categories:
+  //
+  //  GOVERNED SURFACES — call `resolveQueryForExecution` first, then execute what
+  //  it returns. These are the only places user- or agent-authored SQL enters:
+  //    · app/api/query/route.ts                        the browser
+  //    · agents/benchmark-analyst/db-tools.server.ts   the agent's ExecuteQuery
+  //    · lib/connections/execute-query.server.ts       shared executor (MCP governs before calling)
+  //
+  //  ALREADY-VALIDATED SQL — never caller-authored, so there is nothing to authorize:
+  //    · lib/semantic/save-gate.server.ts   tier-3 probes of authored metrics (`SELECT … LIMIT 0`)
+  //    · lib/views/prepare.server.ts        view column snapshots, run at authoring time
+  //    · lib/file-state/file-state.server.ts / lib/evals/server.ts
+  //      execute a SAVED question's SQL, authorized when the file was saved and
+  //      re-authorized by the query route whenever the browser runs it
+  {
+    files: [
+      "app/api/query/route.ts",
+      "agents/benchmark-analyst/db-tools.server.ts",
+      "lib/connections/execute-query.server.ts",
+      "lib/connections/run-query.ts",
+      "lib/semantic/save-gate.server.ts",
+      "lib/views/prepare.server.ts",
+      "lib/file-state/file-state.server.ts",
+      "lib/evals/server.ts",
+      "lib/sql/governed-query.server.ts",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [RESTRICT_DOCUMENTS_DB, RESTRICT_ADAPTER_FACTORY, RESTRICT_PI_AI],
+          patterns: [RESTRICT_PI_AI_SUBPATHS],
+        },
       ],
     },
   },

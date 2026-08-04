@@ -120,6 +120,44 @@ non-`SELECT` roots are no-ops, which is what makes it safe to apply unconditiona
 `runQueryStream` (see `frontend/lib/connections/CLAUDE.md`). Mongo has its own mirror,
 `enforceMongoLimit`, because this is a SQL parser.
 
+## The governed query seam
+
+`governed-query.server.ts` is the ONE place that decides whether a piece of user- or agent-authored
+SQL may run and what it executes as. `resolveQueryForExecution({sql, connectionName, user, anchor})`
+composes, in a fixed order: whitelist resolution → `validateQueryTables` → dialect → `_views.*`
+inlining. It throws `WhitelistViolationError` or `ViewResolutionError`; otherwise it returns
+`{executedQuery, dialect, schemaContext}`.
+
+**It exists because per-surface enforcement drifted, three times.** `/api/query` validated and
+inlined; MCP validated but never inlined (a view reference reached the warehouse as a nonexistent
+table); the agent's `ExecuteQuery` did neither — so a table withheld from a workspace still returned
+rows through the agent's tool while the browser answered 403 for the same SQL. **Concealment is not
+enforcement**: not showing a table to a model is no protection once the model names it anyway.
+The three callers are `app/api/query/route.ts`, `agents/benchmark-analyst/db-tools.server.ts`
+(`ExecuteQuery._executeFallback`) and `lib/mcp/server.ts`.
+
+**Validation precedes inlining, deliberately.** A view is authorized as *itself* — it appears in the
+whitelisted schema, so a curated view may expose an aggregate over tables the caller cannot query
+directly, and its own SQL is validated where it is authored (the context save gate). Validating the
+inlined text would reject exactly the case views exist for. Inlining precedes execution *and* caching
+so cache keys are computed over the resolved SQL.
+
+**The `QueryAnchor` is required, not inferred**, because the surfaces genuinely differ and the
+difference used to be accidental: `{kind:'file', path}` governs a question by the nearest context to
+**its own path** (what makes a locked-down team folder lock its questions down), `{kind:'homeFolder'}`
+governs free-form chat and MCP, which have no file in hand.
+
+**`eslint.config.mjs` enforces the boundary** (`RESTRICT_RUN_QUERY`): importing
+`@/lib/connections/run-query` is an error outside the allowlist block at the bottom of that config —
+the governed surfaces, plus the paths that run already-validated SQL (semantic tier-3 probes, view
+column snapshots, saved-question execution). A new surface cannot silently skip governance.
+
+**Known fail-open, pre-existing:** `getWhitelistForPath` returns `null` (= unrestricted) when the
+resolved context exposes *nothing* for a connection, because "exposes nothing" and "never mentioned
+this connection" are indistinguishable at that point. A context whose whitelist is `[]` therefore
+does not deny-all. Changing it would make a connection added after a context deny-all everywhere,
+so it is deliberately left alone.
+
 ## Whitelisting and schema exposure
 
 `validateQueryTables` (`validate-query-tables.ts`) extracts table references and rejects anything
@@ -148,6 +186,7 @@ context handed to agents and the right sidebar — so widening a whitelist widen
 | None-param semantics | `lib/sql/none-params.ts` |
 | `:param` extraction + value assembly | `lib/sql/sql-params.ts` |
 | Row caps | `lib/sql/limit-enforcer.ts` |
+| Authorize + rewrite a query before executing it | `lib/sql/governed-query.server.ts` (every executing surface calls this) |
 | Table allowlisting | `lib/sql/validate-query-tables.ts`, `lib/sql/whitelist-resolver.server.ts` |
 | Whitelist → exposed schema | `lib/sql/schema-filter.ts` |
 | Agent-facing Schema Notes / context docs | `lib/sql/context-docs.ts`, `lib/sql/annotation-notes.ts` |

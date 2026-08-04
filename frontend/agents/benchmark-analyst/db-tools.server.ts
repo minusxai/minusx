@@ -32,25 +32,16 @@ import {
 import { SemanticQuerySpec } from '@/lib/validation/atlas-schemas';
 import { validateSemanticQuery, compileSemanticQuery, SemanticCompileError } from '@/lib/semantic/compile';
 import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
-import { mentionsViews, resolveViewsInSql } from '@/lib/views/resolve';
-import { resolveViewsForContext, getViewsForPath } from '@/lib/views/views.server';
+import { resolveViewsInSql } from '@/lib/views/resolve';
+import { resolveViewsForContext } from '@/lib/views/views.server';
 import { viewsAsSchemaTables, VIEWS_SCHEMA } from '@/lib/types/views';
+import {
+  resolveQueryForExecution, dialectForConnection, type QueryAnchor,
+} from '@/lib/sql/governed-query.server';
 import { loadNearestContext, resolveModelsForContext } from '@/lib/semantic/models.server';
-import { ConnectionsAPI } from '@/lib/data/connections.server';
-import { connectionTypeToDialect } from '@/lib/types';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import type { ContextContent } from '@/lib/types';
 import type { QueryIR } from '@/lib/sql/ir-types';
-
-/** Connection dialect (same seam as the semantic save gate); duckdb fallback. */
-async function dialectFor(connection: string, mode: EffectiveUser['mode']): Promise<string> {
-  try {
-    const { type } = await ConnectionsAPI.getRawByName(connection, mode);
-    return connectionTypeToDialect(type);
-  } catch {
-    return 'duckdb';
-  }
-}
 
 /**
  * Production ExecuteQuery variant. Overrides `_initialiseConnectors` to a
@@ -96,17 +87,18 @@ export class ExecuteQuery extends BaseExecuteQuery {
         'ExecuteQuery: missing effectiveUser on agent context — cannot resolve connection. This is a server bug; please report.',
       );
     }
-    // Inline `_views.x` (views are virtual — resolution mirrors the UI query
-    // route; the home-folder anchor mirrors SearchDBSchema/RunSemanticQuery).
-    // A ViewResolutionError (unknown view, cycle) propagates as the tool error,
-    // pointing at the view instead of a confusing warehouse catalog error.
-    let executedQuery = query;
-    if (mentionsViews(query)) {
-      const basePath = (this.context as { homeFolder?: string }).homeFolder
-        ?? resolveHomeFolderSync(user.mode, user.home_folder || '');
-      const views = await getViewsForPath(basePath, connectionId, user);
-      executedQuery = await resolveViewsInSql(query, await dialectFor(connectionId, user.mode), views);
-    }
+    // Governance: the SAME seam the browser query route uses. The agent gets no
+    // weaker check than a human — the whitelist has to be enforcement, not
+    // concealment, because a model that names a withheld table anyway would
+    // otherwise be served its rows. Errors (whitelist violation, unknown view)
+    // surface as tool errors naming the offending table/view, which is exactly
+    // what the model needs to correct itself.
+    const anchor: QueryAnchor = (this.context as { homeFolder?: string }).homeFolder
+      ? { kind: 'file', path: (this.context as { homeFolder: string }).homeFolder }
+      : { kind: 'homeFolder' };
+    const { executedQuery } = await resolveQueryForExecution({
+      sql: query, connectionName: connectionId, user, anchor,
+    });
 
     // Route through the SHARED durable cache (`lib/query-cache`): an agent query and a
     // UI query of the same SQL+params in the same mode hit one blob + SWR. The
@@ -340,7 +332,7 @@ export class RunSemanticQuery extends MXTool<typeof RunSemanticQueryParams, Remo
     let sql: string;
     try {
       const ir = compileSemanticQuery(spec, model) as QueryIR;
-      const dialect = await dialectFor(model.connection, user.mode);
+      const dialect = await dialectForConnection(model.connection, user.mode);
       const rawSql = irToSqlLocal(ir, dialect);
       const views = resolveViewsForContext(contextContent, user.userId)
         .filter((v) => v.connection === model.connection);

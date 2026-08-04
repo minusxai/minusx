@@ -69,6 +69,26 @@ async function searchSchemas(
         });
       }
 
+      // Search the table's description when it has one (weight: 2, same as the
+      // name). Only virtual tables carry this today — a view's authored purpose
+      // — and it is often the only text that matches what a question is asking
+      // ("revenue by zone") when the view's NAME does not.
+      const tableDescription = table.description || '';
+      if (tableDescription) {
+        const descStats = searchInField(tableDescription, query, 'table', 2);
+        totalMatches += descStats.exactMatches + descStats.wordBoundaryMatches + descStats.partialMatches;
+        totalScore += (descStats.exactMatches * 10 + descStats.wordBoundaryMatches * 5 + descStats.partialMatches * 1) * 2;
+
+        if (descStats.snippets.length > 0) {
+          relevantResults.push({
+            field: 'table',
+            location: `${schemaName}.${tableName}`,
+            snippet: descStats.snippets[0],
+            matchType: descStats.exactMatches > 0 ? 'exact' : 'partial',
+          });
+        }
+      }
+
       // Search column names (weight: 1)
       for (const column of columns) {
         const columnName = column.name || '';

@@ -28,6 +28,13 @@ vi.mock('@/lib/views/views.server', async (importOriginal) => ({
   ...(await importOriginal<object>()),
   getViewsForPath: mockGetViewsForPath,
 }));
+// The agent's query path runs through the same governed seam as /api/query; the
+// whitelist it enforces comes from the context, mocked here at its resolver.
+const { mockGetWhitelistForPath } = vi.hoisted(() => ({ mockGetWhitelistForPath: vi.fn() }));
+vi.mock('@/lib/sql/whitelist-resolver.server', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  getWhitelistForPath: mockGetWhitelistForPath,
+}));
 // ExecuteQuery now streams (runQueryStream) and reads BOUNDED through the durable cache
 // (getCachedResultBounded). Keep the tests driving rows via mockRunQuery: expose runQueryStream as
 // a one-shot stream over its result, and stub the cache to just run the execute thunk + bounded-drain
@@ -153,6 +160,27 @@ describe('SearchDBSchema', () => {
     expect(table.columns.map((c: { name: string }) => c.name)).toEqual(['actual', 'target']);
   });
 
+  it('carries a view\'s description into search results (and makes it searchable)', async () => {
+    // A view's description is the one place its PURPOSE is written down. Without
+    // it in the payload the agent sees a bare name and has to guess what the
+    // view is for — and cannot match it against what a question is asking.
+    mockLoadSchema.mockResolvedValue(fakeSchemas);
+    mockLoadNearestContext.mockResolvedValue(contextWithView({
+      ...CLEAN_KPI, description: 'Cleaned KPI actuals vs targets by directorate',
+    }));
+
+    const orch = new Orchestrator([]);
+    const tool = new SearchDBSchema(orch, { connection_id: 'main', query: 'directorate' }, ctx);
+    const res = await tool.run();
+
+    const parsed = JSON.parse((res.content[0] as { text: string }).text);
+    const viewsEntry = parsed.results.find(
+      (r: { schema: { schema: string } }) => r.schema.schema === '_views',
+    );
+    expect(viewsEntry).toBeTruthy(); // matched via the description text
+    expect(viewsEntry.schema.tables[0].description).toBe('Cleaned KPI actuals vs targets by directorate');
+  });
+
   it('does not surface views belonging to a different connection', async () => {
     mockLoadSchema.mockResolvedValue(fakeSchemas);
     mockLoadNearestContext.mockResolvedValue(
@@ -224,6 +252,44 @@ describe('ExecuteQuery', () => {
     mockRunQuery.mockReset();
     mockGetViewsForPath.mockReset();
     mockGetViewsForPath.mockResolvedValue([]);
+    mockGetWhitelistForPath.mockReset();
+    mockGetWhitelistForPath.mockResolvedValue(null); // null = unrestricted
+  });
+
+  // The whitelist must be ENFORCEMENT, not concealment: not showing a table to
+  // the model is no protection once the model names it anyway. Confirmed in a
+  // real workspace — a withheld table returned rows through this tool while the
+  // browser route answered 403 for the same SQL.
+  it('ENFORCES the context table whitelist (parity with /api/query)', async () => {
+    mockGetWhitelistForPath.mockResolvedValue([
+      { schema: 'mxfood', tables: [{ table: 'orders' }] },
+    ]);
+
+    const orch = new Orchestrator([]);
+    const tool = new ExecuteQuery(orch, {
+      connectionId: 'main', query: 'SELECT COUNT(*) FROM mxfood.users',
+    }, ctx);
+    const res = await tool.run();
+
+    expect(res.isError).toBe(true);
+    expect((res.content[0] as { text: string }).text).toContain('mxfood.users');
+    expect(mockRunQuery).not.toHaveBeenCalled();
+  });
+
+  it('allows a whitelisted table through', async () => {
+    mockGetWhitelistForPath.mockResolvedValue([
+      { schema: 'mxfood', tables: [{ table: 'orders' }] },
+    ]);
+    mockRunQuery.mockResolvedValue({ columns: ['n'], types: ['int'], rows: [{ n: 3 }], finalQuery: '' });
+
+    const orch = new Orchestrator([]);
+    const tool = new ExecuteQuery(orch, {
+      connectionId: 'main', query: 'SELECT COUNT(*) AS n FROM mxfood.orders',
+    }, ctx);
+    const res = await tool.run();
+
+    expect(res.isError).toBe(false);
+    expect(mockRunQuery).toHaveBeenCalled();
   });
 
   // Views are virtual — the warehouse has no `_views` schema, so SQL referencing

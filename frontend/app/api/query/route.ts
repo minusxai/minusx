@@ -1,16 +1,15 @@
 import type { QueryStream } from '@/lib/connections/base';
-import { connectionTypeToDialect } from '@/lib/types';
 import { handleApiError, ApiErrors } from '@/lib/http/api-responses';
 import { withAuth } from '@/lib/http/with-auth';
 import { NextRequest, NextResponse } from 'next/server';
 import { Readable } from 'stream';
-import { ConnectionsAPI } from '@/lib/data/connections.server';
 import { runQueryStream } from '@/lib/connections/run-query';
 import { applyNoneParams } from '@/lib/sql/none-params';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
-import { validateQueryTables } from '@/lib/sql/validate-query-tables';
-import { getWhitelistForPath, whitelistToSchemaContext } from '@/lib/sql/whitelist-resolver.server';
+import {
+  resolveQueryForExecution, dialectForConnection, WhitelistViolationError,
+} from '@/lib/sql/governed-query.server';
 import { getModules } from '@/lib/modules/registry';
 import { getCachedJsonlStream } from '@/lib/query-cache/execute.server';
 import { resolveCachePolicy } from '@/lib/query-cache/policy.server';
@@ -74,53 +73,56 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     const queryHash = getQueryHash(query, paramValues as Record<string, unknown>, connectionName);
     const mode = await getModules().auth.getUserKey(user);
 
-    // ── Whitelist validation (BEFORE serving any cache) ────────────────────────
-    // Keyed by (mode, query, params) — does NOT include filePath. Validate before
-    // trusting the cache so a user can't replay a query authorized under one
-    // filePath's whitelist from another where it's now denied.
+    // ── Governance: whitelist validation + view inlining (BEFORE any cache) ────
+    // One shared seam (`lib/sql/governed-query.server.ts`) that every executing
+    // surface calls, so the browser, the agent's ExecuteQuery and MCP cannot
+    // drift apart on what is allowed — they have, repeatedly.
+    //
+    // Validation happens before the cache is trusted because the cache key is
+    // (mode, query, params) and does NOT include filePath: without this a user
+    // could replay a query authorized under one filePath's whitelist from
+    // another where it is now denied.
+    //
+    // A question's queries are governed by ITS OWN path — the nearest context to
+    // the file, not the caller's home folder — which is what makes a locked-down
+    // team folder actually lock its questions down. With no filePath there is
+    // nothing to anchor to and the query runs ungoverned (unchanged behaviour).
     let schemaContext: Array<{ schema: string; table: string; columns: string[] }> | null = null;
+    let executedQuery = query;
     if (filePath) {
-      const whitelist = await getWhitelistForPath(filePath, connectionName, user);
-      if (whitelist) {
-        schemaContext = whitelistToSchemaContext(whitelist);
-        const validationError = await validateQueryTables(query, whitelist, user);
-        if (validationError) {
+      try {
+        const governed = await resolveQueryForExecution({
+          sql: query, connectionName, user, anchor: { kind: 'file', path: filePath },
+        });
+        executedQuery = governed.executedQuery;
+        schemaContext = governed.schemaContext;
+      } catch (err) {
+        if (err instanceof WhitelistViolationError) {
           return NextResponse.json(
-            { success: false, error: { code: 'FORBIDDEN_TABLES', message: validationError } },
+            { success: false, error: { code: 'FORBIDDEN_TABLES', message: err.message } },
             { status: 403 },
           );
         }
+        if (err instanceof ViewResolutionError) return ApiErrors.badRequest(err.message);
+        throw err;
       }
-    }
-
-    // Derive dialect via getRawByName (no schema-profiling loader on the hot path).
-    let queryDialect = 'duckdb';
-    try {
-      const { type } = await ConnectionsAPI.getRawByName(connectionName, user.mode);
-      if (type) queryDialect = connectionTypeToDialect(type);
-    } catch { /* default duckdb */ }
-
-    // ── Views: inline `_views.x` as CTEs BEFORE caching ───────────────────────
-    // Order matters twice over:
-    //  · AFTER whitelist validation, which checks the query the user wrote — a
-    //    view is authorized as itself (it appears in the whitelisted schema),
-    //    so a curated view can expose an aggregate of tables the reader may not
-    //    query directly. The view's own SQL is validated where it is AUTHORED.
-    //  · BEFORE the cache, so the cache key is computed over the RESOLVED SQL:
-    //    editing a view's body changes the key and invalidates stale results for
-    //    free, with no cache-key surgery.
-    // Non-view queries take the fast path (byte-identical, never parsed) and keep
-    // their existing cache keys.
-    let executedQuery = query;
-    if (mentionsViews(query)) {
+    } else if (mentionsViews(query)) {
+      // No anchor to govern by, but a `_views` reference still has to be inlined
+      // or it reaches the warehouse as a table that does not exist there.
       try {
-        const views = await getViewsForPath(filePath ?? resolvePath(user.mode, '/'), connectionName, user);
-        executedQuery = await resolveViewsInSql(query, queryDialect, views);
+        const views = await getViewsForPath(resolvePath(user.mode, '/'), connectionName, user);
+        executedQuery = await resolveViewsInSql(
+          query, await dialectForConnection(connectionName, user.mode), views,
+        );
       } catch (err) {
         if (err instanceof ViewResolutionError) return ApiErrors.badRequest(err.message);
         throw err;
       }
     }
+
+    // Dialect for param resolution below (the seam resolved its own for view
+    // inlining; this is the same lookup, off the schema-profiling path).
+    const queryDialect = await dialectForConnection(connectionName, user.mode);
 
     // ── The execution thunk (runs only on miss / expired / background revalidate) ──
     const execute = async (): Promise<QueryStream> => {
