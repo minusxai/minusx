@@ -34,9 +34,11 @@ import { validateSemanticQuery, compileSemanticQuery, SemanticCompileError } fro
 import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
 import { resolveViewsInSql } from '@/lib/views/resolve';
 import { resolveViewsForContext } from '@/lib/views/views.server';
+import { viewsAsSchemaTables, VIEWS_SCHEMA } from '@/lib/types/views';
+import {
+  resolveQueryForExecution, dialectForConnection, type QueryAnchor,
+} from '@/lib/sql/governed-query.server';
 import { loadNearestContext, resolveModelsForContext } from '@/lib/semantic/models.server';
-import { ConnectionsAPI } from '@/lib/data/connections.server';
-import { connectionTypeToDialect } from '@/lib/types';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import type { ContextContent } from '@/lib/types';
 import type { QueryIR } from '@/lib/sql/ir-types';
@@ -47,6 +49,14 @@ import type { QueryIR } from '@/lib/sql/ir-types';
  * routes the fallback through the durable query cache over `runQueryStream`,
  * which goes via `ConnectionsAPI.getRawByName` + `getNodeConnector` — the
  * standard production seam.
+ *
+ * SQL referencing `_views.x` is inlined as CTEs BEFORE the cache — same
+ * ordering as `app/api/query/route.ts`, and for the same reasons: views are
+ * virtual (the warehouse has no `_views` schema, so unresolved SQL is a
+ * guaranteed catalog error), and keying the cache on the RESOLVED SQL means
+ * editing a view's body invalidates stale results for free while agent and UI
+ * queries of the same view SQL share one entry. Non-view SQL takes the
+ * byte-identical fast path and is never parsed.
  *
  * Overrides `static schema` with the no-`timeout` variant: the production
  * path (`_executeFallback` → `runQueryStream`) does not honour the query
@@ -77,6 +87,19 @@ export class ExecuteQuery extends BaseExecuteQuery {
         'ExecuteQuery: missing effectiveUser on agent context — cannot resolve connection. This is a server bug; please report.',
       );
     }
+    // Governance: the SAME seam the browser query route uses. The agent gets no
+    // weaker check than a human — the whitelist has to be enforcement, not
+    // concealment, because a model that names a withheld table anyway would
+    // otherwise be served its rows. Errors (whitelist violation, unknown view)
+    // surface as tool errors naming the offending table/view, which is exactly
+    // what the model needs to correct itself.
+    const anchor: QueryAnchor = (this.context as { homeFolder?: string }).homeFolder
+      ? { kind: 'file', path: (this.context as { homeFolder: string }).homeFolder }
+      : { kind: 'homeFolder' };
+    const { executedQuery } = await resolveQueryForExecution({
+      sql: query, connectionName: connectionId, user, anchor,
+    });
+
     // Route through the SHARED durable cache (`lib/query-cache`): an agent query and a
     // UI query of the same SQL+params in the same mode hit one blob + SWR. The
     // cache is best-effort, so a DB/blob hiccup degrades to direct execution.
@@ -87,12 +110,12 @@ export class ExecuteQuery extends BaseExecuteQuery {
     const { result } = await getCachedResultBounded({
       mode: user.mode,
       connectionName: connectionId,
-      query,
+      query: executedQuery,
       params: params as Record<string, string | number | null>,
       policy: resolveCachePolicy(null),
       // The execute thunk streams; the write-through avoids a second server-side copy. Its own
       // (uncached-degrade) drain is bounded inside getCachedResultBounded.
-      execute: async () => runQueryStream(connectionId, query, params, user),
+      execute: async () => runQueryStream(connectionId, executedQuery, params, user),
     }, { maxBytes: AGENT_DRAIN_MAX_BYTES, maxRows: AGENT_DRAIN_MAX_ROWS });
     return result;
   }
@@ -133,6 +156,15 @@ export class ExecuteQuery extends BaseExecuteQuery {
  * which reads the cached schema from the connection file via FilesAPI.
  * Inherits `static schema` (and therefore `schema.name`) from
  * `BaseSearchDBSchema`.
+ *
+ * The context's views are appended as a `_views` schema entry: they are
+ * VIRTUAL tables — present in the agent's prompt schema (injected by the
+ * context loader) but absent from the connection's introspected schema — so
+ * without this a whitelisted view is undiscoverable by schema search and the
+ * agent second-guesses views it was told about. Context resolution mirrors
+ * RunSemanticQuery below (nearest context for the user's home folder), and
+ * the per-run table whitelist in `run()` applies to view tables like any
+ * other, so a view outside the whitelist stays hidden (fail closed).
  */
 export class SearchDBSchema extends BaseSearchDBSchema {
   protected override async _initialiseConnectors(): Promise<void> {
@@ -142,7 +174,22 @@ export class SearchDBSchema extends BaseSearchDBSchema {
   protected override async _loadSchemaFallback(connection: string): Promise<SchemaEntry[]> {
     const user = (this.context as { effectiveUser?: EffectiveUser }).effectiveUser;
     if (!user) return [];
-    return loadConnectionSchema(connection, user);
+    const schemas = await loadConnectionSchema(connection, user);
+
+    const basePath = (this.context as { homeFolder?: string }).homeFolder
+      ?? resolveHomeFolderSync(user.mode, user.home_folder || '');
+    let contextContent: ContextContent | null = null;
+    try {
+      contextContent = await loadNearestContext(user, basePath);
+    } catch {
+      contextContent = null; // no context is not an error — plain connection schema
+    }
+    const viewTables = viewsAsSchemaTables(
+      resolveViewsForContext(contextContent, user.userId), connection,
+    );
+    return viewTables.length > 0
+      ? [...schemas, { schema: VIEWS_SCHEMA, tables: viewTables }]
+      : schemas;
   }
 }
 
@@ -285,7 +332,7 @@ export class RunSemanticQuery extends MXTool<typeof RunSemanticQueryParams, Remo
     let sql: string;
     try {
       const ir = compileSemanticQuery(spec, model) as QueryIR;
-      const dialect = await this._dialectFor(model.connection, user.mode);
+      const dialect = await dialectForConnection(model.connection, user.mode);
       const rawSql = irToSqlLocal(ir, dialect);
       const views = resolveViewsForContext(contextContent, user.userId)
         .filter((v) => v.connection === model.connection);
@@ -306,15 +353,5 @@ export class RunSemanticQuery extends MXTool<typeof RunSemanticQueryParams, Remo
       this.id,
     );
     return exec.run();
-  }
-
-  /** Connection dialect (same seam as the semantic save gate); duckdb fallback. */
-  private async _dialectFor(connection: string, mode: EffectiveUser['mode']): Promise<string> {
-    try {
-      const { type } = await ConnectionsAPI.getRawByName(connection, mode);
-      return connectionTypeToDialect(type);
-    } catch {
-      return 'duckdb';
-    }
   }
 }

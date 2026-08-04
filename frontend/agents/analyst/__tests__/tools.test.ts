@@ -7,12 +7,33 @@ import {
 
 // Mock the production chokepoints. Production `SearchDBSchema` / `ExecuteQuery`
 // route here, so configuring these mocks is how tests inject schemas/rows.
-const { mockLoadSchema, mockRunQuery } = vi.hoisted(() => ({
+const { mockLoadSchema, mockRunQuery, mockLoadNearestContext } = vi.hoisted(() => ({
   mockLoadSchema: vi.fn(),
   mockRunQuery: vi.fn(),
+  mockLoadNearestContext: vi.fn(),
 }));
 vi.mock('@/lib/connections/load-schema', () => ({
   loadConnectionSchema: mockLoadSchema,
+}));
+// SearchDBSchema resolves the nearest context to surface its views as `_views`
+// tables; RunSemanticQuery shares the module. Models are irrelevant here.
+vi.mock('@/lib/semantic/models.server', () => ({
+  loadNearestContext: mockLoadNearestContext,
+  resolveModelsForContext: () => [],
+}));
+// ExecuteQuery inlines `_views.x` via getViewsForPath before executing; keep the
+// pure helpers (resolveViewsForContext) real.
+const { mockGetViewsForPath } = vi.hoisted(() => ({ mockGetViewsForPath: vi.fn() }));
+vi.mock('@/lib/views/views.server', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  getViewsForPath: mockGetViewsForPath,
+}));
+// The agent's query path runs through the same governed seam as /api/query; the
+// whitelist it enforces comes from the context, mocked here at its resolver.
+const { mockGetWhitelistForPath } = vi.hoisted(() => ({ mockGetWhitelistForPath: vi.fn() }));
+vi.mock('@/lib/sql/whitelist-resolver.server', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  getWhitelistForPath: mockGetWhitelistForPath,
 }));
 // ExecuteQuery now streams (runQueryStream) and reads BOUNDED through the durable cache
 // (getCachedResultBounded). Keep the tests driving rows via mockRunQuery: expose runQueryStream as
@@ -65,6 +86,8 @@ describe('SearchDBSchema', () => {
   beforeEach(() => {
     mockLoadSchema.mockReset();
     mockRunQuery.mockReset();
+    mockLoadNearestContext.mockReset();
+    mockLoadNearestContext.mockResolvedValue(null);
   });
 
   it('returns production-shaped {success, queryType, tableCount, results} on keyword match', async () => {
@@ -100,6 +123,114 @@ describe('SearchDBSchema', () => {
     expect(parsed).toMatchObject({ success: true, tableCount: 0, results: [] });
   });
 
+  // Views are VIRTUAL tables: injected into the agent's prompt schema by the
+  // context loader but absent from the connection's introspected schema. The
+  // production tool appends the nearest context's views as a `_views` schema
+  // entry so a whitelisted view is discoverable by schema search — without it,
+  // searching for a view the agent was just told about returns "no matches".
+  const contextWithView = (view: object) => ({
+    versions: [{
+      version: 1, whitelist: [], docs: [], views: [view],
+      createdAt: '', createdBy: 1,
+    }],
+    published: { all: 1 },
+  });
+  const CLEAN_KPI = {
+    name: 'clean_kpi', connection: 'main', sql: 'SELECT 1',
+    columns: [{ name: 'actual', type: 'DOUBLE' }, { name: 'target', type: 'DOUBLE' }],
+  };
+
+  it('surfaces the nearest context\'s views as searchable _views tables', async () => {
+    mockLoadSchema.mockResolvedValue(fakeSchemas);
+    mockLoadNearestContext.mockResolvedValue(contextWithView(CLEAN_KPI));
+
+    const orch = new Orchestrator([]);
+    const tool = new SearchDBSchema(orch, { connection_id: 'main', query: 'clean_kpi' }, ctx);
+    const res = await tool.run();
+
+    expect(res.isError).toBe(false);
+    const parsed = JSON.parse((res.content[0] as { text: string }).text);
+    expect(parsed.success).toBe(true);
+    const viewsEntry = parsed.results.find(
+      (r: { schema: { schema: string } }) => r.schema.schema === '_views',
+    );
+    expect(viewsEntry).toBeTruthy();
+    const table = viewsEntry.schema.tables.find((t: { table: string }) => t.table === 'clean_kpi');
+    expect(table).toBeTruthy();
+    expect(table.columns.map((c: { name: string }) => c.name)).toEqual(['actual', 'target']);
+  });
+
+  it('carries a view\'s description into search results (and makes it searchable)', async () => {
+    // A view's description is the one place its PURPOSE is written down. Without
+    // it in the payload the agent sees a bare name and has to guess what the
+    // view is for — and cannot match it against what a question is asking.
+    mockLoadSchema.mockResolvedValue(fakeSchemas);
+    mockLoadNearestContext.mockResolvedValue(contextWithView({
+      ...CLEAN_KPI, description: 'Cleaned KPI actuals vs targets by directorate',
+    }));
+
+    const orch = new Orchestrator([]);
+    const tool = new SearchDBSchema(orch, { connection_id: 'main', query: 'directorate' }, ctx);
+    const res = await tool.run();
+
+    const parsed = JSON.parse((res.content[0] as { text: string }).text);
+    const viewsEntry = parsed.results.find(
+      (r: { schema: { schema: string } }) => r.schema.schema === '_views',
+    );
+    expect(viewsEntry).toBeTruthy(); // matched via the description text
+    expect(viewsEntry.schema.tables[0].description).toBe('Cleaned KPI actuals vs targets by directorate');
+  });
+
+  it('does not surface views belonging to a different connection', async () => {
+    mockLoadSchema.mockResolvedValue(fakeSchemas);
+    mockLoadNearestContext.mockResolvedValue(
+      contextWithView({ ...CLEAN_KPI, connection: 'other_warehouse' }),
+    );
+
+    const orch = new Orchestrator([]);
+    const tool = new SearchDBSchema(orch, { connection_id: 'main', query: 'clean_kpi' }, ctx);
+    const res = await tool.run();
+
+    const parsed = JSON.parse((res.content[0] as { text: string }).text);
+    expect(parsed).toMatchObject({ success: true, tableCount: 0, results: [] });
+  });
+
+  it('the per-run table whitelist still applies to _views tables (fail closed)', async () => {
+    mockLoadSchema.mockResolvedValue(fakeSchemas);
+    mockLoadNearestContext.mockResolvedValue(contextWithView(CLEAN_KPI));
+
+    const orch = new Orchestrator([]);
+    // Whitelist names only the physical table — the view is NOT whitelisted.
+    const restricted = { ...ctx, whitelistedTables: ['users', 'main.users'] };
+    const tool = new SearchDBSchema(orch, { connection_id: 'main', query: 'clean_kpi' }, restricted);
+    const res = await tool.run();
+
+    const parsed = JSON.parse((res.content[0] as { text: string }).text);
+    expect(parsed).toMatchObject({ success: true, tableCount: 0, results: [] });
+
+    // Whitelisted (the flattened context schema carries both bare and qualified
+    // forms) → the view is searchable.
+    const allowed = { ...ctx, whitelistedTables: ['users', 'main.users', 'clean_kpi', '_views.clean_kpi'] };
+    const tool2 = new SearchDBSchema(orch, { connection_id: 'main', query: 'clean_kpi' }, allowed);
+    const res2 = await tool2.run();
+    const parsed2 = JSON.parse((res2.content[0] as { text: string }).text);
+    expect(parsed2.tableCount).toBeGreaterThanOrEqual(1);
+    expect(parsed2.results[0].schema.schema).toBe('_views');
+  });
+
+  it('a context that fails to load degrades to the plain connection schema', async () => {
+    mockLoadSchema.mockResolvedValue(fakeSchemas);
+    mockLoadNearestContext.mockRejectedValue(new Error('db down'));
+
+    const orch = new Orchestrator([]);
+    const tool = new SearchDBSchema(orch, { connection_id: 'main' }, ctx);
+    const res = await tool.run();
+
+    expect(res.isError).toBe(false);
+    const parsed = JSON.parse((res.content[0] as { text: string }).text);
+    expect(parsed.schema).toEqual(fakeSchemas);
+  });
+
   it('returns full schema when no query is provided', async () => {
     mockLoadSchema.mockResolvedValue(fakeSchemas);
 
@@ -119,6 +250,96 @@ describe('ExecuteQuery', () => {
   beforeEach(() => {
     mockLoadSchema.mockReset();
     mockRunQuery.mockReset();
+    mockGetViewsForPath.mockReset();
+    mockGetViewsForPath.mockResolvedValue([]);
+    mockGetWhitelistForPath.mockReset();
+    mockGetWhitelistForPath.mockResolvedValue(null); // null = unrestricted
+  });
+
+  // The whitelist must be ENFORCEMENT, not concealment: not showing a table to
+  // the model is no protection once the model names it anyway. Confirmed in a
+  // real workspace — a withheld table returned rows through this tool while the
+  // browser route answered 403 for the same SQL.
+  it('ENFORCES the context table whitelist (parity with /api/query)', async () => {
+    mockGetWhitelistForPath.mockResolvedValue([
+      { schema: 'mxfood', tables: [{ table: 'orders' }] },
+    ]);
+
+    const orch = new Orchestrator([]);
+    const tool = new ExecuteQuery(orch, {
+      connectionId: 'main', query: 'SELECT COUNT(*) FROM mxfood.users',
+    }, ctx);
+    const res = await tool.run();
+
+    expect(res.isError).toBe(true);
+    expect((res.content[0] as { text: string }).text).toContain('mxfood.users');
+    expect(mockRunQuery).not.toHaveBeenCalled();
+  });
+
+  it('allows a whitelisted table through', async () => {
+    mockGetWhitelistForPath.mockResolvedValue([
+      { schema: 'mxfood', tables: [{ table: 'orders' }] },
+    ]);
+    mockRunQuery.mockResolvedValue({ columns: ['n'], types: ['int'], rows: [{ n: 3 }], finalQuery: '' });
+
+    const orch = new Orchestrator([]);
+    const tool = new ExecuteQuery(orch, {
+      connectionId: 'main', query: 'SELECT COUNT(*) AS n FROM mxfood.orders',
+    }, ctx);
+    const res = await tool.run();
+
+    expect(res.isError).toBe(false);
+    expect(mockRunQuery).toHaveBeenCalled();
+  });
+
+  // Views are virtual — the warehouse has no `_views` schema, so SQL referencing
+  // one must be inlined as a CTE before execution (the UI's /api/query does this;
+  // the agent's tool must too, or a view the agent can discover is unqueryable).
+  it('inlines _views.x as a CTE before executing (same as /api/query)', async () => {
+    mockGetViewsForPath.mockResolvedValue([{
+      name: 'zone_speed', connection: 'main',
+      sql: 'SELECT zone_name, avg_delivery_time_mins FROM mxfood.zones',
+    }]);
+    mockRunQuery.mockResolvedValue({ columns: ['zone_name'], types: ['string'], rows: [{ zone_name: 'North' }], finalQuery: '' });
+
+    const orch = new Orchestrator([]);
+    const tool = new ExecuteQuery(orch, {
+      connectionId: 'main',
+      query: 'SELECT zone_name FROM _views.zone_speed LIMIT 5',
+    }, ctx);
+    const res = await tool.run();
+
+    expect(res.isError).toBe(false);
+    const executedSql = mockRunQuery.mock.calls[0][1] as string;
+    expect(executedSql).toContain('mxfood.zones');            // view body inlined
+    expect(executedSql).not.toContain('_views.zone_speed');   // virtual ref gone
+  });
+
+  it('a query referencing an unknown view fails with a pointing error, not a warehouse error', async () => {
+    mockGetViewsForPath.mockResolvedValue([]);
+
+    const orch = new Orchestrator([]);
+    const tool = new ExecuteQuery(orch, {
+      connectionId: 'main',
+      query: 'SELECT * FROM _views.nope',
+    }, ctx);
+    const res = await tool.run();
+
+    expect(res.isError).toBe(true);
+    expect((res.content[0] as { text: string }).text).toContain('unknown view');
+    expect(mockRunQuery).not.toHaveBeenCalled();
+  });
+
+  it('non-view SQL passes through byte-identical (never parsed)', async () => {
+    mockRunQuery.mockResolvedValue({ columns: ['count'], types: ['int'], rows: [{ count: 1 }], finalQuery: '' });
+    const weird = 'SELECT count(*) FROM users -- keep\n';
+
+    const orch = new Orchestrator([]);
+    const tool = new ExecuteQuery(orch, { connectionId: 'main', query: weird }, ctx);
+    await tool.run();
+
+    expect(mockGetViewsForPath).not.toHaveBeenCalled();
+    expect(mockRunQuery.mock.calls[0][1]).toBe(weird);
   });
 
   it('returns compressed markdown + metadata on success', async () => {

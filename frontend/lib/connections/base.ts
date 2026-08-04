@@ -48,6 +48,13 @@ export interface SchemaTable {
   columns: SchemaColumn[];
   /** Indexes on this table, when the connector can introspect them. */
   indexes?: TableIndex[];
+  /**
+   * What this table is for, when something knows. No connector introspects
+   * this — it is carried by VIRTUAL tables (a view's authored description,
+   * injected under `_views`), so the agent sees a view's purpose rather than a
+   * bare name, and schema search can match on it.
+   */
+  description?: string;
 }
 
 export interface SchemaEntry {

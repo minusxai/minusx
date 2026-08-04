@@ -23,8 +23,7 @@ import { getNodeConnector } from '@/lib/connections';
 import { compressQueryResult } from '@/lib/chat/compress-augmented';
 import { searchFilesInFolder } from '@/lib/search/file-search';
 import { readFilesServer } from '@/lib/file-state/file-state.server';
-import { getWhitelistForUser } from '@/lib/sql/whitelist-resolver.server';
-import { validateQueryTables } from '@/lib/sql/validate-query-tables';
+import { resolveQueryForExecution } from '@/lib/sql/governed-query.server';
 import { buildServerAgentArgs } from '@/lib/chat/agent-args.server';
 import { formatContextDocsSection, loadContextDocsByKeys } from '@/lib/sql/context-docs';
 
@@ -137,17 +136,23 @@ export async function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCa
     async ({ query, connection_id, parameters }: { query: string; connection_id: string; parameters?: Record<string, string | number> }) => {
       const params: Record<string, string | number> = parameters || {};
 
-      // Whitelist validation — use the user's home folder to find the relevant context
-      const whitelist = await getWhitelistForUser(connection_id, user);
-      if (whitelist) {
-        const validationError = await validateQueryTables(query, whitelist, user);
-        if (validationError) {
-          const result: McpToolCallResult = {
-            content: [{ type: 'text' as const, text: JSON.stringify({ success: false, error: validationError }) }],
-          };
-          onToolCall?.('ExecuteQuery', { query, connection_id, parameters }, result);
-          return result;
-        }
+      // Governance: the SAME seam the browser route and the agent's ExecuteQuery
+      // use — whitelist enforcement plus `_views.*` inlining, which this surface
+      // previously lacked entirely (a view reference reached the warehouse as a
+      // nonexistent table). Anchored on the user's home folder: an MCP client has
+      // no file in hand.
+      let executedQuery: string;
+      try {
+        ({ executedQuery } = await resolveQueryForExecution({
+          sql: query, connectionName: connection_id, user, anchor: { kind: 'homeFolder' },
+        }));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        const result: McpToolCallResult = {
+          content: [{ type: 'text' as const, text: JSON.stringify({ success: false, error: message }) }],
+        };
+        onToolCall?.('ExecuteQuery', { query, connection_id, parameters }, result);
+        return result;
       }
 
       // Resolve the connection and run via the Node.js connector.
@@ -157,7 +162,7 @@ export async function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCa
         const { type, config } = connData;
         const connector = getNodeConnector(connection_id, type, config);
         if (connector) {
-          const queryResult = await connector.query(query, params);
+          const queryResult = await connector.query(executedQuery, params);
           const compressed = compressQueryResult(queryResult);
           const result: McpToolCallResult = {
             content: [{ type: 'text' as const, text: JSON.stringify({ success: true, data: compressed }) }],
@@ -169,7 +174,7 @@ export async function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCa
 
       // Fall through to the Node.js query executor for postgresql, bigquery, etc.
       const execResult = await execQuery({
-        query,
+        query: executedQuery,
         connectionId: connection_id,
         parameters: params,
       }, user);

@@ -181,6 +181,10 @@ export const createFileHandler: FrontendToolHandler = async (args, context) => {
     createValidation.push(missingTitleFeedback(file_type as FileType));
   }
 
+  // How the created question's auto-executed query ended, when it failed. Reported
+  // to the model in `queryExecution` (see the catch below).
+  let queryExecution: { failed: string[]; note: string } | undefined;
+
   // Auto-execute query for questions (agent sees results immediately)
   if (file_type === 'question') {
     const updatedState = getStore().getState();
@@ -211,6 +215,13 @@ export const createFileHandler: FrontendToolHandler = async (args, context) => {
         }
       }));
 
+      // Auto-execute is best-effort — a failed run must NOT fail the create, the file
+      // is already written. But it MUST be reported: the query runs through the file's
+      // OWN path, so it is governed by that folder's context, and a failure means the
+      // agent just created a question that does not run there (a table the folder does
+      // not expose, a bad column). Swallowing it into a console.warn answered plain
+      // `success: true` and left the agent to find out from a user. Mirrors EditFile's
+      // `queryExecution` block.
       try {
         await getQueryResult({
           query: finalContent.query,
@@ -220,6 +231,11 @@ export const createFileHandler: FrontendToolHandler = async (args, context) => {
         });
       } catch (execErr) {
         console.warn('[CreateFile] Auto-execute failed (file still created):', execErr);
+        queryExecution = {
+          failed: [`question query: ${execErr instanceof Error ? execErr.message : String(execErr)}`],
+          note: 'The file was created, but its query did not run. Fix the query with EditFile — '
+            + 'as saved, this question shows an error rather than data.',
+        };
       }
     }
   }
@@ -242,6 +258,7 @@ export const createFileHandler: FrontendToolHandler = async (args, context) => {
   const result: Record<string, any> = { success: true, state: stateNoMarkup };
   if (rubric) result.rubric = rubric;
   if (vizWarning) result.vizWarning = vizWarning;
+  if (queryExecution) result.queryExecution = queryExecution;
   if (createValidation.length) result.validation = createValidation; // non-blocking feedback
   // A nameless draft's path ends in a random token (DB uniqueness only) that is rewritten to the
   // name slug when the user saves — without this note the agent treats the token as a real
@@ -266,6 +283,9 @@ export const createFileHandler: FrontendToolHandler = async (args, context) => {
       // to the conversation permanently — the full rubric stays in `result` for the chat UI only.
       ...(rubric ? { rubric: compactAgentRubric(rubric) } : {}),
       ...(vizWarning ? { vizWarning } : {}),
+      // A question whose query did not run is not a clean create — this rides in the
+      // DURABLE status so the fact survives in the conversation, not just the chat UI.
+      ...(queryExecution ? { queryExecution } : {}),
       ...(createValidation.length ? { validation: createValidation } : {}),
     },
   };

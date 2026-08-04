@@ -17,10 +17,73 @@ import {
 } from './types';
 import { DatabaseWithSchema } from '@/lib/types';
 import { FilesAPI } from '@/lib/data/files.server';
+import { getWhitelistForPath } from '@/lib/sql/whitelist-resolver.server';
+import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
+import type { SchemaEntry } from '@/lib/connections/base';
 import { getCompletionsLocal } from '@/lib/sql/autocomplete';
 import { getMentionCompletionsLocal, type AvailableMentionFile } from '@/lib/sql/mention-completions';
 import { parseSqlToIrLocal, UnsupportedSQLError } from '@/lib/sql/sql-to-ir';
 import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
+
+/**
+ * Narrow a connection's introspected schema to what the caller's context
+ * actually exposes.
+ *
+ * Every suggestion surface here hands back schema METADATA (table and column
+ * names), and metadata is part of what a whitelist curates — a table hidden
+ * from the picker but named by the endpoint behind it is not hidden. So the
+ * whitelist is resolved SERVER-SIDE from the caller's own context, exactly as
+ * query execution resolves it (`getWhitelistForPath`), and a client-supplied
+ * whitelist is never trusted: `getMentions` used to take one straight from the
+ * request body, so omitting the field returned the entire warehouse.
+ *
+ * `null` from the resolver means genuinely unrestricted → pass everything
+ * through. An empty array means the context exposes nothing → return nothing.
+ */
+async function whitelistConnectionSchemas(
+  schemas: SchemaEntry[],
+  connectionName: string,
+  user: EffectiveUser,
+  /**
+   * A caller-supplied narrowing (the client's cached view of the context). It can
+   * only ever REMOVE from the server-resolved set — never add. Callers legitimately
+   * narrow (the editor scopes suggestions to the context it is showing); what they
+   * may not do is widen, which omitting the field used to achieve.
+   */
+  clientNarrowing?: DatabaseWithSchema[],
+): Promise<SchemaEntry[]> {
+  const homeFolder = resolveHomeFolderSync(user.mode, user.home_folder || '');
+  const whitelist = await getWhitelistForPath(homeFolder, connectionName, user);
+
+  const keep = (list: SchemaEntry[], allowed: Map<string, Set<string>>): SchemaEntry[] =>
+    list
+      .map((s) => {
+        const tables = allowed.get((s.schema ?? '').toLowerCase());
+        if (!tables) return { ...s, tables: [] };
+        return { ...s, tables: (s.tables ?? []).filter((t) => tables.has(t.table.toLowerCase())) };
+      })
+      .filter((s) => s.tables.length > 0);
+
+  const toAllowed = (entries: Array<{ schema?: string; tables?: Array<{ table: string }> }>) => {
+    const m = new Map<string, Set<string>>();
+    for (const e of entries) {
+      m.set((e.schema ?? '').toLowerCase(),
+        new Set((e.tables ?? []).map((t) => t.table.toLowerCase())));
+    }
+    return m;
+  };
+
+  // `null` = genuinely unrestricted; anything else (including `[]`, "exposes
+  // nothing") is the ceiling.
+  let exposed = whitelist === null ? schemas : keep(schemas, toAllowed(whitelist));
+
+  if (clientNarrowing) {
+    const clientEntry = clientNarrowing.find((d) => d.databaseName === connectionName)
+      ?? clientNarrowing[0];
+    exposed = keep(exposed, toAllowed(clientEntry?.schemas ?? []));
+  }
+  return exposed;
+}
 
 /**
  * Server-side implementation of completions data layer
@@ -30,11 +93,12 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
   async getMentions(options: MentionsOptions, user: EffectiveUser): Promise<MentionsResult> {
     const { prefix, mentionType, databaseName, whitelistedSchemas } = options;
 
-    // Use whitelisted schemas if provided (from context), otherwise load from connections
-    let schemaData: DatabaseWithSchema[] = whitelistedSchemas || [];
+    // `whitelistedSchemas` is no longer the source of truth — it used to be, so a
+    // caller that simply omitted it received the entire connection. It is now
+    // only a NARROWING applied on top of the server-resolved whitelist.
+    let schemaData: DatabaseWithSchema[] = [];
 
-    // Only load from connections if no whitelisted schemas provided
-    if (!whitelistedSchemas && databaseName) {
+    if (databaseName) {
       try {
         // Load all connections and find the one matching databaseName
         const connectionsResult = await FilesAPI.getFiles({ type: 'connection' }, user);
@@ -45,11 +109,10 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
           const fullConnectionResult = await FilesAPI.loadFile(connection.id, user);
           const connectionContent = fullConnectionResult.data.content as any;
           if (connectionContent?.schema?.schemas) {
-            // Wrap the schema in DatabaseWithSchema format
-            schemaData = [{
-              databaseName: connection.name,
-              schemas: connectionContent.schema.schemas
-            }];
+            const exposed = await whitelistConnectionSchemas(
+              connectionContent.schema.schemas, connection.name, user, whitelistedSchemas,
+            );
+            schemaData = [{ databaseName: connection.name, schemas: exposed }];
           }
         }
       } catch (error) {
@@ -216,10 +279,16 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
         };
       }
 
+      // Only what this caller's context exposes — the picker is a read of the
+      // whitelist like any other.
+      const exposedSchemas = await whitelistConnectionSchemas(
+        connectionContent.schema.schemas, connection.name, user,
+      );
+
       // Extract all tables from all schemas
       const tables: TableSuggestionsResult['tables'] = [];
 
-      for (const schemaObj of connectionContent.schema.schemas) {
+      for (const schemaObj of exposedSchemas) {
         const schemaName = schemaObj.schema;
         for (const tableObj of schemaObj.tables || []) {
           const tableName = tableObj.table;
@@ -270,10 +339,17 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
         };
       }
 
+      // Search only the exposed set: a withheld table must read as "not found"
+      // here exactly as it does everywhere else, rather than handing back its
+      // column names to anyone who guesses it.
+      const exposedSchemas = await whitelistConnectionSchemas(
+        connectionContent.schema.schemas, connection.name, user,
+      );
+
       // Find the specified table
       let targetTable: any = null;
 
-      for (const schemaObj of connectionContent.schema.schemas) {
+      for (const schemaObj of exposedSchemas) {
         // If schema specified, only search in that schema
         if (schema && schemaObj.schema !== schema) {
           continue;

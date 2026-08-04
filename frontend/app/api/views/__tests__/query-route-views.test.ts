@@ -79,11 +79,16 @@ async function seedContext(views: ViewDef[]): Promise<number> {
   return mk('context', '/org/context', 'context', { versions: [version], published: { all: 1 } } as ContextContent);
 }
 
-async function runViaRoute(query: string, forceRefresh = false) {
+/** `filePath: null` OMITS the field entirely — the ad-hoc /explore shape.
+ *  (Not `undefined`: that would trigger the default and silently send '/org'.) */
+async function runViaRoute(query: string, forceRefresh = false, filePath: string | null = '/org') {
   const req = new NextRequest('http://localhost:3000/api/query?mode=org', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-user-id': '1' },
-    body: JSON.stringify({ query, connection_name: 'warehouse', filePath: '/org', parameters: {}, forceRefresh }),
+    body: JSON.stringify({
+      query, connection_name: 'warehouse', parameters: {}, forceRefresh,
+      ...(filePath === null ? {} : { filePath }),
+    }),
   });
   const res = await queryPost(req);
   return { status: res.status, text: await res.text() };
@@ -160,6 +165,38 @@ describe('/api/query with views (real route handler)', () => {
     const { status, text } = await runViaRoute('SELECT * FROM _views.ghost');
     expect(status).toBe(403);
     expect(text).toMatch(/FORBIDDEN_TABLES|not.*allowed|whitelist/i);
+  });
+
+  // CHARACTERIZATION, not an endorsement: ad-hoc SQL (/explore, no filePath) is
+  // NOT whitelist-checked, so a user can read a withheld table by typing it into
+  // the editor while the agent running the identical SQL is refused.
+  //
+  // Closing it needs a PROFILING-FREE resolver. Resolving the whitelist today
+  // goes through the context loader, which loads connection files and can start
+  // a schema refresh — the regression `query-route-no-profiling.test.ts` guards
+  // (N parallel dashboard queries → gateway timeout → "Failed to fetch"). A
+  // cheap re-fold from raw context reads was attempted and reverted: the
+  // loader's `fullSchema` also carries VIEWS injected as `_views` tables, so a
+  // whitelist-only re-fold silently denied every view query. Doing it properly
+  // means re-folding inherited views, `viewWhitelist` and disabled-view
+  // detection too — its own change, with `whitelist-resolver-parity.test.ts`
+  // extended to cover views.
+  it('ad-hoc SQL with no filePath is currently UNGOVERNED (known gap)', async () => {
+    await getModules().db.exec("DELETE FROM files WHERE type = 'context'", []);
+    const version: ContextVersion = {
+      version: 1, docs: [], views: [], createdAt: new Date().toISOString(), createdBy: 1,
+      whitelist: [{
+        name: 'warehouse', type: 'connection',
+        children: [{ name: 'mxfood', type: 'schema', children: [{ name: 'orders', type: 'table' }] }],
+      }],
+    };
+    await mk('context', '/org/context', 'context',
+      { versions: [version], published: { all: 1 } } as ContextContent);
+
+    // `zones` is withheld by that whitelist, yet runs with no filePath…
+    expect((await runViaRoute('SELECT * FROM mxfood.zones', false, null)).status).toBe(200);
+    // …while the SAME SQL anchored to a file is refused.
+    expect((await runViaRoute('SELECT * FROM mxfood.zones')).status).toBe(403);
   });
 
   it('an UNKNOWN view under a WILDCARD whitelist fails loudly at resolution (400 unknown view)', async () => {

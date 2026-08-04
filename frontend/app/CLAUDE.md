@@ -283,11 +283,17 @@ assuming any route is static.
 - **`api/query` returns 400 for query failures, not 500.** The client's `parseErrorMessage` and
   `captureError` both key off that. Changing it to `handleApiError` would start paging the team on every
   user typo.
-- **View resolution sits between whitelist validation and the cache on purpose.** A view is authorized as
-  itself (it appears in the whitelisted schema, so it can expose an aggregate over tables the reader
-  can't query directly — its own SQL is validated where it is *authored*), and the cache key is computed
-  over the *resolved* SQL, so editing a view body invalidates results for free. Non-view queries take a
-  byte-identical fast path and are never parsed.
+- **Whitelist validation and view resolution are no longer this route's own code.** Both live in
+  `resolveQueryForExecution` (`lib/sql/governed-query.server.ts`), which the agent's `ExecuteQuery` and
+  the MCP server call too — they had each independently forgotten a step. The ordering it enforces is
+  the one this route established: a view is authorized as itself (it appears in the whitelisted schema,
+  so it can expose an aggregate over tables the reader can't query directly — its own SQL is validated
+  where it is *authored*), and the cache key is computed over the *resolved* SQL, so editing a view body
+  invalidates results for free. Non-view queries take a byte-identical fast path and are never parsed.
+  The route passes `{kind:'file', path: filePath}` as the anchor: a question is governed by the nearest
+  context to ITS path. **With no `filePath` there is no anchor and the query is ungoverned** (long-standing
+  behaviour, unchanged) — the route still inlines views in that case so a `_views` reference cannot reach
+  the warehouse as a nonexistent table.
 - **`forceRefresh` is ignored for guests** — public shares stay cache-served so they can't be used to
   hammer the warehouse.
 - **`api/validate-sql` calls `FilesAPI.loadFile` on the connection** — the exact schema-profiling call

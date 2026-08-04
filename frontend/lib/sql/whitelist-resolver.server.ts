@@ -35,9 +35,17 @@ export function whitelistToSchemaContext(
  * the client-side `selectContextFromPath` Redux selector), then returns the
  * whitelisted schema entries for `connectionName`.
  *
- * Returns `null` when no context applies — callers should allow the query
- * through with no restriction.  Never throws: errors are silently swallowed
- * so a context lookup failure never blocks query execution.
+ * The return value has THREE meanings, and `null` vs `[]` are opposites:
+ *   · `null`  — genuinely unrestricted: a `*` chain to the root, no context at
+ *               all, or a lookup failure. Callers allow the query through.
+ *   · `[]`    — the governing context exposes NOTHING for this connection.
+ *               Callers must deny everything (see `validateQueryTablesLocal`,
+ *               which only short-circuits on a nullish whitelist).
+ *   · entries — the exposed schemas.
+ *
+ * Never throws: errors are silently swallowed so a context lookup failure never
+ * blocks query execution (that path returns `null`, not `[]` — a failure to
+ * READ the rules is not a rule that denies).
  *
  * @param lookupPath   - Absolute path used to find the nearest context.
  *                       Pass the question's file path for GUI queries, or the
@@ -97,9 +105,22 @@ export async function getWhitelistForPath(
     // so this resolves the published whitelist directly.
     const databases = getWhitelistedSchemaForUser(contextContent, user.userId);
     const dbEntry = databases.find(d => d.databaseName === connectionName);
-    if (!dbEntry || !dbEntry.schemas.length) return null;
 
-    return dbEntry.schemas;
+    // Reaching here means the chain is NOT all-wildcard: somebody curates
+    // explicitly. So a connection that resolves to no schemas — whether it is
+    // absent from the whitelist entirely or listed with nothing under it — is
+    // NOT EXPOSED, and the answer is deny-all (`[]`), never `null`.
+    //
+    // `null` is reserved for "genuinely unrestricted" (a `*` chain) and for
+    // lookup failures above, which must never block execution. Returning it
+    // here instead is what made an admin's "expose nothing" mean "expose
+    // everything" — the inverse of the request, silently.
+    //
+    // Consequence worth knowing: in a workspace that curates explicitly, a
+    // connection added later is not queryable until a context whitelists it.
+    // That is the meaning of an explicit list, and it fails loudly rather than
+    // quietly granting access nobody granted.
+    return dbEntry?.schemas ?? [];
   } catch {
     return null; // On any error, allow through — don't block execution over a lookup failure
   }

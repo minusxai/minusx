@@ -120,6 +120,74 @@ non-`SELECT` roots are no-ops, which is what makes it safe to apply unconditiona
 `runQueryStream` (see `frontend/lib/connections/CLAUDE.md`). Mongo has its own mirror,
 `enforceMongoLimit`, because this is a SQL parser.
 
+## The governed query seam
+
+`governed-query.server.ts` is the ONE place that decides whether a piece of user- or agent-authored
+SQL may run and what it executes as. `resolveQueryForExecution({sql, connectionName, user, anchor})`
+composes, in a fixed order: whitelist resolution → `validateQueryTables` → dialect → `_views.*`
+inlining. It throws `WhitelistViolationError` or `ViewResolutionError`; otherwise it returns
+`{executedQuery, dialect, schemaContext}`.
+
+**It exists because per-surface enforcement drifted, three times.** `/api/query` validated and
+inlined; MCP validated but never inlined (a view reference reached the warehouse as a nonexistent
+table); the agent's `ExecuteQuery` did neither — so a table withheld from a workspace still returned
+rows through the agent's tool while the browser answered 403 for the same SQL. **Concealment is not
+enforcement**: not showing a table to a model is no protection once the model names it anyway.
+The three callers are `app/api/query/route.ts`, `agents/benchmark-analyst/db-tools.server.ts`
+(`ExecuteQuery._executeFallback`) and `lib/mcp/server.ts`.
+
+**Validation precedes inlining, deliberately.** A view is authorized as *itself* — it appears in the
+whitelisted schema, so a curated view may expose an aggregate over tables the caller cannot query
+directly, and its own SQL is validated where it is authored (the context save gate). Validating the
+inlined text would reject exactly the case views exist for. Inlining precedes execution *and* caching
+so cache keys are computed over the resolved SQL.
+
+**The `QueryAnchor` is required, not inferred**, because the surfaces genuinely differ and the
+difference used to be accidental: `{kind:'file', path}` governs a question by the nearest context to
+**its own path** (what makes a locked-down team folder lock its questions down), `{kind:'homeFolder'}`
+governs free-form chat and MCP, which have no file in hand.
+
+**Metadata is whitelisted too.** The suggestion surfaces (`lib/data/completions/completions.server.ts`
+— mentions, table and column suggestions) resolve the whitelist server-side through
+`getWhitelistForPath` and filter the connection schema before answering. A client-supplied
+`whitelistedSchemas` is now only a **narrowing** applied on top; it used to be the source of truth,
+so a caller that omitted it got the entire warehouse. `/api/autocomplete` is exempt by construction:
+it completes against schema the client already sent, so it can reveal nothing new.
+
+**Known gap — ad-hoc SQL is not whitelist-checked.** `/api/query` with no `filePath` (the `/explore`
+editor) has no anchor and runs unvalidated, so a user can read a withheld table by typing it there
+while the agent running the identical SQL is refused. Pinned as characterization in
+`app/api/views/__tests__/query-route-views.test.ts`.
+
+Closing it needs a **profiling-free resolver**, and the obvious version does not work. Resolving a
+whitelist today goes through the context loader, which loads connection files and can start a schema
+refresh — the regression `app/api/query/__tests__/query-route-no-profiling.test.ts` guards (N parallel
+dashboard queries → gateway timeout → "Failed to fetch"). Re-folding the whitelist from raw context
+reads (`skipEnrichment`) plus the connection's cached schema was tried and reverted: the loader's
+`fullSchema` also carries **views injected as `_views` tables**, so a whitelist-only re-fold denied
+every view query. A correct cheap resolver must additionally re-fold inherited views, `viewWhitelist`
+and disabled-view detection. `__tests__/whitelist-resolver-parity.test.ts` already pins the resolver
+against the loader across wildcards, explicit lists, narrowing children, `childPaths` and multi-level
+chains — extend it to views and the rest of that work has a safety net.
+
+**`eslint.config.mjs` enforces the boundary** (`RESTRICT_RUN_QUERY`): importing
+`@/lib/connections/run-query` is an error outside the allowlist block at the bottom of that config —
+the governed surfaces, plus the paths that run already-validated SQL (semantic tier-3 probes, view
+column snapshots, saved-question execution). A new surface cannot silently skip governance.
+
+**`null` and `[]` are opposites, and the distinction is load-bearing.** `null` means genuinely
+unrestricted — a `*` chain to the root, no context at all, or a lookup failure (which must never
+block execution). `[]` means *this context exposes nothing for this connection* and denies
+everything. Both `getWhitelistForPath` and `validateQueryTablesLocal` observe it: the resolver
+returns `[]` once it knows the chain is not all-wildcard and the connection resolves to no schemas,
+and the validator only short-circuits on a nullish whitelist, never on an empty one.
+
+Conflating them was a fail-open — an admin's "expose nothing" silently became "expose everything",
+the exact inverse of the request, on an access-control decision. The consequence of the fix is worth
+knowing: **in a workspace that curates explicitly, a connection added later is not queryable until
+some context whitelists it.** That is what an explicit list means, and it now fails loudly instead of
+quietly granting access nobody granted.
+
 ## Whitelisting and schema exposure
 
 `validateQueryTables` (`validate-query-tables.ts`) extracts table references and rejects anything
@@ -148,6 +216,7 @@ context handed to agents and the right sidebar — so widening a whitelist widen
 | None-param semantics | `lib/sql/none-params.ts` |
 | `:param` extraction + value assembly | `lib/sql/sql-params.ts` |
 | Row caps | `lib/sql/limit-enforcer.ts` |
+| Authorize + rewrite a query before executing it | `lib/sql/governed-query.server.ts` (every executing surface calls this) |
 | Table allowlisting | `lib/sql/validate-query-tables.ts`, `lib/sql/whitelist-resolver.server.ts` |
 | Whitelist → exposed schema | `lib/sql/schema-filter.ts` |
 | Agent-facing Schema Notes / context docs | `lib/sql/context-docs.ts`, `lib/sql/annotation-notes.ts` |
