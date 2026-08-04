@@ -8,6 +8,7 @@ import { inlineSqlParams } from '@/lib/sql/inline-params';
 // same code was needed by Postgres / DuckDB / SQLite after the `::cast`
 // regression in the catalog-build pg_stats query.
 import { namedToPositional } from './named-to-positional';
+import { pgOidToTypeName } from './pg-oid-types';
 
 const WRITE_OPERATIONS = immutableSet(['insert', 'update', 'delete', 'create', 'drop', 'alter', 'truncate', 'merge', 'replace']);
 
@@ -40,8 +41,14 @@ export class InternalDbConnector extends NodeConnector {
     const { sql: positionalSql, values } = namedToPositional(sql, params);
     const finalQuery = inlineSqlParams(sql, params);
     const result = await getModules().db.exec<Record<string, unknown>>(positionalSql, values);
-    const columns = result.rows.length > 0 ? Object.keys(result.rows[0]) : [];
-    return { columns, types: columns.map(() => 'text'), rows: result.rows, finalQuery };
+    // Column names + PG type OIDs come from the driver's field metadata, threaded
+    // through the adapter's QueryResult.fields — this is what gives the viz layer
+    // real types (a COUNT(*) typed as 'text' renders a categorical axis). The
+    // fallback covers the adapter's multi-statement exec path, which has no fields.
+    const fields = result.fields;
+    const columns = fields?.length ? fields.map((f) => f.name) : result.rows.length > 0 ? Object.keys(result.rows[0]) : [];
+    const types = fields?.length ? fields.map((f) => pgOidToTypeName(f.dataTypeID)) : columns.map(() => 'text');
+    return { columns, types, rows: result.rows, finalQuery };
   }
 
   async getSchema(): Promise<SchemaEntry[]> {

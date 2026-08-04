@@ -208,6 +208,7 @@ wrongly — extend the function rather than accepting the default.
 | SQLite-over-DuckDB attach | `lib/connections/sqlite-via-duckdb-registry.ts` |
 | Chunked DuckDB streaming (DuckDB, SQLite, CSV) | `lib/connections/duckdb-stream.ts`, `lib/connections/duckdb-query.ts` |
 | `:name` rewrite grammar (all dialects) | `lib/connections/named-to-positional.ts` |
+| PG type-OID → type-name map (Postgres, internal_db) | `lib/connections/pg-oid-types.ts` |
 | Column profiling / `ColumnMeta` | `lib/connections/statistics-engine.ts` |
 | Index introspection | `lib/connections/duckdb-indexes.ts`, `lib/connections/postgres-connector.ts` |
 | Mongo's row cap (`enforceMongoLimit`) | `lib/connections/mongo-connector.ts` |

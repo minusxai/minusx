@@ -57,6 +57,7 @@ export class PgliteAdapter implements IDatabaseAdapter {
       return {
         rows: result.rows as T[],
         rowCount: result.affectedRows ?? result.rows.length,
+        fields: result.fields?.map((f) => ({ name: f.name, dataTypeID: f.dataTypeID })),
       };
     });
   }

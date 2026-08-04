@@ -89,6 +89,7 @@ export class PostgresAdapter implements IDatabaseAdapter {
       return {
         rows: result.rows as T[],
         rowCount: result.rowCount || 0,
+        fields: result.fields?.map((f) => ({ name: f.name, dataTypeID: f.dataTypeID })),
       };
     } catch (error) {
       console.error('[PostgresAdapter] Query error:', { sql, params, error });
