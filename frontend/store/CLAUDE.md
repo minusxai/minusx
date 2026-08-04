@@ -82,7 +82,7 @@ useQueryResult(query, params, db)
 **Chat path.** `chatListener.ts` is the only driver.
 
 ```
-dispatch(createConversation | sendMessage | retryConversationTurn | editAndForkMessage)
+dispatch(createConversation | sendMessage | retryConversationTurn | editAndForkMessage | deleteAndForkMessage)
    → emitSyntheticSkillLoads → runV3TurnInListener
         → runV3Turn (conversation-stream-client.ts): POST /turns, then XHR GET /stream?since=
              deltas → addStreamingMessage; committed rows → live tool rows; pending → derived below

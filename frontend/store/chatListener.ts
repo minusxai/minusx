@@ -9,6 +9,7 @@ import {
   clearQueuedMessages,
   flushQueuedMessages,
   editAndForkMessage,
+  deleteAndForkMessage,
   updateConversation,
   completeToolCall,
   setError,
@@ -580,6 +581,40 @@ chatListenerMiddleware.startListening({
         dispatch, abortController.signal, viewFor(state));
     } catch (error: any) {
       if (await handleStreamError(error, 'chatListener:editAndFork', conversationID, conversation._id, dispatch)) return;
+    }
+  }
+});
+
+/**
+ * deleteAndForkMessage → fork the v3 conversation at the deleted message and STOP.
+ * Same fork endpoint and Redux move as editAndForkMessage, but no turn runs —
+ * the user lands on the truncated fork with an empty composer. The source
+ * conversation is untouched server-side (append-only log; fork copies a prefix).
+ */
+chatListenerMiddleware.startListening({
+  actionCreator: deleteAndForkMessage,
+  effect: async (action, listenerApi) => {
+    const { conversationID } = action.payload;
+    const state = listenerApi.getState() as RootState;
+    const conversation = selectConversation(state, conversationID);
+    if (!conversation) return;
+
+    const dispatch = listenerApi.dispatch as AppDispatch;
+    try {
+      const forkRes = await fetch(patchApiUrl(`${API_BASE_URL}/api/conversations/${conversationID}/fork`), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ atSeq: conversation.log_index }),
+      });
+      if (!forkRes.ok) throw new Error(`fork failed: HTTP ${forkRes.status}`);
+      // successResponse envelope: id lives under `data` (see editAndForkMessage above).
+      const forkBody = await forkRes.json() as { id?: number; data?: { id?: number } };
+      const newId = forkBody.data?.id ?? forkBody.id;
+      if (!newId) throw new Error('fork failed: missing conversation id in response');
+      // Moves Redux to the fork (carrying the reducer-truncated messages) + flags
+      // the source forked → triggers nav. Deliberately no runV3TurnInListener.
+      dispatch(updateConversation({ conversationID, newConversationID: newId, log_index: conversation.log_index, completed_tool_calls: [], pending_tool_calls: [], debug: [] }));
+    } catch (error: any) {
+      if (await handleStreamError(error, 'chatListener:deleteAndFork', conversationID, conversation._id, dispatch)) return;
     }
   }
 });

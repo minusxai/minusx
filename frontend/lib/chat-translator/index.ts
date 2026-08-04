@@ -147,6 +147,7 @@ export function piLogToLegacy(piLog: ConversationLog): LegacyLogEntry[] {
           args: { user_message: userMessageStr, ...rest },
           unique_id: entry.id,
           created_at: tsFromTimestamp(invocationTimestamp(piLog, i)),
+          _piIndex: i, // pi seq of this user turn — what fork atSeq expects
         };
         taskById.set(entry.id, out.length);
         out.push(task);
