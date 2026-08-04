@@ -491,7 +491,12 @@ describe('buildPlanStep — native web search is provider-gated', () => {
       { providerName: 'fw', model: 'accounts/fireworks/models/deepseek-v4-flash', options: webSearchOn },
       'core', 'analyst',
     );
-    expect(step.callOptions?.webSearch).toBeUndefined();
+    // MUST be an explicit false, not a deleted key: the orchestrator merges
+    // `{...agent.callOptions, ...plan.callOptions}` (orchestrator.ts), so a key
+    // the plan omits falls back to the agent's `webSearch: true` and the 400
+    // returns. Absence cannot override; only a value can.
+    expect(step.callOptions?.webSearch).toBe(false);
+    expect({ ...{ webSearch: true }, ...step.callOptions }.webSearch).toBe(false);
     expect(step.callOptions?.reasoning).toBe('low');   // every other option survives
     expect(step.callOptions?.apiKey).toBe('k');
   });
@@ -501,13 +506,23 @@ describe('buildPlanStep — native web search is provider-gated', () => {
       { name: 'c', provider: 'custom', baseUrl: 'http://localhost:11434/v1' },
       { providerName: 'c', model: 'qwen3:32b', options: webSearchOn }, 'core', 'analyst',
     );
-    expect(custom.callOptions?.webSearch).toBeUndefined();
+    expect(custom.callOptions?.webSearch).toBe(false);
 
     const groq = buildPlanStep(
       { name: 'g', provider: 'groq', apiKey: 'k' },
       { providerName: 'g', model: 'llama-3.3-70b-versatile', options: webSearchOn }, 'core', 'analyst',
     );
-    expect(groq.callOptions?.webSearch).toBeUndefined();
+    expect(groq.callOptions?.webSearch).toBe(false);
+  });
+
+  it('overrides the agent default even when the grade carries no options at all', () => {
+    // The common case: an admin maps a grade to fireworks and never touches
+    // options. The agent still asks for webSearch, so the plan must say false.
+    const step = buildPlanStep(
+      { name: 'fw', provider: 'fireworks', apiKey: 'k' },
+      { providerName: 'fw', model: 'accounts/fireworks/models/deepseek-v4-flash' }, 'core', 'analyst',
+    );
+    expect(step.callOptions?.webSearch).toBe(false);
   });
 
   it('leaves an explicit webSearch:false alone (no resurrection)', () => {
