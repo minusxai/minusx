@@ -550,3 +550,31 @@ describe('story <template> field round-trip', () => {
     expect(markup).toContain('<template>editorial</template>');
   });
 });
+
+// A whole story wrapped in a template literal — `{`<div …>`}` — is the failure
+// mode observed from anthropic-messages models (Claude, deepseek) in the QA
+// eval on 2026-08-04. It PARSES: a static string expression is a legal child,
+// so the body stores as one text node and the interpreter renders the markup
+// verbatim (a wall of `<div className=…>`), with nothing erroring anywhere.
+// The save must reject it so the agent sees the error and re-emits real JSX.
+describe('markupToContent — a story body that is entirely a text node is rejected', () => {
+  const BODY = '<div data-design="tw" className="@container px-6"><h1>Hi</h1></div>';
+
+  it('rejects the whole document wrapped in a template literal', () => {
+    const back = markupToContent('story', `<story>{\`${BODY}\`}</story>`);
+    expect(back.ok).toBe(false);
+    if (!back.ok) expect(back.error).toMatch(/template literal|raw JSX|elements/i);
+  });
+
+  it('rejects it on the loose-body path too (no <story> wrapper)', () => {
+    const back = markupToContent('story', `{\`${BODY}\`}`);
+    expect(back.ok).toBe(false);
+  });
+
+  it('still accepts real markup, including template literals INSIDE it (SQL/CSS survive)', () => {
+    const withSql = '<story><div><Number query={`SELECT 1`} connection="static" /></div></story>';
+    const back = markupToContent('story', withSql);
+    expect(back.ok).toBe(true);
+    if (back.ok) expect(String(back.content.story)).toContain('SELECT 1');
+  });
+});
