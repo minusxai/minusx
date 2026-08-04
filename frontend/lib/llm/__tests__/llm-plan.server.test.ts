@@ -455,3 +455,81 @@ describe('buildPlanStep — provider mapping', () => {
     )).toThrow(/not in the model registry/);
   });
 });
+
+// Native web search is injected by the pi patch on API SHAPE (anthropic-messages
+// / openai-responses), not on provider. Several registry providers ride
+// anthropic-messages without implementing Anthropic's server-side web_search
+// tool — fireworks 400s the WHOLE request ("tools[N].type value
+// 'web_search_20250305'"), killing every turn rather than degrading. The plan
+// step is the one place that knows the provider, so it drops the option there.
+describe('buildPlanStep — native web search is provider-gated', () => {
+  const webSearchOn = { reasoning: 'low', webSearch: true };
+
+  it('keeps webSearch for providers that implement it natively', () => {
+    const anthropic = buildPlanStep(
+      { name: 'a', provider: 'anthropic', apiKey: 'k' },
+      { providerName: 'a', model: 'claude-sonnet-4-6', options: webSearchOn }, 'core', 'analyst',
+    );
+    expect(anthropic.callOptions?.webSearch).toBe(true);
+
+    const openai = buildPlanStep(
+      { name: 'o', provider: 'openai', apiKey: 'k' },
+      { providerName: 'o', model: 'gpt-5.6-terra', options: webSearchOn }, 'core', 'analyst',
+    );
+    expect(openai.callOptions?.webSearch).toBe(true);
+
+    const minusx = buildPlanStep(
+      { name: 'mx', provider: 'minusx', apiKey: 'k' },
+      { providerName: 'mx', options: webSearchOn }, 'core', 'analyst',
+    );
+    expect(minusx.callOptions?.webSearch).toBe(true);
+  });
+
+  it('drops webSearch for an anthropic-messages provider that does not implement it', () => {
+    const step = buildPlanStep(
+      { name: 'fw', provider: 'fireworks', apiKey: 'k' },
+      { providerName: 'fw', model: 'accounts/fireworks/models/deepseek-v4-flash', options: webSearchOn },
+      'core', 'analyst',
+    );
+    // MUST be an explicit false, not a deleted key: the orchestrator merges
+    // `{...agent.callOptions, ...plan.callOptions}` (orchestrator.ts), so a key
+    // the plan omits falls back to the agent's `webSearch: true` and the 400
+    // returns. Absence cannot override; only a value can.
+    expect(step.callOptions?.webSearch).toBe(false);
+    expect({ ...{ webSearch: true }, ...step.callOptions }.webSearch).toBe(false);
+    expect(step.callOptions?.reasoning).toBe('low');   // every other option survives
+    expect(step.callOptions?.apiKey).toBe('k');
+  });
+
+  it('drops webSearch for custom endpoints and other registry providers', () => {
+    const custom = buildPlanStep(
+      { name: 'c', provider: 'custom', baseUrl: 'http://localhost:11434/v1' },
+      { providerName: 'c', model: 'qwen3:32b', options: webSearchOn }, 'core', 'analyst',
+    );
+    expect(custom.callOptions?.webSearch).toBe(false);
+
+    const groq = buildPlanStep(
+      { name: 'g', provider: 'groq', apiKey: 'k' },
+      { providerName: 'g', model: 'llama-3.3-70b-versatile', options: webSearchOn }, 'core', 'analyst',
+    );
+    expect(groq.callOptions?.webSearch).toBe(false);
+  });
+
+  it('overrides the agent default even when the grade carries no options at all', () => {
+    // The common case: an admin maps a grade to fireworks and never touches
+    // options. The agent still asks for webSearch, so the plan must say false.
+    const step = buildPlanStep(
+      { name: 'fw', provider: 'fireworks', apiKey: 'k' },
+      { providerName: 'fw', model: 'accounts/fireworks/models/deepseek-v4-flash' }, 'core', 'analyst',
+    );
+    expect(step.callOptions?.webSearch).toBe(false);
+  });
+
+  it('leaves an explicit webSearch:false alone (no resurrection)', () => {
+    const step = buildPlanStep(
+      { name: 'a', provider: 'anthropic', apiKey: 'k' },
+      { providerName: 'a', model: 'claude-sonnet-4-6', options: { webSearch: false } }, 'core', 'analyst',
+    );
+    expect(step.callOptions?.webSearch).toBe(false);
+  });
+});

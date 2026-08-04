@@ -27,6 +27,28 @@ export const MINUSX_PROVIDER = 'minusx';
 /** Provider slug for a self-managed OpenAI-compatible endpoint (Ollama, vLLM, …). */
 export const CUSTOM_PROVIDER = 'custom';
 
+/**
+ * Providers that implement NATIVE (server-side) web search, i.e. the hosted
+ * search tool the pi patch injects when `callOptions.webSearch` is set.
+ *
+ * The patch decides by API SHAPE — it adds Anthropic's `web_search_20250305`
+ * on `anthropic-messages` and OpenAI's `web_search` on `openai-responses` — but
+ * API shape is not the same question as who implements the tool. Several
+ * registry providers speak `anthropic-messages` while rejecting that tool
+ * outright: fireworks answers a request carrying it with a 400 on the WHOLE
+ * request ("Input should be 'function', 'web_search_preview' or
+ * 'code_interpreter'"), so every turn dies at the first call instead of simply
+ * going without search. `buildPlanStep` therefore drops the option for anything
+ * not listed here — a workspace that maps a grade to such a provider loses web
+ * search, which is the intended degradation.
+ */
+export const NATIVE_WEB_SEARCH_PROVIDERS: readonly string[] = ['anthropic', 'openai', MINUSX_PROVIDER];
+
+/** Whether `callOptions.webSearch` is safe to send to this provider. */
+export function supportsNativeWebSearch(provider: string): boolean {
+  return NATIVE_WEB_SEARCH_PROVIDERS.includes(provider);
+}
+
 /** Header carrying the requested grade to the MinusX gateway for routing. */
 export const MX_USE_CASE_HEADER = 'X-MX-Use-Case';
 /**

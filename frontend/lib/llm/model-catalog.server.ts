@@ -23,6 +23,23 @@ export interface CatalogModel extends RegistryModelInfo {
 
 export type ModelCatalog = Map<string, Map<string, CatalogModel>>;
 
+/**
+ * models.dev ids that differ from the pi registry slug a provider entry
+ * carries. The catalog is keyed by PI SLUG, because that is what
+ * `catalog.get(entry.provider)` looks up: without the alias the live overlay is
+ * simply dead for these providers — every model id newer than the baked
+ * registry throws "not in the model registry" with no fallback, while every
+ * other provider quietly resolves.
+ *
+ * Deliberately minimal. Only unambiguous renames of the SAME service belong
+ * here; a wrong guess is worse than a miss, since it attaches another
+ * provider's context/pricing metadata to a runnable model handle.
+ */
+const PROVIDER_SLUG_BY_MODELS_DEV_ID: Record<string, string> = {
+  'fireworks-ai': 'fireworks',
+  togetherai: 'together',
+};
+
 const MODELS_DEV_URL = 'https://models.dev/api.json';
 const CACHE_TTL_MS = 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 5_000;
@@ -64,7 +81,7 @@ export function parseModelsDevCatalog(json: unknown): ModelCatalog {
           : {}),
       });
     }
-    if (parsed.size > 0) catalog.set(providerId, parsed);
+    if (parsed.size > 0) catalog.set(PROVIDER_SLUG_BY_MODELS_DEV_ID[providerId] ?? providerId, parsed);
   }
   return catalog;
 }

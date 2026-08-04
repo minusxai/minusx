@@ -29,6 +29,18 @@ const MODELS_DEV_JSON = {
       'text-embedding-3-large': { id: 'text-embedding-3-large', name: 'Embedding', tool_call: false },
     },
   },
+  // models.dev keys this provider 'fireworks-ai'; the pi registry slug (and our
+  // config `provider` value) is 'fireworks'. Without the alias, every live
+  // fireworks model id is unreachable — see PROVIDER_SLUG_BY_MODELS_DEV_ID.
+  'fireworks-ai': {
+    id: 'fireworks-ai',
+    models: {
+      'accounts/fireworks/models/brand-new-1': {
+        id: 'accounts/fireworks/models/brand-new-1', name: 'Brand New 1', reasoning: true,
+        limit: { context: 900_000, output: 64_000 },
+      },
+    },
+  },
   'not-a-pi-provider': { id: 'not-a-pi-provider', models: { 'x-1': { id: 'x-1', name: 'X-1' } } },
   broken: { id: 'broken' },
 };
@@ -44,6 +56,13 @@ describe('parseModelsDevCatalog', () => {
     expect(model.maxTokens).toBe(128_000);
     expect(model.cost).toEqual({ input: 10, output: 60, cacheRead: 1, cacheWrite: 12.5 });
     expect(catalog.get('broken')).toBeUndefined();    // provider without models skipped
+  });
+
+  it('keys aliased providers by their pi registry slug, not the models.dev id', () => {
+    const catalog = parseModelsDevCatalog(MODELS_DEV_JSON);
+    // 'fireworks' is what a provider entry carries; 'fireworks-ai' must not leak through.
+    expect(catalog.get('fireworks')!.get('accounts/fireworks/models/brand-new-1')).toBeDefined();
+    expect(catalog.get('fireworks-ai')).toBeUndefined();
   });
 
   it('tolerates junk input', () => {
@@ -97,6 +116,14 @@ describe('buildPlanStep with a live catalog', () => {
   it('still throws for a model unknown to both registry and catalog', () => {
     expect(() => buildPlanStep(entry, { providerName: 'oa', model: 'gpt-99-fake' }, 'core', 'analyst', catalog))
       .toThrow(/not in the model registry/);
+  });
+
+  it('resolves a live fireworks model id despite the models.dev key mismatch', () => {
+    const fw = { name: 'fw', provider: 'fireworks', apiKey: 'k' };
+    const step = buildPlanStep(fw, { providerName: 'fw', model: 'accounts/fireworks/models/brand-new-1' }, 'core', 'analyst', catalog);
+    const model = step.model as { id: string; contextWindow: number };
+    expect(model.id).toBe('accounts/fireworks/models/brand-new-1');
+    expect(model.contextWindow).toBe(900_000);
   });
 
   it('baked registry models are unaffected by the catalog', () => {

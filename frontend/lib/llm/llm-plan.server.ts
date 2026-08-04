@@ -44,7 +44,7 @@ import { E2E_MODE } from '@/lib/constants';
 import { DEFAULT_MODE } from '@/lib/mode/mode-types';
 import {
   LLM_AGENT_KEYS, LLM_GRADES, MINUSX_PROVIDER, CUSTOM_PROVIDER,
-  findLlmProvider, findMinusxProvider, hasLlmEndpoints, resolveAgentPolicy,
+  findLlmProvider, findMinusxProvider, hasLlmEndpoints, resolveAgentPolicy, supportsNativeWebSearch,
   type LlmAgentKey, type LlmConfig, type LlmGrade, type LlmModelChoice, type LlmProviderEntry,
 } from './llm-config-types';
 import { autoGradeProvider, compatDefaultModel } from './compat-models';
@@ -57,6 +57,14 @@ import { autoGradeProvider, compatDefaultModel } from './compat-models';
 export function buildPlanStep(entry: LlmProviderEntry, choice: LlmModelChoice, grade: LlmGrade, agent: LlmAgentKey, catalog?: ModelCatalog | null): LlmPlanStep {
   const options: Record<string, unknown> = { ...(choice.options ?? {}) };
   if (entry.apiKey) options['apiKey'] = entry.apiKey;
+  // Native web search is injected by API shape, not by provider (see
+  // NATIVE_WEB_SEARCH_PROVIDERS). Sending it to a provider that speaks the
+  // shape without implementing the tool 400s the entire request, so it is
+  // forced off here — the only layer that knows which provider a grade
+  // resolved to. It must be an explicit `false`, never a deleted key: the
+  // orchestrator merges `{...agent.callOptions, ...plan.callOptions}`, so an
+  // absent key falls back to the agent's `webSearch: true` and the 400 returns.
+  if (!supportsNativeWebSearch(entry.provider)) options['webSearch'] = false;
 
   if (entry.provider === MINUSX_PROVIDER) {
     // Managed gateway: OpenAI-compatible endpoint; the gateway owns model

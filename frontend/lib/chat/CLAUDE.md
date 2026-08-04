@@ -138,6 +138,24 @@ run as "Auto" → a hard error naming the unmapped grade. That ladder runs only 
 gateway on the `mx-unconfigured` key sentinel, so the failure is one clear auth error pointing at
 Settings → Models rather than a silent fallback to some other vendor's model.
 
+**Native web search is gated on the PROVIDER, not the API shape.** The pi patch injects the hosted
+search tool whenever `callOptions.webSearch` is set and the model speaks `anthropic-messages` or
+`openai-responses`. Several registry providers speak `anthropic-messages` without implementing
+Anthropic's `web_search_20250305` — fireworks rejects it with a 400 on the *whole* request, so every
+turn of a workspace whose grade maps there dies at the first call, with a green Test button (the
+probe sends no tools). `buildPlanStep` deletes the option for any provider outside
+`NATIVE_WEB_SEARCH_PROVIDERS` (`anthropic`, `openai`, `minusx`, in `llm-config-types.ts`), which is
+why `WebAnalystAgent` can ask for `webSearch: true` unconditionally. Add a slug there only when the
+provider genuinely implements the hosted tool.
+
+**The models.dev overlay is keyed by PI SLUG, not by the models.dev id.** `parseModelsDevCatalog`
+maps ids that differ through `PROVIDER_SLUG_BY_MODELS_DEV_ID` (`fireworks-ai` → `fireworks`,
+`togetherai` → `together`), because the lookup is `catalog.get(entry.provider)`. Without the alias
+the live overlay is dead for exactly those providers — every model id newer than the baked registry
+throws "not in the model registry" with no fallback, while every other provider resolves fine. Keep
+that map to unambiguous renames of the same service: a wrong alias attaches another provider's
+context window and pricing to a runnable model handle.
+
 **Two routing headers ride every managed call.** `minusxCallOptions(grade, agent, extraHeaders)` emits
 `X-MX-Use-Case` (the capability grade) and `X-MX-Agent` (the task kind, an `LlmAgentKey`). The gateway
 resolves `agent:grade` first and falls back to `grade`, so the second header is purely additive — an
