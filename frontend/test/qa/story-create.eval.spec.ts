@@ -97,20 +97,26 @@ test.describe('eval: story creation', () => {
     // mounts hundreds of elements and never shows tag syntax as text (measured
     // on a real story: 2344 elements / no markup text, vs 7 / markup text for
     // the text-node failure).
+    // BOTH conditions are polled together, so a story that is merely slow to
+    // mount (embeds hydrate late, sections mount on scroll) is waited for
+    // rather than failed. Only a stable text-node render — which never
+    // resolves, because there is nothing further to mount — reaches the
+    // timeout. `textContent` via evaluate, NOT innerText: foreignObject is an
+    // SVG node and Playwright's innerText throws on it.
     const surfaceRoot = frame.locator('svg[data-mx-story-svg] foreignObject');
     await expect
-      .poll(async () => surfaceRoot.locator('*').count(), {
-        message: 'story surface never mounted interpreted elements (source rendered as text?)',
-        timeout: 30_000,
-      })
-      .toBeGreaterThan(50);
-    // `textContent` via evaluate, NOT innerText: foreignObject is an SVG node,
-    // and Playwright's innerText throws "Node is not an HTMLElement" on it.
-    const surfaceText = await surfaceRoot.evaluate((el) => el.textContent ?? '');
-    expect(
-      /<div|className=/.test(surfaceText),
-      'story rendered its markup as literal text instead of interpreting it',
-    ).toBe(false);
+      .poll(
+        async () => {
+          const elements = await surfaceRoot.locator('*').count();
+          const text = await surfaceRoot.evaluate((el) => el.textContent ?? '');
+          return { interpreted: elements > 50, markupAsText: /<div|className=/.test(text) };
+        },
+        {
+          message: 'story never rendered: surface shows its markup as text instead of interpreting it',
+          timeout: 60_000,
+        },
+      )
+      .toEqual({ interpreted: true, markupAsText: false });
     // Capture the story IFRAME ELEMENT with the viewport grown to fit it:
     // Chromium paints iframe content only inside the viewport, so this is
     // what makes the FULL story render into one image (and any lazily
