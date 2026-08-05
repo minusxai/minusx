@@ -6,6 +6,7 @@
  */
 import 'server-only';
 import { createTrackedOrchestrator } from '@/lib/chat/tracked-orchestrator.server';
+import { deriveTurnAnchorPath } from '@/lib/chat/agent-args.server';
 import type { ToolResultMessage } from '@/orchestrator/llm';
 import type { RegistrableClass } from '@/orchestrator/types';
 import {
@@ -79,6 +80,7 @@ export async function runEvalV2(params: RunEvalV2Params): Promise<EvalSubmission
     resolvedContextDocs: params.resolvedContextDocs,
     schema: params.schema,
     homeFolder: resolveHomeFolderSync(params.user.mode, params.user.home_folder || ''),
+    anchorPath: deriveTurnAnchorPath(params.appState, params.user),
     role: params.user.role,
     appState: params.appState,
     pageType: getPageType(params.appState),

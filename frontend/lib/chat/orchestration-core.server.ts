@@ -59,7 +59,7 @@ import type { RemoteAnalystContext } from '@/agents/analyst/types';
 import { getPageType } from '@/agents/analyst/skills';
 import { normalizeAttachments } from '@/lib/chat/attachments.server';
 import type { AgentSkillSelection, AgentUserSkillCatalogItem } from '@/lib/types';
-import { buildServerAgentArgs } from '@/lib/chat/agent-args.server';
+import { buildServerAgentArgs, deriveTurnAnchorPath } from '@/lib/chat/agent-args.server';
 import { listAllConnections } from '@/lib/data/connections.server';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import {
@@ -385,11 +385,18 @@ export async function setupOrchestration(
   // uses, so the prompt and the UI can never disagree, and the browser can't
   // inject context it didn't earn. (Clientless callers — Slack, report jobs —
   // call buildServerAgentArgs directly and never reach this chat path.)
+  // The turn anchor: the open file's path when the side chat is on a file page,
+  // so the turn's context (docs, schema, skills) and the DB tools' governance
+  // resolve from the same context that governs the file's own execution.
+  const turnAnchorPath = deriveTurnAnchorPath(
+    (agentArgs as { app_state?: unknown }).app_state, user,
+  );
   const serverArgs = await buildServerAgentArgs(user, {
     contextFileId,
     contextVersion,
     connectionId: requestedConnectionId,
     customAgentName,
+    anchorPath: turnAnchorPath,
   });
   if (customAgentName && !serverArgs.custom_agent) {
     console.warn(`[chat-v3] custom agent '${customAgentName}' not found/enabled on the resolved context — falling back to the default analyst`);
@@ -587,6 +594,7 @@ export async function setupOrchestration(
       allowedVizTypes: clientAllowedVizTypes,
       schema: serverArgs.schema,
       homeFolder: resolveHomeFolderSync(user.mode, user.home_folder || ''),
+      anchorPath: turnAnchorPath,
       role: user.role,
       agentName: clientAgentName,
       appState: clientAppState,

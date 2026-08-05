@@ -12,7 +12,7 @@ import { randomUUID } from 'crypto';
 import type { AgentInvocation } from '@/orchestrator/types';
 import type { ToolResultMessage } from '@/orchestrator/llm';
 import type { RemoteAnalystContext } from '@/agents/analyst/types';
-import { buildServerAgentArgs } from '@/lib/chat/agent-args.server';
+import { buildServerAgentArgs, deriveTurnAnchorPath } from '@/lib/chat/agent-args.server';
 import { getPageType } from '@/agents/analyst/skills';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
@@ -54,7 +54,8 @@ export class RemoteSessionMintError extends Error {
  *  the same server-resolved pieces `setupOrchestration` gives a browser turn that sends no
  *  client pointers. Stored on the root invocation like any other turn's context. */
 async function buildRemoteSessionContext(user: EffectiveUser, appState?: unknown): Promise<RemoteAnalystContext> {
-  const serverArgs = await buildServerAgentArgs(user, {});
+  const anchorPath = deriveTurnAnchorPath(appState, user);
+  const serverArgs = await buildServerAgentArgs(user, { anchorPath });
   const whitelistedTables: string[] = [];
   for (const s of serverArgs.schema) {
     for (const t of s.tables) {
@@ -72,6 +73,7 @@ async function buildRemoteSessionContext(user: EffectiveUser, appState?: unknown
     annotations: serverArgs.annotations,
     schema: serverArgs.schema,
     homeFolder: resolveHomeFolderSync(user.mode, user.home_folder || ''),
+    anchorPath,
     role: user.role,
     // Mint-time app state (the page the user is looking at) — same field a normal turn carries,
     // so tools and later LLM turns see what was on screen when the session started.

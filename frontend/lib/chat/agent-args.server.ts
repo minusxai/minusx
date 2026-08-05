@@ -149,6 +149,38 @@ export interface BuildServerAgentArgsOptions {
    * the caller falls back to the default analyst.
    */
   customAgentName?: string;
+  /**
+   * The TURN ANCHOR: the path whose nearest context governs this turn's
+   * schema, docs, skills, and custom agents. Derive it with
+   * `deriveTurnAnchorPath` (the open file's path when the side chat is on a
+   * file page). Absent → the user's home folder, which is what free-form
+   * chat (explore page, Slack, jobs) is governed by.
+   */
+  anchorPath?: string;
+}
+
+/**
+ * Derive the turn anchor from a client-sent app_state: the open file's path
+ * when the chat is on a file page, else undefined (callers fall back to the
+ * home folder). The FILE's path is the anchor because whatever the agent
+ * authors into that file will execute under the file's own path (see the
+ * `/api/query` route) — resolving the turn from anywhere else makes the agent
+ * and the page disagree about which context applies.
+ *
+ * app_state is client-supplied; the trust model matches `/api/query`'s
+ * client-supplied `filePath` (any anchor the client can name is one the user
+ * could navigate to). The one server-side guard is MODE: a path outside the
+ * user's mode root is ignored rather than allowed to cross org/tutorial.
+ */
+export function deriveTurnAnchorPath(appState: unknown, user: EffectiveUser): string | undefined {
+  const state = appState && typeof appState === 'object' ? (appState as Record<string, unknown>) : null;
+  if (!state || state.type !== 'file') return undefined;
+  const inner = state.state && typeof state.state === 'object' ? (state.state as Record<string, unknown>) : null;
+  const fileState = inner?.fileState && typeof inner.fileState === 'object' ? (inner.fileState as Record<string, unknown>) : null;
+  const path = fileState?.path;
+  if (typeof path !== 'string' || !path.startsWith('/')) return undefined;
+  const modeRoot = resolvePath(user.mode, '/');
+  return path === modeRoot || path.startsWith(`${modeRoot}/`) ? path : undefined;
 }
 
 /**
@@ -187,7 +219,11 @@ export async function buildServerAgentArgs(
       const contextResult = await FilesAPI.loadFile(options.contextFileId, user);
       contextContent = contextResult.data?.content as ContextContent | undefined;
     } else {
-      // General path: find the context file nearest to the user's home folder.
+      // General path: find the context file nearest to the TURN ANCHOR — the
+      // open file's path when the side chat is on a file, else the user's home
+      // folder. This must match what governs execution (the file's own path in
+      // `/api/query`), or the prompt's docs/schema and the whitelist that
+      // actually gates ExecuteQuery come from different contexts.
       const modePath = resolvePath(user.mode, '/');
       const { data: contextFiles } = await FilesAPI.getFiles(
         { type: 'context', paths: [modePath], depth: -1 },
@@ -195,7 +231,7 @@ export async function buildServerAgentArgs(
       );
       const nearestContextPath = findNearestContextPath(
         contextFiles.map((f) => f.path),
-        effectiveHomeFolder
+        options?.anchorPath ?? effectiveHomeFolder
       );
       if (nearestContextPath) {
         const contextResult = await FilesAPI.loadFileByPath(nearestContextPath, user);
