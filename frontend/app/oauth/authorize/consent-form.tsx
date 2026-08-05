@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { Box, VStack, HStack, Text, Heading, Button } from '@chakra-ui/react';
-import { LuShieldCheck, LuDatabase, LuSearch, LuTable } from 'react-icons/lu';
+import { LuShieldCheck, LuDatabase, LuSearch, LuTable, LuBookOpen } from 'react-icons/lu';
+import { MCP_TOOLS } from '@/lib/mcp/tool-manifest';
 
 interface ConsentProps {
   clientOrigin?: string;
@@ -97,6 +98,9 @@ export default function OAuthConsentForm({
     { icon: LuSearch, label: 'Search your database schemas and files' },
     { icon: LuDatabase, label: 'Execute SQL queries on your connections' },
     { icon: LuTable, label: 'Read files, query results, and metadata' },
+    // The grant covers LoadContext, so it covers the bodies of your context documents.
+    // That was never stated here while the tool list was five names long.
+    { icon: LuBookOpen, label: 'Read documents from your Context Library' },
   ];
 
   return (
@@ -177,12 +181,13 @@ export default function OAuthConsentForm({
           {/* Tools */}
           <Box>
             <Text fontSize="xs" color="fg.muted" fontWeight={500} textTransform="uppercase" letterSpacing="wider" mb={2}>
-              Available tools
+              Tools this grants access to
             </Text>
             <HStack gap={2} flexWrap="wrap">
-              {['SearchDBSchema', 'ExecuteQuery', 'ListAllConnections', 'SearchFiles', 'ReadFiles'].map((tool) => (
+              {MCP_TOOLS.map(({ name: tool }) => (
                 <Box
                   key={tool}
+                  aria-label={`Granted tool ${tool}`}
                   px={2.5}
                   py={1}
                   bg="bg.muted"

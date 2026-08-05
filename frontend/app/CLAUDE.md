@@ -211,6 +211,17 @@ returns the single public client `minusx-mcp`), `oauth/authorize` (+ `approve`),
 (PKCE authorization_code, plus single-use rotating refresh tokens — covered by
 `oauth/token/__tests__/refresh-flow.e2e.test.ts`).
 
+**The `api/mcp` 401 is the entry point to all of that, not just a rejection.** Its
+`WWW-Authenticate` cites `resource_metadata` (RFC 9728) so a client holding nothing but the
+endpoint URL can walk 401 → protected-resource metadata → `authorization_servers` → RFC 8414 →
+register → authorize. `error="invalid_token"` is included only when a bearer token was actually
+presented (RFC 6750 §3.1) — an unauthenticated first contact has nothing invalid yet. The URL is
+built from the request via `lib/oauth/base-url.ts`, the same helper both `.well-known/oauth-*`
+routes use, so a workspace reached on its own host is pointed at its own discovery document; and
+`WWW-Authenticate` is in `Access-Control-Expose-Headers`, without which a browser client gets the
+401 but cannot read the challenge off it. Pinned by
+`api/mcp/__tests__/unauthorized-challenge.test.ts`.
+
 **Object store.** `api/object-store/upload-url` issues presigned PUTs restricted to an allowlist of MIME
 types (so an authenticated user can't host `text/html` under the app's S3 domain). When no S3 is
 configured the client transparently uses `local-upload` (PUT, path-traversal guarded) and

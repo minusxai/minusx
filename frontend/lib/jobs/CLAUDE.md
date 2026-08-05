@@ -62,6 +62,16 @@ action to it. There is **no DuckDB here** — `file-analytics.db.ts` writes thro
 **`lib/mcp/`** — a per-session MCP server bound to one OAuth-authenticated user, exposing
 read-only tools. It does not own OAuth token issuance (`lib/oauth/`) and cannot write files.
 
+**Tool names are declared once, in `lib/mcp/tool-manifest.ts`.** `server.ts` registers by
+`MCP_TOOL.X` and the OAuth consent screen (`app/oauth/authorize/consent-form.tsx`) maps over
+`MCP_TOOLS`, so neither spells a name and neither can drift from the other. Adding a tool means
+adding it there as well as registering it — `lib/mcp/__tests__/tool-manifest.e2e.test.ts` asks a
+real server what it advertises and fails on a mismatch in either direction. `LoadContext` is
+`conditional: true` because it is registered only when the user's context has on-demand docs; the
+consent screen still names it, since the token authorizes the whole surface. This exists because
+the consent screen previously kept its own hardcoded list and understated the grant by one tool
+for every user with a Context Library.
+
 **`lib/search/`** — pure ranking/snippet logic for file search and database-schema search,
 plus the schema-result size cap. No DB access of its own beyond `FilesAPI`.
 
@@ -254,6 +264,7 @@ appEventRegistry.publish(AppEvents.X, payload)          registry.ts (never await
 | Route an unhandled rejection to its conversation | `frontend/lib/messaging/unhandled-rejection-logger.ts` |
 | Event → webhook fan-out + enrichment | `frontend/lib/messaging/app-events-notifier.ts` |
 | MCP tool surface | `frontend/lib/mcp/server.ts` |
+| Add/rename an MCP tool (name it here too) | `frontend/lib/mcp/tool-manifest.ts` |
 | File / schema search ranking | `frontend/lib/search/file-search.ts`, `frontend/lib/search/schema-search.ts` |
 | Direct-data question validation + cache key | `frontend/lib/spreadsheet/materialize.ts` |
 

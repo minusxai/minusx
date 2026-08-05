@@ -7,17 +7,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getRequestBaseUrl } from '@/lib/oauth/base-url';
 
-function getBaseUrl(request: NextRequest): string {
-  // x-forwarded-proto can be comma-separated (e.g. "https, https" from ngrok)
-  const protoHeader = request.headers.get('x-forwarded-proto') || 'http';
-  const proto = protoHeader.split(',')[0].trim();
-  const host = request.headers.get('host') || 'localhost:3000';
-  return `${proto}://${host}`;
-}
 
 export async function GET(request: NextRequest) {
-  const baseUrl = getBaseUrl(request);
+  const baseUrl = getRequestBaseUrl(request);
 
   const metadata = {
     issuer: baseUrl,

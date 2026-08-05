@@ -26,9 +26,10 @@ import { readFilesServer } from '@/lib/file-state/file-state.server';
 import { resolveQueryForExecution } from '@/lib/sql/governed-query.server';
 import { buildServerAgentArgs } from '@/lib/chat/agent-args.server';
 import { formatContextDocsSection, loadContextDocsByKeys } from '@/lib/sql/context-docs';
+import { MCP_TOOL, type McpToolName } from '@/lib/mcp/tool-manifest';
 
 export type McpToolCallResult = { content: Array<{ type: 'text'; text: string }> };
-export type OnToolCall = (tool: string, args: Record<string, unknown>, result: McpToolCallResult) => void;
+export type OnToolCall = (tool: McpToolName, args: Record<string, unknown>, result: McpToolCallResult) => void;
 
 /**
  * Create an MCP server instance bound to a specific user.
@@ -62,8 +63,8 @@ export async function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCa
     '- Explore (ad-hoc SQL): /explore',
     '',
     'Files are identified by integer IDs. The `path` field (e.g. /org/elo-by-organization) is for display only.',
-    'Use SearchFiles to find files by name/content, then ReadFiles to get full details.',
-    'Use ListAllConnections to discover available databases, then SearchDBSchema and ExecuteQuery to work with data.',
+    `Use ${MCP_TOOL.SearchFiles} to find files by name/content, then ${MCP_TOOL.ReadFiles} to get full details.`,
+    `Use ${MCP_TOOL.ListAllConnections} to discover available databases, then ${MCP_TOOL.SearchDBSchema} and ${MCP_TOOL.ExecuteQuery} to work with data.`,
     'As of now, you cannot create / modify files in the BI tool via MCP, only read/search existing ones. Future versions may add write capabilities.',
   ].join('\n');
 
@@ -87,7 +88,7 @@ export async function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCa
   // SearchDBSchema
   // -----------------------------------------------------------------------
   server.registerTool(
-    'SearchDBSchema',
+    MCP_TOOL.SearchDBSchema,
     {
       description: 'Search database schema for tables, columns, and relationships. Use string search for keywords, or JSONPath (starting with $) for structured queries.',
       inputSchema: {
@@ -103,7 +104,7 @@ export async function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCa
         const result: McpToolCallResult = {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: `Connection '${connection_id}' not found` }) }],
         };
-        onToolCall?.('SearchDBSchema', { connection_id, query }, result);
+        onToolCall?.(MCP_TOOL.SearchDBSchema, { connection_id, query }, result);
         return result;
       }
 
@@ -115,7 +116,7 @@ export async function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCa
       const result: McpToolCallResult = {
         content: [{ type: 'text' as const, text: JSON.stringify(searchResult) }],
       };
-      onToolCall?.('SearchDBSchema', { connection_id, query }, result);
+      onToolCall?.(MCP_TOOL.SearchDBSchema, { connection_id, query }, result);
       return result;
     }
   );
@@ -124,7 +125,7 @@ export async function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCa
   // ExecuteQuery
   // -----------------------------------------------------------------------
   server.registerTool(
-    'ExecuteQuery',
+    MCP_TOOL.ExecuteQuery,
     {
       description: 'Execute a SQL query against a database connection. A default LIMIT of 1000 rows is applied when your query has no LIMIT clause; an explicit LIMIT above 10000 is capped at 10000. Use COUNT/SUM/GROUP BY for cardinality questions and explicit LIMIT/OFFSET to page through large tables. Returns columns, types, and rows.',
       inputSchema: {
@@ -151,7 +152,7 @@ export async function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCa
         const result: McpToolCallResult = {
           content: [{ type: 'text' as const, text: JSON.stringify({ success: false, error: message }) }],
         };
-        onToolCall?.('ExecuteQuery', { query, connection_id, parameters }, result);
+        onToolCall?.(MCP_TOOL.ExecuteQuery, { query, connection_id, parameters }, result);
         return result;
       }
 
@@ -167,7 +168,7 @@ export async function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCa
           const result: McpToolCallResult = {
             content: [{ type: 'text' as const, text: JSON.stringify({ success: true, data: compressed }) }],
           };
-          onToolCall?.('ExecuteQuery', { query, connection_id, parameters }, result);
+          onToolCall?.(MCP_TOOL.ExecuteQuery, { query, connection_id, parameters }, result);
           return result;
         }
       }
@@ -182,7 +183,7 @@ export async function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCa
       const result: McpToolCallResult = {
         content: [{ type: 'text' as const, text: JSON.stringify(execResult.content) }],
       };
-      onToolCall?.('ExecuteQuery', { query, connection_id, parameters }, result);
+      onToolCall?.(MCP_TOOL.ExecuteQuery, { query, connection_id, parameters }, result);
       return result;
     }
   );
@@ -191,7 +192,7 @@ export async function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCa
   // ListAllConnections
   // -----------------------------------------------------------------------
   server.registerTool(
-    'ListAllConnections',
+    MCP_TOOL.ListAllConnections,
     {
       description: 'List all available database connections with their names and types.',
     },
@@ -207,7 +208,7 @@ export async function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCa
           },
         ],
       };
-      onToolCall?.('ListAllConnections', {}, result);
+      onToolCall?.(MCP_TOOL.ListAllConnections, {}, result);
       return result;
     }
   );
@@ -216,7 +217,7 @@ export async function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCa
   // SearchFiles
   // -----------------------------------------------------------------------
   server.registerTool(
-    'SearchFiles',
+    MCP_TOOL.SearchFiles,
     {
       description: 'Search files (questions, dashboards) by name, description, or content. Returns ranked results with match snippets.',
       inputSchema: {
@@ -250,7 +251,7 @@ export async function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCa
       const result: McpToolCallResult = {
         content: [{ type: 'text' as const, text: JSON.stringify({ success: true, ...searchResult }) }],
       };
-      onToolCall?.('SearchFiles', { query, file_types, folder_path, limit, offset }, result);
+      onToolCall?.(MCP_TOOL.SearchFiles, { query, file_types, folder_path, limit, offset }, result);
       return result;
     }
   );
@@ -259,7 +260,7 @@ export async function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCa
   // ReadFiles
   // -----------------------------------------------------------------------
   server.registerTool(
-    'ReadFiles',
+    MCP_TOOL.ReadFiles,
     {
       description: 'Load one or more files by ID with their full content. Returns complete JSON including name, path, type, and content.',
       inputSchema: {
@@ -275,7 +276,7 @@ export async function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCa
       const result: McpToolCallResult = {
         content: [{ type: 'text' as const, text: JSON.stringify({ success: true, files }) }],
       };
-      onToolCall?.('ReadFiles', { fileIds }, result);
+      onToolCall?.(MCP_TOOL.ReadFiles, { fileIds }, result);
       return result;
     }
   );
@@ -287,7 +288,7 @@ export async function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCa
   // -----------------------------------------------------------------------
   if (hasLoadableDocs) {
     server.registerTool(
-      'LoadContext',
+      MCP_TOOL.LoadContext,
       {
         description:
           'Load the full content of one or more context documents by their key, as listed in the Context Library section of the instructions. ' +
@@ -301,7 +302,7 @@ export async function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCa
         const result: McpToolCallResult = {
           content: [{ type: 'text' as const, text: JSON.stringify(payload) }],
         };
-        onToolCall?.('LoadContext', { keys }, result);
+        onToolCall?.(MCP_TOOL.LoadContext, { keys }, result);
         return result;
       }
     );
