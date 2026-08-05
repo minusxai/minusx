@@ -21,6 +21,7 @@
  */
 import { STORY_SVG_ATTR } from '@/lib/story-surface';
 import { collectStoryFontImports, resolveImportFontCss } from '@/lib/html/resolve-story-fonts';
+import { localizeFragmentRefsInTree } from '@/lib/html/fragment-refs';
 
 // Absolute (https://cdn/…) AND root-relative (/fonts/…) refs: platform story fonts are served as
 // same-origin static assets (lib/data/story/story-fonts.ts), which fetch() resolves natively.
@@ -272,6 +273,12 @@ export async function serializeStorySvg(svg: SVGSVGElement): Promise<string> {
       if (cssText) style.textContent = await inlineFontUrls(cssText);
     }),
   );
+
+  // Paint/clip/filter refs: SVG-as-image blocks external references, and Vega writes gradient
+  // paints as `url(<document url>#gradient_N)` — live-correct, but a reference to ANOTHER
+  // document once rasterized, so the mark silently draws as nothing (KPI sparklines vanished
+  // this way while their solid beacon dot survived). Rebind them to the cloned tree's own ids.
+  localizeFragmentRefsInTree(clone);
 
   // Images: SVG-as-image blocks ALL external references, so <img> srcs must be data: URIs in the
   // parsed copy (failures keep the URL — the image just won't render; never fail the capture).

@@ -429,3 +429,22 @@ describe('svgToImage — rasterize readiness', () => {
     expect(decode).toHaveBeenCalled();
   });
 });
+
+describe('serializeStorySvg — same-document paint refs', () => {
+  it('localizes absolute url(...#id) paint refs so they resolve in the rasterized image', async () => {
+    // Vega writes gradient paints as `url(<document url>#gradient_N)`. That resolves live, but
+    // SVG-as-image forbids external refs — so unrewritten, the mark rasterizes as nothing.
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg') as SVGSVGElement;
+    svg.setAttribute('data-mx-story-svg', '');
+    svg.innerHTML = `<foreignObject><div>
+      <svg class="marks"><defs><linearGradient id="gradient_8"></linearGradient></defs>
+      <path stroke="url(${document.baseURI}#gradient_8)" fill="none"/></svg></div></foreignObject>`;
+    document.body.appendChild(svg);
+
+    const out = await serializeStorySvg(svg);
+
+    expect(out).toContain('url(#gradient_8)');
+    expect(out).not.toContain(`url(${document.baseURI}#gradient_8)`);
+    document.body.removeChild(svg);
+  });
+});

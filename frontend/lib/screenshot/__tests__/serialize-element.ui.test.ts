@@ -228,3 +228,18 @@ describe('serializeElementToSvg', () => {
     expect(out).toContain('https://cdn.example/blocked.png'); // left as-is: SVG-as-image simply won't fetch it
   });
 });
+
+describe('serializeElementToSvg — same-document paint refs', () => {
+  it('localizes absolute url(...#id) refs, which SVG-as-image would otherwise refuse to resolve', async () => {
+    const host = document.createElement('div');
+    host.innerHTML = `<svg class="marks"><defs><linearGradient id="gradient_3"></linearGradient></defs>
+      <path stroke="url(${document.baseURI}#gradient_3)" fill="none"/></svg>`;
+    document.body.appendChild(host);
+
+    const out = await serializeElementToSvg(host, { width: 200, height: 100 });
+
+    expect(out).toContain('url(#gradient_3)');
+    expect(out).not.toContain(`url(${document.baseURI}#gradient_3)`);
+    document.body.removeChild(host);
+  });
+});
