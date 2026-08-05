@@ -8,6 +8,7 @@ import ReduxProvider from './ReduxProvider';
 import { DataLoader } from './DataLoader';
 import { ColorModeSync } from './ColorModeSync';
 import { NavigationSync } from './NavigationSync';
+import { E2eCaptureBridge } from './E2eCaptureBridge';
 import { NavigationGuardProvider } from '@/lib/navigation/NavigationGuardProvider';
 import { AnalyticsProvider } from './AnalyticsProvider';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
@@ -75,6 +76,7 @@ export function Providers({ children, initialData }: ProvidersProps) {
               <ColorModeSync />
               <NavigationSync />
               <DataLoader />
+              <E2eCaptureBridge enabled={initialData?.e2eEnabled} />
               <NavigationGuardProvider>
                 {children}
               </NavigationGuardProvider>
