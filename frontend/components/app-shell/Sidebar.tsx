@@ -1,6 +1,6 @@
 'use client';
 
-import { LuPanelLeftClose, LuPanelLeftOpen, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuHeadset, LuGithub, LuEllipsisVertical, LuSun, LuMoon, LuGraduationCap, LuBookOpen, LuUserPlus, LuChevronDown, LuHistory, LuFolder, LuWrench, LuBot, LuSparkles } from 'react-icons/lu';
+import { LuPanelLeftClose, LuPanelLeftOpen, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuHeadset, LuGithub, LuEllipsisVertical, LuSun, LuMoon, LuGraduationCap, LuBookOpen, LuUserPlus, LuChevronDown, LuHistory, LuFolder, LuWrench, LuBot, LuZap } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { Box, Flex, VStack, HStack, Text, IconButton, Icon, Menu, Portal } from '@chakra-ui/react';
 import { Tooltip } from '@/components/kit/tooltip';
@@ -155,7 +155,7 @@ export default function Sidebar() {
           { href: '/explore', icon: <FILE_TYPE_METADATA.explore.icon />, label: FILE_TYPE_METADATA.explore.label },
           { href: '/conversations', icon: <LuHistory />, label: 'Conversations' },
           { href: `/p/${mode}`, icon: <LuFolder />, label: 'Files' },
-          ...(skillsPageHref ? [{ href: skillsPageHref, icon: <LuSparkles />, label: 'Skills' }] : []),
+          ...(skillsPageHref ? [{ href: skillsPageHref, icon: <LuZap />, label: 'Skills' }] : []),
           ...(agentsPageHref ? [{ href: agentsPageHref, icon: <LuBot />, label: 'Agents' }] : []),
         ],
       },

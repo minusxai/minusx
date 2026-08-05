@@ -29,7 +29,6 @@ interface AgentsTabContentProps {
   onChange: (updates: Partial<ContextContent>) => void;
   canAddAgent: boolean;
   canManageAgents: boolean;
-  systemSkills: { name: string; description: string }[];
   mentions?: MentionsConfig;
   onStartAddAgent: () => void;
   onAddAgent: (draft: AgentDraft) => void;
@@ -47,7 +46,6 @@ export function AgentsTabContent({
   onChange,
   canAddAgent,
   canManageAgents,
-  systemSkills,
   mentions,
   onStartAddAgent,
   onAddAgent,
@@ -71,6 +69,12 @@ export function AgentsTabContent({
       displayName: getUserSkillDisplayName(skill),
       description: skill.description,
     }));
+  const userSkillNames = new Set(userSkills.map((skill) => skill.name));
+  const withUserSkillsOnly = (agent: AgentEntry): AgentEntry => ({
+    ...agent,
+    preloadSkills: agent.preloadSkills.filter((name) => userSkillNames.has(name)),
+    includeSkills: agent.includeSkills.filter((name) => userSkillNames.has(name)),
+  });
 
   // React's prop-derived state adjustment: page-level Cancel flips this flag
   // outside the tab, so clear any nested builder in the same render cycle.
@@ -96,10 +100,9 @@ export function AgentsTabContent({
           {builder ? (
             <AgentBuilder
               initial={builder.mode === 'edit' ? {
-                ...agents[builder.index],
+                ...withUserSkillsOnly(agents[builder.index]),
                 displayName: getUserAgentDisplayName(agents[builder.index]),
               } : undefined}
-              systemSkills={systemSkills}
               userSkills={userSkills}
               existingAgentNames={[
                 ...agents
@@ -166,7 +169,7 @@ export function AgentsTabContent({
                       }}
                     >
                       <AgentReadView
-                        agent={agent}
+                        agent={withUserSkillsOnly(agent)}
                         compact
                         muted={!agent.enabled}
                         showSettings={canAddAgent}

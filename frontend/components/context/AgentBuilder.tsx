@@ -30,7 +30,6 @@ const STEP_TITLES: Record<Step, string> = {
 export interface AgentBuilderProps {
   /** Prefill for editing; omit for a new agent. */
   initial?: AgentDraft;
-  systemSkills: { name: string; description: string }[];
   userSkills: { name: string; displayName?: string; description: string }[];
   existingAgentNames: string[];
   mentions?: MentionsConfig;
@@ -58,19 +57,24 @@ const GRADE_OPTIONS = createListCollection({
   ],
 });
 
-function normalizeSkillAccess(draft: AgentDraft): AgentDraft {
-  const preloaded = new Set(draft.preloadSkills);
+function normalizeSkillAccess(draft: AgentDraft, userSkillNames: Set<string>): AgentDraft {
+  const preloadSkills = draft.preloadSkills.filter((name) => userSkillNames.has(name));
+  const preloaded = new Set(preloadSkills);
   return {
     ...draft,
-    includeSkills: draft.includeSkills.filter((name) => !preloaded.has(name)),
+    preloadSkills,
+    includeSkills: draft.includeSkills.filter((name) => userSkillNames.has(name) && !preloaded.has(name)),
   };
 }
 
 type SkillAccessMode = 'excluded' | 'demand' | 'always';
 
-export function AgentBuilder({ initial, systemSkills, userSkills, existingAgentNames, mentions, onSave, onCancel }: AgentBuilderProps) {
+export function AgentBuilder({ initial, userSkills, existingAgentNames, mentions, onSave, onCancel }: AgentBuilderProps) {
   const [step, setStep] = useState<Step>('identity');
-  const [draft, setDraft] = useState<AgentDraft>(() => normalizeSkillAccess(initial ?? EMPTY_DRAFT));
+  const [draft, setDraft] = useState<AgentDraft>(() => normalizeSkillAccess(
+    initial ?? EMPTY_DRAFT,
+    new Set(userSkills.map((skill) => skill.name)),
+  ));
   const [skillQuery, setSkillQuery] = useState('');
   const stepIndex = STEPS.indexOf(step);
 
@@ -99,19 +103,14 @@ export function AgentBuilder({ initial, systemSkills, userSkills, existingAgentN
   };
   const canAdvance = stepIndex < STEPS.length - 1 && stepReachable[STEPS[stepIndex + 1]];
 
-  const allSkills = [
-    ...userSkills.map((s) => ({ ...s, source: 'user' as const })),
-    ...systemSkills.map((s) => ({ ...s, displayName: undefined, source: 'system' as const })),
-  ];
   const normalizedSkillQuery = skillQuery.trim().toLowerCase();
   const filteredSkills = normalizedSkillQuery
-    ? allSkills.filter((skill) => (
+    ? userSkills.filter((skill) => (
       skill.name.toLowerCase().includes(normalizedSkillQuery)
       || skill.displayName?.toLowerCase().includes(normalizedSkillQuery)
       || skill.description.toLowerCase().includes(normalizedSkillQuery)
-      || skill.source.includes(normalizedSkillQuery)
     ))
-    : allSkills;
+    : userSkills;
 
   const label = (text: string) => (
     <Text fontSize="sm" fontWeight="600" color="fg.default" mb={1.5}>{text}</Text>
@@ -293,7 +292,7 @@ export function AgentBuilder({ initial, systemSkills, userSkills, existingAgentN
             <Box>
               <Text fontSize="md" fontWeight="700">Skill access</Text>
               <Text fontSize="sm" color="fg.muted" mt={1}>
-                Choose what the agent can fetch when needed and what it should know on every turn.
+                Configure user-defined skills for this agent. System skills load automatically for the current page.
               </Text>
             </Box>
             <HStack gap={2} flexWrap="wrap">
@@ -353,7 +352,7 @@ export function AgentBuilder({ initial, systemSkills, userSkills, existingAgentN
               aria-label="Search skills"
               value={skillQuery}
               onChange={(event) => setSkillQuery(event.target.value)}
-              placeholder="Search skills by name, description, or source…"
+              placeholder="Search user-defined skills by name or description…"
               pl={9}
               bg="bg.panel"
               fontFamily="mono"
@@ -367,7 +366,7 @@ export function AgentBuilder({ initial, systemSkills, userSkills, existingAgentN
               const accessMode: SkillAccessMode = isAlwaysLoaded ? 'always' : isOnDemand ? 'demand' : 'excluded';
               return (
                 <Box
-                  key={`${skill.source}:${skill.name}`}
+                  key={skill.name}
                   aria-label={`Skill ${skill.name}`}
                   display="flex"
                   flexDirection="column"
@@ -393,10 +392,10 @@ export function AgentBuilder({ initial, systemSkills, userSkills, existingAgentN
                     <Badge
                       size="xs"
                       flexShrink={0}
-                      variant={skill.source === 'user' ? 'subtle' : 'outline'}
-                      colorPalette={skill.source === 'user' ? 'teal' : 'gray'}
+                      variant="subtle"
+                      colorPalette="teal"
                     >
-                      {skill.source === 'user' ? 'User skill' : 'System skill'}
+                      User skill
                     </Badge>
                   </HStack>
 
@@ -452,15 +451,15 @@ export function AgentBuilder({ initial, systemSkills, userSkills, existingAgentN
               );
             })}
           </SimpleGrid>
-          {allSkills.length > 0 && filteredSkills.length === 0 && (
+          {userSkills.length > 0 && filteredSkills.length === 0 && (
             <Box py={10} textAlign="center" border="1px dashed" borderColor="border.muted" borderRadius="lg">
               <Icon as={LuBookOpen} boxSize={5} color="fg.subtle" mb={2} />
               <Text fontSize="sm" fontWeight="600">No matching skills</Text>
-              <Text fontSize="xs" color="fg.muted" mt={1}>Try a different name, description, or source.</Text>
+              <Text fontSize="xs" color="fg.muted" mt={1}>Try a different name or description.</Text>
             </Box>
           )}
-          {allSkills.length === 0 && (
-            <Text fontSize="sm" color="fg.muted">No skills are available to configure.</Text>
+          {userSkills.length === 0 && (
+            <Text fontSize="sm" color="fg.muted">No enabled user-defined skills are available to configure.</Text>
           )}
         </VStack>
       )}

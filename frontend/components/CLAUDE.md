@@ -403,7 +403,10 @@ cold cache repainted fallback text on every single edit.
 from `fullAgents`, and a raw-JSON variant. `components/context/AgentBuilder.tsx` is a four-step builder
 (Identity → Prompt → Skills → Review) that **saves only at the end**, and whose Review step renders the
 very component the saved card uses, `components/context/AgentReadView.tsx` — so what an author approves
-is byte-for-byte what is stored, with no second formatting path to drift. The feature is alpha-gated on
+is byte-for-byte what is stored, with no second formatting path to drift. The Skills step lists only
+enabled user-defined Knowledge Base skills and sanitizes legacy system names out of edited definitions;
+system/page skills are intentionally invisible because the runtime loads them from `PAGE_SKILL_MAP`.
+The feature is alpha-gated on
 `uiSlice.enableCustomAgents`: with the flag off the editor tab is not rendered *and* the chat picker
 receives an empty option list, so no `custom_agent` pointer is ever sent. The gate is on both the
 authoring and the sending side, not just the visible one. When the gate is on, `app-shell/Sidebar.tsx`

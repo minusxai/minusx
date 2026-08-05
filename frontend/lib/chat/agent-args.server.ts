@@ -55,7 +55,7 @@ export interface ServerAgentArgs {
    */
   custom_agent?: {
     resolved: ResolvedCustomAgent;
-    /** Preload selections (system names + user skills WITH content) to merge into selectedSkills. */
+    /** Agent-authored user skills WITH content to merge into selectedSkills. */
     preloadSelections: AgentSkillSelection[];
   };
 }
@@ -63,9 +63,8 @@ export interface ServerAgentArgs {
 /**
  * Resolve a custom-agent definition by name from a loaded context. Malformed,
  * disabled, or missing entries resolve to undefined (caller falls back to the
- * default analyst). Skill names that are neither user skills nor system skills
- * are passed through as system selections and silently skipped downstream
- * (same posture as buildPreloadedSkillsContent).
+ * default analyst). Agent definitions control user-defined skills only; saved
+ * legacy system-skill names are ignored because system skills are page-managed.
  */
 function resolveCustomAgentFromContext(
   content: ContextContent,
@@ -81,16 +80,17 @@ function resolveCustomAgentFromContext(
   const preload = Array.isArray(entry.preloadSkills) ? entry.preloadSkills.filter((n) => typeof n === 'string') : [];
   const include = Array.isArray(entry.includeSkills) ? entry.includeSkills.filter((n) => typeof n === 'string') : [];
 
-  const preloadSelections: AgentSkillSelection[] = preload.map((n) => {
+  const preloadSelections: AgentSkillSelection[] = preload.flatMap((n) => {
     const user = userByName.get(n);
     return user
-      ? { type: 'user' as const, name: n, content: user.content, description: user.description }
-      : { type: 'system' as const, name: n };
+      ? [{ type: 'user' as const, name: n, content: user.content, description: user.description }]
+      : [];
   });
 
-  // Custom-agent skill selection is exact: empty include/preload arrays mean
-  // no optional skills, rather than an unrestricted catalog.
-  const skillAllowlist = [...new Set([...include, ...preload])];
+  // Custom-agent user-skill selection is exact. System skills remain managed
+  // by PAGE_SKILL_MAP and the normal LoadSkill catalog.
+  const skillAllowlist = [...new Set([...include, ...preload])]
+    .filter((skillName) => userByName.has(skillName));
   const gradeOverride: LlmGrade | undefined =
     typeof entry.gradeOverride === 'string' && (LLM_GRADES as readonly string[]).includes(entry.gradeOverride)
       ? entry.gradeOverride

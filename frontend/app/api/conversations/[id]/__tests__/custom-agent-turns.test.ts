@@ -133,12 +133,21 @@ describe('custom-agent turns (v3 chat routes)', () => {
     expect(root).toContain('APPEND_PERSONA_MARKER');
     // preloadSkills resolved server-side: user-skill CONTENT present without any client skills payload
     expect(root).toContain('SERVER_KB_PRICING_BODY');
+    // Legacy system names saved in the agent definition do not become user-controlled permissions.
+    expect(root).toContain('"skillAllowlist":["kb_pricing"]');
   });
 
-  it('assembles the append prompt with a restricted catalog (previewNextChatContext)', async () => {
+  it('assembles the append prompt with page-managed system skills and configured user skills', async () => {
     const conv = await createConversation({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent' });
     const ctx = await previewNextChatContext(
-      { user_message: 'q', agent_args: { custom_agent: 'sales_helper', context_file_id: contextFileId } },
+      {
+        user_message: 'q',
+        agent_args: {
+          custom_agent: 'sales_helper',
+          context_file_id: contextFileId,
+          app_state: { type: 'file', state: { fileState: { type: 'dashboard' } } },
+        },
+      },
       testUser,
       conv.id,
     );
@@ -146,8 +155,9 @@ describe('custom-agent turns (v3 chat routes)', () => {
     expect(sp).toContain('APPEND_PERSONA_MARKER');
     expect(sp).toContain('## Application Structure');       // append keeps the default body
     expect(sp).toContain('**Skill: kb_pricing (user-defined)**'); // preload inlined
-    expect(sp).toContain('- `"dashboards"`');               // includeSkills in catalog
-    expect(sp).not.toContain('- `"alerts"`');               // outside allowlist
+    expect(sp).toContain('**Skill: dashboards**');           // page default, not agent-authored
+    expect(sp).toContain('**Skill: questions**');
+    expect(sp).toContain('- `"alerts"`');                   // remaining system skills stay available
   });
 
   it('assembles the replace prompt: persona replaces the intro + guidelines', async () => {
@@ -163,9 +173,10 @@ describe('custom-agent turns (v3 chat routes)', () => {
     expect(sp).not.toContain('expert data analyst');         // intro gone
     expect(sp).not.toContain('### Response Guidelines');     // guidelines gone
     expect(sp).toContain('## Available Database Schema');   // dynamic sections kept
-    expect(sp).toContain('No additional skills are available for this turn.');
-    expect(sp).not.toContain('**Skill: questions**');
-    expect(sp).not.toContain('**Skill: explore**');
+    expect(sp).not.toContain('No additional skills are available for this turn.');
+    expect(sp).toContain('**Skill: questions**');
+    expect(sp).toContain('**Skill: explore**');
+    expect(sp).toContain('- `"dashboards"`');
   });
 
   it("applies the agent's gradeOverride, but an explicit client grade wins", async () => {

@@ -467,7 +467,6 @@ export default function ContextEditorV2({
       onChange={onChange}
       canAddAgent={canEditContext}
       canManageAgents={canManageAgents}
-      systemSkills={systemSkills}
       mentions={editorMentions}
       onStartAddAgent={() => {
         if (!editMode) onEditModeChange(true);

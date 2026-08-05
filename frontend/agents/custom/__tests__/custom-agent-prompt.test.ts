@@ -97,18 +97,21 @@ describe('CustomAgent replace mode', () => {
   });
 });
 
-describe('CustomAgent skill allowlist', () => {
-  it('restricts the LoadSkill catalog to the allowlist (system + user skills)', () => {
+describe('CustomAgent user-skill allowlist', () => {
+  it('keeps page-default and on-demand system skills while restricting user skills', () => {
     const sp: string = newCustomAgent({
-      customAgent: def({ skillAllowlist: ['dashboards', 'allowed_kb'] }),
+      customAgent: def({ skillAllowlist: ['allowed_kb'] }),
+      pageType: 'dashboard',
       userSkillCatalog: [
         { name: 'allowed_kb', description: 'in allowlist' },
         { name: 'blocked_kb', description: 'not in allowlist' },
       ],
     }).getSystemPrompt();
-    expect(sp).toContain('- `"dashboards"`');
+    expect(sp).toContain('**Skill: dashboards**');
+    expect(sp).toContain('**Skill: questions**');
+    expect(sp).toContain('- `"alerts"`');
+    expect(sp).toContain('- `"explore"`');
     expect(sp).toContain('- `"allowed_kb"`');
-    expect(sp).not.toContain('- `"alerts"`');
     expect(sp).not.toContain('blocked_kb');
   });
 
@@ -118,17 +121,17 @@ describe('CustomAgent skill allowlist', () => {
     expect(sp).toContain('- `"alerts"`');
   });
 
-  it('exposes and preloads no optional skills for an explicit empty allowlist', () => {
+  it('an empty user allowlist still follows the normal system-skill pattern', () => {
     const sp: string = newCustomAgent({
       customAgent: def({ skillAllowlist: [] }),
       pageType: 'explore',
     }).getSystemPrompt();
 
-    expect(sp).toContain('No additional skills are available for this turn.');
-    expect(sp).not.toContain('- `"dashboards"`');
-    expect(sp).not.toContain('- `"alerts"`');
-    expect(sp).not.toContain('**Skill: questions**');
-    expect(sp).not.toContain('**Skill: explore**');
+    expect(sp).not.toContain('No additional skills are available for this turn.');
+    expect(sp).toContain('- `"dashboards"`');
+    expect(sp).toContain('- `"alerts"`');
+    expect(sp).toContain('**Skill: questions**');
+    expect(sp).toContain('**Skill: explore**');
   });
 });
 
