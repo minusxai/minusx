@@ -12,15 +12,16 @@
 import { NextRequest } from 'next/server';
 import { POST as turnsRoute } from '@/app/api/conversations/[id]/turns/route';
 import { GET as getRoute } from '@/app/api/conversations/[id]/route';
+import { POST as logErrorRoute } from '@/app/api/chat/log-error/route';
 import {
-  createConversation as createConversationServer, setLastContextTokens,
+  createConversation as createConversationServer, setLastContextTokens, loadErrors,
 } from '@/lib/data/conversations.server';
 import { fauxRegistration as webAnalystFaux } from '@/agents/web-analyst/web-analyst';
 import { fauxAssistantMessage } from '@/orchestrator/llm/testing';
 import * as storeModule from '@/store/store';
 import { makeStore } from '@/store/store';
 import { createConversation, sendMessage, selectConversation } from '@/store/chatSlice';
-import { TOKEN_LIMIT } from '@/lib/chat/conversation-limits';
+import { TOKEN_LIMIT, CONVERSATION_TOO_LONG } from '@/lib/chat/conversation-limits';
 import type { RootState } from '@/store/store';
 import { getTestDbPath } from './test-utils';
 import { setupTestDb } from '@/test/harness/test-db';
@@ -47,6 +48,11 @@ describe('conversation too long — refusal reaches Redux with its typed reason'
       }
       if (method === 'GET' && (m = full.match(/\/api\/conversations\/(\d+)(\?|$)/))) {
         return await getRoute(new NextRequest(full), idCtx(m[1]!));
+      }
+      // The REAL error-echo route, so a client-side echo actually lands as a durable row and the
+      // duplicate is observable here. Stubbing it would hide exactly what this test checks.
+      if (method === 'POST' && full.includes('/api/chat/log-error')) {
+        return await logErrorRoute(new NextRequest(full, { method, body: init?.body as string, headers: init?.headers as HeadersInit }));
       }
       return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }) as unknown as typeof fetch;
@@ -92,5 +98,40 @@ describe('conversation too long — refusal reaches Redux with its typed reason'
     expect(c.errorRetryability).toBe('terminal');
     // ...and the reason came from the typed code, not from matching our own prose.
     expect(c.errorReason).toBe('conversation_too_long');
+  });
+
+  it('does not echo the refusal back as a second, untyped error row', async () => {
+    // The echo exists to make CLIENT-side failures durable. An error that arrived FROM the durable
+    // log is already durable, so echoing it writes a near-duplicate row — one that is
+    // `source: 'transport'` with no `details`, and lands LAST. Anything reading "the most recent
+    // error" then sees the untyped copy and loses the reason.
+    const conv = await createConversationServer({ ownerUserId: 1, mode: 'org', agent: 'WebAnalystAgent' });
+
+    webAnalystFaux.setResponses([fauxAssistantMessage('first answer', { stopReason: 'stop' })]);
+    store.dispatch(createConversation({ conversationID: conv.id, agent: 'WebAnalystAgent', agent_args: {}, message: 'first question' } as never));
+    await waitForFinished(conv.id);
+
+    webAnalystFaux.setResponses([fauxAssistantMessage('second answer', { stopReason: 'stop' })]);
+    store.dispatch(sendMessage({ conversationID: conv.id, message: 'second question' }));
+    await waitForFinished(conv.id);
+
+    await setLastContextTokens(conv.id, TOKEN_LIMIT + 50_000);
+    webAnalystFaux.setResponses([]);
+    store.dispatch(sendMessage({ conversationID: conv.id, message: 'one question too many' }));
+
+    await vi.waitFor(() => {
+      expect(selectConversation(store.getState() as RootState, conv.id)?.error).toBeTruthy();
+    }, { timeout: 8000, interval: 20 });
+
+    // Give any (unwanted) fire-and-forget echo time to land before asserting its absence.
+    await vi.waitFor(async () => {
+      expect((await loadErrors(conv.id)).length).toBeGreaterThan(0);
+    }, { timeout: 4000, interval: 20 });
+    await new Promise((r) => setTimeout(r, 300));
+
+    const errors = await loadErrors(conv.id);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.source).toBe('session');
+    expect((errors[0]!.details as { code?: string } | null)?.code).toBe(CONVERSATION_TOO_LONG);
   });
 });

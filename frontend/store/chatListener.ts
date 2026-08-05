@@ -173,7 +173,13 @@ async function handleStreamError(
   dispatch(setError({ conversationID, error: errMsg, retryability, ...(reason ? { reason } : {}) }));
   dispatch(clearStreamingContent({ conversationID }));
   abortControllers.delete(stableId);
-  reportClientErrorToServer(conversationID, error.message || 'Unknown error', source, httpStatus);
+  // The echo exists to make CLIENT-side failures durable. An error carrying `mxCode` came FROM a
+  // durable row (that is the only way the code is set), so echoing it appends a near-duplicate —
+  // `source: 'transport'`, no `details`, and LAST, so whoever reads the most recent error gets the
+  // untyped copy and loses the reason.
+  if (!(error as { mxCode?: string }).mxCode) {
+    reportClientErrorToServer(conversationID, error.message || 'Unknown error', source, httpStatus);
+  }
   return false;
 }
 
