@@ -121,6 +121,97 @@ describe('FilesAPI.moveFile — folders', () => {
     expect(await DocumentDB.getByPath('/org/cycle-outer/sub/cycle-outer')).toBeNull();
   });
 
+  it('rewrites childPaths references to the moved folder across context documents', async () => {
+    const srcId = await createFolder('/org/cp-src');
+    await createFolder('/org/cp-src/sub');
+    await createFolder('/org/cp-dest');
+
+    // Root context grants things to the folder being moved (exact and descendant
+    // paths), via every childPaths carrier: whitelist nodes, docs, views, models.
+    const rootCtx = await DocumentDB.getByPath('/org/context');
+    expect(rootCtx).not.toBeNull();
+    const rootContent = {
+      ...(rootCtx!.content as Record<string, unknown>),
+      versions: [{
+        version: 1,
+        whitelist: [
+          { name: 'warehouse', type: 'connection', children: [
+            { name: 'finance', type: 'schema', childPaths: ['/org/cp-src', '/org/elsewhere'] },
+            { name: 'kpi', type: 'schema', childPaths: ['/org/cp-src/sub'] }
+          ]}
+        ],
+        docs: [{ title: 'src-doc', content: 'doc', childPaths: ['/org/cp-src'] }],
+        views: [{
+          name: 'v1', connection: 'warehouse', sql: 'SELECT 1',
+          reads: { tables: [], views: [] }, childPaths: ['/org/cp-src']
+        }],
+        semanticModels: [{
+          name: 'm1', connection: 'warehouse',
+          primary: { kind: 'table', schema: 'finance', table: 't' },
+          dimensions: [], metrics: [], childPaths: ['/org/cp-src/sub']
+        }],
+        createdAt: new Date().toISOString(),
+        createdBy: 1
+      }],
+      published: { all: 1 }
+    };
+    await DocumentDB.update(rootCtx!.id, 'context', '/org/context', rootContent, [], 'seed-root-cp');
+
+    // The moved folder's own context grants to its descendant — that path moves too.
+    const srcCtx = await DocumentDB.getByPath('/org/cp-src/context');
+    const srcContent = {
+      ...(srcCtx!.content as Record<string, unknown>),
+      versions: [{
+        version: 1,
+        whitelist: '*',
+        docs: [{ title: 'inner-doc', content: 'doc', childPaths: ['/org/cp-src/sub'] }],
+        createdAt: new Date().toISOString(),
+        createdBy: 1
+      }],
+      published: { all: 1 }
+    };
+    await DocumentDB.update(srcCtx!.id, 'context', '/org/cp-src/context', srcContent, [], 'seed-src-cp');
+
+    await FilesAPI.moveFile({ id: srcId, name: 'cp-src', newPath: '/org/cp-dest/cp-src' }, testUser);
+
+    const root = (await DocumentDB.getByPath('/org/context'))!.content as any;
+    const [conn] = root.versions[0].whitelist;
+    expect(conn.children[0].childPaths).toEqual(['/org/cp-dest/cp-src', '/org/elsewhere']);
+    expect(conn.children[1].childPaths).toEqual(['/org/cp-dest/cp-src/sub']);
+    expect(root.versions[0].docs[0].childPaths).toEqual(['/org/cp-dest/cp-src']);
+    expect(root.versions[0].views[0].childPaths).toEqual(['/org/cp-dest/cp-src']);
+    expect(root.versions[0].semanticModels[0].childPaths).toEqual(['/org/cp-dest/cp-src/sub']);
+
+    const moved = (await DocumentDB.getByPath('/org/cp-dest/cp-src/context'))!.content as any;
+    expect(moved.versions[0].docs[0].childPaths).toEqual(['/org/cp-dest/cp-src/sub']);
+  });
+
+  it('leaves childPaths of prefix-similar but distinct folders untouched', async () => {
+    const srcId = await createFolder('/org/pfx');
+    await createFolder('/org/pfx-other');
+    await createFolder('/org/pfx-dest');
+
+    const otherCtx = await DocumentDB.getByPath('/org/pfx-other/context');
+    const otherContent = {
+      ...(otherCtx!.content as Record<string, unknown>),
+      versions: [{
+        version: 1,
+        whitelist: '*',
+        // '/org/pfx-other' shares the '/org/pfx' prefix but is NOT inside it.
+        docs: [{ title: 'other-doc', content: 'doc', childPaths: ['/org/pfx-other/deep'] }],
+        createdAt: new Date().toISOString(),
+        createdBy: 1
+      }],
+      published: { all: 1 }
+    };
+    await DocumentDB.update(otherCtx!.id, 'context', '/org/pfx-other/context', otherContent, [], 'seed-pfx-other');
+
+    await FilesAPI.moveFile({ id: srcId, name: 'pfx', newPath: '/org/pfx-dest/pfx' }, testUser);
+
+    const other = (await DocumentDB.getByPath('/org/pfx-other/context'))!.content as any;
+    expect(other.versions[0].docs[0].childPaths).toEqual(['/org/pfx-other/deep']);
+  });
+
   it('delete still cascades the context file with its folder', async () => {
     const folderId = await createFolder('/org/del-me');
     expect(await DocumentDB.getByPath('/org/del-me/context')).not.toBeNull();

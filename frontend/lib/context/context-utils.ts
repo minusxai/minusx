@@ -17,6 +17,55 @@ export function findDocsMissingMeta(docs: (DocEntry | string)[]): number[] {
 }
 
 /**
+ * Rewrite every `childPaths` reference to a moved folder, wherever it appears
+ * in a context document — whitelist nodes (any nesting level), docs, views and
+ * semantic models all carry the field, and a folder move must update all of
+ * them or the grant silently points at a path that no longer exists.
+ *
+ * Deliberately a DEEP WALK keyed on the property name rather than an
+ * enumeration of the four carriers: a fold that lists fields drops the next
+ * carrier someone adds. Only string-array values under a key named exactly
+ * `childPaths` are touched; document prose and every other field pass through
+ * untouched. An entry is rewritten when it IS the moved folder or lies inside
+ * it (`oldPath` exactly, or `oldPath/…`) — prefix-similar siblings
+ * (`/org/a` vs `/org/ab`) never match.
+ *
+ * Returns the original object identity when nothing referenced the folder, so
+ * callers can use identity to skip a write.
+ */
+export function rewriteChildPathsForMove<T>(value: T, oldPath: string, newPath: string): T {
+  if (Array.isArray(value)) {
+    let changed = false;
+    const next = value.map((v) => {
+      const nv = rewriteChildPathsForMove(v, oldPath, newPath);
+      if (nv !== v) changed = true;
+      return nv;
+    });
+    return (changed ? next : value) as T;
+  }
+  if (value !== null && typeof value === 'object') {
+    let changed = false;
+    const next: Record<string, unknown> = {};
+    for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
+      if (key === 'childPaths' && Array.isArray(v) && v.every((p) => typeof p === 'string')) {
+        const rewritten = (v as string[]).map((p) =>
+          p === oldPath ? newPath : p.startsWith(oldPath + '/') ? newPath + p.slice(oldPath.length) : p
+        );
+        const same = rewritten.every((p, i) => p === (v as string[])[i]);
+        next[key] = same ? v : rewritten;
+        if (!same) changed = true;
+      } else {
+        const nv = rewriteChildPathsForMove(v, oldPath, newPath);
+        next[key] = nv;
+        if (nv !== v) changed = true;
+      }
+    }
+    return (changed ? next : value) as T;
+  }
+  return value;
+}
+
+/**
  * Count whitelist items (schemas/tables) that still exist in the loader-resolved
  * `fullSchema`. Stale entries — pointing at a deleted connection, schema, or
  * table — are excluded, so the count reflects what the agent actually sees

@@ -212,14 +212,13 @@ function findNearestAncestorContext(currentPath: string, allContexts: any[]): an
     segments.pop();
     const ancestorDir = '/' + segments.join('/');
 
+    // Match on the context's OWN directory, never on a length-based substring:
+    // sibling directories with same-length paths (/org/BSIM vs /org/SMMA) must
+    // never satisfy each other's ancestor lookup.
     const found = allContexts.find(c => {
       if (c.type !== 'context') return false;
-
-      const relativePath = c.path.substring(ancestorDir.length);
-      if (!relativePath.startsWith('/')) return false;
-
-      const remainingSegments = relativePath.split('/').filter(Boolean);
-      return remainingSegments.length === 1;
+      const dir = c.path.substring(0, c.path.lastIndexOf('/')) || '/';
+      return dir === ancestorDir;
     });
 
     if (found) {
