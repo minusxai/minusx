@@ -75,6 +75,13 @@ first-turn AI title (via `runMicroTask('title', …)`), and the turn's app event
 `USER_MESSAGE`, one `CHAT_TURN` per segment, `ERROR` on failure — it runs detached, so nothing
 upstream can observe the outcome). It owns nothing about *which* agent runs.
 
+**`frontend/lib/chat/conversation-limits.ts`** — how big a conversation may get, as one predicate
+(`conversationTooLong`) plus `TOKEN_LIMIT` and the typed `CONVERSATION_TOO_LONG` refusal code.
+Client-safe and dependency-free ON PURPOSE: the browser imports it so the composer is replaced
+before the user writes a message the server would refuse, and the two sides cannot drift apart
+about where the line is. It must never re-export the engine's `MAX_CONTEXT_TOKENS` as a value —
+`@/orchestrator/types` reaches `orchestrator/utils`, which imports node `crypto`.
+
 **`frontend/lib/chat/conversation-stream.server.ts`** — the wakeup bus only (`notifyMessage`,
 `notifyDelta`, `notifyStatus`, `notifyInterrupt`, `subscribe`). No SSE, no serialization, no cursor
 logic — those live in the stream route.
@@ -269,6 +276,20 @@ sees *and* what Redux stores.
 
 ## Gotchas
 
+- **The conversation-size limit is enforced HERE, not in the browser.** `runConversationTurn` checks
+  `conversationTooLong` before building the orchestrator and, on refusal, writes an error row with
+  `details.code = 'conversation-too-long'` and returns — so a turn that cannot succeed spends
+  nothing, and Slack and scheduled jobs are covered by the same check. `ChatInterface` renders the
+  same predicate, but that is an affordance; deleting the client copy would degrade UX, deleting
+  this one removes the limit. Two carve-outs are load-bearing: a **resume** is never gated (a
+  refused resume strands its pending frontend tool call and wedges the conversation), and a
+  conversation with fewer than two prior user turns is never gated (one huge query would otherwise
+  lock the user out of a chat that a fresh start cannot make smaller).
+- **The turn gate and the engine's per-call ceiling are different mechanisms, and they compose.**
+  `TOKEN_LIMIT` admits a turn; `MXAgent.maxContextTokens` aborts one that grows past the ceiling
+  mid-run (every step re-sends the whole thread, so a turn admitted just under the gate can still
+  run away). The abort path still stamps `lastContextTokens`, which leaves the conversation above
+  `TOKEN_LIMIT` and refused from then on.
 - **NOTIFY is lossy by design.** Correctness comes from the cursor + catch-up `SELECT`; a wakeup lost
   while nobody listens is harmless. Never move state into a notify payload — deltas ride inline only
   because they are ephemeral.
@@ -387,6 +408,7 @@ sees *and* what Redux stores.
 | Add a headless run type | `frontend/lib/chat/run-report.server.ts` (pattern), `frontend/lib/chat/run-micro-task.server.ts` |
 | Change the `/debug` cost model | `frontend/lib/convo-debug/costs.ts`, `frontend/lib/convo-debug/turns.ts` |
 | Change chat error → "Try again" vs "new chat" | `frontend/lib/chat/error-retryability.ts` |
+| Change how long a conversation may get | `frontend/lib/chat/conversation-limits.ts` (+ `MXAgent.maxContextTokens` for the per-call ceiling) |
 
 ## Decisions not to re-litigate
 

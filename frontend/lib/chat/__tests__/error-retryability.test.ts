@@ -5,7 +5,8 @@
  * MUST be terminal; genuinely transient blips (network / 500 / 429 / timeout / unknown) stay
  * retryable.
  */
-import { classifyErrorRetryability, classifyTerminalReason } from '@/lib/chat/error-retryability';
+import { classifyErrorRetryability, classifyTerminalReason, terminalReasonForCode } from '@/lib/chat/error-retryability';
+import { CONVERSATION_TOO_LONG } from '@/lib/chat/conversation-limits';
 
 describe('classifyErrorRetryability', () => {
   describe('terminal — retry would deterministically re-fail', () => {
@@ -129,4 +130,30 @@ describe('classifyTerminalReason', () => {
       expect(classifyTerminalReason(msg)).toBeNull();
     },
   );
+});
+
+// Our OWN refusals carry a typed code, so recognizing them never depends on parsing prose we wrote.
+// Message-matching remains the fallback — both because older rows predate the code and because a
+// consumer holding only the text (a log line, a Slack relay) still has to get the verdict right.
+describe('errors we raise ourselves', () => {
+  it('maps the conversation-too-long code to its own reason', () => {
+    expect(terminalReasonForCode(CONVERSATION_TOO_LONG)).toBe('conversation_too_long');
+  });
+
+  it.each([null, undefined, '', 'some-other-code'])('no reason for an unknown code: %s', (code) => {
+    expect(terminalReasonForCode(code)).toBeNull();
+  });
+
+  it('classifies the turn-start refusal as terminal from its message alone', () => {
+    const msg = 'This conversation exceeds the token limit (250000 tokens > 200000). Start a new chat to keep going.';
+    expect(classifyErrorRetryability(msg)).toBe('terminal');
+    expect(classifyTerminalReason(msg)).toBe('context_length');
+  });
+
+  it('classifies the engine mid-turn abort as terminal from its message alone', () => {
+    const msg = 'LLM call exceeded the maximum context tokens (310000 > 300000): '
+      + 'the conversation grew too long within a single turn. Start a new conversation.';
+    expect(classifyErrorRetryability(msg)).toBe('terminal');
+    expect(classifyTerminalReason(msg)).toBe('context_length');
+  });
 });

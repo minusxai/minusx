@@ -18,6 +18,22 @@ export interface AgentContext {}
  *  nothing) rather than a genuinely long response hitting the output cap. */
 const TRUNCATION_CONTEXT_CLAMP_MAX_OUTPUT = 64;
 
+/**
+ * Default hard ceiling on the context of a SINGLE LLM call, in tokens — the
+ * engine's own backstop, checked in {@link MXAgent.llm}.
+ *
+ * The app gates a conversation at turn start (`lib/chat/conversation-limits.ts`),
+ * but a turn admitted just under that limit still grows across tool steps, and
+ * every step re-sends the whole thread. Without a per-call ceiling a single turn
+ * can run far past any conversation-level number on a large-window model, paying
+ * for the whole context again on each step.
+ *
+ * Flat rather than derived from the model's `contextWindow`: that field is a
+ * fallback default as often as it is real data (see the app-side note), so a
+ * derived ceiling would fire on models that are nowhere near full.
+ */
+export const MAX_CONTEXT_TOKENS = 300_000;
+
 export interface ToolResponse<TDetails = Record<string, unknown>> {
   content: (TextContent | ImageContent)[];
   details?: TDetails;
@@ -167,6 +183,13 @@ export class MXAgent<
    * agents opt in by declaring a finite value).
    */
   static readonly maxSteps: number = Infinity;
+  /**
+   * Hard ceiling on the context of one LLM call, in `usage.totalTokens`. A call
+   * that comes back above it fails the run — see {@link MAX_CONTEXT_TOKENS} for
+   * why the engine carries this at all. Per-agent so a genuinely long-context
+   * agent can raise it deliberately rather than by editing a shared constant.
+   */
+  static readonly maxContextTokens: number = MAX_CONTEXT_TOKENS;
   /** Call-time options spread blindly into `streamSimple` (matches
    *  `SimpleStreamOptions`: `reasoning`, `thinkingBudgets`, `metadata`,
    *  `maxRetryDelayMs`, …). Subclasses set this from env config; the
@@ -259,6 +282,18 @@ export class MXAgent<
         ? `the conversation has filled the model's context window (${msg.usage?.totalTokens ?? 'unknown'} tokens), leaving no room to respond. Start a new conversation.`
         : 'the response hit the maximum output length. Ask for a shorter or more focused result.';
       throw new Error(`LLM response truncated (stop reason 'length'): ${detail}`);
+    }
+    // The whole thread is re-sent on every step, so a turn admitted under the app's
+    // conversation-level gate still grows with each tool result. Stop as soon as one call
+    // reports a context above the ceiling — BEFORE its tool calls are dispatched, so the
+    // next (larger) call is never assembled. Checked on the returned usage rather than
+    // estimated up front: it is exact, free, and already on every assistant message.
+    const total = msg.usage?.totalTokens ?? 0;
+    if (total > ctor.maxContextTokens) {
+      throw new Error(
+        `LLM call exceeded the maximum context tokens (${total} > ${ctor.maxContextTokens}): `
+        + 'the conversation grew too long within a single turn. Start a new conversation.',
+      );
     }
     return msg;
   }

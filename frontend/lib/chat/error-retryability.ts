@@ -15,6 +15,8 @@
  * Default is TRANSIENT — an unrecognized error shows "Try again", the safe/forgiving choice (a retry
  * that can't help is a wasted click; hiding a retry that WOULD help is worse).
  */
+import { CONVERSATION_TOO_LONG } from '@/lib/chat/conversation-limits';
+
 export type ErrorRetryability = 'transient' | 'terminal';
 
 /**
@@ -22,7 +24,7 @@ export type ErrorRetryability = 'transient' | 'terminal';
  * is the right move for a context overflow and useless for a bad API key, which re-fails in every
  * conversation until an admin fixes the provider credentials.
  */
-export type TerminalErrorReason = 'context_length' | 'auth' | 'permission' | 'malformed';
+export type TerminalErrorReason = 'context_length' | 'auth' | 'permission' | 'malformed' | 'conversation_too_long';
 
 /**
  * TERMINAL: retrying the identical request will fail the same way, so offer a new conversation, not
@@ -73,6 +75,19 @@ const TERMINAL_PATTERNS: { reason: TerminalErrorReason; patterns: RegExp[] }[] =
   // a 400 that isn't a rate limit / overload / server error
   { reason: 'malformed', patterns: [/invalid[_ ]request[_ ]error/i] },
 ];
+
+/**
+ * The reason for an error WE raised, read from its typed `code` instead of from its text.
+ *
+ * String matching is a necessity for provider errors and a defect for our own: we would be parsing
+ * prose we wrote, and a copy edit would silently change a verdict. Errors raised by the app carry a
+ * `code` on the error row's `details`; this maps it. Unknown/absent code → null, so the caller
+ * falls back to {@link classifyTerminalReason} (which still covers rows written before the code
+ * existed, and consumers that only ever see the message).
+ */
+export function terminalReasonForCode(code: string | null | undefined): TerminalErrorReason | null {
+  return code === CONVERSATION_TOO_LONG ? 'conversation_too_long' : null;
+}
 
 /**
  * Why a chat turn error is terminal, or null when a retry may plausibly succeed. Unknown/empty →

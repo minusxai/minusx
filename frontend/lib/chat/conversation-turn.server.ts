@@ -21,6 +21,7 @@ import {
   bumpAutoRetries, resetAutoRetries, truncateMessagesFrom, setLastContextTokens, MAX_AUTO_RETRIES, AUTO_RETRY_EXHAUSTED_MESSAGE,
 } from '@/lib/data/conversations.server';
 import type { Conversation } from '@/lib/data/conversations.types';
+import { conversationTooLong, TOKEN_LIMIT, CONVERSATION_TOO_LONG } from '@/lib/chat/conversation-limits';
 import { notifyMessage, notifyDelta, notifyStatus, subscribe } from './conversation-stream.server';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { truncateMessageForName } from '@/lib/conversations-utils';
@@ -39,6 +40,15 @@ const HEARTBEAT_MS = 30_000;
  * instance's heartbeat would keep another's lease alive.
  */
 export const INSTANCE_ID = `mx-${randomUUID()}`;
+
+/** How many user turns this log already holds — one root invocation (parent_id null) per turn. */
+function countUserTurns(entries: ConversationLog): number {
+  let n = 0;
+  for (const e of entries) {
+    if ((e as { type?: string }).type === 'toolCall' && (e as { parent_id?: unknown }).parent_id === null) n += 1;
+  }
+  return n;
+}
 
 /** First user message = the userMessage on the root invocation (parent_id null) in this diff. */
 function firstUserMessage(entries: ConversationLog): string | null {
@@ -212,6 +222,32 @@ export async function runConversationTurn(
 
   const savedLog = await loadLog(conversationId);
   const startSeq = savedLog.length;
+
+  // Size gate. Every surface — browser, Slack, scheduled jobs — runs this function, so refusing
+  // here is the whole enforcement; the client's matching banner is an affordance, not the rule.
+  // Placed BEFORE setupOrchestration so a conversation that cannot succeed spends nothing.
+  //
+  // Only a NEW user turn is gated. A resume carries completed tool results, and refusing one
+  // strands its pending frontend tool call with no way to answer it — the conversation wedges
+  // instead of ending cleanly.
+  const isNewUserTurn = typeof body.user_message === 'string' && body.user_message.length > 0
+    && !(body.completed_tool_calls && body.completed_tool_calls.length > 0);
+  const lastContextTokens = conv?.meta?.lastContextTokens;
+  if (isNewUserTurn && conversationTooLong({ lastContextTokens, priorUserTurns: countUserTurns(savedLog) })) {
+    // The typed `code` is what the client reads; the text is for humans and for any consumer
+    // (logs, Slack) that only has the message.
+    const message = `This conversation exceeds the token limit (${lastContextTokens} tokens > ${TOKEN_LIMIT}). `
+      + 'Start a new chat to keep going.';
+    await appendError(conversationId, {
+      source: 'session',
+      message,
+      details: { code: CONVERSATION_TOO_LONG, tokens: lastContextTokens ?? null, limit: TOKEN_LIMIT },
+    });
+    await releaseRunLease(conversationId, 'error');
+    await notifyStatus(conversationId, 'error', startSeq);
+    publishTurnEnd('error', null, message);
+    return { conversationId, runStatus: 'error', pendingToolCalls: [], finalSeq: startSeq, error: message };
+  }
 
   const setup = await setupOrchestration(body, user, conversationId, { savedLog, fileMeta: conv?.meta ?? null });
   if (setup.fatalError) {

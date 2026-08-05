@@ -18,6 +18,13 @@ const TERMINAL_COPY: Record<TerminalErrorReason, { message: string; action: 'new
     message: "This conversation can't continue — it may have grown too long or hit a limit. Start a new chat to keep going.",
     action: 'new-chat',
   },
+  // Our own refusal, recognized by its typed code rather than by its text — so unlike the hedged
+  // `context_length` copy above (which is inferred from provider prose) this one can state the
+  // cause outright.
+  conversation_too_long: {
+    message: 'This chat has reached its length limit. Start a new chat to keep going.',
+    action: 'new-chat',
+  },
   auth: {
     message: "Couldn't authenticate with the configured AI model provider — its API key looks missing, wrong, or expired. Check it in Settings → Models.",
     action: 'models-settings',
@@ -35,6 +42,9 @@ const TERMINAL_COPY: Record<TerminalErrorReason, { message: string; action: 'new
 interface ChatErrorBannerProps {
   error: string | LoadError | null | undefined;
   isTerminalError: boolean;
+  /** Set when the failure carried a typed code (an error the app raised itself). Preferred over
+   *  guessing the reason from the message; absent for provider errors. */
+  terminalReason?: TerminalErrorReason;
   devMode: boolean;
   colSpan: ComponentProps<typeof GridItem>['colSpan'];
   colStart: ComponentProps<typeof GridItem>['colStart'];
@@ -45,13 +55,15 @@ interface ChatErrorBannerProps {
 // Error Display. Terminal errors (context-length, auth, permission, malformed) can't be retried — an
 // identical re-run re-fails — so we steer to a fresh chat instead of "Try again". Transient
 // (and local/load) errors offer a clean replay of the failed turn (no "Continue" bubble).
-export default function ChatErrorBanner({ error, isTerminalError, devMode, colSpan, colStart, conversationID, handleNewChat }: ChatErrorBannerProps) {
+export default function ChatErrorBanner({ error, isTerminalError, terminalReason, devMode, colSpan, colStart, conversationID, handleNewChat }: ChatErrorBannerProps) {
   const dispatch = useAppDispatch();
 
-  // Terminal errors carry a reason (context length / auth / permission / malformed); the copy and
-  // the offered action follow it, so the banner never blames conversation length for a bad key.
+  // Terminal errors carry a reason; the copy and the offered action follow it, so the banner never
+  // blames conversation length for a bad key. A typed reason (ours) wins over one inferred from
+  // the message text (the provider's), which stays the fallback.
   const rawMessage = typeof error === 'string' ? error : error?.message;
-  const terminal = isTerminalError ? TERMINAL_COPY[classifyTerminalReason(rawMessage) ?? 'context_length'] : null;
+  const reason = terminalReason ?? classifyTerminalReason(rawMessage) ?? 'context_length';
+  const terminal = isTerminalError ? TERMINAL_COPY[reason] : null;
   const message = terminal
     ? terminal.message
     : (devMode ? (rawMessage || 'An error occurred') : 'An error occurred');

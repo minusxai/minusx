@@ -3,7 +3,7 @@ import type { RootState } from './store';
 import type { UserInput } from '@/lib/tools/user-input-exception';
 import type { MessageDebugInfo, ErrorLogEntry } from '@/lib/types';
 import type { AppState } from '@/lib/appState';
-import { classifyErrorRetryability, type ErrorRetryability } from '@/lib/chat/error-retryability';
+import { classifyErrorRetryability, type ErrorRetryability, type TerminalErrorReason } from '@/lib/chat/error-retryability';
 
 // Types
 interface ToolCall {
@@ -97,6 +97,10 @@ export interface Conversation {
   // re-run may succeed); terminal → hide retry, steer to a new conversation (an identical request
   // would re-fail, e.g. context-length). Set alongside `error`; see classifyErrorRetryability.
   errorRetryability?: ErrorRetryability;
+  // WHY the turn failed, when the failure carried a typed code (an error the app raised itself,
+  // e.g. the conversation-size refusal). Absent for provider errors, whose reason the banner
+  // infers from the message instead. Set alongside `error`.
+  errorReason?: TerminalErrorReason;
 
   // Streaming state (ephemeral) - built from streaming events
   streamedCompletedToolCalls: CompletedToolCall[];
@@ -256,6 +260,7 @@ const chatSlice = createSlice({
       conv.executionState = 'WAITING';
       conv.error = undefined;
       conv.errorRetryability = undefined;
+      conv.errorReason = undefined;
       conv.wasInterrupted = false;
     },
 
@@ -269,6 +274,7 @@ const chatSlice = createSlice({
       conv.executionState = 'WAITING';
       conv.error = undefined;
       conv.errorRetryability = undefined;
+      conv.errorReason = undefined;
       conv.wasInterrupted = false;
     },
 
@@ -367,6 +373,7 @@ const chatSlice = createSlice({
       conv.executionState = 'WAITING';
       conv.error = undefined;
       conv.errorRetryability = undefined;
+      conv.errorReason = undefined;
     },
 
     // Delete a past user message and everything after it, as a FORK from that
@@ -401,6 +408,7 @@ const chatSlice = createSlice({
       conv.executionState = 'FINISHED';
       conv.error = undefined;
       conv.errorRetryability = undefined;
+      conv.errorReason = undefined;
     },
 
     // Update agent_args (e.g., to refresh app_state before sending new message)
@@ -512,12 +520,14 @@ const chatSlice = createSlice({
       conversationID: number;
       error: string;
       retryability?: ErrorRetryability;
+      reason?: TerminalErrorReason;
     }>) {
-      const { conversationID, error, retryability } = action.payload;
+      const { conversationID, error, retryability, reason } = action.payload;
       const conv = state.conversations[conversationID];
       if (conv) {
         conv.error = error;
         conv.errorRetryability = retryability ?? classifyErrorRetryability(error);
+        conv.errorReason = reason;
         conv.executionState = 'FINISHED';
       }
     },
