@@ -11,7 +11,7 @@ import { E2E_HEADER } from '@/lib/auth/e2e-runtime';
 import { getConfigs, getConfigsForMode, getOrgStyles, getStylesForMode } from '@/lib/data/configs.server';
 import { OrgConfig, DEFAULT_CONFIG, DEFAULT_STYLES, getBrandTagline } from '@/lib/branding/whitelabel';
 import { redactRawConfigSecrets } from '@/lib/secrets/config-secret-specs';
-import { ANALYTICS_CONFIG, DISABLE_APP_STATE_IMAGES, MAX_CONCURRENT_QUERIES, QUERY_TIMEOUT_MS, TELEMETRY_LEVEL } from '@/lib/config';
+import { ANALYTICS_CONFIG, DISABLE_APP_STATE_IMAGES, MAX_CONCURRENT_QUERIES, MX_EGRESS_IPS, QUERY_TIMEOUT_MS, TELEMETRY_LEVEL } from '@/lib/config';
 import { parseAnalyticsConfig } from '@/lib/constants';
 import { TELEMETRY_LEVEL_ATTR } from '@/lib/telemetry';
 import type { AnalyticsConfig } from '@/lib/analytics/types';
@@ -77,6 +77,7 @@ async function loadInitialState(): Promise<{
   maxConcurrentQueries: number;
   queryTimeoutMs: number;
   creditsEnabled: boolean;
+  egressIps: string[];
   e2eEnabled: boolean;
 }> {
   const user = await getEffectiveUserCached();
@@ -108,6 +109,8 @@ async function loadInitialState(): Promise<{
     // Credits UI visibility now comes from the org config `credits` section
     // (admin-editable), not an env var.
     creditsEnabled: config.credits?.enabled ?? false,
+    // Deployment egress IPs for the DB-firewall hint; empty (unset) on self-hosted.
+    egressIps: MX_EGRESS_IPS,
     // QA runtime E2E opt-in: middleware stamps this header when `?e2e=<secret>`
     // (or its persisted cookie) matches. Exposes the store on the client.
     e2eEnabled: (await headers()).get(E2E_HEADER) === '1',

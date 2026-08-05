@@ -29,6 +29,7 @@ interface ProvidersProps {
     maxConcurrentQueries?: number;    // Server runtime env (MAX_CONCURRENT_QUERIES)
     queryTimeoutMs?: number;          // Server runtime env (QUERY_TIMEOUT_MS)
     creditsEnabled?: boolean;         // Org config (config.credits.enabled), not an env var
+    egressIps?: string[];             // Server runtime env (MX_EGRESS_IPS) — DB-firewall hint
     e2eEnabled?: boolean;             // QA runtime E2E opt-in (?e2e=<secret>)
   };
 }
@@ -46,6 +47,7 @@ export function Providers({ children, initialData }: ProvidersProps) {
       maxConcurrentQueries: initialData?.maxConcurrentQueries ?? 10,
       queryTimeoutMs: initialData?.queryTimeoutMs ?? 120_000,
       creditsEnabled: initialData?.creditsEnabled ?? false,
+      egressIps: initialData?.egressIps ?? [],
     },
 
     // Auth (if user present)

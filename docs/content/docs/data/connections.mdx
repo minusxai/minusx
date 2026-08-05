@@ -45,6 +45,20 @@ MinusX connects to your existing databases to query and analyze data. Connection
 Connection credentials are stored securely in the documents database. For production deployments, use environment variables for sensitive values.
 </Callout>
 
+## Allowing access through a firewall
+
+If your database only accepts connections from known addresses, allow the IPs MinusX
+connects **from**. On MinusX Cloud those addresses are shown directly in the connection
+form for the engines it applies to — PostgreSQL and ClickHouse — and again if a connection
+test fails, so you can copy them straight into your firewall rule.
+
+BigQuery and Athena are reached over their public service endpoints and authorised by
+credentials rather than source IP, so no allowlisting is needed for those.
+
+Self-hosted deployments connect from your own network, so the addresses to allow are your
+host's — MinusX cannot know them, and the hint is hidden. Operators who want it shown can
+set `MX_EGRESS_IPS` to a comma-separated list of the deployment's egress addresses.
+
 ---
 
 ## How connections are used

@@ -76,6 +76,42 @@ afterEach(() => {
 });
 
 describe('ConnectionFormV2 via ConnectionContainerV2', () => {
+  // MX_EGRESS_IPS reaches the form as a prop (this view is Redux-restricted), so a
+  // hosted customer can see which source IPs to allow through their DB firewall.
+  describe('egress IP hint (configs.egressIps)', () => {
+    function setupWithEgress(ips: string[], connType = 'postgresql') {
+      const testStore = storeModule.makeStore({
+        configs: { ...storeModule.makeStore().getState().configs, egressIps: ips },
+      } as never);
+      vi.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
+      testStore.dispatch(setFile({ file: makeConnectionFile({ type: connType } as never), references: [] }));
+      return testStore;
+    }
+
+    it('lists the IPs for a network-reached engine', () => {
+      const store = setupWithEgress(['34.34.220.153', '35.1.2.3']);
+      renderWithProviders(<ConnectionContainerV2 fileId={CONNECTION_ID} />, { store });
+      fireEvent.click(screen.getByLabelText('Settings view'));
+      const hint = screen.getByLabelText('Database firewall allowlist');
+      expect(hint.textContent).toContain('34.34.220.153');
+      expect(hint.textContent).toContain('35.1.2.3');
+    });
+
+    it('shows nothing when unset — that is how self-hosted opts out', () => {
+      const store = setupWithEgress([]);
+      renderWithProviders(<ConnectionContainerV2 fileId={CONNECTION_ID} />, { store });
+      fireEvent.click(screen.getByLabelText('Settings view'));
+      expect(screen.queryByLabelText('Database firewall allowlist')).toBeNull();
+    });
+
+    it('shows nothing for an IAM-authenticated cloud API', () => {
+      const store = setupWithEgress(['34.34.220.153'], 'bigquery');
+      renderWithProviders(<ConnectionContainerV2 fileId={CONNECTION_ID} />, { store });
+      fireEvent.click(screen.getByLabelText('Settings view'));
+      expect(screen.queryByLabelText('Database firewall allowlist')).toBeNull();
+    });
+  });
+
   // Call site: state.ui.devMode (showJson)
   describe('showJson (state.ui.devMode)', () => {
     it('shows the Form/JSON View tab switcher in the Settings section when devMode is on', () => {
