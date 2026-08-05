@@ -974,8 +974,14 @@ export default function ConnectionFormV2({
 
         {/* Which source IPs the customer must allow through their DB firewall.
             Self-gating: renders nothing unless the deployment publishes egress
-            IPs and this engine is reached over the network. */}
-        <EgressIpHint connectionType={content.type} ips={egressIps} />
+            IPs and this engine is reached over the network. A failed test is
+            when this is actually being asked, so it hardens rather than
+            duplicating itself lower down. */}
+        <EgressIpHint
+          connectionType={content.type}
+          ips={egressIps}
+          emphasis={!!testResult && !testResult.success}
+        />
 
         {/* Actions */}
         <HStack gap={3} pt={2} justify="flex-end">
@@ -1013,11 +1019,6 @@ export default function ConnectionFormV2({
                 {testResult.message}
               </Text>
             </HStack>
-          )}
-          {/* A failed test is the moment this is actually being asked, so repeat
-              the allowlist here with stronger framing. Self-gating as above. */}
-          {testResult && !testResult.success && (
-            <EgressIpHint connectionType={content.type} ips={egressIps} emphasis />
           )}
           <Button
             onClick={handleTest}
