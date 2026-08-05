@@ -4,6 +4,9 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffec
 import { createRoot, type Root } from 'react-dom/client';
 import { createPortal } from 'react-dom';
 
+import { useRouter } from 'next/navigation';
+
+import { bridgeSurfaceLinks } from '@/lib/navigation/surface-link-bridge';
 import { sanitizeAgentHtml } from '@/lib/html/sanitize-agent-html';
 import { mirrorAppStyles } from '@/lib/html/mirror-app-styles';
 import { AGENT_IFRAME_CSP } from '@/lib/html/agent-iframe-csp';
@@ -152,6 +155,11 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
   const docRef = useRef<Document | null>(null);
   const surfaceRef = useRef<StorySurface | null>(null);
   const reactRootRef = useRef<Root | null>(null);
+  // Routes same-origin link clicks inside the surface through the app router (see the link
+  // bridge below). Held in a ref because the document-build effect runs once per mount.
+  const router = useRouter();
+  const routerRef = useRef(router);
+  useEffect(() => { routerRef.current = router; }, [router]);
   const [targets, setTargets] = useState<ChartTarget[]>([]);
   const [inlineTargets, setInlineTargets] = useState<InlineChartTarget[]>([]);
   const [numberTargets, setNumberTargets] = useState<NumberTarget[]>([]);
@@ -372,6 +380,11 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     // the real-browser guard (scripts/story-width-matrix.ts) drives it directly.
     const disposeAutoSize = autoSizeStorySurface({ surface, iframe, doc, fluid, fixedHeight: height });
 
+    // Embed titles and author links are `next/link`s / `<a>`s in a root that has no Next router
+    // context, so their clicks would fall through to `<base target="_top">` and reload the whole
+    // app. Route the same-origin ones through the parent tree's router instead.
+    const disposeLinkBridge = bridgeSurfaceLinks(doc, (href) => routerRef.current.push(href));
+
     // Width provision for the jsx body (see surfaceWidth above). The iframe element is a
     // TOP-document RO target — natively reliable, unlike observers inside the iframe realm.
     // Trailing 60ms debounce: a pane-toggle resize burst becomes one grid relayout.
@@ -403,6 +416,7 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
 
     return () => {
       disposeAutoSize();
+      disposeLinkBridge();
       observer.disconnect();
       widthObserver?.disconnect();
       if (widthTimer) window.clearTimeout(widthTimer);

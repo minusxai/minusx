@@ -20,7 +20,9 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { createPortal } from 'react-dom';
+import { useRouter } from 'next/navigation';
 
+import { bridgeSurfaceLinks } from '@/lib/navigation/surface-link-bridge';
 import { mountStorySurface, autoSizeStorySurface, type StorySurface } from '@/lib/story-surface';
 import { mirrorAppStyles } from '@/lib/html/mirror-app-styles';
 import { DASHBOARD_CHROME_CSS } from '@/lib/dashboard-surface/chrome-css.gen';
@@ -55,6 +57,12 @@ export default function DashboardSurface({ colorMode, children }: DashboardSurfa
   // The surface's measured width, provided to the view tree (SurfaceWidthContext): the grid
   // consumes it directly — WidthProvider's polyfill observer is deaf inside the iframe realm.
   const surfaceWidthRef = useRef<number | null>(null);
+  // Tile titles are `next/link`s in the nested root, where the router context does not reach —
+  // bridgeSurfaceLinks routes their clicks through THIS router (parent tree) so opening a
+  // question is a soft navigation. Held in a ref: the build effect runs once per mount.
+  const router = useRouter();
+  const routerRef = useRef(router);
+  useEffect(() => { routerRef.current = router; }, [router]);
 
   const renderNested = () => {
     const doc = docRef.current;
@@ -83,8 +91,9 @@ export default function DashboardSurface({ colorMode, children }: DashboardSurfa
     const doc = iframe?.contentDocument;
     if (!iframe || !doc) return;
 
-    // `<base target="_top">`: links inside the iframe (tile titles → /f/<id>) must navigate the
-    // top window, not load the app inside the surface.
+    // `<base target="_top">`: the browser-default fallback for links this document's bridge
+    // declines (cross-origin, new-tab, download) — those must navigate the top window, never load
+    // inside the surface. Same-origin app links are intercepted below and never reach it.
     doc.open();
     doc.write('<!DOCTYPE html><html><head><meta charset="utf-8"><base target="_top"></head><body></body></html>');
     doc.close();
@@ -144,6 +153,9 @@ export default function DashboardSurface({ colorMode, children }: DashboardSurfa
     embedRoot.style.display = 'none';
     doc.body.appendChild(embedRoot);
 
+    // Keep tile-title clicks a client navigation (see lib/navigation/surface-link-bridge.ts).
+    const disposeLinkBridge = bridgeSurfaceLinks(doc, (href) => routerRef.current.push(href));
+
     let tearingDown = false;
     reactRootRef.current = createRoot(embedRoot, {
       onUncaughtError: (error) => {
@@ -197,6 +209,7 @@ export default function DashboardSurface({ colorMode, children }: DashboardSurfa
 
     return () => {
       disposeAutoSize();
+      disposeLinkBridge();
       ro?.disconnect();
       if (nudgeRaf) cancelAnimationFrame(nudgeRaf);
       window.clearTimeout(widthTimer);

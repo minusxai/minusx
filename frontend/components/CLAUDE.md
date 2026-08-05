@@ -179,6 +179,15 @@ DashboardContainerV2 → views/shared/DashboardSurface.tsx  (same machinery, reu
       └─ views/DashboardView.tsx  → react-grid-layout → WindowedTile → SmartEmbeddedQuestionContainer
 ```
 
+**Links inside a surface need the bridge, because `next/link` is inert there.** The nested root has
+no `AppRouterContext`, so Link's click handler returns early without `preventDefault()` and the
+browser follows the anchor — `<base target="_top">` then makes it a full document load, resetting
+Redux and any unsent side-chat draft. Both `AgentHtml` and `DashboardSurface` install
+`bridgeSurfaceLinks` (`lib/navigation/surface-link-bridge.ts`) on their iframe document, which routes
+same-origin anchors through the parent tree's router and re-applies `mode`/`as_user`/`view` (also
+lost, since `components/ui/Link.tsx` gets them from a contextless `useSearchParams()`). Keep the
+`<base target="_top">`: it is the fallback for everything the bridge declines.
+
 `DashboardSurface` injects the generated chrome stylesheet (`lib/dashboard-surface/chrome-css.gen.ts`)
 **inside** the surface root, so serializing the `<svg>` subtree is self-contained by construction.
 Because the surface svg carries `STORY_SVG_ATTR`, the story capture path

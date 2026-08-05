@@ -263,6 +263,17 @@ client component — it forces a static-rendering bailout — costs nothing here
 mismatch on every link; see `frontend/components/CLAUDE.md`). Re-check with `npm run build` before
 assuming any route is static.
 
+**That exemption does NOT extend to a client component wrapped in its own `<Suspense>` boundary.**
+Measured on a production build of `/login`: `useSearchParams()` inside an explicitly Suspense-wrapped
+client component makes the browser discard the server HTML for that subtree and re-render it from
+scratch once the bundle executes — the server-rendered markup is stranded in a hidden `<div hidden
+id="S:0">` that is never revealed, and a second, empty copy of the form is mounted beside it. The
+route is still `ƒ (Dynamic)`; the bailout is about the *client*, not the prerender. The visible cost
+is that nothing in that boundary exists until the JS loads, so a user typing straight after the page
+paints types into a field that is not there yet. `app/login/page.tsx` therefore reads `register` and
+`callbackUrl` from its own `searchParams` prop and passes them down, and has no `<Suspense>` at all.
+Verify with `curl -s <host>/login | grep -c 'id="S:0"'` — it must be `0`.
+
 ## Interactions with other areas
 
 - **← `lib/file-state/`**: the client `FilesAPI` and `lib/file-state/query-results.ts` are the callers of
