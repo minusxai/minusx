@@ -285,6 +285,13 @@ sees *and* what Redux stores.
   refused resume strands its pending frontend tool call and wedges the conversation), and a
   conversation with fewer than two prior user turns is never gated (one huge query would otherwise
   lock the user out of a chat that a fresh start cannot make smaller).
+- **An error that came FROM the durable log must not be echoed back to it.** `chatListener`'s
+  `reportClientErrorToServer` exists to make *client-side* failures durable; a server error is
+  already a row, so echoing appends a near-duplicate that is `source: 'transport'`, carries no
+  `details`, and sorts LAST — so anything reading "the most recent error" gets the untyped copy.
+  The echo is skipped when the error carries `mxCode`, which is set only from a durable row's
+  `details.code`. Errors *without* a typed code still echo, so the same duplication remains
+  possible for server errors that carry no code.
 - **The turn gate and the engine's per-call ceiling are different mechanisms, and they compose.**
   `TOKEN_LIMIT` admits a turn; `MXAgent.maxContextTokens` aborts one that grows past the ceiling
   mid-run (every step re-sends the whole thread, so a turn admitted just under the gate can still
