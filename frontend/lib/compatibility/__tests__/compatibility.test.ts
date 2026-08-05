@@ -18,6 +18,7 @@ type CompatField = {
 type CompatConnectionType = { type: string; name: string; cli: boolean; fields: CompatField[] };
 type CompatProvider = {
   id: string; name: string; kind: 'managed' | 'registry' | 'custom';
+  cli: boolean;
   credentials: CompatField[];
   defaults?: Record<string, string>;
 };
@@ -30,6 +31,20 @@ describe('compatibility.json — LLM providers', () => {
     expect(llmProviders[0].id).toBe(MINUSX_PROVIDER);
     expect(llmProviders[0].kind).toBe('managed');
     expect(llmProviders.some(p => p.id === CUSTOM_PROVIDER && p.kind === 'custom')).toBe(true);
+  });
+
+  it('declares CLI visibility per provider, and hides minusx from the installer', () => {
+    for (const p of llmProviders) {
+      expect(typeof p.cli, `provider ${p.id} must declare cli`).toBe('boolean');
+    }
+    // minusx still leads the array — that order drives the app and the docs table —
+    // but install.sh must not offer it while tokens cannot be purchased. This matters
+    // more than it looks: menu() selects option 1 on an empty answer, so a CLI-visible
+    // minusx would be what pressing Enter through the interview picks.
+    expect(llmProviders.find(p => p.id === MINUSX_PROVIDER)!.cli).toBe(false);
+    const cliVisible = llmProviders.filter(p => p.cli);
+    expect(cliVisible.length).toBeGreaterThan(0);
+    expect(cliVisible[0].kind).toBe('registry');
   });
 
   it('registry providers exist in the pi-ai registry', () => {

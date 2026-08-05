@@ -54,7 +54,7 @@ Note: This is on top of obvious BI features like connecting to databases/warehou
 curl -fsSL https://minusx.ai/install.sh | bash
 ```
 
-Requires [Docker](https://docs.docker.com/get-docker/). While the image downloads, the script walks you through setup — workspace, AI model (with a live connection test), and optionally your first database — so you just log in when it finishes.
+Requires [Docker](https://docs.docker.com/get-docker/). Run it in a terminal: while the image downloads, the script walks you through setup — workspace, AI model (with a live connection test), and optionally your first database — so you just log in when it finishes. Run non-interactively and it skips the questions and starts the app, and you set the workspace up in the browser.
 
 ## Local development
 MinusX is a single Next.js application — there is no separate backend service.
