@@ -18,7 +18,7 @@ import { toggleLeftSidebar, selectDevMode, setDevMode, selectShowAdvanced, toggl
 import { selectContextFromPath } from '@/store/filesSlice';
 import { APP_VERSION } from '@/lib/constants';
 import { exitImpersonation } from '@/lib/navigation/url-utils';
-import { isAdmin } from '@/lib/auth/role-helpers';
+import { canEdit, isAdmin } from '@/lib/auth/role-helpers';
 import { selectConfig } from '@/store/configsSlice';
 import { analytics, AnalyticsEvents } from '@/lib/analytics';
 import { switchMode } from '@/lib/mode/mode-utils';
@@ -139,7 +139,8 @@ export default function Sidebar() {
   const contextPath = currentPath === '/' ? `/${mode}` : currentPath;
   const resolvedContext = useAppSelector(state => selectContextFromPath(state, contextPath));
   const contextId = resolvedContext?.id && resolvedContext.id > 0 ? resolvedContext.id : null;
-  const skillsPageHref = contextId ? `/skills?context=${contextId}` : null;
+  const canAccessSkillsPage = effectiveUser?.role ? canEdit(effectiveUser.role) : false;
+  const skillsPageHref = canAccessSkillsPage && contextId ? `/skills?context=${contextId}` : null;
   const agentsPageHref = enableCustomAgents && contextId
     ? `/agents?context=${contextId}`
     : null;

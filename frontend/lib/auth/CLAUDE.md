@@ -222,8 +222,8 @@ The default context contract deliberately separates background access from UI vi
 viewers may load `context` files so their docs, schema, skills, and agents can govern the app,
 but `context` is absent from both viewer `viewTypes` and `createTypes`. Editors and admins may
 view and edit contexts. The standalone Agents and Skills surfaces expose only those context-backed
-components: viewers remain read-only (while retaining the agent Explore action), and editor/admin
-changes save back through the context container.
+components: viewers can access Agents but see only enabled entries and retain their Explore actions;
+Skills is editor/admin-only. Editor/admin changes save back through the context container.
 
 ### Architecture — the rubric
 

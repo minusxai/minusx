@@ -7,6 +7,7 @@ import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { useAppSelector } from '@/store/hooks';
 import { selectContextFromPath } from '@/store/filesSlice';
 import { selectEnableCustomAgents } from '@/store/uiSlice';
+import { canEdit } from '@/lib/auth/role-helpers';
 
 export type StandaloneContextSurface = 'agents' | 'skills';
 
@@ -52,6 +53,15 @@ export default function StandaloneContextPage({
     ? requestedContext
     : nearestContext || homeContext || contexts[0];
   const title = surface === 'agents' ? 'Agents' : 'Skills';
+
+  if (surface === 'skills' && !canEdit(user?.role || 'viewer')) {
+    return (
+      <SurfaceMessage
+        title="Skills"
+        message="Skills are available to editors and admins."
+      />
+    );
+  }
 
   if (surface === 'agents' && !enableCustomAgents) {
     return (

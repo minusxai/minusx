@@ -91,7 +91,7 @@ describe('Sidebar context feature navigation', () => {
   });
 
   it.each<UserRole>(['viewer', 'editor', 'admin'])(
-    'shows the resolved standalone Agents and Skills pages to %s users',
+    'shows the resolved standalone Agents page to %s users',
     (role) => {
       const store = setup(role);
       addKnowledgeBase(store);
@@ -101,6 +101,16 @@ describe('Sidebar context feature navigation', () => {
         'href',
         '/agents?context=1008',
       );
+    },
+  );
+
+  it.each<UserRole>(['editor', 'admin'])(
+    'shows the resolved standalone Skills page to %s users',
+    (role) => {
+      const store = setup(role);
+      addKnowledgeBase(store, { enableCustomAgents: false });
+      renderSidebar(store);
+
       expect(screen.getByLabelText('Skills').closest('a')).toHaveAttribute(
         'href',
         '/skills?context=1008',
@@ -108,15 +118,12 @@ describe('Sidebar context feature navigation', () => {
     },
   );
 
-  it('does not expose a dead Agents link when Custom Agents is disabled', () => {
+  it('hides Skills from viewers', () => {
     const store = setup('viewer');
     addKnowledgeBase(store, { enableCustomAgents: false });
     renderSidebar(store);
 
     expect(screen.queryByLabelText('Agents')).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Skills').closest('a')).toHaveAttribute(
-      'href',
-      '/skills?context=1008',
-    );
+    expect(screen.queryByLabelText('Skills')).not.toBeInTheDocument();
   });
 });

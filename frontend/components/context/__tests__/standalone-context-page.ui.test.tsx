@@ -4,7 +4,7 @@ import { makeStore } from '@/store/store';
 import { setUser } from '@/store/authSlice';
 import { setFile } from '@/store/filesSlice';
 import { setEnableCustomAgents } from '@/store/uiSlice';
-import type { DbFile } from '@/lib/types';
+import type { DbFile, UserRole } from '@/lib/types';
 
 const contextsState = vi.hoisted(() => ({
   contexts: [] as DbFile[],
@@ -45,13 +45,13 @@ function contextFile(id: number, path: string): DbFile {
   } as DbFile;
 }
 
-function setup() {
+function setup(role: UserRole = 'viewer') {
   const store = makeStore();
   store.dispatch(setUser({
     id: 1,
     email: 'viewer@minusx.ai',
     name: 'Viewer',
-    role: 'viewer',
+    role,
     mode: 'org',
   }));
   return store;
@@ -71,11 +71,24 @@ describe('StandaloneContextPage', () => {
 
     renderWithProviders(
       <StandaloneContextPage surface="skills" requestedContextId="22" />,
-      { store: setup() },
+      { store: setup('editor') },
     );
 
     expect(screen.getByTestId('context-surface')).toHaveAttribute('data-file-id', '22');
     expect(screen.getByTestId('context-surface')).toHaveAttribute('data-surface', 'skills');
+  });
+
+  it('does not expose the standalone Skills component to viewers', () => {
+    const requested = contextFile(22, '/org/sales/Knowledge Base');
+    contextsState.contexts = [requested];
+
+    renderWithProviders(
+      <StandaloneContextPage surface="skills" requestedContextId="22" />,
+      { store: setup('viewer') },
+    );
+
+    expect(screen.queryByTestId('context-surface')).not.toBeInTheDocument();
+    expect(screen.getByText('Skills are available to editors and admins.')).toBeVisible();
   });
 
   it('falls back to the same nearest home context selector used by chat', () => {
@@ -99,7 +112,7 @@ describe('StandaloneContextPage', () => {
 
     renderWithProviders(
       <StandaloneContextPage surface="skills" requestedContextId="9999" />,
-      { store: setup() },
+      { store: setup('editor') },
     );
 
     expect(screen.queryByTestId('context-surface')).not.toBeInTheDocument();

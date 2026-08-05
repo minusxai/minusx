@@ -368,6 +368,43 @@ describe('AgentsTabContent — builder', () => {
     expect(screen.queryByLabelText('Delete agent sales_helper')).not.toBeInTheDocument();
   });
 
+  it('shows viewers only enabled local and inherited agents', () => {
+    renderTab({
+      canAddAgent: false,
+      canManageAgents: false,
+      content: {
+        ...content,
+        agents: [
+          mkAgent({ name: 'published_local' }),
+          mkAgent({ name: 'draft_local', enabled: false }),
+        ],
+        fullAgents: [
+          mkAgent({ name: 'published_inherited' }),
+          mkAgent({ name: 'draft_inherited', enabled: false }),
+        ],
+      },
+    });
+
+    expect(screen.getByLabelText('Agent published_local')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Agent draft_local')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Inherited agent published_inherited')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Inherited agent draft_inherited')).not.toBeInTheDocument();
+  });
+
+  it('keeps disabled agents visible to editors outside edit mode', () => {
+    renderTab({
+      canAddAgent: true,
+      canManageAgents: false,
+      content: {
+        ...content,
+        agents: [mkAgent({ name: 'draft_local', enabled: false })],
+      },
+    });
+
+    expect(screen.getByLabelText('Agent draft_local')).toHaveTextContent(/draft/i);
+    expect(screen.queryByLabelText('Explore with Draft Local')).not.toBeInTheDocument();
+  });
+
   it('shows Add agent before edit mode while keeping edit and delete controls hidden', () => {
     const { onStartAddAgent } = renderTab({ canAddAgent: true, canManageAgents: false });
 
