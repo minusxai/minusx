@@ -145,6 +145,39 @@ ask_secret() { # ask_secret <prompt> -> REPLY_VALUE (never echoed)
   printf "\n" > /dev/tty
 }
 
+# Interview progress. Weighted by SECTION, never by question count: a managed
+# provider skips the model questions, the database is optional, and field counts
+# differ per engine, so any up-front question total would be wrong on most paths.
+# A bar that advances further when you skip something reads as progress; a
+# question counter that jumps from 7 to 19 reads as a bug.
+#
+# Printed as ordinary lines at section boundaries only — never redrawn in place.
+# The spinner can use \r because nothing else writes while it runs; here the
+# prompts interleave with what the user types, and an in-place bar would be
+# clobbered mid-answer.
+section() { # section <percent-complete> <title>
+  local pct="$1" title="$2" i out=""
+  local filled=$(( pct * 20 / 100 ))
+  for (( i = 0; i < 20; i++ )); do
+    if [ "$i" -lt "$filled" ]; then out="${out}█"; else out="${out}░"; fi
+  done
+  printf "\n  ${BOLD}${WHITE}%-22s${RESET} ${CYAN}%s${RESET} ${DIM}%3d%%${RESET}\n" \
+    "$title" "$out" "$pct" > /dev/tty
+}
+
+confirm() { # confirm <prompt> -> 0 for yes, 1 for no. Empty answer means yes.
+  local prompt="$1" reply
+  while true; do
+    printf "  ${WHITE}%b${RESET} ${DIM}[Y/n]${RESET}: " "$prompt" > /dev/tty
+    IFS= read -r reply < /dev/tty || reply=""
+    case "$reply" in
+      ''|y|Y|yes|YES|Yes) return 0 ;;
+      n|N|no|NO|No)       return 1 ;;
+      *) warn "Answer y or n" > /dev/tty ;;
+    esac
+  done
+}
+
 ask_multiline() { # ask_multiline <prompt> -> REPLY_VALUE (until an empty line)
   local prompt="$1" line acc=""
   printf "  ${WHITE}%b${RESET} ${DIM}(finish with an empty line)${RESET}:\n" "$prompt" > /dev/tty
@@ -157,6 +190,14 @@ ask_multiline() { # ask_multiline <prompt> -> REPLY_VALUE (until an empty line)
 
 menu() { # menu <title> <opt1> <opt2> ... -> MENU_INDEX (0-based)
   local title="$1"; shift
+  # No options means no answer can ever satisfy the range check below, so the
+  # loop would never terminate. Bail loudly instead: returning an index here
+  # would be worse than useless, since bash reads [-1] as the LAST element.
+  if [ "$#" -eq 0 ]; then
+    fail "No options available for: $title"
+    fail "This is a bug in the setup data — finish setup in the browser instead."
+    exit 1
+  fi
   printf "  ${WHITE}%b${RESET}\n" "$title" > /dev/tty
   local i=1
   for opt in "$@"; do
@@ -178,7 +219,15 @@ menu() { # menu <title> <opt1> <opt2> ... -> MENU_INDEX (0-based)
 
 # compatibility.json accessor — python3 keeps parsing honest (a bash JSON
 # parser is a bug farm). Without python3 the interview degrades gracefully.
+#
+# Presence is not enough: macOS ships /usr/bin/python3 as a stub that exists and
+# is executable even with no Command Line Tools installed, so `command -v` finds
+# it on every Mac but running it fails. Actually execute it, or the degraded path
+# never triggers on precisely the machines that need it.
 PYTHON_BIN="$(command -v python3 || true)"
+if [ -n "$PYTHON_BIN" ] && ! "$PYTHON_BIN" -c 'pass' > /dev/null 2>&1; then
+  PYTHON_BIN=""
+fi
 compat() { # compat <python expression over `data`> — prints lines
   "$PYTHON_BIN" -c "
 import json, sys
@@ -291,6 +340,9 @@ LLM_JSON=""; CONNECTION_JSON=""
 LLM_PROVIDER_ID=""; LLM_KIND=""; LLM_API_KEY=""; LLM_AWS_REGION=""; LLM_BASE_URL=""
 LLM_ANALYST_MODEL=""; LLM_MICRO_MODEL=""
 CONN_TYPE=""; CONN_NAME=""; CONN_CONFIG_JSON=""
+# Set when the chosen source can only be finished in the app (file uploads):
+# carries the connection type so the closing message can deep-link to its screen.
+FINISH_CONN_IN_APP=""
 
 # -r/-w on /dev/tty only test permissions; actually OPEN it — without a
 # controlling terminal (CI, cron) the open fails with ENXIO.
@@ -354,12 +406,27 @@ print(p.get('defaults', {}).get('core', ''))")
     advanced_default=$(compat "
 p = next(p for p in data['llm']['providers'] if p['id'] == '$LLM_PROVIDER_ID')
 print(p.get('defaults', {}).get('advanced', ''))")
-    info "Suggested models:"
+    info "Recommended models for this provider:"
     compat "
 p = next(p for p in data['llm']['providers'] if p['id'] == '$LLM_PROVIDER_ID')
 defaults = p.get('defaults', {})
+labels = {'lite': 'fast + cheap — titles, summaries',
+          'core': 'balanced — most analysis',
+          'advanced': 'strongest — hardest analysis'}
 for grade in ('lite', 'core', 'advanced'):
-    if defaults.get(grade): print(f\"    - {defaults[grade]}  ({grade})\")" > /dev/tty
+    if defaults.get(grade): print(f\"    {defaults[grade]:24} {grade:9} {labels[grade]}\")" > /dev/tty
+  fi
+  # Offer the whole set in one keypress when we actually have one. Asking three
+  # pre-filled questions reads as three decisions; most people want all three
+  # defaults and cannot tell that Enter accepts rather than blanks the field.
+  if [ -n "$lite_default" ] && [ -n "$core_default" ] && [ -n "$advanced_default" ]; then
+    if confirm "Use these three?"; then
+      LLM_LITE_MODEL="$lite_default"
+      LLM_CORE_MODEL="$core_default"
+      LLM_ADVANCED_MODEL="$advanced_default"
+      return 0
+    fi
+    info "Choosing each model — press Enter to accept the value shown"
   fi
   ask "Lite model ${DIM}(fast + cheap — titles, summaries)${RESET}" "$lite_default"; LLM_LITE_MODEL="$REPLY_VALUE"
   ask "Core model ${DIM}(balanced default — most analysis)${RESET}" "${core_default:-$LLM_LITE_MODEL}"; LLM_CORE_MODEL="$REPLY_VALUE"
@@ -412,7 +479,8 @@ for f in t['fields']:
 }
 
 if [ "$HAVE_TTY" = 1 ] && [ "$EXISTING_WORKSPACE" = 0 ]; then
-  printf "\n  ${BOLD}${WHITE}Workspace${RESET}\n"
+  info "Setup has 3 parts: Workspace, AI model, then Database (optional)."
+  section 0 "Workspace"
   while [ -z "$WS_NAME" ]; do
     ask "Workspace name ${DIM}(letters, numbers, hyphens, underscores)${RESET}" ""
     case "$REPLY_VALUE" in
@@ -430,7 +498,7 @@ if [ "$HAVE_TTY" = 1 ] && [ "$EXISTING_WORKSPACE" = 0 ]; then
     warn "Passwords don't match — try again" > /dev/tty
   done
 
-  printf "\n  ${BOLD}${WHITE}AI model${RESET}\n"
+  section 35 "AI model"
   if [ "$HAVE_COMPAT" = 1 ]; then
     PROVIDER_IDS=()
     PROVIDER_LABELS=()
@@ -443,6 +511,7 @@ if [ "$HAVE_TTY" = 1 ] && [ "$EXISTING_WORKSPACE" = 0 ]; then
       fi
     done < <(compat "
 for p in data['llm']['providers']:
+    if not p.get('cli', True): continue
     print('|'.join([p['id'], p['name'], p['kind'], p.get('description', '')]))")
     menu "Which LLM provider?" "${PROVIDER_LABELS[@]}"
     LLM_PROVIDER_ID="${PROVIDER_IDS[$MENU_INDEX]%%|*}"
@@ -462,17 +531,34 @@ for p in data['llm']['providers']:
   build_llm_json
 
   if [ "$HAVE_COMPAT" = 1 ]; then
-    printf "\n  ${BOLD}${WHITE}Database ${DIM}(optional — you can also do this in the app)${RESET}\n"
+    section 70 "Database (optional)"
     CONN_TYPE_LABELS=("Skip for now")
     CONN_TYPE_IDS=("")
-    while IFS='|' read -r ctype cname; do
-      CONN_TYPE_IDS+=("$ctype")
-      CONN_TYPE_LABELS+=("$cname")
+    # File-based sources (CSV, Excel, Sheets) are listed but cannot be completed
+    # here: their config is a `files` array whose entries embed an already-profiled
+    # schema (row_count, columns), which only the app's upload pipeline can produce.
+    # Listing them anyway matters — omitting them silently reads as "unsupported".
+    while IFS='|' read -r ctype cname ccli; do
+      if [ "$ccli" = "true" ]; then
+        CONN_TYPE_IDS+=("$ctype")
+        CONN_TYPE_LABELS+=("$cname")
+      else
+        CONN_TYPE_IDS+=("app:$ctype")
+        CONN_TYPE_LABELS+=("$cname ${DIM}— needs a file upload, opens in the app${RESET}")
+      fi
     done < <(compat "
 for t in data['connections']['types']:
-    if t.get('cli'): print('|'.join([t['type'], t['name']]))")
+    if t.get('comingSoon'): continue
+    print('|'.join([t['type'], t['name'], str(t.get('cli', False)).lower()]))")
     menu "Connect a database now?" "${CONN_TYPE_LABELS[@]}"
     CONN_TYPE="${CONN_TYPE_IDS[$MENU_INDEX]}"
+    case "$CONN_TYPE" in
+      app:*)
+        FINISH_CONN_IN_APP="${CONN_TYPE#app:}"
+        CONN_TYPE=""
+        info "Noted — setup will finish at the upload screen for that source."
+        ;;
+    esac
     if [ -n "$CONN_TYPE" ]; then
       ask "Connection name ${DIM}(lowercase letters, numbers, underscores)${RESET}" "warehouse"
       CONN_NAME=$(printf '%s' "$REPLY_VALUE" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_')
@@ -483,7 +569,7 @@ for t in data['connections']['types']:
       fi
     fi
   fi
-  printf "\n"
+  section 100 "Questions done"
   success "Setup details collected"
 elif [ "$EXISTING_WORKSPACE" = 1 ]; then
   info "Existing workspace detected — upgrading in place (no setup questions)"
@@ -670,7 +756,12 @@ printf "${BOLD}${GREEN}  ╚═════════════════�
 printf "\n"
 printf "  ${BOLD}${WHITE}Next steps:${RESET}\n"
 printf "\n"
-if [ "$REGISTERED" = 1 ]; then
+if [ "$REGISTERED" = 1 ] && [ -n "$FINISH_CONN_IN_APP" ]; then
+  # They picked a file-based source, so send them straight to its upload screen
+  # rather than the home page — that upload is the step they already asked for.
+  printf "  ${WHITE}1.${RESET} Open ${BOLD}${BLUE}http://localhost:${FRONTEND_PORT}/new/connection?type=${FINISH_CONN_IN_APP}${RESET}\n"
+  printf "     ${GRAY}Log in as ${BOLD}${ADMIN_EMAIL}${RESET}${GRAY}, then upload your ${FINISH_CONN_IN_APP} source.${RESET}\n"
+elif [ "$REGISTERED" = 1 ]; then
   printf "  ${WHITE}1.${RESET} Open ${BOLD}${BLUE}http://localhost:${FRONTEND_PORT}${RESET} and log in as ${BOLD}${ADMIN_EMAIL}${RESET}\n"
 elif [ "$EXISTING_WORKSPACE" = 1 ]; then
   printf "  ${WHITE}1.${RESET} Open ${BOLD}${BLUE}http://localhost:${FRONTEND_PORT}${RESET} and log in\n"

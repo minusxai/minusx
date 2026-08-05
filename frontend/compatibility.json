@@ -7,6 +7,7 @@
         "id": "minusx",
         "name": "MinusX (managed)",
         "kind": "managed",
+        "cli": false,
         "description": "Fully managed — one API key, model choice and routing handled by the MinusX gateway.",
         "credentials": [
           {
@@ -22,6 +23,7 @@
         "id": "anthropic",
         "name": "Anthropic",
         "kind": "registry",
+        "cli": true,
         "credentials": [
           {
             "key": "apiKey",
@@ -41,6 +43,7 @@
         "id": "openai",
         "name": "OpenAI",
         "kind": "registry",
+        "cli": true,
         "credentials": [
           {
             "key": "apiKey",
@@ -60,6 +63,7 @@
         "id": "google",
         "name": "Google Gemini",
         "kind": "registry",
+        "cli": true,
         "credentials": [
           {
             "key": "apiKey",
@@ -79,6 +83,7 @@
         "id": "amazon-bedrock",
         "name": "Amazon Bedrock",
         "kind": "registry",
+        "cli": true,
         "credentials": [
           {
             "key": "apiKey",
@@ -105,6 +110,7 @@
         "id": "custom",
         "name": "Custom (OpenAI-compatible)",
         "kind": "custom",
+        "cli": true,
         "description": "Self-managed OpenAI-compatible endpoint (Ollama, vLLM, LiteLLM, …).",
         "credentials": [
           {

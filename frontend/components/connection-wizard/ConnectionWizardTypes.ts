@@ -27,9 +27,38 @@ export interface QuestionnaireAnswers {
   dashboardPreference: string;
 }
 
+/** The two upload surfaces on the connection step. File uploads and Google Sheets
+ *  are the only sources configured by upload rather than by typed fields. */
+export type StaticTab = 'csv' | 'sheets';
+
+/**
+ * The upload tab a connection type opens on, or null for engines configured with
+ * plain fields (Postgres, BigQuery, …) which never reach the upload screen.
+ *
+ * install.sh offers the file-based types but cannot complete them — their config
+ * is a `files` array whose entries carry an already-profiled schema (row_count,
+ * columns) that only the upload pipeline here can produce — so it finishes by
+ * linking to /new/connection?type=<type>, which lands via this map.
+ */
+export function staticTabForConnectionType(type: string | null | undefined): StaticTab | null {
+  switch (type) {
+    case 'google-sheets':
+      return 'sheets';
+    // Excel has no tab of its own; the CSV tab is a generic file upload.
+    case 'csv':
+    case 'xlsx':
+      return 'csv';
+    default:
+      return null;
+  }
+}
+
 export interface ConnectionWizardProps {
   /** Starting step (default: 'connection'). Lets hello-world resume from saved config. */
   initialStep?: ConnectionWizardStep;
+  /** Opens the connection step directly on an upload tab. Set from ?type= so the
+   *  installer can hand a CSV/Excel/Sheets user straight to the right screen. */
+  initialStaticTab?: StaticTab | null;
   /** Pre-populated connection info when resuming mid-wizard. */
   initialConnectionId?: number | null;
   initialConnectionName?: string | null;

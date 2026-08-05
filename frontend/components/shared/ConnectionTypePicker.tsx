@@ -91,6 +91,7 @@ export default function ConnectionTypePicker({ onSelect, disabled = false }: Con
                   <Box
                     key={connType.type}
                     as="button"
+                    aria-label={connType.name}
                     onClick={() => !isCardDisabled && onSelect(connType)}
                     px={4}
                     py={3.5}

@@ -18,6 +18,8 @@ MinusX is currently in **alpha**. Expect rough edges, breaking changes, and inco
 
 Pulls the prebuilt image from GitHub Container Registry and, **while it downloads**, walks you through setup in the terminal — workspace and admin account, AI model provider (with a real connection test), and optionally your first database connection. When the app comes up, everything is already configured: just log in.
 
+The interview needs an interactive terminal; run non-interactively (in CI, or through a provisioning script) it skips the questions, starts the app, and you create the workspace in the browser instead. File-based sources — CSV, Excel and Google Sheets — are offered in the interview but finished in the app, since they are configured by upload rather than by typed settings; the script ends by linking you straight to that screen.
+
 ```bash
 curl -fsSL https://minusx.ai/install.sh | bash
 ```

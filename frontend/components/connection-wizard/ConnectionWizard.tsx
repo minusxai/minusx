@@ -10,6 +10,7 @@ import {
   type ConnectionWizardStep,
   type ConnectionWizardProps,
   type QuestionnaireAnswers,
+  type StaticTab,
 } from './ConnectionWizardTypes';
 import StepIndicatorBar from './StepIndicatorBar';
 import StepConnection from './steps/StepConnection';
@@ -26,6 +27,7 @@ export default function ConnectionWizard({
   initialConnectionName = null,
   initialContextFileId = null,
   initialQuestionnaireAnswers = null,
+  initialStaticTab = null,
   onStepChange,
   onComplete,
   showGreetings = false,
@@ -41,8 +43,9 @@ export default function ConnectionWizard({
   const [questionnaireAnswers, setQuestionnaireAnswers] = useState<QuestionnaireAnswers | null>(
     initialQuestionnaireAnswers,
   );
-  // Sub-state for static connection (CSV/Sheets) upload within the connection step
-  const [staticTab, setStaticTab] = useState<'csv' | 'sheets' | null>(null);
+  // Sub-state for static connection (CSV/Sheets) upload within the connection step.
+  // Seeded from initialStaticTab so ?type= can open straight on the upload screen.
+  const [staticTab, setStaticTab] = useState<StaticTab | null>(initialStaticTab);
   // Schema names from static upload — used to auto-select only relevant schemas in context step
   const [staticSchemas, setStaticSchemas] = useState<string[] | null>(null);
 
