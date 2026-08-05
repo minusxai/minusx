@@ -128,6 +128,30 @@ const FIXTURES: Record<string, string> = {
       .dark [data-mx-theme-host] { --tile-bg: rgb(20, 24, 28); }
       .tile { background: var(--tile-bg); }
     </style>`),
+  // Vega writes gradient paints as ABSOLUTE refs — `url(<document url>#gradient_N)` — which
+  // resolve live (that URL is this document) and name a DIFFERENT document once rasterized as an
+  // <img>, where SVG-as-image forbids external references. Unrewritten, the gradient-painted mark
+  // draws as nothing while its solid-painted sibling survives: exactly how KPI sparklines
+  // disappeared from every app capture. The zig-zag matters — a straight horizontal path has a
+  // zero-height bbox, which suppresses an objectBoundingBox gradient for unrelated reasons.
+  '/absrefs.html': page(`
+    <div id="target" style="width:300px;height:200px;background:#ffffff">
+      <svg width="300" height="200" viewBox="0 0 300 200">
+        <defs>
+          <linearGradient id="gradient_0" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="rgb(0,0,255)"></stop>
+            <stop offset="1" stop-color="rgb(0,0,255)"></stop>
+          </linearGradient>
+        </defs>
+        <path id="gradline" d="M10,60 L80,20 L150,70 L220,15 L290,55" stroke-width="14" fill="none"></path>
+        <path d="M10,170 L80,130 L150,180 L220,125 L290,165" stroke="rgb(255,0,0)" stroke-width="14" fill="none"></path>
+      </svg>
+    </div>
+    <script>
+      // Set the ref the way Vega does: absolute, including the query string.
+      document.getElementById('gradline')
+        .setAttribute('stroke', 'url(' + document.location.href + '#gradient_0)');
+    </script>`),
   '/form.html': page(`
     <div id="target" style="width:260px;height:120px;background:#ffffff">
       <input id="txt" type="text" style="width:200px">
@@ -240,6 +264,14 @@ async function runEngine(browserType: BrowserType, base: string): Promise<CheckR
     const bars = hasColor(data, w, h, 230, 140, 20) && hasColor(data, w, h, 20, 120, 220);
     const line = hasColor(data, w, h, 120, 40, 200);
     return { pass: bars && line, detail: 'bars=' + bars + ' line=' + line };
+  }`);
+
+  await check('absolute url(...#id) paint refs survive rasterization', '/absrefs.html', `async () => {
+    const { data, w, h } = await rasterize(document.getElementById('target'));
+    // The gradient-painted line must render, not just the solid control beside it.
+    const gradient = hasColor(data, w, h, 0, 0, 255);
+    const solid = hasColor(data, w, h, 255, 0, 0);
+    return { pass: gradient && solid, detail: 'gradientLine=' + gradient + ' solidLine=' + solid };
   }`);
 
   await check('large-dataset SVG chart (perf) captures complete within budget', '/bigchart.html', `async () => {

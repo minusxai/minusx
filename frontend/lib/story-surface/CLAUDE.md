@@ -78,6 +78,11 @@ clone only** (the live DOM is never mutated):
   `takeFailedFontUrls()` exists: it drains the URLs that failed since the last call (and
   `inlineFontUrls` warns), so a degraded capture is observable instead of being read as three
   unrelated rendering bugs. Same contract as `reviewFile`'s `renderPending` / `reviewNote`;
+- same-document paint/clip/filter refs rebound (`localizeFragmentRefsInTree`, `lib/html/fragment-refs.ts`):
+  Vega writes gradient paints as `url(<document url>#gradient_N)`, which resolves live because that
+  URL *is* the live document and names a DIFFERENT one once rasterized — where SVG-as-image forbids
+  external references, so the mark draws as **nothing**. Rewriting is conditional on the id existing
+  in the clone, so a genuinely external ref is left alone;
 - scroll offsets baked as transforms (`applyScrollOffsets` — `scrollLeft` is a property, so
   `XMLSerializer` drops it) and form state stamped as attributes (`stampFormValues`);
 - `applyInheritedTypography` — the standalone document has no `<html>`/`<body>`, so Tailwind
@@ -138,6 +143,10 @@ consumes it.
 - `css-urls.ts` — `absolutizeCssUrls`, deliberately dependency-free because it is shared by the
   mocked mirror **and** by the capture serializers; importing it from the mirror silently broke
   capture CSS collection in tests.
+- `fragment-refs.ts` — the inverse, for the capture direction: `localizeFragmentUrls` /
+  `localizeFragmentRefsInTree` rewrite `url(<document>#id)` → `url(#id)` across reference
+  attributes, inline styles and `<style>` text, but only for ids present in the serialized tree.
+  Both capture serializers call it on the clone; dependency-free for the same reason.
 - `resolve-story-fonts.ts` — captures scan `@font-face`, not `@import`, so imported web-font
   stylesheets are fetched and their faces injected. Cached by URL set; an all-failed result is
   deliberately not cached so a later capture retries.
@@ -181,6 +190,12 @@ DOM edits back onto the AST by `data-mx-ast` path and re-runs `validateJsx` on t
 
 - **A Blob URL for the rasterizing `<img>` taints the canvas** in Chromium and WebKit. `svgToImage`
   uses a percent-encoded `data:` URL; never "optimize" this.
+- **An `<img>`-rendered SVG resolves NOTHING externally, and that includes same-document-looking
+  refs.** `<img src>`, `@font-face src` and `url(…#id)` paints all name the *capture's* document
+  once rasterized. A ref like `url(http://host/f/12?mode=tutorial#gradient_8)` is live-correct and
+  externally-broken, and the failure is silent: the element simply does not render, while its
+  solid-painted siblings do. When a capture is missing one mark rather than a whole chart, check
+  its paint reference before suspecting the renderer.
 - **Styles injected into `<head>` are lost by the SVG capture path.** Anything the surface needs must
   live inside `surface.root` — which is also why `serialize-story.ts` strips the whole `data-mx-*`
   style family on save (otherwise derived CSS compounds into `content.story` on every round-trip).
@@ -209,6 +224,7 @@ DOM edits back onto the AST by `data-mx-ast` path and re-runs `validateJsx` on t
 |---|---|
 | Change how a story is sized inside its iframe | `frontend/lib/story-surface/index.ts` |
 | Fix a capture that loses styles/fonts/images on a surface | `frontend/lib/story-surface/serialize.ts` |
+| A capture drops one mark (gradient/clip/filter) but keeps the rest | `frontend/lib/html/fragment-refs.ts` |
 | Dashboard iframe missing a style | `frontend/lib/dashboard-surface/chrome-css.gen.ts` → `npm run generate-dashboard-chrome-css` |
 | Dashboard grid laid out at a stale width | `frontend/lib/dashboard-surface/surface-width.tsx` |
 | Saved story grows / re-nests on every save | `frontend/lib/html/serialize-story.ts` |

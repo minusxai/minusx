@@ -19,6 +19,7 @@
  */
 import { applyScrollOffsets, stampFormValues } from '@/lib/story-surface/serialize';
 import { absolutizeCssUrls } from '@/lib/html/css-urls';
+import { localizeFragmentRefsInTree } from '@/lib/html/fragment-refs';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -199,6 +200,10 @@ export async function serializeElementToSvg(
   stampCanvases(element, clone);
   if (opts.filter) applyNodeFilter(element, clone, opts.filter);
   clone.querySelectorAll(TRANSIENT_PORTAL_SELECTOR).forEach((n) => n.remove());
+  // Paint/clip/filter refs written as `url(<document url>#id)` (Vega does this for gradients)
+  // name ANOTHER document once this is rasterized as an <img>, and SVG-as-image refuses external
+  // references — the mark then draws as nothing. Rebind them to the clone's own ids.
+  localizeFragmentRefsInTree(clone);
   await inlineImageSources(clone, doc.baseURI);
 
   const css = await inlineCssUrls(collectDocumentCss(doc), doc.baseURI);

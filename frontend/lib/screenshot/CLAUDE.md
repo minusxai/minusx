@@ -42,6 +42,11 @@ context the detached clone lost: an outer wrapper carrying the color-mode class 
 tiles), and an inner wrapper stamped `data-mx-theme-host` so `.dark [data-mx-theme-host]` token rules
 resolve. `fixed`/`sticky` chrome renders at its document-flow position — accepted divergence.
 
+`serialize-element.ts` and the surface serializer both call `localizeFragmentRefsInTree`
+(`lib/html/fragment-refs.ts`) on the clone: a paint written as `url(<document url>#id)` — the form
+Vega emits for gradients — points at another document once rasterized, and SVG-as-image refuses
+external references, so the mark renders as nothing while solid-painted siblings survive.
+
 `readiness.ts` gates everything. Busy is **explicit and opt-in**: any `[data-mx-busy="true"]` inside
 the view, including inside same-origin iframes (one nested level), plus an iframe whose document is
 still `loading`. Each poll re-broadcasts `FORCE_MOUNT_TILES_EVENT` on `document`, so windowed
