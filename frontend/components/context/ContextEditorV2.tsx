@@ -461,6 +461,7 @@ export default function ContextEditorV2({
             }
           }}
           onSave={handleSave}
+          hideEditToggle={!canEditContext}
           viewMode={activeTab === 'picker' ? 'visual' : 'json'}
           onViewModeChange={(mode) => handleTabChange(mode === 'visual' ? 'picker' : 'yaml')}
           additionalBadges={file ? <FileHealthBadge fileId={file.id} fileType="context" /> : undefined}

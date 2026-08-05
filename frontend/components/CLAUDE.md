@@ -406,7 +406,10 @@ very component the saved card uses, `components/context/AgentReadView.tsx` — s
 is byte-for-byte what is stored, with no second formatting path to drift. The feature is alpha-gated on
 `uiSlice.enableCustomAgents`: with the flag off the editor tab is not rendered *and* the chat picker
 receives an empty option list, so no `custom_agent` pointer is ever sent. The gate is on both the
-authoring and the sending side, not just the visible one.
+authoring and the sending side, not just the visible one. When the gate is on, `app-shell/Sidebar.tsx`
+adds Agents to the Analytics navigation for every role and deep-links to the nearest resolved context's
+existing Agents tab (global pages resolve from the active mode root). Viewers keep the Play action but
+cannot enter context edit mode; editors and admins use the same context page to manage agents.
 
 **`components/settings/GatewayBillingCard.tsx` renders `null`, not an empty card, when there is no
 gateway.** A self-hosted install is not in an error state — it simply has no billing — and an empty

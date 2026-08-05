@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import { setUser } from '@/store/authSlice';
 import { makeStore } from '@/store/store';
-import type { ContextContent } from '@/lib/types';
+import type { ContextContent, UserRole } from '@/lib/types';
 
 const navigationState = vi.hoisted(() => ({ tab: 'skills' }));
 
@@ -79,7 +79,11 @@ const CONTENT = {
 function renderEditor(
   tab: 'skills' | 'agents',
   content: ContextContent = CONTENT,
-  { enableCustomAgents = tab === 'agents', devMode = false }: { enableCustomAgents?: boolean; devMode?: boolean } = {},
+  {
+    enableCustomAgents = tab === 'agents',
+    devMode = false,
+    role = 'editor',
+  }: { enableCustomAgents?: boolean; devMode?: boolean; role?: UserRole } = {},
 ) {
   navigationState.tab = tab;
   const onChange = vi.fn();
@@ -91,7 +95,7 @@ function renderEditor(
     id: 1,
     email: 'editor@minusx.ai',
     name: 'Editor',
-    role: 'editor',
+    role,
     mode: 'org',
   }));
   function ControlledEditor() {
@@ -211,6 +215,13 @@ describe('ContextEditorV2 add actions outside edit mode', () => {
 
     expect(screen.getByRole('tab', { name: /Agents/ })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByLabelText('Add agent')).toBeInTheDocument();
+  });
+
+  it('keeps the context Agents page read-only for viewers', () => {
+    renderEditor('agents', CONTENT, { role: 'viewer' });
+
+    expect(screen.queryByLabelText('Edit')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Add agent')).not.toBeInTheDocument();
   });
 
   it('shows Add agent and enters edit mode before opening the agent builder', () => {

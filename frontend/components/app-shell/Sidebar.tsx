@@ -1,6 +1,6 @@
 'use client';
 
-import { LuPanelLeftClose, LuPanelLeftOpen, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuHeadset, LuGithub, LuEllipsisVertical, LuSun, LuMoon, LuGraduationCap, LuBookOpen, LuUserPlus, LuChevronDown, LuHistory, LuFolder, LuWrench } from 'react-icons/lu';
+import { LuPanelLeftClose, LuPanelLeftOpen, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuHeadset, LuGithub, LuEllipsisVertical, LuSun, LuMoon, LuGraduationCap, LuBookOpen, LuUserPlus, LuChevronDown, LuHistory, LuFolder, LuWrench, LuBot } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { Box, Flex, VStack, HStack, Text, IconButton, Icon, Menu, Portal } from '@chakra-ui/react';
 import { Tooltip } from '@/components/kit/tooltip';
@@ -14,7 +14,8 @@ import CreateMenu from './CreateMenu';
 import { CreditsUsageBars } from '../settings/CreditsCard';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectEffectiveUser } from '@/store/authSlice';
-import { toggleLeftSidebar, selectDevMode, setDevMode, selectShowAdvanced, toggleColorMode } from '@/store/uiSlice';
+import { toggleLeftSidebar, selectDevMode, setDevMode, selectShowAdvanced, toggleColorMode, selectEnableCustomAgents } from '@/store/uiSlice';
+import { selectContextFromPath } from '@/store/filesSlice';
 import { APP_VERSION } from '@/lib/constants';
 import { exitImpersonation } from '@/lib/navigation/url-utils';
 import { isAdmin } from '@/lib/auth/role-helpers';
@@ -75,6 +76,7 @@ export default function Sidebar() {
   const isCollapsed = useAppSelector((state) => state.ui.leftSidebarCollapsed);
   const showDebug = useAppSelector(selectDevMode);
   const showAdvanced = useAppSelector(selectShowAdvanced);
+  const enableCustomAgents = useAppSelector(selectEnableCustomAgents);
   const colorMode = useAppSelector((state) => state.ui.colorMode);
   const pathname = usePathname();
   const { navigate } = useNavigationGuard();
@@ -131,6 +133,14 @@ export default function Sidebar() {
   // Get user mode for mode-aware navigation
   const mode = effectiveUser?.mode || 'org';
   const userIsAdmin = effectiveUser?.role && isAdmin(effectiveUser.role);
+  // Global pages do not carry a file/folder path, so resolve their Agents link
+  // against the active mode's home folder. File and folder pages use their
+  // nearest context, matching the right-sidebar chat's context resolution.
+  const agentsContextPath = currentPath === '/' ? `/${mode}` : currentPath;
+  const agentsContext = useAppSelector(state => selectContextFromPath(state, agentsContextPath));
+  const agentsPageHref = enableCustomAgents && agentsContext?.id && agentsContext.id > 0
+    ? `/f/${agentsContext.id}?tab=agents`
+    : null;
 
   // Build and filter nav sections inside useMemo so JSX icon expressions are only evaluated
   // when mode/showDebug/userIsAdmin actually change (not on every streaming render)
@@ -142,6 +152,7 @@ export default function Sidebar() {
           { href: '/explore', icon: <FILE_TYPE_METADATA.explore.icon />, label: FILE_TYPE_METADATA.explore.label },
           { href: '/conversations', icon: <LuHistory />, label: 'Conversations' },
           { href: `/p/${mode}`, icon: <LuFolder />, label: 'Files' },
+          ...(agentsPageHref ? [{ href: agentsPageHref, icon: <LuBot />, label: 'Agents' }] : []),
         ],
       },
       {
@@ -151,13 +162,13 @@ export default function Sidebar() {
           { href: '/settings?tab=users', icon: <LuUserPlus />, label: 'Invite Users', adminOnly: true },
         ],
       },
-      {
-        category: 'Debug',
-        items: [
-          { href: '/recordings', icon: <FILE_TYPE_METADATA.session.icon />, label: FILE_TYPE_METADATA.session.label, adminOnly: true },
-          { href: `/p/${mode}/logs`, icon: <LuFileText />, label: 'Logs', adminOnly: true },
-        ]
-      }
+    //   {
+    //     category: 'Debug',
+    //     items: [
+    //       { href: '/recordings', icon: <FILE_TYPE_METADATA.session.icon />, label: FILE_TYPE_METADATA.session.label, adminOnly: true },
+    //       { href: `/p/${mode}/logs`, icon: <LuFileText />, label: 'Logs', adminOnly: true },
+    //     ]
+    //   }
     ];
     return raw
       .filter(section => !(section.category === 'Debug' && !showDebug))
@@ -166,7 +177,7 @@ export default function Sidebar() {
         items: section.items.filter((item: NavItem) => !item.adminOnly || userIsAdmin),
       }))
       .filter(section => section.items.length > 0);
-  }, [showDebug, userIsAdmin, mode]);
+  }, [showDebug, userIsAdmin, mode, agentsPageHref]);
 
   return (
     <Box
