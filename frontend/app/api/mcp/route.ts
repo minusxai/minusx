@@ -16,6 +16,7 @@ import { createMcpServer } from '@/lib/mcp/server';
 import { getModules } from '@/lib/modules/registry';
 import { McpSessionLogger } from '@/lib/mcp/session-logger';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
+import { getProtectedResourceMetadataUrl } from '@/lib/oauth/base-url';
 
 // ---------------------------------------------------------------------------
 // Session store (in-memory, survives HMR via globalThis)
@@ -54,7 +55,11 @@ const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept, Mcp-Session-Id',
-  'Access-Control-Expose-Headers': 'Mcp-Session-Id',
+  // WWW-Authenticate is exposed because the 401 challenge is a client's discovery entry point
+  // (see unauthorizedResponse). Without this a browser-based MCP client gets the 401 but cannot
+  // read the header off it, so citing resource_metadata there would do nothing for exactly the
+  // clients that have no other way to find it.
+  'Access-Control-Expose-Headers': 'Mcp-Session-Id, WWW-Authenticate',
 };
 
 export async function OPTIONS(): Promise<Response> {
@@ -69,7 +74,29 @@ function addCorsHeaders(response: Response): Response {
   return newResponse;
 }
 
-function unauthorizedResponse(): Response {
+/**
+ * The 401 an MCP client is expected to bootstrap from.
+ *
+ * RFC 9728 has the challenge cite the Protected Resource Metadata document, and that is how a
+ * client with nothing but this URL discovers where to authenticate: 401 → fetch
+ * `resource_metadata` → read `authorization_servers` → RFC 8414 → register and authorize. The
+ * header used to be the bare word `Bearer`, which names a scheme and nothing else, so a client
+ * had to already know to guess `/.well-known/oauth-protected-resource` — clients that follow the
+ * spec instead of guessing simply failed to connect.
+ *
+ * `error="invalid_token"` is only correct when a token was actually presented (RFC 6750 §3.1).
+ * On a request with no `Authorization` header at all there is nothing invalid yet, and sending
+ * the code anyway tells a client its credentials were rejected when it never offered any.
+ */
+function unauthorizedResponse(request: Request): Response {
+  const presentedToken = request.headers.get('authorization')?.startsWith('Bearer ') ?? false;
+
+  const params = [
+    'realm="minusx"',
+    ...(presentedToken ? ['error="invalid_token"'] : []),
+    `resource_metadata="${getProtectedResourceMetadataUrl(request)}"`,
+  ];
+
   return new Response(
     JSON.stringify({
       jsonrpc: '2.0',
@@ -81,7 +108,8 @@ function unauthorizedResponse(): Response {
       headers: {
         ...CORS_HEADERS,
         'Content-Type': 'application/json',
-        'WWW-Authenticate': 'Bearer',
+        // "Bearer" is the scheme; the auth-params after it are comma-separated.
+        'WWW-Authenticate': `Bearer ${params.join(', ')}`,
       },
     }
   );
@@ -95,7 +123,7 @@ async function handleMcpPost(request: NextRequest): Promise<Response> {
   // Authenticate via OAuth Bearer token
   const user = await authenticateOAuthRequest(request);
   if (!user) {
-    return unauthorizedResponse();
+    return unauthorizedResponse(request);
   }
 
   const sessionId = request.headers.get('mcp-session-id');
@@ -163,7 +191,7 @@ async function handleMcpPost(request: NextRequest): Promise<Response> {
 async function handleMcpGet(request: NextRequest): Promise<Response> {
   const user = await authenticateOAuthRequest(request);
   if (!user) {
-    return unauthorizedResponse();
+    return unauthorizedResponse(request);
   }
 
   const sessionId = request.headers.get('mcp-session-id');
@@ -200,7 +228,7 @@ async function withNamespace(
   handler: (request: NextRequest) => Promise<Response>,
 ): Promise<Response> {
   const ns = await getModules().namespace.resolve(request);
-  if (ns == null) return unauthorizedResponse();
+  if (ns == null) return unauthorizedResponse(request);
   return getModules().namespace.with(ns, () => handler(request));
 }
 
