@@ -92,8 +92,8 @@ test.describe('eval: story creation', () => {
     // stored source is a TEXT node (escaped markup, or markup that parsed as
     // text) mounts a surface and renders that source verbatim
     // (`lib/story-ui/interpreter.tsx` — a text node renders as its value), so
-    // this flow once reported pass:true while the captured artifact was a wall
-    // of `<div className=…>`. Gate on STRUCTURE instead: an interpreted story
+    // gating on existence reports pass:true while the captured artifact is a
+    // wall of `<div className=…>`. Gate on STRUCTURE instead: an interpreted story
     // mounts hundreds of elements and never shows tag syntax as text (measured
     // on a real story: 2344 elements / no markup text, vs 7 / markup text for
     // the text-node failure).

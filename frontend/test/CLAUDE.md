@@ -283,8 +283,8 @@ Both suites locate controls by `aria-label` via `getByLabel` — 55 of the ~67 l
 component, not a reason to use a different query. The three standing exceptions are structural, not
 loopholes: `getByPlaceholder` in the two `auth.setup.ts` files (the login form), and `.locator()`
 over the `data-*` DOM contract (`[data-file-id]`, `svg[data-mx-story-svg] foreignObject`) in
-`test/e2e/story-lifecycle.spec.ts` and `test/qa/dashboard-theme.spec.ts`, where the target is an
-iframe surface rather than a control.
+`test/e2e/story-lifecycle.spec.ts`, `test/qa/dashboard-theme.spec.ts` and
+`test/qa/story-create.eval.spec.ts`, where the target is an iframe surface rather than a control.
 
 ## CI
 

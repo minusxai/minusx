@@ -37,8 +37,8 @@ import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
  * from the picker but named by the endpoint behind it is not hidden. So the
  * whitelist is resolved SERVER-SIDE from the caller's own context, exactly as
  * query execution resolves it (`getWhitelistForPath`), and a client-supplied
- * whitelist is never trusted: `getMentions` used to take one straight from the
- * request body, so omitting the field returned the entire warehouse.
+ * whitelist is never trusted — taking one straight from the request body would
+ * let a caller receive the entire warehouse by omitting the field.
  *
  * `null` from the resolver means genuinely unrestricted → pass everything
  * through. An empty array means the context exposes nothing → return nothing.
@@ -57,7 +57,7 @@ async function whitelistConnectionSchemas(
    * A caller-supplied narrowing (the client's cached view of the context). It can
    * only ever REMOVE from the server-resolved set — never add. Callers legitimately
    * narrow (the editor scopes suggestions to the context it is showing); what they
-   * may not do is widen, which omitting the field used to achieve.
+   * may not do is widen — including by omitting the field.
    */
   clientNarrowing?: DatabaseWithSchema[],
 ): Promise<SchemaEntry[]> {
@@ -109,9 +109,9 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
   async getMentions(options: MentionsOptions, user: EffectiveUser): Promise<MentionsResult> {
     const { prefix, mentionType, databaseName, whitelistedSchemas } = options;
 
-    // `whitelistedSchemas` is no longer the source of truth — it used to be, so a
-    // caller that simply omitted it received the entire connection. It is now
-    // only a NARROWING applied on top of the server-resolved whitelist.
+    // `whitelistedSchemas` is not the source of truth — as one, a caller that
+    // simply omitted it would receive the entire connection. It is only a
+    // NARROWING applied on top of the server-resolved whitelist.
     let schemaData: DatabaseWithSchema[] = [];
 
     if (databaseName) {

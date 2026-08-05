@@ -49,7 +49,7 @@ export function resolveViewsForContext(content: ContextContent | null | undefine
 const hydrated = (views: ViewDef[]): HydratedView[] =>
   views.filter((v): v is HydratedView => !!v.sql?.trim());
 
-/** Views visible to a file at `lookupPath`, scoped to one connection (SQL hydrated). */
+/** Views visible at `lookupPath` — a file path or a folder anchor (e.g. chat's home folder) — scoped to one connection (SQL hydrated). */
 export async function getViewsForPath(
   lookupPath: string,
   connectionName: string,
@@ -63,10 +63,10 @@ export async function getViewsForPath(
     );
     // The path goes in WHOLE. `findNearestContextPath` already matches a context
     // whose serving folder is the path itself OR any ancestor of it, so it takes
-    // a file path and a folder path alike. Stripping the last segment first was
-    // right for a file and wrong for the FOLDER anchor chat and MCP use: it
-    // walked past that folder's own context, resolving views from one context
-    // while `getWhitelistForPath` — which never stripped — resolved the
+    // a file path and a folder path alike. Stripping the last segment first would
+    // be right for a file and wrong for the FOLDER anchor chat and MCP use: it
+    // walks past that folder's own context, resolving views from one context
+    // while `getWhitelistForPath` — which never strips — resolves the
     // whitelist from another.
     const nearest = findNearestContextPath(contextFiles.map((f) => f.path), lookupPath);
     if (!nearest) return [];

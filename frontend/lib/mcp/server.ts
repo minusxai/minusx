@@ -138,10 +138,9 @@ export async function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCa
       const params: Record<string, string | number> = parameters || {};
 
       // Governance: the SAME seam the browser route and the agent's ExecuteQuery
-      // use — whitelist enforcement plus `_views.*` inlining, which this surface
-      // previously lacked entirely (a view reference reached the warehouse as a
-      // nonexistent table). Anchored on the user's home folder: an MCP client has
-      // no file in hand.
+      // use — whitelist enforcement plus `_views.*` inlining (without which a view
+      // reference reaches the warehouse as a nonexistent table). Anchored on the
+      // user's home folder: an MCP client has no file in hand.
       let executedQuery: string;
       try {
         ({ executedQuery } = await resolveQueryForExecution({

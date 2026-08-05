@@ -79,10 +79,10 @@ function addCorsHeaders(response: Response): Response {
  *
  * RFC 9728 has the challenge cite the Protected Resource Metadata document, and that is how a
  * client with nothing but this URL discovers where to authenticate: 401 → fetch
- * `resource_metadata` → read `authorization_servers` → RFC 8414 → register and authorize. The
- * header used to be the bare word `Bearer`, which names a scheme and nothing else, so a client
- * had to already know to guess `/.well-known/oauth-protected-resource` — clients that follow the
- * spec instead of guessing simply failed to connect.
+ * `resource_metadata` → read `authorization_servers` → RFC 8414 → register and authorize. A bare
+ * `Bearer` header names a scheme and nothing else — a client would have to already know to guess
+ * `/.well-known/oauth-protected-resource`, and clients that follow the spec instead of guessing
+ * simply fail to connect.
  *
  * `error="invalid_token"` is only correct when a token was actually presented (RFC 6750 §3.1).
  * On a request with no `Authorization` header at all there is nothing invalid yet, and sending

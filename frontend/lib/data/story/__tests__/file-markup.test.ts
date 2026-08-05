@@ -551,9 +551,9 @@ describe('story <template> field round-trip', () => {
   });
 });
 
-// A whole story wrapped in a template literal — `{`<div …>`}` — is the failure
-// mode observed from anthropic-messages models (Claude, deepseek) in the QA
-// eval on 2026-08-04. It PARSES: a static string expression is a legal child,
+// A whole story wrapped in a template literal — `{`<div …>`}` — is a failure
+// mode anthropic-messages models (Claude, deepseek) routinely produce.
+// It PARSES: a static string expression is a legal child,
 // so the body stores as one text node and the interpreter renders the markup
 // verbatim (a wall of `<div className=…>`), with nothing erroring anywhere.
 // The save must reject it so the agent sees the error and re-emits real JSX.

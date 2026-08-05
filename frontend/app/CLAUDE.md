@@ -305,10 +305,10 @@ Verify with `curl -s <host>/login | grep -c 'id="S:0"'` — it must be `0`.
 - **`api/query` returns 400 for query failures, not 500.** The client's `parseErrorMessage` and
   `captureError` both key off that. Changing it to `handleApiError` would start paging the team on every
   user typo.
-- **Whitelist validation and view resolution are no longer this route's own code.** Both live in
+- **Whitelist validation and view resolution are not this route's own code.** Both live in
   `resolveQueryForExecution` (`lib/sql/governed-query.server.ts`), which the agent's `ExecuteQuery` and
-  the MCP server call too — they had each independently forgotten a step. The ordering it enforces is
-  the one this route established: a view is authorized as itself (it appears in the whitelisted schema,
+  the MCP server call too — one seam, so no surface can independently forget a step. The ordering it
+  enforces: a view is authorized as itself (it appears in the whitelisted schema,
   so it can expose an aggregate over tables the reader can't query directly — its own SQL is validated
   where it is *authored*), and the cache key is computed over the *resolved* SQL, so editing a view body
   invalidates results for free. Non-view queries take a byte-identical fast path and are never parsed.

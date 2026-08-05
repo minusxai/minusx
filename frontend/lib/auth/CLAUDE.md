@@ -98,8 +98,8 @@ owns **no database tables**: PKCE authorization codes live in a `globalThis`-bac
 hop of a comma-separated chain, plus `host`) rather than from configuration, so one image serves
 correct discovery documents behind a proxy, through ngrok, on localhost, and on a per-workspace
 host — where a configured base URL would send clients to somebody else's discovery document. Both
-`.well-known/oauth-*` routes and the `api/mcp` 401 challenge share it; it had been copy-pasted into
-the two well-known routes before the challenge needed a third copy.
+`.well-known/oauth-*` routes and the `api/mcp` 401 challenge share the one helper rather than
+keeping per-route copies.
 
 **`lib/rubric/`** owns file-health scoring: the report contract (`types.ts`), the scoring math
 (`scoring.ts`), four pure deterministic scorers (`deterministic/*`), the check catalogs

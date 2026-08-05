@@ -150,9 +150,11 @@ search tool whenever `callOptions.webSearch` is set and the model speaks `anthro
 `openai-responses`. Several registry providers speak `anthropic-messages` without implementing
 Anthropic's `web_search_20250305` — fireworks rejects it with a 400 on the *whole* request, so every
 turn of a workspace whose grade maps there dies at the first call, with a green Test button (the
-probe sends no tools). `buildPlanStep` deletes the option for any provider outside
-`NATIVE_WEB_SEARCH_PROVIDERS` (`anthropic`, `openai`, `minusx`, in `llm-config-types.ts`), which is
-why `WebAnalystAgent` can ask for `webSearch: true` unconditionally. Add a slug there only when the
+probe sends no tools). `buildPlanStep` sets the option to an explicit `false` for any provider
+outside `NATIVE_WEB_SEARCH_PROVIDERS` (`anthropic`, `openai`, `minusx`, in `llm-config-types.ts`) —
+explicit `false`, never a deleted key, because plan options merge OVER agent options and an absent
+key would fall back to the agent's `webSearch: true`. This is why `WebAnalystAgent` can ask for
+`webSearch: true` unconditionally. Add a slug there only when the
 provider genuinely implements the hosted tool.
 
 **The models.dev overlay is keyed by PI SLUG, not by the models.dev id.** `parseModelsDevCatalog`

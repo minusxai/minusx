@@ -52,7 +52,7 @@ interface ChatErrorBannerProps {
   handleNewChat: () => void;
 }
 
-// Error Display. Terminal errors (context-length, auth, permission, malformed) can't be retried — an
+// Error Display. Terminal errors (context-length, conversation-too-long, auth, permission, malformed) can't be retried — an
 // identical re-run re-fails — so we steer to a fresh chat instead of "Try again". Transient
 // (and local/load) errors offer a clean replay of the failed turn (no "Continue" bubble).
 export default function ChatErrorBanner({ error, isTerminalError, terminalReason, devMode, colSpan, colStart, conversationID, handleNewChat }: ChatErrorBannerProps) {

@@ -106,8 +106,8 @@ whole instruction because an error gates the score to 0.
   a question created or edited inside a narrowed folder can legitimately fail there while the same
   SQL runs fine elsewhere. The run never fails the edit/create (the file is already written), but it
   lands in a `queryExecution` block in both the tool result and the durable `__status`, so the agent
-  learns immediately that it wrote a question that does not run. `CreateFile` used to `console.warn`
-  it and answer plain `success: true`.
+  learns immediately that it wrote a question that does not run — swallowing it into a `console.warn`
+  with a plain `success: true` would leave the agent to find out from a user.
 - **`CreateFile` never renders a chart image** (a created file is always a background draft) and
   refuses `dashboard`/`story` in the background unless `selectUnrestrictedMode` is on — those must
   go through `Navigate` with `newFileType`.
