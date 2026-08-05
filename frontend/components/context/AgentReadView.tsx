@@ -25,6 +25,7 @@ interface AgentReadViewProps {
   footerEnd?: ReactNode;
   compact?: boolean;
   muted?: boolean;
+  showSettings?: boolean;
 }
 
 const COMPACT_INSTRUCTION_CHARS = 240;
@@ -121,7 +122,14 @@ function SkillPills({
   );
 }
 
-export function AgentReadView({ agent, headerEnd, footerEnd, compact = false, muted = false }: AgentReadViewProps) {
+export function AgentReadView({
+  agent,
+  headerEnd,
+  footerEnd,
+  compact = false,
+  muted = false,
+  showSettings = true,
+}: AgentReadViewProps) {
   const instructions = agent.prompt || 'No custom instructions yet.';
   const agentDisplayName = getUserAgentDisplayName(agent);
   const onDemandSkills = agent.includeSkills.filter((skill) => !agent.preloadSkills.includes(skill));
@@ -207,7 +215,7 @@ export function AgentReadView({ agent, headerEnd, footerEnd, compact = false, mu
         </Text>
       </Box>
 
-      <Box>
+      {showSettings && <Box>
         <HStack gap={3} mb={compact ? 3 : 4}>
           <Text fontSize="2xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.12em" color="fg.muted">
             Settings
@@ -246,7 +254,7 @@ export function AgentReadView({ agent, headerEnd, footerEnd, compact = false, mu
             </HStack>
           </Box>
         </Box>
-      </Box>
+      </Box>}
 
       <Box mt="auto">
         <HStack gap={3} mb={compact ? 3 : 4}>

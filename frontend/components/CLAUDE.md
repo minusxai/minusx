@@ -413,7 +413,8 @@ used by chat. `components/context/StandaloneContextPage.tsx` owns the `/agents` 
 resolution and passes `standaloneTab` through `ContextContainerV2` to `ContextEditorV2`, which reuses the
 existing `AgentsTabContent` / `SkillsTabContent` bodies without the Knowledge Base file header or tab
 strip. Viewers see only enabled agents and keep their Play actions, but cannot enter context edit mode;
-draft agents remain visible to editors/admins for management and never receive a Play action. The
+their cards omit authoring-only prompt/model settings and use the solid Play treatment. Draft agents
+remain visible to editors/admins for management and never receive a Play action. The
 standalone Skills surface rejects viewers even if they follow its URL directly. Editors and admins get
 the compact Edit/Save/Cancel controls. The ordinary context-file route still renders the full tabbed editor.
 

@@ -116,6 +116,9 @@ describe('AgentsTabContent — read view', () => {
       'href',
       '/explore?agent=ceo_agent&context=%2Forg%2Fcontext.json',
     );
+    expect(
+      screen.getByLabelText('Explore with CEO Agent').querySelector('svg'),
+    ).toHaveAttribute('fill', 'currentColor');
   });
 
   it('caps long card instructions with an ellipsis while keeping settings visible', () => {
@@ -386,6 +389,7 @@ describe('AgentsTabContent — builder', () => {
     });
 
     expect(screen.getByLabelText('Agent published_local')).toBeInTheDocument();
+    expect(screen.getByLabelText('Agent published_local')).not.toHaveTextContent(/settings/i);
     expect(screen.queryByLabelText('Agent draft_local')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Inherited agent published_inherited')).toBeInTheDocument();
     expect(screen.queryByLabelText('Inherited agent draft_inherited')).not.toBeInTheDocument();
@@ -402,6 +406,7 @@ describe('AgentsTabContent — builder', () => {
     });
 
     expect(screen.getByLabelText('Agent draft_local')).toHaveTextContent(/draft/i);
+    expect(screen.getByLabelText('Agent draft_local')).toHaveTextContent(/settings/i);
     expect(screen.queryByLabelText('Explore with Draft Local')).not.toBeInTheDocument();
   });
 

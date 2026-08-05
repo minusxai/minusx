@@ -169,6 +169,7 @@ export function AgentsTabContent({
                         agent={agent}
                         compact
                         muted={!agent.enabled}
+                        showSettings={canAddAgent}
                         footerEnd={agent.enabled ? (
                           <Button
                             asChild
@@ -186,7 +187,7 @@ export function AgentsTabContent({
                             transition="opacity 160ms ease"
                           >
                             <Link href={getAgentExploreHref(agent.name)}>
-                              <Icon as={LuPlay} boxSize={4} ml={0.5} />
+                              <LuPlay size={16} fill="currentColor" strokeWidth={0} style={{ marginLeft: 2 }} />
                             </Link>
                           </Button>
                         ) : undefined}
