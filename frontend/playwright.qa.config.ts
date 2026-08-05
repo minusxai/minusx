@@ -32,6 +32,12 @@ const QA_WORKERS = Number(process.env.QA_PARALLELISM) || 2;
 
 export default defineConfig({
   testDir: './test/qa',
+  // Playwright's DEFAULT testMatch is `**/*.@(spec|test).*`, so it also claims
+  // Vitest files. A `__tests__/*.test.ts` next to the flows (unit cover for the
+  // helpers they share) made Playwright import `vitest` while COLLECTING, which
+  // fails the entire run — every shard, before a single test executes. Vitest
+  // owns `__tests__`; this suite owns `*.spec.ts`.
+  testIgnore: '**/__tests__/**',
   // QA flows are read-only and run entirely in tutorial mode (reset once up front
   // via the setup chain), so they parallelize safely. Defaults to 2; override
   // locally with QA_PARALLELISM (see QA_WORKERS above).

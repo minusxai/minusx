@@ -122,9 +122,6 @@ test.describe('eval: story creation', () => {
     // owns the viewport fitting and the settle waits; the report toggles
     // between the results (`test/qa/image-variants.ts`). `fileId` is what makes
     // the app-capture renderer possible: it needs a `[data-file-id]` view.
-    await metrics.screenshot(page, FLOW, 'story', {
-      target: page.locator('iframe[title="Story document"]'),
-      fileId: story!.id,
-    });
+    await metrics.screenshot(page, FLOW, 'story', { fileId: story!.id });
   });
 });

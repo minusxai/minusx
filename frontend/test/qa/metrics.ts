@@ -17,7 +17,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Locator, Page, TestInfo } from '@playwright/test';
-import { test as qaTest, fitViewportToSurface } from './flows';
+import { test as qaTest, fitViewportToSurface, fileCaptureUrl } from './flows';
 import { IMAGE_SIZES, IMAGE_RENDERERS, VIEWPORT_WIDTH_PX, type ImageVariant } from './image-variants';
 import { E2E_CAPTURE_KEY } from '@/lib/screenshot/constants';
 
@@ -89,17 +89,23 @@ async function withTimeout<T>(work: Promise<T>, ms: number, what: string): Promi
  *
  * The hook is installed only under the E2E build flag or the QA runtime opt-in
  * (`?e2e=<secret>`), the same gate that exposes `window.__MX_STORE__`.
+ *
+ * `maxWidth` is the DEVICE width, not the app's display cap: capping at 1536
+ * upscaled a 708px canvas by 2.2x — the same layout, enlarged and soft, at four
+ * times the bytes. At device width the app renderer and the Playwright one
+ * produce the same pixel dimensions, which is the only way the two are
+ * comparable in the report.
  */
-async function captureViaApp(page: Page, fileId: number): Promise<Buffer> {
+async function captureViaApp(page: Page, fileId: number, maxWidth: number): Promise<Buffer> {
   const dataUrl = await page.evaluate(
-    async ({ key, id }) => {
+    async ({ key, id, width }) => {
       const hook = (window as unknown as Record<string, unknown>)[key];
       if (typeof hook !== 'function') {
         throw new Error(`window.${key} is not installed — is the e2e runtime opt-in active on this page?`);
       }
-      return (await hook({ fileId: id })) as string;
+      return (await hook({ fileId: id, maxWidth: width })) as string;
     },
-    { key: E2E_CAPTURE_KEY, id: fileId },
+    { key: E2E_CAPTURE_KEY, id: fileId, width: maxWidth },
   );
   return Buffer.from(dataUrl.slice(dataUrl.indexOf(',') + 1), 'base64');
 }
@@ -130,21 +136,33 @@ export class MetricsRecorder {
   }
 
   /**
-   * Capture the image row for `(flow, name)` in EVERY variant — each size ×
-   * each renderer — and record one row per captured file. The report shows one
-   * at a time behind its settings toggle; it cannot re-capture after the run,
-   * so the matrix is produced here or not at all (`image-variants.ts`).
+   * Capture the image row for `(flow, name)` in EVERY variant — each device
+   * width × each renderer — and record one row per captured file. The report
+   * shows one at a time behind its settings toggle; it cannot re-capture after
+   * the run, so the matrix is produced here or not at all.
    *
-   * Pass `target` to capture one ELEMENT in full — artifact surfaces (stories)
-   * size their iframe to content inside an inner scroll container, so neither a
-   * viewport shot (crops below the fold) nor fullPage (the app shell's BODY
-   * doesn't scroll) sees the whole document; an element capture of the surface
-   * iframe does. Without `target`, captures the full page.
+   * The question each image answers is "what does this document look like on a
+   * laptop / on a phone", so the DOCUMENT must own the viewport. With `fileId`
+   * the page is therefore RELOADED per width at `view=contentonly`
+   * (`fileCaptureUrl`) — chrome-free, so canvas width == device width — rather
+   * than resized in place inside the app shell, where the side chat and rails
+   * leave a story 708px of a 1280px window and collapse its container-query
+   * bands into a layout no reader sees. Reloading per width (instead of
+   * resizing once) is also how a real device arrives: first layout at that
+   * width, no resize artifacts.
    *
-   * Pass `fileId` to additionally capture through the APP's own capture path
-   * (`lib/screenshot/capture.ts` — what ReviewFile and dev-tools "Get image"
-   * produce). Without it the `download` renderer is skipped for this row: there
-   * is no `[data-file-id]` view for the app to capture.
+   * `fileId` is the whole contract for a file: it selects the capture page,
+   * anchors BOTH renderers to `[data-file-id]` (the same box, so a pair differs
+   * only by renderer), and enables the `download` one — the APP's own capture
+   * (`lib/screenshot/capture.ts`, what ReviewFile and dev-tools "Get image"
+   * produce), which has no `[data-file-id]` view to photograph without it.
+   * The capture is of that ELEMENT, not the viewport: a surface sizes its
+   * iframe to content inside an inner scroll container, so neither a viewport
+   * shot (crops below the fold) nor fullPage (the app shell's BODY doesn't
+   * scroll) sees the whole document.
+   *
+   * `target` is the fallback for a page with no file view (a chat transcript,
+   * say); with `fileId` it is ignored, and with neither the full page is taken.
    *
    * Every capture is best-effort. A variant that throws is warned and omitted —
    * instrumentation must never fail the flow it is measuring.
@@ -157,11 +175,15 @@ export class MetricsRecorder {
   ): Promise<void> {
     fs.mkdirSync(SCREENS_DIR, { recursive: true });
     const original = page.viewportSize() ?? { width: VIEWPORT_WIDTH_PX.laptop, height: 720 };
+    const returnTo = page.url();
     try {
       for (const size of IMAGE_SIZES) {
-        // Width is a LAYOUT input: the surface tracks its container, so this is
-        // what makes the mobile shot a mobile layout rather than a scaled one.
-        await page.setViewportSize({ width: VIEWPORT_WIDTH_PX[size], height: original.height });
+        const width = VIEWPORT_WIDTH_PX[size];
+        await page.setViewportSize({ width, height: original.height });
+        if (opts.fileId !== undefined) {
+          await page.goto(fileCaptureUrl(opts.fileId));
+          await this.waitForCaptureTarget(page, opts.fileId, `${flow}/${name} ${size}`);
+        }
         await page.waitForTimeout(RELAYOUT_MS);
         for (const renderer of IMAGE_RENDERERS) {
           await this.captureVariant(page, flow, name, { size, renderer }, opts);
@@ -169,6 +191,22 @@ export class MetricsRecorder {
       }
     } finally {
       await page.setViewportSize(original);
+      // Leave the page where the flow had it: later steps (and the console
+      // guard's view of the run) must not inherit a chrome-less capture page.
+      await page.goto(returnTo).catch(() => {});
+    }
+  }
+
+  /**
+   * Wait for the freshly loaded capture page to be worth photographing: the
+   * file view mounted, and its surface present. Best-effort — a capture of a
+   * half-rendered page is better evidence than no capture at all.
+   */
+  private async waitForCaptureTarget(page: Page, fileId: number, label: string): Promise<void> {
+    try {
+      await page.locator(`[data-file-id="${fileId}"]`).waitFor({ state: 'visible', timeout: 60_000 });
+    } catch (error) {
+      console.warn(`[metrics] ${label}: capture page never settled:`, error);
     }
   }
 
@@ -182,24 +220,40 @@ export class MetricsRecorder {
     const rel = path.join('screens', `${slug(flow)}-${slug(name)}-${variant.size}-${variant.renderer}.png`);
     const file = path.join(METRICS_DIR, rel);
     const label = `${flow}/${name} ${variant.size}:${variant.renderer}`;
+    // Both renderers must photograph the SAME box, or the two images differ by
+    // more than the renderer under test. The app capture is anchored to
+    // `[data-file-id]`, so the Playwright one is too — capturing the surface
+    // iframe instead cropped the file view's own padding and made every pair
+    // disagree on width (1184 vs 1280).
+    const target = opts.fileId !== undefined ? page.locator(`[data-file-id="${opts.fileId}"]`) : opts.target;
     // Progress on stdout: a capture matrix is minutes of otherwise silent work
     // in the CI log, and silence is indistinguishable from a hang.
     console.log(`[metrics] capturing ${label}`);
     try {
       if (variant.renderer === 'download') {
         if (opts.fileId === undefined) return;
-        fs.writeFileSync(file, await withTimeout(captureViaApp(page, opts.fileId), CAPTURE_TIMEOUT_MS, label));
-      } else if (opts.target) {
+        // 1:1 with the live element. `maxWidth` doesn't only cap — the app
+        // derives its raster scale from it, so ANY value other than the
+        // element's own CSS width rescales: the device width upscaled a 1184px
+        // view to 1280, and the display cap upscaled it to 1536. Measuring
+        // first is what makes this pair comparable with the Playwright shot.
+        const box = await target?.boundingBox();
+        const cssWidth = Math.round(box?.width ?? VIEWPORT_WIDTH_PX[variant.size]);
+        fs.writeFileSync(
+          file,
+          await withTimeout(captureViaApp(page, opts.fileId, cssWidth), CAPTURE_TIMEOUT_MS, label),
+        );
+      } else if (target) {
         // Chromium composites iframe content only INSIDE the viewport, so a
         // full-artifact element capture must grow the viewport to the surface
         // height first — otherwise everything below the fold captures black.
         // `restore` runs even when the capture times out: leaving the viewport
         // grown would corrupt every later variant.
-        const restore = await fitViewportToSurface(page, opts.target);
+        const restore = await fitViewportToSurface(page, target);
         try {
           await page.waitForTimeout(SETTLE_MS);
           await withTimeout(
-            opts.target.screenshot({ path: file, timeout: CAPTURE_TIMEOUT_MS }),
+            target.screenshot({ path: file, timeout: CAPTURE_TIMEOUT_MS }),
             CAPTURE_TIMEOUT_MS,
             label,
           );
