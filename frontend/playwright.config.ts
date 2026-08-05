@@ -23,6 +23,11 @@ fs.mkdirSync(PGLITE_DIR, { recursive: true });
 
 export default defineConfig({
   testDir: './test/e2e',
+  // Same guard as the QA config: Playwright's default testMatch claims
+  // `*.test.ts` too, so a Vitest file under `__tests__` here would fail
+  // collection for the whole suite. Vitest owns `__tests__`; this suite owns
+  // `*.spec.ts`.
+  testIgnore: '**/__tests__/**',
   // tutorial reset is workspace-wide → serialize to avoid runs stomping each other.
   fullyParallel: false,
   workers: 1,

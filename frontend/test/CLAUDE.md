@@ -267,6 +267,14 @@ The QA config never runs `next dev`. Locally it does a full `npm run build && np
 `QA_SKIP_BUILD=1` (CI) skips straight to `next start` on a restored build. The dev server compiles
 routes on demand and races cold builds under parallel workers, producing `page.goto` timeouts.
 
+**Both Playwright configs set `testIgnore: '**/__tests__/**'`, and it is load-bearing.**
+Playwright's default `testMatch` is `**/*.@(spec|test).*`, so it claims Vitest files too: a
+`__tests__/*.test.ts` placed beside the flows (unit cover for helpers they share) makes Playwright
+import `vitest` while COLLECTING, which fails the entire run — every shard, before one test
+executes. Vitest owns `__tests__`, these suites own `*.spec.ts`. `npx playwright test --list` is
+the two-second check that catches it; running a single spec by path does not, because collection
+of the other files never happens.
+
 **QA's tutorial-mode discipline** lives in `test/qa/flows.ts`. `QA_MODE = 'tutorial'`; `modeUrl()`
 appends `mode=tutorial`; `e2eUrl()` appends that plus `e2e=<secret>`; every `/api/files` discovery
 call carries `mode=tutorial` explicitly. The system default is `org`, so tutorial is opt-in on every
