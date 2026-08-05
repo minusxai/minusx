@@ -73,3 +73,14 @@ export const CHART_WATERMARK_PADDING_PX = 48;
 
 /** Logo size as a fraction of CHART_WATERMARK_PADDING_PX (≈20% gap on each side within the P×P zone). */
 export const CHART_WATERMARK_LOGO_SCALE = 0.6;
+
+// ── Test instrumentation ──────────────────────────────────────────────────────
+/**
+ * `window` key the browser capture path is exposed under for Playwright, so a
+ * QA run can produce the image the APP would produce rather than Playwright's
+ * compositor screenshot (`test/qa/metrics.ts`, the `download` renderer).
+ * Installed only behind the E2E build flag or the QA runtime opt-in — the same
+ * gate as `window.__MX_STORE__`. Lives here because both sides need the string
+ * and this module is dependency-free by design.
+ */
+export const E2E_CAPTURE_KEY = '__MX_CAPTURE_FILE__';

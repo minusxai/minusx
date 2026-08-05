@@ -73,7 +73,7 @@ Everything runs from `frontend/`. Names that mean what they say are omitted.
 | `check-docs` | `check-docs-consistency.ts` alone. Four sweeps, the first three over **every** `CLAUDE.md` in the repo, not just the root: (1) each backticked path resolves, (2) no source comment references a missing `*.md`, (3) each nested doc is named in the root `CLAUDE.md`, unless it is a short pointer stub whose redirect target exists, (4) no tracked `.md` exists outside `CLAUDE.md` / the root `README.md` / `docs/**`. Exits 1 if the root `CLAUDE.md` is absent. |
 | `test` / `test:main` / `test:ui` / `test:orchestrator` | Vitest; all projects, or one. |
 | `test:e2e` / `test:qa` | The two Playwright configs (see below). |
-| `qa-report` | `scripts/qa-report.ts`: merges N QA metrics runs (`test/qa/.metrics/` dirs, one per `test:qa` invocation) into a machine-parseable JSON report plus a self-contained HTML one (screenshots base64-inlined). One run = a plain report; two+ = a side-by-side comparison. `--run <dir>[:<label>]` per run, `--out <dir>`. |
+| `qa-report` | `scripts/qa-report.ts`: merges N QA metrics runs (`test/qa/.metrics/` dirs, one per `test:qa` invocation) into a machine-parseable JSON report plus a self-contained HTML one (screenshots base64-inlined). One run = a plain report; two+ = a side-by-side comparison. `--run <dir>[:<label>]` per run, `--out <dir>`. Images are thumbnails that open a scrolling lightbox, and a Settings modal switches every image row between the captured variants (`test/qa/image-variants.ts`). |
 | `capture-matrix` | Chromium+WebKit+Firefox fixture matrix over the real serialization modules. No dev server. |
 | `capture-fidelity` | Pixel-diffs the headless capture backend against the client serialize path. Sets `HEADLESS_CAPTURE=1` and a throwaway `NEXTAUTH_SECRET`. |
 | `update-workspace-template` | Runs migrations over `lib/database/workspace-template.json` with placeholder values substituted, restores the `{{TEMPLATE_VAR}}` markers, writes back. Never touches a database — review with `git diff`. |
@@ -208,7 +208,23 @@ orchestrator with no auto-answer anywhere in the app — it clicks "Figure it ou
 Allows navigation requests while waiting for the reply) and `fitViewportToSurface` (Chromium only
 composites iframe content inside the viewport, so a full-artifact element capture of a story must
 grow the viewport to the surface height first — otherwise everything below the fold captures
-black).
+black — called by the recorder, not by specs).
+
+**An image row is captured in every VARIANT, because the report cannot re-capture.**
+`metrics.screenshot(page, flow, name, { target, fileId })` walks the matrix in
+`test/qa/image-variants.ts` — each viewport width (`laptop` 1280, matching
+`devices['Desktop Chrome']`, and `mobile` 390) × each renderer — and writes one image row per
+capture, tagged with its `variant`. The report renders them all and shows one, toggled from its
+settings modal; a row with no variant reads as the default (`laptop:playwright`), so pre-matrix
+runs still render. Width is a **layout** input, not an output scale: the surface tracks its
+container, so capturing wide and downscaling would show a layout no phone reader ever sees.
+The two renderers are deliberately different mechanisms — `playwright` is
+`locator.screenshot()` (what Chromium composited), `download` is the APP's own
+`captureFileViewBlob` reached through `window.__MX_CAPTURE_FILE__`
+(`lib/screenshot/e2e-capture.ts`, installed under the same gate as `window.__MX_STORE__`). The
+`download` renderer is **skipped without `fileId`**: it needs a `[data-file-id]` view to capture.
+Every capture is best-effort — a variant that throws is warned and omitted, because
+instrumentation must never fail the flow it measures.
 
 **QA workspace provisioning (`test/qa/provision.setup.ts`).** Env-gated head of the setup chain:
 a no-op unless `QA_PROVISION_WORKSPACE` is set, in which case it registers a FRESH workspace
@@ -430,6 +446,7 @@ built from the repository root**, not from `docs/`.
 | Add a faux-LLM browser E2E spec | `frontend/test/e2e/` (+ `frontend/test/flows/e2e-faux.ts`) |
 | Add a real-LLM QA flow | `frontend/test/qa/flows.ts` (import `test` from here, not `@playwright/test`) |
 | Add a measured QA flow (metrics + report) | `frontend/test/qa/metrics.ts` (import `test` from here; name the spec `*.eval.spec.ts`) |
+| Add an image size or renderer to the report toggle | `frontend/test/qa/image-variants.ts` (both sides read it) |
 | Merge QA metrics runs into a report | `frontend/scripts/qa-report.ts` |
 | Provision a fresh workspace before QA | `frontend/test/qa/provision.setup.ts` (gated on `QA_PROVISION_WORKSPACE`) |
 | Allow a known-benign console error in QA | `frontend/test/qa/console-guard.ts` |

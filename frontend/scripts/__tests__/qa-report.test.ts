@@ -8,6 +8,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { mergeRuns, renderHtml, type RunData } from '../qa-report';
+import { DEFAULT_IMAGE_VARIANT, variantKey } from '../../test/qa/image-variants';
 
 const runA: RunData = {
   meta: { label: 'run-a', target: 'https://a.example' },
@@ -57,7 +58,26 @@ describe('mergeRuns', () => {
 
     const chat = merged.flows.find((f) => f.flow === 'Chat Question')!;
     const image = chat.metrics.find((m) => m.metric === 'conversation')!;
-    expect(image.values).toEqual(['screens/chat.png', null]);
+    // An image row with no recorded variant reads as the default one, so a run
+    // captured before the variant matrix existed still renders.
+    expect(image.values).toEqual([{ [variantKey(DEFAULT_IMAGE_VARIANT)]: 'screens/chat.png' }, null]);
+  });
+
+  it('collects an image row captured in several variants into one keyed set', () => {
+    const run: RunData = {
+      meta: { label: 'variants', target: 'local' },
+      rows: [
+        { flow: 'Story Creation', metric: 'story', value: 'screens/s-laptop-pw.png', kind: 'image', variant: { size: 'laptop', renderer: 'playwright' } },
+        { flow: 'Story Creation', metric: 'story', value: 'screens/s-laptop-dl.png', kind: 'image', variant: { size: 'laptop', renderer: 'download' } },
+        { flow: 'Story Creation', metric: 'story', value: 'screens/s-mobile-pw.png', kind: 'image', variant: { size: 'mobile', renderer: 'playwright' } },
+      ],
+    };
+    const image = mergeRuns([run]).flows[0].metrics[0];
+    expect(image.values[0]).toEqual({
+      'laptop:playwright': 'screens/s-laptop-pw.png',
+      'laptop:download': 'screens/s-laptop-dl.png',
+      'mobile:playwright': 'screens/s-mobile-pw.png',
+    });
   });
 });
 
@@ -81,5 +101,45 @@ describe('renderHtml', () => {
     expect(html).toContain(`data:image/png;base64,${png.toString('base64')}`);
     // The run that has no image for the row renders a placeholder, not a broken tag.
     expect(html).toContain('—');
+  });
+
+  it('emits one img per captured variant, tagged so the settings toggle can switch between them', () => {
+    const run: RunData = {
+      meta: { label: 'variants', target: 'local' },
+      rows: [
+        { flow: 'Story Creation', metric: 'story', value: 'a.png', kind: 'image', variant: { size: 'laptop', renderer: 'playwright' } },
+        { flow: 'Story Creation', metric: 'story', value: 'b.png', kind: 'image', variant: { size: 'mobile', renderer: 'download' } },
+      ],
+    };
+    const html = renderHtml(mergeRuns([run]), { resolveImage: (_c, rel) => Buffer.from(rel) });
+    expect(html).toContain('data-variant="laptop:playwright"');
+    expect(html).toContain('data-variant="mobile:download"');
+    expect(html).toContain(`data:image/png;base64,${Buffer.from('a.png').toString('base64')}`);
+    expect(html).toContain(`data:image/png;base64,${Buffer.from('b.png').toString('base64')}`);
+  });
+
+  it('still renders an image value from an older report.json (a bare path, no variants)', () => {
+    const legacy = {
+      columns: [{ label: 'old', target: 'local' }],
+      flows: [{ flow: 'F', metrics: [{ metric: 'story', kind: 'image' as const, values: ['screens/old.png'] }] }],
+    };
+    const html = renderHtml(legacy, { resolveImage: () => Buffer.from('old-bytes') });
+    expect(html).toContain('data-variant="laptop:playwright"');
+    expect(html).toContain(`data:image/png;base64,${Buffer.from('old-bytes').toString('base64')}`);
+  });
+
+  it('renders the settings control, its Size/Renderer toggles, and the lightbox', () => {
+    const html = renderHtml(mergeRuns([runA]), { resolveImage: () => Buffer.from('x') });
+    // The settings box and the two toggle groups it opens.
+    expect(html).toContain('aria-label="Open report settings"');
+    expect(html).toContain('aria-label="Image size"');
+    expect(html).toContain('aria-label="Image renderer"');
+    // Defaults: laptop + playwright, i.e. exactly what the old report showed.
+    expect(html).toContain('value="laptop" checked');
+    expect(html).toContain('value="playwright" checked');
+    // Lightbox: thumbnails open it, and it can escape the data: URL restriction.
+    expect(html).toContain('aria-label="Close image preview"');
+    expect(html).toContain('aria-label="Open image in new tab"');
+    expect(html).toContain('createObjectURL');
   });
 });

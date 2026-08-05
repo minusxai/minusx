@@ -230,7 +230,10 @@ observer is bound to the top realm and goes deaf inside the surface iframe. Widt
   `[data-mx-theme-host]`, never `:root` — don't resolve.
 - **Tests**: `test/qa/*` and `test/e2e/*` drive this tree by `aria-label` only and read state via
   `window.__MX_STORE__`, which `app-shell/ReduxProvider.tsx` assigns only when the build-time
-  `E2E_MODE` flag is set or the runtime QA opt-in (`?e2e=<secret>`) passes.
+  `E2E_MODE` flag is set or the runtime QA opt-in (`?e2e=<secret>`) passes. `E2eCaptureBridge.tsx`
+  rides the same gate to install the app's own capture on `window` for measured QA flows
+  (`lib/screenshot/e2e-capture.ts`) — a null-rendering sibling, gated in an effect rather than by a
+  conditional render so SSR and hydration agree.
   A control without an `aria-label` is untestable by policy — add the label rather than working
   around it.
 

@@ -14,7 +14,7 @@
 import {
   expect, findFile, openFileByClick, openSideChat, sendChat, saveDraft,
   awaitReplyAnsweringClarifications, assertTutorialMode, latestConversationId, conversationUsage,
-  hasLlm, fitViewportToSurface,
+  hasLlm,
 } from './flows';
 import { test } from './metrics';
 
@@ -117,14 +117,14 @@ test.describe('eval: story creation', () => {
         },
       )
       .toEqual({ interpreted: true, markupAsText: false });
-    // Capture the story IFRAME ELEMENT with the viewport grown to fit it:
-    // Chromium paints iframe content only inside the viewport, so this is
-    // what makes the FULL story render into one image (and any lazily
-    // mounted sections become visible and mount). Restore afterwards.
-    const surface = page.locator('iframe[title="Story document"]');
-    const restore = await fitViewportToSurface(page, surface);
-    await page.waitForTimeout(5_000); // relayout + section mount + charts settle
-    await metrics.screenshot(page, FLOW, 'story', surface);
-    await restore();
+    // Capture the artifact in every image variant — laptop and mobile widths,
+    // Playwright's element screenshot and the app's own capture. The recorder
+    // owns the viewport fitting and the settle waits; the report toggles
+    // between the results (`test/qa/image-variants.ts`). `fileId` is what makes
+    // the app-capture renderer possible: it needs a `[data-file-id]` view.
+    await metrics.screenshot(page, FLOW, 'story', {
+      target: page.locator('iframe[title="Story document"]'),
+      fileId: story!.id,
+    });
   });
 });

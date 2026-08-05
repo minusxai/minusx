@@ -121,7 +121,17 @@ to `serialize-element.ts`, then crops the top band to the 1200×630 OG aspect.
 Chromium/WebKit/Firefox; `scripts/headless-capture-fidelity.ts` pixel-diffs the Playwright screenshot
 against the client serialize path under an explicit threshold — that diff is what keeps the two
 capture mechanisms from forking, because the Playwright backend uses `locator.screenshot()` rather
-than calling `serializeStorySvg` in-page (the app bundle does not expose it on `window`).
+than calling `serializeStorySvg` in-page (the app bundle does not expose the serializer on
+`window`).
+
+**QA reports (`test/qa/metrics.ts`).** A measured QA flow captures its artifact BOTH ways so the
+report can toggle between them, and the app-side one goes through `e2e-capture.ts`: it installs
+`captureFileForE2e` on `window` under `E2E_CAPTURE_KEY` (`constants.ts`), gated exactly like
+`window.__MX_STORE__` — the build-time E2E flag or the QA runtime opt-in (`?e2e=<secret>`), mounted
+by `components/app-shell/E2eCaptureBridge.tsx`. It is one function wide on purpose: it forwards to
+`captureFileViewBlob` and adds nothing but the Blob → data: URL conversion a `page.evaluate`
+boundary forces, so what the report shows is the product's own image and not a QA lookalike. This
+is the ONLY thing this module puts on `window`, and it is read-only.
 
 ## Gotchas
 
@@ -170,6 +180,7 @@ than calling `serializeStorySvg` in-page (the app bundle does not expose it on `
 | Change what the agent sees on send | `frontend/lib/screenshot/app-state-screenshot.ts` |
 | Change marker cadence / the `<Viewport>` pointer | `frontend/lib/screenshot/page-markers.ts`, `frontend/lib/screenshot/read-viewport.ts`, `frontend/lib/screenshot/draw-markers.ts` |
 | Agent image size/quality constants | `frontend/lib/screenshot/constants.ts` |
+| Let a QA run capture the app's own image | `frontend/lib/screenshot/e2e-capture.ts` (+ `frontend/components/app-shell/E2eCaptureBridge.tsx`) |
 | Server-side story image (Slack, reports, eval) | `frontend/lib/headless-capture/index.server.ts`, `frontend/lib/headless-capture/playwright-backend.server.ts` |
 | Share-card look or caching | `frontend/lib/og/og-cards.tsx`, `frontend/lib/og/og-image.tsx`, `frontend/lib/og/og-helpers.ts` (docs: `frontend/lib/CLAUDE.md`) |
 
