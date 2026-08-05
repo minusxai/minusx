@@ -38,10 +38,12 @@ export const DEFAULT_IMAGE_VARIANT: ImageVariant = { size: 'laptop', renderer: '
  * bands a document lays out in — capturing wide and downscaling would show a
  * layout no phone reader ever sees.
  *
- * `laptop` is 1280 because that is `devices['Desktop Chrome']` in
- * `playwright.qa.config.ts` — the width pre-matrix report images on disk were
- * captured at. The default variant is byte-parity with those, not a new
- * baseline.
+ * `laptop` is 1280 because that is `STORY_CANVAS_WIDTH` — the logical canvas a
+ * story is authored against, and the width `lib/headless-capture` renders at
+ * for the same reason. `mobile` is 390 (iPhone-class CSS width). Both are
+ * DEVICE widths, and the capture loads the document chrome-free so the canvas
+ * actually gets them; a capture taken inside the app shell gets whatever the
+ * rails and side chat leave over, which is a different layout entirely.
  */
 export const VIEWPORT_WIDTH_PX: Record<ImageSize, number> = { laptop: 1280, mobile: 390 };
 

@@ -211,20 +211,35 @@ grow the viewport to the surface height first — otherwise everything below the
 black — called by the recorder, not by specs).
 
 **An image row is captured in every VARIANT, because the report cannot re-capture.**
-`metrics.screenshot(page, flow, name, { target, fileId })` walks the matrix in
-`test/qa/image-variants.ts` — each viewport width (`laptop` 1280, matching
-`devices['Desktop Chrome']`, and `mobile` 390) × each renderer — and writes one image row per
-capture, tagged with its `variant`. The report renders them all and shows one, toggled from its
-settings modal; a row with no variant reads as the default (`laptop:playwright`), so pre-matrix
-runs still render. Width is a **layout** input, not an output scale: the surface tracks its
-container, so capturing wide and downscaling would show a layout no phone reader ever sees.
-The two renderers are deliberately different mechanisms — `playwright` is
-`locator.screenshot()` (what Chromium composited), `download` is the APP's own
-`captureFileViewBlob` reached through `window.__MX_CAPTURE_FILE__`
-(`lib/screenshot/e2e-capture.ts`, installed under the same gate as `window.__MX_STORE__`). The
-`download` renderer is **skipped without `fileId`**: it needs a `[data-file-id]` view to capture.
-Every capture is best-effort — a variant that throws is warned and omitted, because
+`metrics.screenshot(page, flow, name, { fileId })` walks the matrix in
+`test/qa/image-variants.ts` — each device width (`laptop` 1280 = `STORY_CANVAS_WIDTH`, `mobile`
+390) × each renderer — and writes one image row per capture, tagged with its `variant`. The report
+renders them all and shows one, toggled from its settings modal; a row with no variant reads as the
+default (`laptop:playwright`), so pre-matrix runs still render. The two renderers are deliberately
+different mechanisms — `playwright` is `locator.screenshot()` (what Chromium composited),
+`download` is the APP's own `captureFileViewBlob` reached through `window.__MX_CAPTURE_FILE__`
+(`lib/screenshot/e2e-capture.ts`, installed under the same gate as `window.__MX_STORE__`).
+Every capture is best-effort — a variant that throws or hangs is warned and omitted, because
 instrumentation must never fail the flow it measures.
+
+**Three rules make those images mean "what a reader on that device sees", and each one was
+learned by shipping its violation** (guarded by `test/qa/capture-width.spec.ts`, a no-LLM QA spec):
+
+1. **The document must own the viewport**, so the capture page is `view=contentonly`
+   (`fileCaptureUrl`) and is RELOADED per width. Captured inside the app shell, the rails and the
+   open side chat left a story **708px of a 1280px window** — a single-column collapse of a
+   four-across layout, i.e. a design no reader is looking at.
+2. **Neither renderer may rescale.** `maxWidth` doesn't only cap the app capture — the raster scale
+   is *derived* from it, so any value but the element's own measured CSS width rescales (the display
+   cap turned a 1184px view into a 1536px image; the device width turned it into 1280). The
+   recorder measures the box first and passes exactly that.
+3. **Both renderers photograph the same box** — `[data-file-id]`, derived from `fileId`, not the
+   surface iframe. Anchoring them differently made every pair disagree on width (1184 vs 1280), so
+   the comparison measured the crop rather than the renderer.
+
+`fileId` is therefore the whole contract for a file: it selects the capture page, anchors both
+renderers, and enables the `download` one (skipped without it — there is no `[data-file-id]` view).
+`target` remains only for a page with no file view.
 
 **QA workspace provisioning (`test/qa/provision.setup.ts`).** Env-gated head of the setup chain:
 a no-op unless `QA_PROVISION_WORKSPACE` is set, in which case it registers a FRESH workspace
@@ -447,6 +462,7 @@ built from the repository root**, not from `docs/`.
 | Add a real-LLM QA flow | `frontend/test/qa/flows.ts` (import `test` from here, not `@playwright/test`) |
 | Add a measured QA flow (metrics + report) | `frontend/test/qa/metrics.ts` (import `test` from here; name the spec `*.eval.spec.ts`) |
 | Add an image size or renderer to the report toggle | `frontend/test/qa/image-variants.ts` (both sides read it) |
+| Guard that captures stay at device width, 1:1 | `frontend/test/qa/capture-width.spec.ts` |
 | Merge QA metrics runs into a report | `frontend/scripts/qa-report.ts` |
 | Provision a fresh workspace before QA | `frontend/test/qa/provision.setup.ts` (gated on `QA_PROVISION_WORKSPACE`) |
 | Allow a known-benign console error in QA | `frontend/test/qa/console-guard.ts` |

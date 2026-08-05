@@ -64,6 +64,21 @@ export function e2eUrl(path: string): string {
 }
 
 /**
+ * A file page with ALL app chrome stripped (`view=contentonly` — no left
+ * sidebar, no top bar, no file header, no right/chat sidebar).
+ *
+ * This is what makes a capture answer "what does this document look like at
+ * width W". On the normal page the surface gets only what the chrome leaves
+ * over — with the side chat open, a 1280 window renders the story at 708px,
+ * which collapses its container-query bands into a layout no reader sees. Here
+ * the surface owns the viewport, so canvas width == viewport width and the
+ * captured layout is the real one for that device width.
+ */
+export function fileCaptureUrl(fileId: number): string {
+  return withParam(e2eUrl(`/f/${fileId}`), 'view=contentonly');
+}
+
+/**
  * Best-effort reset of tutorial + internals modes to the pristine template seed
  * (admin-only). Useful for isolation/mutation where the QA account is an admin; on
  * deployments where it isn't (or the endpoint errors), it's skipped + logged. The
