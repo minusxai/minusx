@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import { setUser } from '@/store/authSlice';
 import { makeStore } from '@/store/store';
-import type { ContextContent } from '@/lib/types';
+import type { ContextContent, UserRole } from '@/lib/types';
 
 const navigationState = vi.hoisted(() => ({ tab: 'skills' }));
 
@@ -79,7 +79,17 @@ const CONTENT = {
 function renderEditor(
   tab: 'skills' | 'agents',
   content: ContextContent = CONTENT,
-  { enableCustomAgents = tab === 'agents', devMode = false }: { enableCustomAgents?: boolean; devMode?: boolean } = {},
+  {
+    enableCustomAgents = tab === 'agents',
+    devMode = false,
+    role = 'editor',
+    standaloneTab,
+  }: {
+    enableCustomAgents?: boolean;
+    devMode?: boolean;
+    role?: UserRole;
+    standaloneTab?: 'agents' | 'skills';
+  } = {},
 ) {
   navigationState.tab = tab;
   const onChange = vi.fn();
@@ -91,7 +101,7 @@ function renderEditor(
     id: 1,
     email: 'editor@minusx.ai',
     name: 'Editor',
-    role: 'editor',
+    role,
     mode: 'org',
   }));
   function ControlledEditor() {
@@ -116,6 +126,7 @@ function renderEditor(
           setEditMode(nextEditMode);
         }}
         file={{ id: 1, path: '/org/context.json', type: 'context' }}
+        standaloneTab={standaloneTab}
       />
     );
   }
@@ -211,6 +222,51 @@ describe('ContextEditorV2 add actions outside edit mode', () => {
 
     expect(screen.getByRole('tab', { name: /Agents/ })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByLabelText('Add agent')).toBeInTheDocument();
+  });
+
+  it('keeps the context Agents page read-only for viewers', () => {
+    renderEditor('agents', CONTENT, { role: 'viewer' });
+
+    expect(screen.queryByLabelText('Edit')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Add agent')).not.toBeInTheDocument();
+  });
+
+  it('renders only the standalone Agents surface for viewers and keeps Play available', () => {
+    renderEditor('agents', {
+      ...CONTENT,
+      agents: [{
+        name: 'sales_helper',
+        displayName: 'Sales helper',
+        description: 'Answers sales questions.',
+        prompt: 'Help with sales.',
+        promptMode: 'append',
+        preloadSkills: [],
+        includeSkills: [],
+        enabled: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        createdBy: 1,
+      }],
+    }, { role: 'viewer', standaloneTab: 'agents' });
+
+    expect(screen.getByRole('heading', { name: 'Agents' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Explore with Sales helper')).toHaveAttribute(
+      'href',
+      '/explore?agent=sales_helper&context=%2Forg%2Fcontext.json&contextVersion=1',
+    );
+    expect(screen.queryByLabelText('Edit Agents')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Add agent')).not.toBeInTheDocument();
+  });
+
+  it('renders only the standalone Skills surface and lets editors enter edit mode', () => {
+    const { onEditModeChange } = renderEditor('skills', CONTENT, { standaloneTab: 'skills' });
+
+    expect(screen.getByRole('heading', { name: 'Skills' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Edit Skills'));
+    expect(onEditModeChange).toHaveBeenCalledWith(true);
+    expect(screen.getByLabelText('Add skill')).toBeInTheDocument();
   });
 
   it('shows Add agent and enters edit mode before opening the agent builder', () => {

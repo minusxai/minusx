@@ -67,7 +67,8 @@ tier — one LLM-visible `ReadFiles`, two implementations.
 ## Skills
 
 `agents/analyst/skills.ts` maps page type → preloaded skills (`PAGE_SKILL_MAP`), builds the
-`LoadSkill` catalog (`buildSkillsCatalog`, which takes the optional custom-agent `allowlist`), and
+`LoadSkill` catalog (`buildSkillsCatalog`, whose optional custom-agent allowlist applies only to
+user-defined skills), and
 renders preloaded skill bodies. `agents/skill-content.ts` is the single sanctioned skill loader: it
 augments the prompt tree with `SCHEMA_TEMPLATE_VARS` from `lib/validation/atlas-json-schemas` so a
 skill's `{schema_question}` placeholder renders the **live** TypeBox content schema. Never call
@@ -110,14 +111,16 @@ drops `{intro}` and `{guidelines}` and keeps everything an author cannot hand-wr
 depend on: app structure, schema, context docs, tools, file-state schema, preloaded skills,
 connection, home folder.
 
-Skill exposure is exact, and this is the counterintuitive part. `resolveCustomAgentFromContext` always
-emits `skillAllowlist` = the de-duplicated union of `includeSkills` and `preloadSkills`, so on the
-real server path it is never `undefined`. A present allowlist means `getPreloadedSkillNames` runs with
-`includePageDefaults: false`, so `PAGE_SKILL_MAP` contributes nothing and an agent that lists no
-skills is told "No additional skills are available for this turn." A custom agent's skills are what
-its author chose, plus nothing. The allowlist is enforced **twice** — the `LoadSkill` catalog omits
-non-allowed names, and `LoadSkill.run()` returns an `isError` before resolving anything — because a
-model that never saw a name can still guess it. `gradeOverride` is a **default**, not a lock: an
+Skill ownership has a hard boundary. System skills are not agent-author configuration:
+`getPreloadedSkillNames` always applies `PAGE_SKILL_MAP` (plus navigation), and the remaining system
+skills stay in the `LoadSkill` catalog exactly as they do for the default analyst. Agent authors
+configure only enabled user-defined Knowledge Base skills: `preloadSkills` injects their bodies on
+every turn, while `includeSkills` makes them available to `LoadSkill` on demand.
+`resolveCustomAgentFromContext` therefore filters both arrays through the enabled user-skill catalog
+and emits `skillAllowlist` as their de-duplicated union; legacy stored system names and missing or
+disabled user skills are ignored. The user allowlist is enforced **twice** — `buildSkillsCatalog`
+omits non-allowed user names, and `LoadSkill.run()` rejects a guessed user skill outside it after
+first checking whether the name is a system skill. `gradeOverride` is a **default**, not a lock: an
 explicit grade picked in the composer always wins.
 
 ## Interactions with other areas

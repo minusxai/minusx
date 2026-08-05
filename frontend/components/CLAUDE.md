@@ -403,10 +403,25 @@ cold cache repainted fallback text on every single edit.
 from `fullAgents`, and a raw-JSON variant. `components/context/AgentBuilder.tsx` is a four-step builder
 (Identity → Prompt → Skills → Review) that **saves only at the end**, and whose Review step renders the
 very component the saved card uses, `components/context/AgentReadView.tsx` — so what an author approves
-is byte-for-byte what is stored, with no second formatting path to drift. The feature is alpha-gated on
+is byte-for-byte what is stored, with no second formatting path to drift. The Skills step lists only
+enabled user-defined Knowledge Base skills and sanitizes legacy system names out of edited definitions;
+system/page skills are intentionally invisible because the runtime loads them from `PAGE_SKILL_MAP`.
+The feature is alpha-gated on
 `uiSlice.enableCustomAgents`: with the flag off the editor tab is not rendered *and* the chat picker
 receives an empty option list, so no `custom_agent` pointer is ever sent. The gate is on both the
-authoring and the sending side, not just the visible one.
+authoring and the sending side, not just the visible one. When the gate is on, `app-shell/Sidebar.tsx`
+adds Agents to the Analytics navigation for every role; Skills is available there independently of the
+agents gate for editors/admins only. Both links carry the nearest context selected by `selectContextFromPath`, the same selector
+used by chat. `components/context/StandaloneContextPage.tsx` owns the `/agents` and `/skills` route
+resolution and passes `standaloneTab` through `ContextContainerV2` to `ContextEditorV2`, which reuses the
+existing `AgentsTabContent` / `SkillsTabContent` bodies without the Knowledge Base file header or tab
+strip. Each standalone page reuses the file-style `Breadcrumb`, derives its ancestor folders from the
+resolved context path, and replaces the context filename with `Agents` or `Skills`. Viewers see only
+enabled agents and keep their Play actions, but cannot enter context edit mode;
+their cards omit authoring-only prompt/model settings and use the solid Play treatment. Draft agents
+remain visible to editors/admins for management and never receive a Play action. The
+standalone Skills surface rejects viewers even if they follow its URL directly. Editors and admins get
+the compact Edit/Save/Cancel controls. The ordinary context-file route still renders the full tabbed editor.
 
 **`components/settings/GatewayBillingCard.tsx` renders `null`, not an empty card, when there is no
 gateway.** A self-hosted install is not in an error state — it simply has no billing — and an empty

@@ -50,6 +50,9 @@ const content: ContextContent = {
   skills: [{
     name: 'kb_pricing', description: 'pricing kb', content: 'body', enabled: true,
     createdAt: '', updatedAt: '', createdBy: 1,
+  }, {
+    name: 'kb_sales', description: 'sales kb', content: 'body', enabled: true,
+    createdAt: '', updatedAt: '', createdBy: 1,
   }],
 };
 
@@ -65,7 +68,6 @@ function renderTab(overrides: Partial<React.ComponentProps<typeof AgentsTabConte
     onChange: vi.fn(),
     canAddAgent: true,
     canManageAgents: true,
-    systemSkills: [{ name: 'dashboards', description: 'dash' }, { name: 'alerts', description: 'alerts' }],
     onStartAddAgent,
     onAddAgent,
     onUpdateAgent,
@@ -96,7 +98,7 @@ describe('AgentsTabContent — read view', () => {
     expect(card).toHaveTextContent('SALES_PROMPT_BODY');
     expect(card).toHaveTextContent(/extends default agent prompt/i);
     expect(card).toHaveTextContent('kb_pricing');   // preloaded skills section
-    expect(card).toHaveTextContent('dashboards');   // available skills section
+    expect(card).not.toHaveTextContent('dashboards'); // legacy system selection is hidden
     // inherited agents render read-only
     expect(screen.getByLabelText('Inherited agent inherited_agent')).toBeInTheDocument();
   });
@@ -116,6 +118,9 @@ describe('AgentsTabContent — read view', () => {
       'href',
       '/explore?agent=ceo_agent&context=%2Forg%2Fcontext.json',
     );
+    expect(
+      screen.getByLabelText('Explore with CEO Agent').querySelector('svg'),
+    ).toHaveAttribute('fill', 'currentColor');
   });
 
   it('caps long card instructions with an ellipsis while keeping settings visible', () => {
@@ -135,12 +140,17 @@ describe('AgentsTabContent — read view', () => {
   });
 
   it('keeps skill chips to two rows and summarizes the remainder', () => {
+    const skillNames = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
     renderTab({
       content: {
         ...content,
+        skills: skillNames.map((name) => ({
+          name, description: name, content: name, enabled: true,
+          createdAt: '', updatedAt: '', createdBy: 1,
+        })),
         agents: [mkAgent({
           name: 'skill_heavy_agent',
-          preloadSkills: ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'],
+          preloadSkills: skillNames,
         })],
       },
     });
@@ -158,15 +168,15 @@ describe('AgentsTabContent — read view', () => {
         ...content,
         agents: [mkAgent({
           name: 'deduped_agent',
-          preloadSkills: ['questions'],
-          includeSkills: ['questions', 'dashboards'],
+          preloadSkills: ['kb_pricing'],
+          includeSkills: ['kb_pricing', 'kb_sales'],
         })],
       },
     });
 
     const cardText = screen.getByLabelText('Agent deduped_agent').textContent ?? '';
-    expect(cardText.match(/questions/g)).toHaveLength(1);
-    expect(cardText).toContain('dashboards');
+    expect(cardText.match(/kb_pricing/g)).toHaveLength(1);
+    expect(cardText).toContain('kb_sales');
   });
 
   it('shows no available or preloaded skills when both selections are empty', () => {
@@ -199,9 +209,9 @@ describe('AgentsTabContent — builder', () => {
     fireEvent.click(screen.getByLabelText('Prompt mode replace'));
     fireEvent.click(screen.getByLabelText('Builder next'));
 
-    // Step 3: Skills — preload a user skill, include a system skill
+    // Step 3: Skills — configure only user-defined skills
     fireEvent.click(screen.getByLabelText('Preload skill kb_pricing'));
-    fireEvent.click(screen.getByLabelText('Include skill dashboards'));
+    fireEvent.click(screen.getByLabelText('Include skill kb_sales'));
     fireEvent.click(screen.getByLabelText('Builder next'));
 
     // Step 4: Review shows the read view; nothing saved yet
@@ -218,7 +228,7 @@ describe('AgentsTabContent — builder', () => {
       prompt: 'GROWTH_PROMPT',
       promptMode: 'replace',
       preloadSkills: ['kb_pricing'],
-      includeSkills: ['dashboards'],
+      includeSkills: ['kb_sales'],
     });
   });
 
@@ -257,7 +267,12 @@ describe('AgentsTabContent — builder', () => {
     fireEvent.click(screen.getByLabelText('Save agent'));
     expect(onUpdateAgent).toHaveBeenCalledTimes(1);
     expect(onUpdateAgent.mock.calls[0][0]).toBe(0); // index of sales_helper
-    expect(onUpdateAgent.mock.calls[0][1]).toMatchObject({ name: 'sales_helper', displayName: 'Sales Helper' });
+    expect(onUpdateAgent.mock.calls[0][1]).toMatchObject({
+      name: 'sales_helper',
+      displayName: 'Sales Helper',
+      preloadSkills: ['kb_pricing'],
+      includeSkills: [],
+    });
   });
 
   it('edits Published/Draft status inside the builder without saving early', async () => {
@@ -320,17 +335,18 @@ describe('AgentsTabContent — builder', () => {
     expect(screen.getByLabelText('Agent prompt')).toHaveValue('SALES_PROMPT_BODY');
   });
 
-  it('labels skill provenance and filters the skill card catalog', () => {
+  it('shows and filters only user-defined skills', () => {
     renderTab();
     fireEvent.click(screen.getByLabelText('Edit agent sales_helper'));
     fireEvent.click(screen.getByLabelText('Builder step Skills'));
 
     expect(screen.getByLabelText('Skill kb_pricing')).toHaveTextContent('User skill');
-    expect(screen.getByLabelText('Skill dashboards')).toHaveTextContent('System skill');
-
-    fireEvent.change(screen.getByLabelText('Search skills'), { target: { value: 'alerts' } });
-    expect(screen.getByLabelText('Skill alerts')).toBeInTheDocument();
+    expect(screen.getByLabelText('Skill kb_sales')).toHaveTextContent('User skill');
     expect(screen.queryByLabelText('Skill dashboards')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Skill alerts')).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Search skills'), { target: { value: 'sales' } });
+    expect(screen.getByLabelText('Skill kb_sales')).toBeInTheDocument();
     expect(screen.queryByLabelText('Skill kb_pricing')).not.toBeInTheDocument();
   });
 
@@ -339,15 +355,16 @@ describe('AgentsTabContent — builder', () => {
     fireEvent.click(screen.getByLabelText('Edit agent sales_helper'));
     fireEvent.click(screen.getByLabelText('Builder step Skills'));
 
-    expect(screen.getByLabelText('Include skill dashboards')).toHaveAttribute('aria-checked', 'true');
-    fireEvent.click(screen.getByLabelText('Preload skill dashboards'));
-    expect(screen.getByLabelText('Include skill dashboards')).toHaveAttribute('aria-checked', 'false');
-    expect(screen.getByLabelText('Preload skill dashboards')).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(screen.getByLabelText('Include skill kb_sales'));
+    expect(screen.getByLabelText('Include skill kb_sales')).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(screen.getByLabelText('Preload skill kb_sales'));
+    expect(screen.getByLabelText('Include skill kb_sales')).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByLabelText('Preload skill kb_sales')).toHaveAttribute('aria-checked', 'true');
 
-    fireEvent.click(screen.getByLabelText('Exclude skill dashboards'));
-    expect(screen.getByLabelText('Exclude skill dashboards')).toHaveAttribute('aria-checked', 'true');
-    expect(screen.getByLabelText('Include skill dashboards')).toHaveAttribute('aria-checked', 'false');
-    expect(screen.getByLabelText('Preload skill dashboards')).toHaveAttribute('aria-checked', 'false');
+    fireEvent.click(screen.getByLabelText('Exclude skill kb_sales'));
+    expect(screen.getByLabelText('Exclude skill kb_sales')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByLabelText('Include skill kb_sales')).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByLabelText('Preload skill kb_sales')).toHaveAttribute('aria-checked', 'false');
   });
 
   it('blocks jumping ahead while prerequisites are missing (new agent)', () => {
@@ -366,6 +383,45 @@ describe('AgentsTabContent — builder', () => {
     expect(screen.queryByLabelText('Add agent')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Edit agent sales_helper')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Delete agent sales_helper')).not.toBeInTheDocument();
+  });
+
+  it('shows viewers only enabled local and inherited agents', () => {
+    renderTab({
+      canAddAgent: false,
+      canManageAgents: false,
+      content: {
+        ...content,
+        agents: [
+          mkAgent({ name: 'published_local' }),
+          mkAgent({ name: 'draft_local', enabled: false }),
+        ],
+        fullAgents: [
+          mkAgent({ name: 'published_inherited' }),
+          mkAgent({ name: 'draft_inherited', enabled: false }),
+        ],
+      },
+    });
+
+    expect(screen.getByLabelText('Agent published_local')).toBeInTheDocument();
+    expect(screen.getByLabelText('Agent published_local')).not.toHaveTextContent(/settings/i);
+    expect(screen.queryByLabelText('Agent draft_local')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Inherited agent published_inherited')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Inherited agent draft_inherited')).not.toBeInTheDocument();
+  });
+
+  it('keeps disabled agents visible to editors outside edit mode', () => {
+    renderTab({
+      canAddAgent: true,
+      canManageAgents: false,
+      content: {
+        ...content,
+        agents: [mkAgent({ name: 'draft_local', enabled: false })],
+      },
+    });
+
+    expect(screen.getByLabelText('Agent draft_local')).toHaveTextContent(/draft/i);
+    expect(screen.getByLabelText('Agent draft_local')).toHaveTextContent(/settings/i);
+    expect(screen.queryByLabelText('Explore with Draft Local')).not.toBeInTheDocument();
   });
 
   it('shows Add agent before edit mode while keeping edit and delete controls hidden', () => {

@@ -15,7 +15,7 @@ export interface ResolvedCustomAgent {
   name: string;
   prompt: string;
   promptMode: 'append' | 'replace';
-  /** includeSkills ∪ preloadSkills when includeSkills was non-empty; undefined = unrestricted catalog. */
+  /** Exact allowlist of user-defined skills. System skills remain page-managed. */
   skillAllowlist?: string[];
   gradeOverride?: LlmGrade;
 }

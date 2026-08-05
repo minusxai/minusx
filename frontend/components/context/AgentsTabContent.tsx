@@ -29,7 +29,6 @@ interface AgentsTabContentProps {
   onChange: (updates: Partial<ContextContent>) => void;
   canAddAgent: boolean;
   canManageAgents: boolean;
-  systemSkills: { name: string; description: string }[];
   mentions?: MentionsConfig;
   onStartAddAgent: () => void;
   onAddAgent: (draft: AgentDraft) => void;
@@ -47,7 +46,6 @@ export function AgentsTabContent({
   onChange,
   canAddAgent,
   canManageAgents,
-  systemSkills,
   mentions,
   onStartAddAgent,
   onAddAgent,
@@ -58,6 +56,12 @@ export function AgentsTabContent({
   const [builder, setBuilder] = useState<BuilderState>(null);
   const agents = content.agents || [];
   const inheritedAgents = content.fullAgents || [];
+  // Draft agents are authoring state. Viewers only see runnable, published
+  // agents; editors/admins retain the full roster so they can publish drafts.
+  const visibleAgentEntries = agents
+    .map((agent, index) => ({ agent, index }))
+    .filter(({ agent }) => canAddAgent || agent.enabled);
+  const visibleInheritedAgents = inheritedAgents.filter(agent => canAddAgent || agent.enabled);
   const userSkills = mergeSkillsByName(content.fullSkills || [], content.skills || [])
     .filter((skill) => skill.enabled)
     .map((skill) => ({
@@ -65,6 +69,12 @@ export function AgentsTabContent({
       displayName: getUserSkillDisplayName(skill),
       description: skill.description,
     }));
+  const userSkillNames = new Set(userSkills.map((skill) => skill.name));
+  const withUserSkillsOnly = (agent: AgentEntry): AgentEntry => ({
+    ...agent,
+    preloadSkills: agent.preloadSkills.filter((name) => userSkillNames.has(name)),
+    includeSkills: agent.includeSkills.filter((name) => userSkillNames.has(name)),
+  });
 
   // React's prop-derived state adjustment: page-level Cancel flips this flag
   // outside the tab, so clear any nested builder in the same render cycle.
@@ -90,10 +100,9 @@ export function AgentsTabContent({
           {builder ? (
             <AgentBuilder
               initial={builder.mode === 'edit' ? {
-                ...agents[builder.index],
+                ...withUserSkillsOnly(agents[builder.index]),
                 displayName: getUserAgentDisplayName(agents[builder.index]),
               } : undefined}
-              systemSkills={systemSkills}
               userSkills={userSkills}
               existingAgentNames={[
                 ...agents
@@ -113,7 +122,7 @@ export function AgentsTabContent({
                     <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.12em" color="fg.muted">
                       Custom agents
                     </Text>
-                    <Badge size="xs" colorPalette="teal" variant="subtle">{agents.length}</Badge>
+                    <Badge size="xs" colorPalette="teal" variant="subtle">{visibleAgentEntries.length}</Badge>
                   </HStack>
                   <Text fontSize="sm" color="fg.subtle" mt={1}>
                     Personas available to everyone using this Knowledge Base.
@@ -137,9 +146,9 @@ export function AgentsTabContent({
                 )}
               </HStack>
 
-              {agents.length > 0 && (
+              {visibleAgentEntries.length > 0 && (
                 <SimpleGrid aria-label="Agent roster" columns={{ base: 1, xl: 2 }} gap={4} alignItems="stretch">
-                  {agents.map((agent, index) => (
+                  {visibleAgentEntries.map(({ agent, index }) => (
                     <Box
                       key={`agent-${index}`}
                       role="group"
@@ -160,10 +169,11 @@ export function AgentsTabContent({
                       }}
                     >
                       <AgentReadView
-                        agent={agent}
+                        agent={withUserSkillsOnly(agent)}
                         compact
                         muted={!agent.enabled}
-                        footerEnd={(
+                        showSettings={canAddAgent}
+                        footerEnd={agent.enabled ? (
                           <Button
                             asChild
                             aria-label={`Explore with ${getUserAgentDisplayName(agent)}`}
@@ -180,10 +190,10 @@ export function AgentsTabContent({
                             transition="opacity 160ms ease"
                           >
                             <Link href={getAgentExploreHref(agent.name)}>
-                              <Icon as={LuPlay} boxSize={4} ml={0.5} />
+                              <LuPlay size={16} fill="currentColor" strokeWidth={0} style={{ marginLeft: 2 }} />
                             </Link>
                           </Button>
-                        )}
+                        ) : undefined}
                         headerEnd={(
                           <HStack
                             align="center"
@@ -271,7 +281,7 @@ export function AgentsTabContent({
                   ))}
                 </SimpleGrid>
               )}
-              {agents.length === 0 && (
+              {visibleAgentEntries.length === 0 && (
                 <Box
                   border="1px dashed"
                   borderColor="border.default"
@@ -297,14 +307,18 @@ export function AgentsTabContent({
                   >
                     AI
                   </Box>
-                  <Text fontSize="md" fontWeight="700">Create your first specialist</Text>
+                  <Text fontSize="md" fontWeight="700">
+                    {canAddAgent ? 'Create your first specialist' : 'No published agents yet'}
+                  </Text>
                   <Text fontSize="sm" color="fg.muted" mt={1} maxW="520px" mx="auto">
-                    Give a focused persona its own instructions and skill set. It will appear in the agent picker for this Knowledge Base.
+                    {canAddAgent
+                      ? 'Give a focused persona its own instructions and skill set. It will appear in the agent picker for this Knowledge Base.'
+                      : 'Published specialists for this Knowledge Base will appear here.'}
                   </Text>
                 </Box>
               )}
 
-              {inheritedAgents.length > 0 && (
+              {visibleInheritedAgents.length > 0 && (
                 <Box borderTop="1px solid" borderColor="border.muted" pt={5} mt={2}>
                   <HStack gap={2} mb={3}>
                     <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.12em" color="fg.muted">
@@ -313,7 +327,7 @@ export function AgentsTabContent({
                     <Badge size="xs" colorPalette="gray" variant="subtle">Read only</Badge>
                   </HStack>
                   <SimpleGrid columns={{ base: 1, xl: 2 }} gap={3}>
-                    {inheritedAgents.map((agent) => (
+                    {visibleInheritedAgents.map((agent) => (
                       <HStack
                         key={agent.name}
                         aria-label={`Inherited agent ${agent.name}`}
@@ -359,7 +373,7 @@ export function AgentsTabContent({
           <Editor
             height="600px"
             language="json"
-            value={JSON.stringify(content.agents || [], null, 2)}
+            value={JSON.stringify(canAddAgent ? agents : visibleAgentEntries.map(({ agent }) => agent), null, 2)}
             onChange={(value) => {
               try {
                 const parsed = JSON.parse(value || '[]');

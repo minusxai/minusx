@@ -34,6 +34,7 @@ interface ContextContainerV2Props {
   fileId: FileId;
   mode?: FileViewMode;
   defaultFolder?: string;
+  standaloneTab?: 'agents' | 'skills';
 }
 
 /**
@@ -45,6 +46,7 @@ export default function ContextContainerV2({
   fileId,
   mode = 'view',
   defaultFolder = '/org',
+  standaloneTab,
 }: ContextContainerV2Props) {
   const router = useRouter();
   const dispatch = useAppDispatch();
@@ -452,6 +454,7 @@ export default function ContextContainerV2({
         selectedRunId={selectedRunId}
         onRunAll={(opts) => triggerRun(opts)}
         onSelectRun={selectRun}
+        standaloneTab={standaloneTab}
       />
 
       {/* Unsaved Changes Confirmation Dialog */}

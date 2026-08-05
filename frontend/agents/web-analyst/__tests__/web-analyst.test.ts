@@ -134,7 +134,7 @@ describe('LoadSkill tool', () => {
     expect(payload.success).toBe(false);
   });
 
-  it('rejects skills outside a custom agent empty allowlist', async () => {
+  it('does not let a custom-agent user allowlist block system skills', async () => {
     const orch = new Orchestrator([], []);
     const customCtx = {
       ...ctx,
@@ -146,6 +146,25 @@ describe('LoadSkill tool', () => {
       },
     };
     const tool = new LoadSkill(orch, { name: 'parameters' }, customCtx);
+    const res = await tool.run();
+    const payload = payloadOf((res as { content: { type: string }[] }).content);
+    expect(payload.success).toBe(true);
+    expect(payload.skill).toBe('parameters');
+  });
+
+  it('rejects user-defined skills outside a custom agent user allowlist', async () => {
+    const orch = new Orchestrator([], []);
+    const customCtx = {
+      ...ctx,
+      userSkillCatalog: [{ name: 'blocked_kb', description: 'kb', content: 'BLOCKED' }],
+      customAgent: {
+        name: 'empty_agent',
+        prompt: 'No user skills.',
+        promptMode: 'append' as const,
+        skillAllowlist: [],
+      },
+    };
+    const tool = new LoadSkill(orch, { name: 'blocked_kb' }, customCtx);
     const res = await tool.run();
     const payload = payloadOf((res as { content: { type: string }[] }).content);
     expect(payload.success).toBe(false);

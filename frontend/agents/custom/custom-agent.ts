@@ -7,9 +7,9 @@ import { WebAnalystAgent } from '@/agents/web-analyst/web-analyst';
  * User-defined custom agent (AgentEntry on the context file), resolved
  * server-side into `context.customAgent` by setupOrchestration. Runs the exact
  * WebAnalystAgent loop and toolset — the definition only shapes the prompt
- * (persona, append/replace), the skill exposure (preloads ride
- * `context.selectedSkills`, the catalog restriction rides
- * `customAgent.skillAllowlist`), and the default LLM grade (applied in
+ * (persona, append/replace), user-defined skill exposure (preloads ride
+ * `context.selectedSkills`, while `customAgent.skillAllowlist` restricts
+ * on-demand user skills; system skills remain page-managed), and the default LLM grade (applied in
  * setupOrchestration). One registered class serves every definition: the
  * per-turn context carries the resolved definition, so saved-log resume
  * reconstructs the same behavior from `REGISTRABLES` by this schema name.

@@ -83,12 +83,10 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
     const selected = this.context.selectedSkills ?? [];
     const userCatalog = this.context.userSkillCatalog ?? [];
     const customAgent = this.context.customAgent;
-    const hasExplicitSkillSelection = customAgent?.skillAllowlist !== undefined;
     const preloadedNames = getPreloadedSkillNames({
       pageType: this.context.pageType ?? null,
       selected,
       unrestrictedMode: this.context.unrestrictedMode ?? false,
-      includePageDefaults: !hasExplicitSkillSelection,
     });
     return {
       // Branding name the agent introduces itself as (default "MinusX").
@@ -110,14 +108,14 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
       // (Resolved server-side via lib/chat/conversation-turn.server.ts → setupOrchestration
       // in lib/chat/orchestration-core.server.ts.)
       context: formatContextDocsSection(this.context.resolvedContextDocs ?? { docs: [] }),
-      // LoadSkill catalog: skills available to fetch on demand (system + user,
-      // minus already-preloaded). A custom agent's skillAllowlist restricts it.
+      // LoadSkill catalog: system skills follow the normal page pattern; a
+      // custom agent's allowlist restricts only user-defined skills.
       skills_catalog: buildSkillsCatalog({
         tree: PROMPTS,
         preloaded: new Set(preloadedNames),
         selected,
         userCatalog,
-        allowlist: customAgent?.skillAllowlist !== undefined
+        userAllowlist: customAgent?.skillAllowlist !== undefined
           ? new Set(customAgent.skillAllowlist)
           : undefined,
       }),
