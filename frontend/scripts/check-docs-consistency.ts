@@ -28,6 +28,15 @@
  *
  * Usage:
  *   npm run check-docs
+ *   npm run check-docs -- --hook   # PostToolUse mode, see below
+ *
+ * `--hook` exists because of how Claude Code delivers PostToolUse output: on exit 0,
+ * plain stdout goes only to the debug log — the model never sees it. The ONLY way to
+ * put text in front of the model from a successful hook is JSON with
+ * `hookSpecificOutput.additionalContext` (max 10k chars). So in hook mode this script
+ * always exits 0 and emits that JSON, carrying any failures plus the standing reminder
+ * that path-existence is the only thing checked mechanically — prose truth is the
+ * author's job. A bare `echo` in the hook command would be silently discarded.
  */
 
 import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
@@ -271,33 +280,64 @@ for (const rel of trackedMarkdown) {
   stray.push(rel);
 }
 
+const HOOK_MODE = process.argv.includes('--hook');
+const report: string[] = [];
+
 if (failures.length || orphaned.length || unlinked.length || stray.length) {
   if (failures.length) {
-    console.error(`\ncheck-docs: ${failures.length} dead path(s) across ${CLAUDE_DOCS.length} CLAUDE.md file(s):\n`);
-    for (const f of failures) console.error(`  ${f}`);
-    console.error('\nFix the path, or delete the pointer. Documentation that lies is worse than none.');
+    report.push(`\ncheck-docs: ${failures.length} dead path(s) across ${CLAUDE_DOCS.length} CLAUDE.md file(s):\n`);
+    for (const f of failures) report.push(`  ${f}`);
+    report.push('\nFix the path, or delete the pointer. Documentation that lies is worse than none.');
   }
   if (orphaned.length) {
-    console.error(`\ncheck-docs: ${orphaned.length} comment(s) reference a doc that does not exist:\n`);
-    for (const o of orphaned) console.error(`  ${o}`);
-    console.error(`\nRepoint at the nearest ${ROOT_DOC}, or drop the reference.`);
+    report.push(`\ncheck-docs: ${orphaned.length} comment(s) reference a doc that does not exist:\n`);
+    for (const o of orphaned) report.push(`  ${o}`);
+    report.push(`\nRepoint at the nearest ${ROOT_DOC}, or drop the reference.`);
   }
   if (unlinked.length) {
-    console.error(`\ncheck-docs: ${unlinked.length} module doc(s) unreachable from the root:\n`);
-    for (const u of unlinked) console.error(`  ${u}`);
-    console.error(`\nAdd a pointer in ${ROOT_DOC} so a top-down reader can find it.`);
+    report.push(`\ncheck-docs: ${unlinked.length} module doc(s) unreachable from the root:\n`);
+    for (const u of unlinked) report.push(`  ${u}`);
+    report.push(`\nAdd a pointer in ${ROOT_DOC} so a top-down reader can find it.`);
   }
   if (stray.length) {
-    console.error(`\ncheck-docs: ${stray.length} markdown file(s) outside the doc tree:\n`);
-    for (const t of stray) console.error(`  ${t}`);
-    console.error(
+    report.push(`\ncheck-docs: ${stray.length} markdown file(s) outside the doc tree:\n`);
+    for (const t of stray) report.push(`  ${t}`);
+    report.push(
       '\nOnly CLAUDE.md, the root README.md and docs/** are tracked as markdown. A plan or'
       + '\ndesign note is stale the day the work lands — keep it outside the repo, or fold what'
       + '\nstays true into the nearest CLAUDE.md.',
     );
   }
-  console.error('');
-  process.exit(1);
+  if (!HOOK_MODE) {
+    for (const line of report) console.error(line);
+    console.error('');
+    process.exit(1);
+  }
+}
+
+// The standing reminder for the editing agent: the sweeps above prove pointers are
+// ALIVE, never that prose is TRUE. Delivered on every hook run, pass or fail.
+const REMINDER =
+  'Docs consistency: the mechanical check only proves that referenced paths still EXIST. It '
+  + 'cannot tell you whether the prose is still TRUE. If this edit changed behaviour, re-read '
+  + '(a) the comments in the file you edited, (b) the section of CLAUDE.md describing this '
+  + 'module, and (c) any docs/content/** page describing this behaviour — and update them in '
+  + 'this change, not later. Docs describe the code AS IT IS TODAY: no plan narrative, no '
+  + 'migration history, no changelog, no phase numbers — that is what git is for.';
+
+if (HOOK_MODE) {
+  // additionalContext is capped at 10k chars; keep the reminder whole and truncate the
+  // failure report, not the other way round — a truncated reminder reads as noise.
+  const budget = 10_000 - REMINDER.length - 100;
+  let failureText = report.join('\n');
+  if (failureText.length > budget) failureText = `${failureText.slice(0, budget)}\n  … (truncated)`;
+  const context = failureText
+    ? `${failureText.trim()}\n\nFix these in this change.\n\n${REMINDER}`
+    : REMINDER;
+  console.log(JSON.stringify({
+    hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: context },
+  }));
+  process.exit(0);
 }
 
 console.log(
