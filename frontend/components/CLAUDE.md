@@ -255,6 +255,13 @@ observer is bound to the top realm and goes deaf inside the surface iframe. Widt
   `[data-radix-popper-content-wrapper]` still sets `fixed`, which `STORY_FLOATING_CSS`
   (`lib/story-ui/floating.ts`) overrides to `absolute`. Re-vendoring shadcn upstream re-breaks
   story popovers.
+- **`ChatInterface`'s "conversation too long" gate is an affordance, not the rule.** It replaces the
+  composer so the user never writes a message the server would refuse, but the enforcement is
+  `runConversationTurn` (which also covers Slack and scheduled jobs). Both call the same
+  `conversationTooLong` predicate from `lib/chat/conversation-limits.ts` — a local threshold here
+  would silently disagree with the server. The banner after an actual refusal is a different
+  surface: it reads the typed `errorReason` off the conversation, falling back to message
+  classification for provider errors.
 - **`AgentTurnContainer` is `memo`'d with default equality and reads `state.files.files` with
   `shallowEqual`.** Passing an unmemoized callback from `ChatInterface`, or switching the selector
   to a plain read, reintroduces a full re-render of every turn on every streaming chunk (guarded by

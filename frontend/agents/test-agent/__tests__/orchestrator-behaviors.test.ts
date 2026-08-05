@@ -11,7 +11,7 @@ import { Type } from 'typebox';
 import type { TextContent, Tool, ToolCall, UserMessage } from '@/orchestrator/llm';
 import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@/orchestrator/llm/testing';
 import { Orchestrator } from '@/orchestrator/orchestrator';
-import { MXAgent } from '@/orchestrator/types';
+import { MAX_CONTEXT_TOKENS, MXAgent } from '@/orchestrator/types';
 import type {
   AgentContext,
   ConversationLog,
@@ -1276,6 +1276,72 @@ describe("stopReason 'length' — truncated responses are terminal, never retrie
     const errorEvent = events.find((e) => e.type === 'error') as { error: { errorMessage?: string } };
     expect(errorEvent.error.errorMessage).toMatch(/output/i);
     expect(errorEvent.error.errorMessage).not.toMatch(/context window/i);
+  });
+});
+
+describe('maxContextTokens — a turn that grows past the ceiling mid-run is stopped', () => {
+  // The app refuses an over-sized conversation at TURN START, but a turn admitted just under that
+  // limit keeps growing across tool steps, and every step re-sends the whole thread. Without a
+  // per-call ceiling one turn can run far past any conversation-level number on a large-window
+  // model — paying for the entire context again on each step. This is the engine's own backstop,
+  // guarded at the same choke point as the 'length' stop so custom loops are covered too.
+  const ctx: AgentContext = { userId: 'u', mode: 'org' };
+
+  // The ceiling is exercised through the per-agent override rather than by inflating a faux
+  // conversation to 300k tokens: the faux provider derives `usage` from prompt/output text and
+  // ignores any usage set on a queued response, so the only honest way to reach the default would
+  // be a megabyte-sized prompt. The override IS the contract (a long-context agent raises its own),
+  // so testing through it covers the mechanism and the knob at once.
+  class TinyContextAgent extends TestAgent {
+    static readonly maxContextTokens: number = 1;
+  }
+
+  async function runWith(agentClass: typeof TestAgent) {
+    let calls = 0;
+    fauxRegistration.setResponses(
+      Array.from({ length: 5 }, () => () => {
+        calls += 1;
+        // A tool call, so an unguarded run would visibly continue into EchoTool.
+        return fauxAssistantMessage([fauxToolCall('EchoTool', { text: 'hi' })], { stopReason: 'toolUse' });
+      }),
+    );
+    const orch = new Orchestrator([EchoTool, PendingTool, ErrorTool, DeepAgent, NestedAgent, TestAgent, TinyContextAgent]);
+    const agent = new agentClass(orch, { userMessage: 'go' }, ctx);
+    const stream = orch.run(agent);
+    const events: StreamEvent[] = [];
+    for await (const ev of stream) events.push(ev);
+    const result = await stream.result();
+    return { calls: () => calls, events, result, log: orch.log };
+  }
+
+  it('defaults to the engine ceiling', () => {
+    expect(MXAgent.maxContextTokens).toBe(MAX_CONTEXT_TOKENS);
+    expect(TestAgent.maxContextTokens).toBe(MAX_CONTEXT_TOKENS);
+  });
+
+  it('fails the run on the first over-ceiling call, before dispatching its tools', async () => {
+    const { calls, events, result, log } = await runWith(TinyContextAgent);
+    expect(calls()).toBe(1); // not a loop that keeps paying for a growing context
+    expect(result).toBeNull();
+    const errorEvent = events.find((e) => e.type === 'error') as { error: { errorMessage?: string } } | undefined;
+    expect(errorEvent).toBeDefined();
+    // The guard runs BEFORE dispatch, so the tool the model asked for never executed.
+    const ran = log.some((e) => 'role' in e && e.role === 'toolResult' && e.toolName === 'EchoTool');
+    expect(ran).toBe(false);
+  });
+
+  it('names the ceiling it hit and steers to a new conversation', async () => {
+    const { events } = await runWith(TinyContextAgent);
+    const errorEvent = events.find((e) => e.type === 'error') as { error: { errorMessage?: string } };
+    expect(errorEvent.error.errorMessage).toMatch(/exceeded the maximum context tokens/i);
+    expect(errorEvent.error.errorMessage).toMatch(/new conversation/i);
+  });
+
+  it('leaves an ordinary run under the ceiling completely alone', async () => {
+    const { calls, log } = await runWith(TestAgent);
+    expect(calls()).toBeGreaterThan(1); // the loop continued
+    const ran = log.some((e) => 'role' in e && e.role === 'toolResult' && e.toolName === 'EchoTool');
+    expect(ran).toBe(true);
   });
 });
 

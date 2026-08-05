@@ -29,7 +29,7 @@ import { selectAllowChatQueue, selectQueueStrategy, selectDevMode, setDevMode, s
 import { UserInputException } from '@/lib/tools/user-input-exception';
 import { generateUniqueId } from './id-generator';
 import { captureError } from '@/lib/messaging/capture-error';
-import { classifyErrorRetryability } from '@/lib/chat/error-retryability';
+import { classifyErrorRetryability, terminalReasonForCode } from '@/lib/chat/error-retryability';
 import { parsePiConversation } from '@/lib/conversations-utils';
 import type { AgentSkillSelection } from '@/lib/types';
 import { API_BASE_URL, patchApiUrl } from './api-url';
@@ -165,9 +165,12 @@ async function handleStreamError(
   // context-length → steer to a new conversation instead of a retry that loops). A session-expiry
   // (401) is always terminal — a retry with the same dead session re-fails.
   const errMsg = error.message || 'Unknown error';
-  const retryability = source === 'session' ? 'terminal' : classifyErrorRetryability(errMsg);
+  // A typed code (ours) is authoritative about both the verdict and the reason; message matching
+  // is the fallback for provider errors, whose text we don't control.
+  const reason = terminalReasonForCode((error as { mxCode?: string }).mxCode);
+  const retryability = (reason || source === 'session') ? 'terminal' : classifyErrorRetryability(errMsg);
   void captureError(captureLabel, error, { conversationID: String(conversationID) });
-  dispatch(setError({ conversationID, error: errMsg, retryability }));
+  dispatch(setError({ conversationID, error: errMsg, retryability, ...(reason ? { reason } : {}) }));
   dispatch(clearStreamingContent({ conversationID }));
   abortControllers.delete(stableId);
   reportClientErrorToServer(conversationID, error.message || 'Unknown error', source, httpStatus);
@@ -267,7 +270,12 @@ async function runV3TurnInListener(
   const detail = await loadConversationDetail(conversationID, view, { incremental: status !== 'error' });
   if (status === 'error') {
     const lastErr = detail.errors[detail.errors.length - 1];
-    throw new Error(runError || lastErr?.message || 'chat error');
+    const err = new Error(runError || lastErr?.message || 'chat error') as Error & { mxCode?: string };
+    // Errors the app raised itself carry a typed code on the row. Forward it so the banner reads
+    // the code instead of pattern-matching prose we wrote (see terminalReasonForCode).
+    const code = (lastErr?.details as { code?: string } | null | undefined)?.code;
+    if (code) err.mxCode = code;
+    throw err;
   }
 
   const piLog = detail.piLog;

@@ -22,7 +22,7 @@ is `frontend/lib/chat/`. Both have their own `CLAUDE.md`.
   return type is what lets an agent be a tool.
 - **`MXAgent`** extends `MXTool` — an agent IS a tool, which is why sub-agents dispatch through the
   same path as leaf tools. Adds `static model`, `static tools: Tool[]`, `static maxSteps`,
-  `static callOptions`, `static llmAgent`, plus `threadHistory` / `toolThread` and the default
+  `static callOptions`, `static llmAgent`, `static maxContextTokens`, plus `threadHistory` / `toolThread` and the default
   agentic `run()` loop. `static type` is `'Tool'` on `MXTool` and `'Agent'` on `MXAgent` — the only
   runtime discriminator, used by the registry filters in `lib/chat/`.
 - **`AgentContext`** — deliberately an empty interface. Each agent family extends it
@@ -153,6 +153,15 @@ and their security rationale live in `frontend/lib/chat/CLAUDE.md`.
   loop — including custom ones like the eval agent's — passes through). Re-calling with the same
   context fails identically at full input cost. The message differentiates context exhaustion
   (output ≤ 64 tokens ⇒ the window is full) from an output-cap truncation.
+- **A call above `maxContextTokens` fails the run** — same choke point as the `'length'` stop, and
+  checked on the returned `usage.totalTokens` (exact and already paid for) rather than estimated up
+  front. It fires BEFORE the message's tool calls are dispatched, so the next, larger call is never
+  assembled. Default `MAX_CONTEXT_TOKENS` (300k); an agent that genuinely needs more raises its own
+  rather than editing the constant. This is the engine's backstop for a turn that grows mid-run —
+  the app separately refuses an over-sized conversation at turn start
+  (`frontend/lib/chat/conversation-limits.ts`), and neither replaces the other. Both ceilings are
+  flat, NOT derived from a model's `contextWindow`: that field is a fallback default as often as it
+  is real data, so a derived ceiling fires on models nowhere near full.
 - **Retries are per-call, not per-turn.** `callLLM` re-issues the same request up to
   `MAX_LLM_CALL_RETRIES` (2), only when the terminal event is `reason: 'error'`, the run isn't
   aborted, **nothing user-visible has streamed yet**, and the message matches the positive allowlist

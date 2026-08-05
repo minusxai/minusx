@@ -46,6 +46,7 @@ import { isAdmin } from '@/lib/auth/role-helpers';
 import ToolDebugBar from './ToolDebugBar';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 import type { LlmGrade } from '@/lib/llm/llm-config-types';
+import { conversationTooLong } from '@/lib/chat/conversation-limits';
 
 // next/dynamic with ssr:false prevents pdfjs-dist (browser-only, uses DOMMatrix at module init)
 // from being evaluated during SSR prerendering. This is an intentional SSR boundary, not a
@@ -424,22 +425,19 @@ export default function ChatInterface({
     );
   }, [conversation?.pending_tool_calls]);
 
-  // Warn near the model's context window. The whole conversation is re-sent on every LLM call, so
-  // the last call's `usage.totalTokens` IS the size of the entire conversation — stamped onto
-  // conversation meta server-side at turn end (`lastContextTokens`) and carried on the conversation
-  // row, so this works on reload for every role (the display wire strips per-message usage). The
-  // Max conversation length: 300k tokens (product decision 2026-07-31). NOTE: this only warns
-  // BEFORE the hard "exceeds the context window" API error on models with a >300k window; on a
-  // 200k-window model the hard error fires first and this gate is the post-hoc lock-out.
-  const TOKEN_LIMIT = 300_000;
-  const tokenLimitExceeded = useMemo(() => {
-    if (!conversation?.lastContextTokens || conversation.lastContextTokens <= TOKEN_LIMIT) return false;
-    // Gate only makes sense once there's accumulated history to shed by starting
-    // over. On a single-query conversation a fresh chat would re-run the same
-    // query and hit the same size, so don't lock the user out.
-    const userMessageCount = (conversation.messages ?? []).filter(m => m.role === 'user').length;
-    return userMessageCount >= 2;
-  }, [conversation?.lastContextTokens, conversation?.messages]);
+  // Replace the composer once the conversation is over the limit, so the user never writes a
+  // message the server would refuse. This is an AFFORDANCE, not the rule: `runConversationTurn`
+  // enforces the same predicate for every surface (browser, Slack, scheduled jobs). Both sides call
+  // `conversationTooLong` so they cannot drift apart on where the line is.
+  //
+  // The signal is `lastContextTokens` — the whole conversation is re-sent on every LLM call, so the
+  // last call's `usage.totalTokens` IS the conversation's size. It is stamped onto conversation meta
+  // server-side at turn end and rides the conversation row, so this survives a reload for every role
+  // (the display wire strips per-message usage).
+  const tokenLimitExceeded = useMemo(() => conversationTooLong({
+    lastContextTokens: conversation?.lastContextTokens,
+    priorUserTurns: (conversation?.messages ?? []).filter(m => m.role === 'user').length,
+  }), [conversation?.lastContextTokens, conversation?.messages]);
 
   // Get error from conversation or use local state for client-side errors
   const [localError, setLocalError] = useState<LoadError | null>(null);
@@ -1015,6 +1013,7 @@ export default function ChatInterface({
             <ChatErrorBanner
               error={error}
               isTerminalError={isTerminalError}
+              terminalReason={conversation?.errorReason}
               devMode={devMode}
               colSpan={colSpan}
               colStart={colStart}
