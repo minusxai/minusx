@@ -55,6 +55,30 @@ function slug(s: string): string {
 const RELAYOUT_MS = 5_000;
 /** Post-fit settle: relayout + lazily mounted sections + charts. */
 const SETTLE_MS = 5_000;
+/**
+ * Hard ceiling per variant. Neither `page.evaluate` nor `locator.screenshot`
+ * carries a timeout of its own, so an in-page capture that never settles hangs
+ * the FLOW — and because the eval's test timeout is longer than the CI job's,
+ * that surfaces as a cancelled job with no failing test and no log. "Best
+ * effort" has to cover a hang, not just a throw; this is what makes it true.
+ */
+const CAPTURE_TIMEOUT_MS = 90_000;
+
+/** Reject if `work` outstays `ms`. The timer never keeps the process alive. */
+async function withTimeout<T>(work: Promise<T>, ms: number, what: string): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${what} exceeded ${ms}ms`)), ms);
+        timer.unref?.();
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 /**
  * Capture a file view through the APP's own capture path, in page. This is the
@@ -157,23 +181,40 @@ export class MetricsRecorder {
   ): Promise<void> {
     const rel = path.join('screens', `${slug(flow)}-${slug(name)}-${variant.size}-${variant.renderer}.png`);
     const file = path.join(METRICS_DIR, rel);
+    const label = `${flow}/${name} ${variant.size}:${variant.renderer}`;
+    // Progress on stdout: a capture matrix is minutes of otherwise silent work
+    // in the CI log, and silence is indistinguishable from a hang.
+    console.log(`[metrics] capturing ${label}`);
     try {
       if (variant.renderer === 'download') {
         if (opts.fileId === undefined) return;
-        fs.writeFileSync(file, await captureViaApp(page, opts.fileId));
+        fs.writeFileSync(file, await withTimeout(captureViaApp(page, opts.fileId), CAPTURE_TIMEOUT_MS, label));
       } else if (opts.target) {
         // Chromium composites iframe content only INSIDE the viewport, so a
         // full-artifact element capture must grow the viewport to the surface
         // height first — otherwise everything below the fold captures black.
+        // `restore` runs even when the capture times out: leaving the viewport
+        // grown would corrupt every later variant.
         const restore = await fitViewportToSurface(page, opts.target);
-        await page.waitForTimeout(SETTLE_MS);
-        await opts.target.screenshot({ path: file });
-        await restore();
+        try {
+          await page.waitForTimeout(SETTLE_MS);
+          await withTimeout(
+            opts.target.screenshot({ path: file, timeout: CAPTURE_TIMEOUT_MS }),
+            CAPTURE_TIMEOUT_MS,
+            label,
+          );
+        } finally {
+          await restore();
+        }
       } else {
-        await page.screenshot({ path: file, fullPage: true });
+        await withTimeout(
+          page.screenshot({ path: file, fullPage: true, timeout: CAPTURE_TIMEOUT_MS }),
+          CAPTURE_TIMEOUT_MS,
+          label,
+        );
       }
     } catch (error) {
-      console.warn(`[metrics] ${flow}/${name} ${variant.size}:${variant.renderer} capture failed:`, error);
+      console.warn(`[metrics] ${label} capture failed:`, error);
       return;
     }
     this.record(flow, name, rel, 'image', variant);
