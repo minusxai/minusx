@@ -66,7 +66,7 @@ export default function FileGridCard({
         href={file.type === 'folder' ? `/p${file.path}` : `/f/${generateFileUrl(file.id, file.name)}`}
         prefetch={!selectionMode}
         style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}
-        draggable={!selectionMode && file.type !== 'folder'}
+        draggable={!selectionMode}
         onDragStart={(e) => !selectionMode && handleDragStart(e, file)}
         onDrag={(e) => !selectionMode && handleDrag(e)}
         onDragEnd={() => !selectionMode && handleDragEnd()}

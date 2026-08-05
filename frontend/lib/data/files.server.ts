@@ -78,6 +78,25 @@ export class ConflictError extends Error {
  * (app/l/[shareId]/page.tsx) and by verifyGuestToken/guestToEffectiveUser in
  * lib/auth/guest-session.ts, which pin a guest to the shared file's folder.
  */
+// A descendant blocks a subtree operation (folder delete or folder move) unless its type
+// is freely deletable, or it is a 'context' file whose owning folder is part of the same
+// subtree — the context travels (or is removed) together with its folder either way, so
+// it is never orphaned. `rootPath` is the folder the operation targets; `descendants` is
+// everything under it.
+function findBlockedDescendants(rootPath: string, descendants: DbFile[]): DbFile[] {
+  return descendants.filter(f => {
+    if (canDeleteFileType(f.type)) return false;
+    if (f.type === 'context') {
+      const parentPath = f.path.substring(0, f.path.lastIndexOf('/'));
+      const parentIsInSubtree =
+        parentPath === rootPath ||
+        descendants.some(d => d.type === 'folder' && d.path === parentPath);
+      if (parentIsInSubtree) return false;
+    }
+    return true;
+  });
+}
+
 class FilesDataLayerServer implements IFilesDataLayer {
   /**
    * Load access rules overrides from the org config. NOT cached — `getConfigs`
@@ -937,21 +956,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
     let deletedCount: number;
     if (file.type === 'folder') {
       const descendants = await DocumentDB.listAll(undefined, [file.path], -1, false);
-      // A 'context' file is normally undeletable, BUT it can be cascade-deleted when
-      // its parent folder is also being deleted (the folder is either the root being
-      // deleted, or another folder in the subtree that is also being deleted).
-      const undeletable = descendants.filter(f => {
-        if (canDeleteFileType(f.type)) return false;
-        if (f.type === 'context') {
-          const parentPath = f.path.substring(0, f.path.lastIndexOf('/'));
-          // Exempt if parent folder is the folder being deleted OR is itself a descendant
-          const parentIsBeingDeleted =
-            parentPath === file.path ||
-            descendants.some(d => d.type === 'folder' && d.path === parentPath);
-          if (parentIsBeingDeleted) return false;
-        }
-        return true;
-      });
+      const undeletable = findBlockedDescendants(file.path, descendants);
       if (undeletable.length > 0) {
         throw new AccessPermissionError(
           `Cannot delete folder: contains ${undeletable.length} file(s) of undeletable type(s): ${[...new Set(undeletable.map(f => f.type))].join(', ')}`
@@ -1007,11 +1012,18 @@ class FilesDataLayerServer implements IFilesDataLayer {
     }
 
     if (file.type === 'folder' && oldPath !== newPath) {
+      // A folder cannot move into its own subtree: the path rewrite would orphan
+      // the subtree (the new parent's own path gets rewritten out from under it).
+      if (newPath === oldPath || newPath.startsWith(oldPath + '/')) {
+        throw new UserFacingError(`Cannot move folder '${oldPath}' into itself`);
+      }
+
       // Fetch all descendants (metadata only)
       const descendants = await DocumentDB.listAll(undefined, [oldPath], -1, false);
 
-      // Check move permission on every descendant
-      const blocked = descendants.filter(f => !canDeleteFileType(f.type));
+      // Check move permission on every descendant. Context files move with their
+      // owning folder (they anchor to it by path, which the move rewrites).
+      const blocked = findBlockedDescendants(oldPath, descendants);
       if (blocked.length > 0) {
         throw new AccessPermissionError(
           `Cannot move folder: contains ${blocked.length} file(s) of protected type(s): ${[...new Set(blocked.map(f => f.type))].join(', ')}`
