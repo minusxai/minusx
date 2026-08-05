@@ -34,8 +34,11 @@ function setup(role: UserRole) {
   return testStore;
 }
 
-function addKnowledgeBase(store: ReturnType<typeof storeModule.makeStore>) {
-  store.dispatch(setEnableCustomAgents(true));
+function addKnowledgeBase(
+  store: ReturnType<typeof storeModule.makeStore>,
+  { enableCustomAgents = true }: { enableCustomAgents?: boolean } = {},
+) {
+  if (enableCustomAgents) store.dispatch(setEnableCustomAgents(true));
   store.dispatch(setFile({
     file: {
       id: 1008,
@@ -82,13 +85,13 @@ describe('Sidebar developer-mode toggle', () => {
   });
 });
 
-describe('Sidebar Agents navigation', () => {
+describe('Sidebar context feature navigation', () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
   it.each<UserRole>(['viewer', 'editor', 'admin'])(
-    'shows the resolved context Agents page to %s users',
+    'shows the resolved standalone Agents and Skills pages to %s users',
     (role) => {
       const store = setup(role);
       addKnowledgeBase(store);
@@ -96,15 +99,24 @@ describe('Sidebar Agents navigation', () => {
 
       expect(screen.getByLabelText('Agents').closest('a')).toHaveAttribute(
         'href',
-        '/f/1008?tab=agents',
+        '/agents?context=1008',
+      );
+      expect(screen.getByLabelText('Skills').closest('a')).toHaveAttribute(
+        'href',
+        '/skills?context=1008',
       );
     },
   );
 
   it('does not expose a dead Agents link when Custom Agents is disabled', () => {
     const store = setup('viewer');
+    addKnowledgeBase(store, { enableCustomAgents: false });
     renderSidebar(store);
 
     expect(screen.queryByLabelText('Agents')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Skills').closest('a')).toHaveAttribute(
+      'href',
+      '/skills?context=1008',
+    );
   });
 });

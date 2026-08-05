@@ -6,7 +6,7 @@
  * All changes go through onChange immediately
  */
 
-import { Box, VStack, HStack, Text, Tabs } from '@chakra-ui/react';
+import { Box, VStack, HStack, Text, Tabs, Heading, Button } from '@chakra-ui/react';
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useRouter } from '@/lib/navigation/use-navigation';
@@ -86,6 +86,8 @@ interface ContextEditorV2Props {
   selectedRunId?: number | null;
   onRunAll?: (opts: RunOptions) => void;
   onSelectRun?: (runId: number | null) => void;
+  /** Render one context-backed surface without the Knowledge Base file chrome. */
+  standaloneTab?: 'agents' | 'skills';
 }
 
 const MONACO_READ_ONLY_MESSAGE = { value: 'Switch to edit mode to make changes.' };
@@ -142,6 +144,7 @@ export default function ContextEditorV2({
   selectedRunId,
   onRunAll,
   onSelectRun,
+  standaloneTab,
 }: ContextEditorV2Props) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -432,6 +435,138 @@ export default function ContextEditorV2({
     onChange({ agents: (content.agents || []).filter((_, i) => i !== index) });
   }, [content.agents, onChange]);
 
+  const skillsTabContent = (
+    <SkillsTabContent
+      activeTab={activeTab}
+      colorMode={colorMode}
+      content={content}
+      onChange={onChange}
+      canAddSkill={canEditContext}
+      canManageSkills={canManageSkills}
+      systemSkills={systemSkills}
+      systemSkillNames={systemSkillNames}
+      mentions={editorMentions}
+      userSkillsOpen={userSkillsOpen}
+      onUserSkillsOpenChange={setUserSkillsOpen}
+      systemSkillsOpen={systemSkillsOpen}
+      onSystemSkillsOpenChange={setSystemSkillsOpen}
+      onAddSkill={() => {
+        if (!editMode) onEditModeChange(true);
+        handleAddSkill();
+      }}
+      onUpdateSkill={handleUpdateSkill}
+      onDeleteSkill={handleDeleteSkill}
+    />
+  );
+
+  const agentsTabContent = enableCustomAgents ? (
+    <AgentsTabContent
+      activeTab={activeTab}
+      colorMode={colorMode}
+      content={content}
+      onChange={onChange}
+      canAddAgent={canEditContext}
+      canManageAgents={canManageAgents}
+      systemSkills={systemSkills}
+      mentions={editorMentions}
+      onStartAddAgent={() => {
+        if (!editMode) onEditModeChange(true);
+      }}
+      onAddAgent={handleAddAgent}
+      onUpdateAgent={handleUpdateAgent}
+      onDeleteAgent={handleDeleteAgent}
+      getAgentExploreHref={(agentName) => buildAgentExploreHref({
+        agentName,
+        contextPath: file?.path,
+        contextVersion: currentVersion,
+        currentSearchParams: searchParams,
+      })}
+    />
+  ) : null;
+
+  if (standaloneTab) {
+    const title = standaloneTab === 'agents' ? 'Agents' : 'Skills';
+    const contentForTab = standaloneTab === 'agents' ? agentsTabContent : skillsTabContent;
+
+    return (
+      <VStack gap={6} align="stretch" p={3} pb={{ base: '100px', md: 12 }}>
+        <HStack
+          justify="space-between"
+          align={{ base: 'flex-start', sm: 'center' }}
+          gap={4}
+          borderBottomWidth="1px"
+          borderColor="border.muted"
+          pb={4}
+        >
+          <Box minW={0}>
+            <Heading as="h1" fontSize={{ base: '2xl', md: '3xl' }} letterSpacing="-0.025em">
+              {title}
+            </Heading>
+            <Text mt={1} color="fg.muted" fontSize="sm" fontFamily="mono" truncate>
+              From {fileName}
+            </Text>
+          </Box>
+          {canEditContext && (
+            editMode ? (
+              <HStack gap={2} flexShrink={0}>
+                <Button
+                  aria-label={`Cancel ${title}`}
+                  size="sm"
+                  variant="outline"
+                  onClick={onCancel}
+                  disabled={isSaving}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  aria-label={`Save ${title}`}
+                  size="sm"
+                  colorPalette="teal"
+                  onClick={handleSave}
+                  loading={isSaving}
+                  disabled={!isDirty}
+                >
+                  Save
+                </Button>
+              </HStack>
+            ) : (
+              <Button
+                aria-label={`Edit ${title}`}
+                size="sm"
+                variant="outline"
+                onClick={() => onEditModeChange(true)}
+                flexShrink={0}
+              >
+                Edit
+              </Button>
+            )
+          )}
+        </HStack>
+
+        {(error || saveError) && (
+          <Box
+            p={3}
+            bg="accent.danger/10"
+            borderLeft="3px solid"
+            borderColor="accent.danger"
+            borderRadius="md"
+          >
+            <HStack gap={2}>
+              <LuCircleAlert color="var(--chakra-colors-accent-danger)" />
+              <Text color="accent.danger" fontSize="sm">
+                {error || saveError}
+              </Text>
+            </HStack>
+          </Box>
+        )}
+
+        <Tabs.Root value={standaloneTab} variant="line" colorPalette="teal">
+          {contentForTab}
+        </Tabs.Root>
+      </VStack>
+    );
+  }
+
   return (
     <VStack gap={6} align="stretch" p={3} pb={{ base: '140px', md: '180px' }}>
       {/* Document Header */}
@@ -624,51 +759,10 @@ export default function ContextEditorV2({
         </Tabs.Content>
 
         {/* Skills Tab */}
-        <SkillsTabContent
-          activeTab={activeTab}
-          colorMode={colorMode}
-          content={content}
-          onChange={onChange}
-          canAddSkill={canEditContext}
-          canManageSkills={canManageSkills}
-          systemSkills={systemSkills}
-          systemSkillNames={systemSkillNames}
-          mentions={editorMentions}
-          userSkillsOpen={userSkillsOpen}
-          onUserSkillsOpenChange={setUserSkillsOpen}
-          systemSkillsOpen={systemSkillsOpen}
-          onSystemSkillsOpenChange={setSystemSkillsOpen}
-          onAddSkill={() => {
-            if (!editMode) onEditModeChange(true);
-            handleAddSkill();
-          }}
-          onUpdateSkill={handleUpdateSkill}
-          onDeleteSkill={handleDeleteSkill}
-        />
+        {skillsTabContent}
 
         {/* Agents Tab */}
-        {enableCustomAgents && <AgentsTabContent
-          activeTab={activeTab}
-          colorMode={colorMode}
-          content={content}
-          onChange={onChange}
-          canAddAgent={canEditContext}
-          canManageAgents={canManageAgents}
-          systemSkills={systemSkills}
-          mentions={editorMentions}
-          onStartAddAgent={() => {
-            if (!editMode) onEditModeChange(true);
-          }}
-          onAddAgent={handleAddAgent}
-          onUpdateAgent={handleUpdateAgent}
-          onDeleteAgent={handleDeleteAgent}
-          getAgentExploreHref={(agentName) => buildAgentExploreHref({
-            agentName,
-            contextPath: file?.path,
-            contextVersion: currentVersion,
-            currentSearchParams: searchParams,
-          })}
-        />}
+        {agentsTabContent}
 
         {/* Evals Tab */}
         <EvalsTabContent

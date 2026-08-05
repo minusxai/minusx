@@ -407,9 +407,13 @@ is byte-for-byte what is stored, with no second formatting path to drift. The fe
 `uiSlice.enableCustomAgents`: with the flag off the editor tab is not rendered *and* the chat picker
 receives an empty option list, so no `custom_agent` pointer is ever sent. The gate is on both the
 authoring and the sending side, not just the visible one. When the gate is on, `app-shell/Sidebar.tsx`
-adds Agents to the Analytics navigation for every role and deep-links to the nearest resolved context's
-existing Agents tab (global pages resolve from the active mode root). Viewers keep the Play action but
-cannot enter context edit mode; editors and admins use the same context page to manage agents.
+adds Agents to the Analytics navigation for every role; Skills is available there independently of the
+agents gate. Both links carry the nearest context selected by `selectContextFromPath`, the same selector
+used by chat. `components/context/StandaloneContextPage.tsx` owns the `/agents` and `/skills` route
+resolution and passes `standaloneTab` through `ContextContainerV2` to `ContextEditorV2`, which reuses the
+existing `AgentsTabContent` / `SkillsTabContent` bodies without the Knowledge Base file header or tab
+strip. Viewers keep the agent Play action but cannot enter context edit mode; editors and admins get the
+compact Edit/Save/Cancel controls. The ordinary context-file route still renders the full tabbed editor.
 
 **`components/settings/GatewayBillingCard.tsx` renders `null`, not an empty card, when there is no
 gateway.** A self-hosted install is not in an error state — it simply has no billing — and an empty

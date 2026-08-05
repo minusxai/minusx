@@ -83,7 +83,13 @@ function renderEditor(
     enableCustomAgents = tab === 'agents',
     devMode = false,
     role = 'editor',
-  }: { enableCustomAgents?: boolean; devMode?: boolean; role?: UserRole } = {},
+    standaloneTab,
+  }: {
+    enableCustomAgents?: boolean;
+    devMode?: boolean;
+    role?: UserRole;
+    standaloneTab?: 'agents' | 'skills';
+  } = {},
 ) {
   navigationState.tab = tab;
   const onChange = vi.fn();
@@ -120,6 +126,7 @@ function renderEditor(
           setEditMode(nextEditMode);
         }}
         file={{ id: 1, path: '/org/context.json', type: 'context' }}
+        standaloneTab={standaloneTab}
       />
     );
   }
@@ -222,6 +229,44 @@ describe('ContextEditorV2 add actions outside edit mode', () => {
 
     expect(screen.queryByLabelText('Edit')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Add agent')).not.toBeInTheDocument();
+  });
+
+  it('renders only the standalone Agents surface for viewers and keeps Play available', () => {
+    renderEditor('agents', {
+      ...CONTENT,
+      agents: [{
+        name: 'sales_helper',
+        displayName: 'Sales helper',
+        description: 'Answers sales questions.',
+        prompt: 'Help with sales.',
+        promptMode: 'append',
+        preloadSkills: [],
+        includeSkills: [],
+        enabled: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        createdBy: 1,
+      }],
+    }, { role: 'viewer', standaloneTab: 'agents' });
+
+    expect(screen.getByRole('heading', { name: 'Agents' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Explore with Sales helper')).toHaveAttribute(
+      'href',
+      '/explore?agent=sales_helper&context=%2Forg%2Fcontext.json&contextVersion=1',
+    );
+    expect(screen.queryByLabelText('Edit Agents')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Add agent')).not.toBeInTheDocument();
+  });
+
+  it('renders only the standalone Skills surface and lets editors enter edit mode', () => {
+    const { onEditModeChange } = renderEditor('skills', CONTENT, { standaloneTab: 'skills' });
+
+    expect(screen.getByRole('heading', { name: 'Skills' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Edit Skills'));
+    expect(onEditModeChange).toHaveBeenCalledWith(true);
+    expect(screen.getByLabelText('Add skill')).toBeInTheDocument();
   });
 
   it('shows Add agent and enters edit mode before opening the agent builder', () => {

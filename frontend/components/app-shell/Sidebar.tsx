@@ -1,6 +1,6 @@
 'use client';
 
-import { LuPanelLeftClose, LuPanelLeftOpen, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuHeadset, LuGithub, LuEllipsisVertical, LuSun, LuMoon, LuGraduationCap, LuBookOpen, LuUserPlus, LuChevronDown, LuHistory, LuFolder, LuWrench, LuBot } from 'react-icons/lu';
+import { LuPanelLeftClose, LuPanelLeftOpen, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuHeadset, LuGithub, LuEllipsisVertical, LuSun, LuMoon, LuGraduationCap, LuBookOpen, LuUserPlus, LuChevronDown, LuHistory, LuFolder, LuWrench, LuBot, LuSparkles } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { Box, Flex, VStack, HStack, Text, IconButton, Icon, Menu, Portal } from '@chakra-ui/react';
 import { Tooltip } from '@/components/kit/tooltip';
@@ -133,13 +133,15 @@ export default function Sidebar() {
   // Get user mode for mode-aware navigation
   const mode = effectiveUser?.mode || 'org';
   const userIsAdmin = effectiveUser?.role && isAdmin(effectiveUser.role);
-  // Global pages do not carry a file/folder path, so resolve their Agents link
-  // against the active mode's home folder. File and folder pages use their
-  // nearest context, matching the right-sidebar chat's context resolution.
-  const agentsContextPath = currentPath === '/' ? `/${mode}` : currentPath;
-  const agentsContext = useAppSelector(state => selectContextFromPath(state, agentsContextPath));
-  const agentsPageHref = enableCustomAgents && agentsContext?.id && agentsContext.id > 0
-    ? `/f/${agentsContext.id}?tab=agents`
+  // Global pages do not carry a file/folder path, so resolve these context-backed
+  // surfaces against the active mode's home folder. File and folder pages use
+  // their nearest context, matching the right-sidebar chat's context resolution.
+  const contextPath = currentPath === '/' ? `/${mode}` : currentPath;
+  const resolvedContext = useAppSelector(state => selectContextFromPath(state, contextPath));
+  const contextId = resolvedContext?.id && resolvedContext.id > 0 ? resolvedContext.id : null;
+  const skillsPageHref = contextId ? `/skills?context=${contextId}` : null;
+  const agentsPageHref = enableCustomAgents && contextId
+    ? `/agents?context=${contextId}`
     : null;
 
   // Build and filter nav sections inside useMemo so JSX icon expressions are only evaluated
@@ -152,6 +154,7 @@ export default function Sidebar() {
           { href: '/explore', icon: <FILE_TYPE_METADATA.explore.icon />, label: FILE_TYPE_METADATA.explore.label },
           { href: '/conversations', icon: <LuHistory />, label: 'Conversations' },
           { href: `/p/${mode}`, icon: <LuFolder />, label: 'Files' },
+          ...(skillsPageHref ? [{ href: skillsPageHref, icon: <LuSparkles />, label: 'Skills' }] : []),
           ...(agentsPageHref ? [{ href: agentsPageHref, icon: <LuBot />, label: 'Agents' }] : []),
         ],
       },
@@ -177,7 +180,7 @@ export default function Sidebar() {
         items: section.items.filter((item: NavItem) => !item.adminOnly || userIsAdmin),
       }))
       .filter(section => section.items.length > 0);
-  }, [showDebug, userIsAdmin, mode, agentsPageHref]);
+  }, [showDebug, userIsAdmin, mode, skillsPageHref, agentsPageHref]);
 
   return (
     <Box
