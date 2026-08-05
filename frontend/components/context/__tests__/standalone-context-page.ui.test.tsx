@@ -28,6 +28,17 @@ vi.mock('@/components/containers/ContextContainerV2', () => {
   };
 });
 
+vi.mock('@/components/file-browser/Breadcrumb', () => {
+  const React = require('react');
+  return {
+    __esModule: true,
+    default: ({ items }: { items: Array<{ label: string; href?: string }> }) => React.createElement(
+      'nav',
+      { 'data-testid': 'standalone-breadcrumb', 'data-items': JSON.stringify(items) },
+    ),
+  };
+});
+
 import StandaloneContextPage from '@/components/context/StandaloneContextPage';
 
 function contextFile(id: number, path: string): DbFile {
@@ -68,14 +79,21 @@ describe('StandaloneContextPage', () => {
   it('renders the requested context through the standalone Skills component', () => {
     const requested = contextFile(22, '/org/sales/Knowledge Base');
     contextsState.contexts = [requested];
+    const store = setup('editor');
 
     renderWithProviders(
       <StandaloneContextPage surface="skills" requestedContextId="22" />,
-      { store: setup('editor') },
+      { store },
     );
 
     expect(screen.getByTestId('context-surface')).toHaveAttribute('data-file-id', '22');
     expect(screen.getByTestId('context-surface')).toHaveAttribute('data-surface', 'skills');
+    expect(JSON.parse(screen.getByTestId('standalone-breadcrumb').getAttribute('data-items') || '[]')).toEqual([
+      { label: 'Home', href: '/' },
+      { label: store.getState().configs.config.branding.displayName, href: '/p/org' },
+      { label: 'sales', href: '/p/org/sales' },
+      { label: 'Skills' },
+    ]);
   });
 
   it('does not expose the standalone Skills component to viewers', () => {
@@ -103,6 +121,11 @@ describe('StandaloneContextPage', () => {
 
     expect(screen.getByTestId('context-surface')).toHaveAttribute('data-file-id', '1008');
     expect(screen.getByTestId('context-surface')).toHaveAttribute('data-surface', 'agents');
+    expect(JSON.parse(screen.getByTestId('standalone-breadcrumb').getAttribute('data-items') || '[]')).toEqual([
+      { label: 'Home', href: '/' },
+      { label: store.getState().configs.config.branding.displayName, href: '/p/org' },
+      { label: 'Agents' },
+    ]);
   });
 
   it('does not substitute another context for an inaccessible requested id', () => {

@@ -412,7 +412,9 @@ agents gate for editors/admins only. Both links carry the nearest context select
 used by chat. `components/context/StandaloneContextPage.tsx` owns the `/agents` and `/skills` route
 resolution and passes `standaloneTab` through `ContextContainerV2` to `ContextEditorV2`, which reuses the
 existing `AgentsTabContent` / `SkillsTabContent` bodies without the Knowledge Base file header or tab
-strip. Viewers see only enabled agents and keep their Play actions, but cannot enter context edit mode;
+strip. Each standalone page reuses the file-style `Breadcrumb`, derives its ancestor folders from the
+resolved context path, and replaces the context filename with `Agents` or `Skills`. Viewers see only
+enabled agents and keep their Play actions, but cannot enter context edit mode;
 their cards omit authoring-only prompt/model settings and use the solid Play treatment. Draft agents
 remain visible to editors/admins for management and never receive a Play action. The
 standalone Skills surface rejects viewers even if they follow its URL directly. Editors and admins get
