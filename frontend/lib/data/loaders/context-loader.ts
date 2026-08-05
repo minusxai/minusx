@@ -187,9 +187,9 @@ async function computeContextSchema(file: DbFile, user: EffectiveUser): Promise<
 function injectViewsAsTables(schema: DatabaseWithSchema[], views: ViewDef[]): DatabaseWithSchema[] {
   // Strip FIRST, unconditionally. A child inherits its parent's `fullSchema`,
   // which already carries the parent's injected `_views` — and to the whitelist
-  // fold that is an ordinary schema, so it rode down the tree untouched. A child
-  // that DECLINED a view still had it in its whitelisted schema, and only view
-  // resolution stopped the query (a puzzling "unknown view" rather than a
+  // fold that is an ordinary schema, so it rides down the tree untouched. A child
+  // that DECLINED a view would still have it in its whitelisted schema, with only
+  // view resolution stopping the query (a puzzling "unknown view" rather than a
   // refusal). Each context injects its OWN views and inherits none as tables.
   const present = new Set(schema.map((db) => db.databaseName));
   const decorated = schema.map((db) => {

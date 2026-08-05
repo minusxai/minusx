@@ -174,6 +174,8 @@ authored `<style>` blocks already live in the root.) DashboardSurface must also 
 `validateJsxSource` against `JSX_STORY_COMPONENT_NAMES` + `STORY_HTML_TAGS`; `content-jsx.ts` does the
 `content ⇄ jsx` conversion and is the only caller of `sanitizeLooseJsx`; `jsx-edit.ts` applies WYSIWYG
 DOM edits back onto the AST by `data-mx-ast` path and re-runs `validateJsx` on the result.
+`content-jsx.ts` also rejects, at save time, a body that parses but contains no element nodes
+(`jsxBodyError`) — a text-only body would otherwise render verbatim as a wall of markup.
 
 ## Gotchas
 

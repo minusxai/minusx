@@ -27,8 +27,8 @@ export interface ImageVariant {
 
 /**
  * What a report shows before anyone touches the settings, and what an image row
- * with NO recorded variant (a run from before the matrix existed) is read as —
- * laptop width, captured by Playwright, i.e. exactly the old behaviour.
+ * with NO recorded variant (a pre-matrix run on disk) is read as — laptop width,
+ * captured by Playwright — so pre-matrix runs still render.
  */
 export const DEFAULT_IMAGE_VARIANT: ImageVariant = { size: 'laptop', renderer: 'playwright' };
 
@@ -39,9 +39,9 @@ export const DEFAULT_IMAGE_VARIANT: ImageVariant = { size: 'laptop', renderer: '
  * layout no phone reader ever sees.
  *
  * `laptop` is 1280 because that is `devices['Desktop Chrome']` in
- * `playwright.qa.config.ts` — the width every existing report image was already
- * captured at. The default variant is therefore byte-parity with the old
- * single-image behaviour, not a new baseline.
+ * `playwright.qa.config.ts` — the width pre-matrix report images on disk were
+ * captured at. The default variant is byte-parity with those, not a new
+ * baseline.
  */
 export const VIEWPORT_WIDTH_PX: Record<ImageSize, number> = { laptop: 1280, mobile: 390 };
 

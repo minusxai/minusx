@@ -7,9 +7,8 @@ import { MD_LOGIN, MD_REGISTER, LANDING_HTML, ENABLE_ORG_CREATION, AUTH_URL } fr
 
 /**
  * The query string is read HERE and handed down as props, rather than with `useSearchParams()`
- * inside the form. That hook opts its subtree out of server rendering: the form was streamed into
- * a hidden Suspense segment that the client never revealed, and React rendered a second, empty
- * copy once the bundle executed. Until then there was no field on screen at all — the "typed
+ * inside the form. That hook opts its subtree out of server rendering: the form would stream into
+ * a hidden Suspense segment, leaving no field on screen until the bundle executes — a "typed
  * right after load and lost it" window. Reading the params on the server keeps the form in the
  * initial HTML, so it paints immediately and hydrates in place.
  */

@@ -113,7 +113,7 @@ export async function getWhitelistForPath(
     //
     // `null` is reserved for "genuinely unrestricted" (a `*` chain) and for
     // lookup failures above, which must never block execution. Returning it
-    // here instead is what made an admin's "expose nothing" mean "expose
+    // here instead would make an admin's "expose nothing" mean "expose
     // everything" — the inverse of the request, silently.
     //
     // Consequence worth knowing: in a workspace that curates explicitly, a

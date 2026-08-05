@@ -2,16 +2,14 @@
  * The governed query seam — the ONE place that decides whether a piece of
  * user- or agent-authored SQL may run, and what it actually executes as.
  *
- * Access control at query time used to be a courtesy each surface
- * re-implemented: the browser route validated the table whitelist and inlined
- * views, MCP validated but never inlined, and the agent's ExecuteQuery did
- * neither. They drifted, silently and repeatedly — a table withheld from a
- * workspace still returned rows through the agent's tool while the browser
- * answered 403 for the same SQL. Concealment is not enforcement: not showing a
- * table to a model is no protection once the model names it anyway.
+ * The composition lives here and every executing surface (browser route, MCP,
+ * the agent's ExecuteQuery) calls it, so the surfaces cannot drift apart —
+ * per-surface re-implementation is exactly how a table withheld from a
+ * workspace returns rows through one surface while another answers 403 for the
+ * same SQL. Concealment is not enforcement: not showing a table to a model is
+ * no protection once the model names it anyway.
  *
- * So the composition lives here and every executing surface calls it. The ORDER
- * is load-bearing and is the order `/api/query` established:
+ * The ORDER is load-bearing:
  *
  *   1. resolve the whitelist for the anchor   (null ⇒ genuinely unrestricted)
  *   2. validate the query the CALLER WROTE    (before any rewriting)
@@ -31,7 +29,8 @@
  *
  * Callers must not re-implement any step. `eslint.config.mjs` restricts direct
  * `run-query` imports to this module and a short list of callers that execute
- * already-validated SQL (semantic probes, view column snapshots, guest replay).
+ * already-validated SQL (semantic probes, view column snapshots, saved-question
+ * execution).
  */
 import 'server-only';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
@@ -50,12 +49,12 @@ import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 /**
  * Which context governs this query.
  *
- * Required rather than inferred, because the two surfaces genuinely differ and
- * the difference used to be accidental: a question file is governed by the
- * nearest context to ITS PATH (so a query saved into a locked-down team folder
- * runs under that folder's rules), while free-form chat has no file and is
- * governed by the user's home folder. Making it a parameter turns "which rules
- * apply?" into a visible decision at every call site.
+ * Required rather than inferred, because the two surfaces genuinely differ: a
+ * question file is governed by the nearest context to ITS PATH (so a query
+ * saved into a locked-down team folder runs under that folder's rules), while
+ * free-form chat has no file and is governed by the user's home folder. Making
+ * it a parameter turns "which rules apply?" into a visible decision at every
+ * call site.
  */
 export type QueryAnchor =
   | { kind: 'file'; path: string }

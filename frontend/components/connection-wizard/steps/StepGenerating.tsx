@@ -237,10 +237,9 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
    *  optional here: the dashboard and each of its questions are draft files, and a draft that is
    *  never published is invisible everywhere in the app — `/api/files` does not list it, so the
    *  completion screen finds no dashboard to link to and opening the file by id shows an empty
-   *  "Let's build your dashboard" grid with 0 questions. Previously this button was a bare
-   *  `onComplete()`, which made "Go to dashboard" and "Connect Slack" differ by whether you kept
-   *  your dashboard at all. Publish failure must still advance — stranding the user on the final
-   *  step with no working control is worse than an unpublished draft. */
+   *  "Let's build your dashboard" grid with 0 questions. Publish failure must still advance —
+   *  stranding the user on the final step with no working control is worse than an unpublished
+   *  draft. */
   const handleContinueToSlack = useCallback(async () => {
     try {
       await publishAll();
@@ -266,10 +265,10 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
   /**
    * "Build dashboard manually": interrupt the agent, but KEEP what it produced and open it.
    *
-   * This used to be byte-identical to `handleGoHome` — discard every draft and land on the home
-   * folder — so the control offering to let you finish the dashboard yourself deleted the
-   * dashboard first. Whatever the agent managed before the interrupt is the starting point the
-   * label promises, and a partial dashboard is strictly more use than an empty folder.
+   * Discarding the drafts here (as `handleGoHome` does) would mean the control offering to let
+   * you finish the dashboard yourself deletes the dashboard first. Whatever the agent managed
+   * before the interrupt is the starting point the label promises, and a partial dashboard is
+   * strictly more use than an empty folder.
    */
   const handleSkip = useCallback(async () => {
     const convToInterrupt = ownConvId ?? activeConvId;

@@ -112,8 +112,8 @@ export function LoginOrRegisterForm({
   // This page is server-rendered and autofocuses its first field, so it is typeable — and
   // fillable by a password manager — before this bundle hydrates. Every input below is
   // controlled from state that starts empty, and React resets a controlled input to its props on
-  // the first render after hydration; `useHtmlDark`'s mount effect guarantees one. That is what
-  // silently emptied the email field a moment after load. These refs adopt the live DOM value
+  // the first render after hydration; `useHtmlDark`'s mount effect guarantees one — which would
+  // silently empty the fields a moment after load. These refs adopt the live DOM value
   // into state instead, so nothing typed in that window is lost.
   const emailRef = usePrehydratedValue(setEmail);
   const passwordRef = usePrehydratedValue(setPassword);

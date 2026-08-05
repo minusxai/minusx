@@ -219,9 +219,9 @@ export const createFileHandler: FrontendToolHandler = async (args, context) => {
       // is already written. But it MUST be reported: the query runs through the file's
       // OWN path, so it is governed by that folder's context, and a failure means the
       // agent just created a question that does not run there (a table the folder does
-      // not expose, a bad column). Swallowing it into a console.warn answered plain
-      // `success: true` and left the agent to find out from a user. Mirrors EditFile's
-      // `queryExecution` block.
+      // not expose, a bad column). Swallowing it into a console.warn with a plain
+      // `success: true` would leave the agent to find out from a user. Mirrors
+      // EditFile's `queryExecution` block.
       try {
         await getQueryResult({
           query: finalContent.query,

@@ -24,8 +24,8 @@ export interface Typewriter {
  * So any click or keypress anywhere completes it. The listeners are attached only while typing and
  * removed the moment it finishes, so they never sit between the user and the page afterwards.
  *
- * This exists as a hook because the same effect had been copy-pasted into six components, which is
- * how five of them ended up unskippable — a fix applied to one copy is not a fix.
+ * This exists as a hook because six components need the same effect — per-component copies drift,
+ * and a fix applied to one copy is not a fix.
  */
 export function useTypewriter(text: string | undefined, speed: number = TYPEWRITER_SPEED): Typewriter {
   const full = text ?? '';

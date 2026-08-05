@@ -205,8 +205,9 @@ const AgentHtml = forwardRef<AgentHtmlHandle, AgentHtmlProps>(function AgentHtml
     // Defense-in-depth CSP for the agent-authored document (see lib/html/agent-iframe-csp.ts).
     const CSP = AGENT_IFRAME_CSP;
     // `<base target="_top">`: links inside an iframe navigate the IFRAME by default, which would load
-    // the whole app inside it (e.g. clicking an embedded chart's title → /f/<id>). Targeting _top sends
-    // every link navigation (chart titles, author links) to the top window instead.
+    // the whole app inside it. This is the browser-default fallback for links this document's bridge
+    // declines (cross-origin, modified clicks) — same-origin app links (e.g. an embedded chart's
+    // title → /f/<id>) are intercepted by `bridgeSurfaceLinks` below and never reach it.
     doc.open();
     doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${CSP}"><base target="_top"></head><body></body></html>`);
     doc.close();

@@ -18,10 +18,10 @@ const stepperKeyframes = `
   }
 `;
 
-// No skip affordance here on purpose. This bar used to carry a bare "Skip" link at its right
-// edge, which read as "skip this step" from its position but ended the ENTIRE wizard — the same
-// outcome as the "Skip Setup" button already sitting in the top-right corner. Two controls, one
-// meaning, and the ambiguous one was the destructive-looking-cheaper of the two. Per-step escapes
+// No skip affordance here on purpose. A bare "Skip" link at this bar's right edge reads as
+// "skip this step" from its position but would end the ENTIRE wizard — the same outcome as the
+// "Skip Setup" button already sitting in the top-right corner: two controls, one meaning, with
+// the ambiguous one looking like the cheaper of the two. Per-step escapes
 // live on the steps that have them ("Skip & figure out later", "Build dashboard manually"), where
 // their scope is unmistakable.
 interface StepIndicatorBarProps {

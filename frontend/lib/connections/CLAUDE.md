@@ -22,13 +22,14 @@ The cache steps are sketched here only for position; they are documented in
 browser  lib/file-state/query-results.ts  ── POST /api/query ─┐
 agent    agents/benchmark-analyst/db-tools.server.ts ─ getCachedResultBounded┤
 MCP      lib/mcp/server.ts ─ executeQuery ─ runQuery ─────────┤ (no cache)
-server   lib/file-state/file-state.server.ts ─ runQueryBounded┘ (no cache)
-                                                   │
-app/api/query/route.ts                             │
+server   lib/file-state/file-state.server.ts ─ runQueryBounded┘ (no cache,
+                                                   │            already-validated saved SQL)
+browser/agent/MCP each call                        │
+  resolveQueryForExecution                         │
+  (lib/sql/governed-query.server.ts:               │
+   whitelist validate + `_views.*` inlining) ← BEFORE any cache serve / cache key
+the route additionally applies                     │
   guest gate (assertGuestQueryAllowed)             │
-  whitelist validate (validateQueryTables)  ← BEFORE any cache serve
-  dialect (ConnectionsAPI.getRawByName)            │
-  view inlining (lib/views/resolve.ts)      ← BEFORE the cache key
   ──► getCachedJsonlStream(execute)                │
                                                    ▼
                                    execute() = applyNoneParams  (lib/sql/none-params.ts)

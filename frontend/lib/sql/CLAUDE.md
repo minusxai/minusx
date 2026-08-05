@@ -15,8 +15,8 @@ The two siblings in the same data plane have their own docs — `frontend/lib/co
 (driver contact, the connectors, the row-cap seam) and `frontend/lib/query-cache/CLAUDE.md` (the
 durable SWR + lease + blob cache). Callers reach into this module from both sides:
 `lib/connections/run-query.ts` calls `enforceQueryLimit`, `app/api/query/route.ts` calls
-`applyNoneParams` and `validateQueryTables`, and `lib/query-cache/guest-query.server.ts` calls
-`isValidParamName`.
+`applyNoneParams` (whitelist validation happens inside `resolveQueryForExecution` — see the
+governance seam below), and `lib/query-cache/guest-query.server.ts` calls `isValidParamName`.
 
 > Part of the MinusX project documentation. The root `CLAUDE.md` carries the system
 > overview, the module map and the development principles that apply everywhere.
@@ -128,10 +128,10 @@ composes, in a fixed order: whitelist resolution → `validateQueryTables` → d
 inlining. It throws `WhitelistViolationError` or `ViewResolutionError`; otherwise it returns
 `{executedQuery, dialect, schemaContext}`.
 
-**It exists because per-surface enforcement drifted, three times.** `/api/query` validated and
-inlined; MCP validated but never inlined (a view reference reached the warehouse as a nonexistent
-table); the agent's `ExecuteQuery` did neither — so a table withheld from a workspace still returned
-rows through the agent's tool while the browser answered 403 for the same SQL. **Concealment is not
+**It exists because per-surface enforcement drifts.** With each surface re-implementing the steps,
+one validates and inlines, another validates but never inlines (a view reference reaches the
+warehouse as a nonexistent table), a third does neither — and a table withheld from a workspace
+returns rows through one surface while another answers 403 for the same SQL. **Concealment is not
 enforcement**: not showing a table to a model is no protection once the model names it anyway.
 The three callers are `app/api/query/route.ts`, `agents/benchmark-analyst/db-tools.server.ts`
 (`ExecuteQuery._executeFallback`) and `lib/mcp/server.ts`.
@@ -142,16 +142,16 @@ directly, and its own SQL is validated where it is authored (the context save ga
 inlined text would reject exactly the case views exist for. Inlining precedes execution *and* caching
 so cache keys are computed over the resolved SQL.
 
-**The `QueryAnchor` is required, not inferred**, because the surfaces genuinely differ and the
-difference used to be accidental: `{kind:'file', path}` governs a question by the nearest context to
+**The `QueryAnchor` is required, not inferred**, because the surfaces genuinely differ:
+`{kind:'file', path}` governs a question by the nearest context to
 **its own path** (what makes a locked-down team folder lock its questions down), `{kind:'homeFolder'}`
 governs free-form chat and MCP, which have no file in hand.
 
 **Metadata is whitelisted too.** The suggestion surfaces (`lib/data/completions/completions.server.ts`
 — mentions, table and column suggestions) resolve the whitelist server-side through
 `getWhitelistForPath` and filter the connection schema before answering. A client-supplied
-`whitelistedSchemas` is now only a **narrowing** applied on top; it used to be the source of truth,
-so a caller that omitted it got the entire warehouse. `/api/autocomplete` is exempt by construction:
+`whitelistedSchemas` is only a **narrowing** applied on top — treating it as the source of truth
+would hand a caller that omits it the entire warehouse. `/api/autocomplete` is exempt by construction:
 it completes against schema the client already sent, so it can reveal nothing new. Those surfaces
 then **append the context's views** as a `_views` entry (`viewsAsSchemaTables`), after the narrowing
 rather than before — the client's cached whitelist enumerates real tables and would drop `_views` for
@@ -159,12 +159,12 @@ not being in it. Filtering alone would have been half the promise: a curated vie
 queryable, but exists nowhere in the connector's introspected schema, so the object such a workspace
 most wants people to reach for was the one no picker, mention or column list would name.
 
-**Both halves of one decision must read the SAME context.** `getWhitelistForPath` takes the anchor
-path whole; `getViewsForPath` used to strip its last segment first — right for a file, wrong for the
-folder anchor chat and MCP pass, where it walked past that folder's own context. The whitelist then
-resolved from `/org/team` while the views resolved from `/org`. Both now hand the unstripped path to
-`findNearestContextPath`, which matches a serving folder that is the path itself or any ancestor of
-it, so file and folder anchors agree by construction
+**Both halves of one decision must read the SAME context.** `getWhitelistForPath` and
+`getViewsForPath` both hand the unstripped anchor path to `findNearestContextPath`, which matches a
+serving folder that is the path itself or any ancestor of it, so file and folder anchors agree by
+construction. Stripping the last segment first would be right for a file but wrong for the folder
+anchor chat and MCP pass — the whitelist would resolve from `/org/team` while the views resolved
+from `/org`
 (`lib/views/__tests__/views-schema.test.ts`, "a FOLDER anchor").
 
 **Known gap — ad-hoc SQL is not whitelist-checked.** `/api/query` with no `filePath` (the `/explore`
@@ -176,9 +176,9 @@ Closing it needs a **profiling-free resolver**, and the obvious version does not
 whitelist today goes through the context loader, which loads connection files and can start a schema
 refresh — the regression `app/api/query/__tests__/query-route-no-profiling.test.ts` guards (N parallel
 dashboard queries → gateway timeout → "Failed to fetch"). Re-folding the whitelist from raw context
-reads (`skipEnrichment`) plus the connection's cached schema was tried and reverted: the loader's
-`fullSchema` also carries **views injected as `_views` tables**, so a whitelist-only re-fold denied
-every view query. A correct cheap resolver must additionally re-fold inherited views, `viewWhitelist`
+reads (`skipEnrichment`) plus the connection's cached schema is not a correct cheap resolver: the
+loader's `fullSchema` also carries **views injected as `_views` tables**, so a whitelist-only re-fold
+denies every view query. A correct cheap resolver must additionally re-fold inherited views, `viewWhitelist`
 and disabled-view detection. `__tests__/whitelist-resolver-parity.test.ts` already pins the resolver
 against the loader across wildcards, explicit lists, narrowing children, `childPaths` and multi-level
 chains — extend it to views and the rest of that work has a safety net.
@@ -195,7 +195,7 @@ everything. Both `getWhitelistForPath` and `validateQueryTablesLocal` observe it
 returns `[]` once it knows the chain is not all-wildcard and the connection resolves to no schemas,
 and the validator only short-circuits on a nullish whitelist, never on an empty one.
 
-Conflating them was a fail-open — an admin's "expose nothing" silently became "expose everything",
+Conflating them is a fail-open — an admin's "expose nothing" silently becomes "expose everything",
 the exact inverse of the request, on an access-control decision. The consequence of the fix is worth
 knowing: **in a workspace that curates explicitly, a connection added later is not queryable until
 some context whitelists it.** That is what an explicit list means, and it now fails loudly instead of

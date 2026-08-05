@@ -1,15 +1,12 @@
 /**
  * The MCP tool surface, declared once.
  *
- * The OAuth consent screen has to tell the user what an MCP client is about to be granted, and
- * it did that with its own hand-typed array of five names. `LoadContext` was added to `server.ts`
- * afterwards and nobody went back to the consent screen, so for every user with a Context Library
- * the screen understated the grant — it named five of the six tools the client would receive, and
- * omitted the one that reads their documents.
- *
- * Two hand-maintained copies of one list is the entire bug, so there is now one copy. `server.ts`
- * registers tools by `MCP_TOOL.X` rather than by retyping the string, and the consent screen maps
- * over `MCP_TOOLS`. A name cannot drift between them because neither of them spells it.
+ * The OAuth consent screen has to tell the user what an MCP client is about to be granted, and a
+ * second hand-typed copy of the tool list there understates the grant the moment a tool is added
+ * to `server.ts` alone — for a user with a Context Library, that means omitting exactly the tool
+ * that reads their documents. So there is one copy: `server.ts` registers tools by `MCP_TOOL.X`
+ * rather than by retyping the string, and the consent screen maps over `MCP_TOOLS`. A name cannot
+ * drift between them because neither of them spells it.
  *
  * What a shared constant still cannot catch is a tool declared here and registered nowhere, or
  * registered under a name absent from `MCP_TOOL`. `__tests__/tool-manifest.e2e.test.ts` closes

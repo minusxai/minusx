@@ -18,9 +18,9 @@ const RESTRICT_DOCUMENTS_DB = {
 
 // Query execution is governed: `lib/sql/governed-query.server.ts` resolves the
 // table whitelist, validates the SQL the caller wrote, and inlines `_views.*`.
-// Surfaces that execute user- or agent-authored SQL must go through it — three
-// of them independently forgot a step and drifted apart, which is how a table
-// withheld from a workspace still returned rows through the agent's tool.
+// Surfaces that execute user- or agent-authored SQL must go through it — surfaces
+// that each re-implement the steps independently forget one and drift apart, which
+// is how a table withheld from a workspace still returns rows through another surface.
 //
 // The allowlist at the bottom of this file names the legitimate direct callers:
 // the governed surfaces themselves (which call the seam and then execute), and

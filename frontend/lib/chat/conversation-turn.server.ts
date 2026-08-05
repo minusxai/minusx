@@ -358,8 +358,9 @@ export async function runConversationTurn(
   // (conversation id + surface: `setup.pageType` becomes the LLM-call `trigger`
   // so usage can be split by surface). Passed the turn's log DIFF, not the full log.
   await setup.recordUsage?.(piDiff);
-  // Stamp the turn's final context size (last call's totalTokens) for the client's
-  // "conversation too long" gate. Best-effort — never fails the turn.
+  // Stamp the turn's final context size (last call's totalTokens). The server-side
+  // "conversation too long" gate above reads it on the next turn, and the client's
+  // banner reads it on reload. Best-effort — never fails the turn.
   const lastUsage = [...piDiff].reverse().find(
     (e): e is typeof e & { usage: { totalTokens?: number } } =>
       'role' in e && e.role === 'assistant' && 'usage' in e && e.usage != null,

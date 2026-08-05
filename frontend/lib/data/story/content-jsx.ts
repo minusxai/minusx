@@ -168,8 +168,8 @@ const isJsxField = (s: JsonSchema): boolean => !!s && s.format === 'jsx';
  * child, so it parses, validates, stores, and then renders as a wall of
  * `<div className=…>` text (`lib/story-ui/interpreter.tsx` renders a text node
  * as its value). Nothing throws anywhere along that path. Models on the
- * anthropic-messages API produce it routinely — it shipped a text-dump story
- * through the QA eval as a PASS on 2026-08-04. Rejecting at save is what turns
+ * anthropic-messages API produce it routinely — enough to ship a text-dump
+ * story through the QA eval as a PASS. Rejecting at save is what turns
  * it into something the agent can see and correct, and the message is its only
  * route to doing so (same precedent as the unknown-component error listing the
  * registered set). Template literals INSIDE markup — the SQL/CSS escape hatch —

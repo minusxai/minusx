@@ -244,8 +244,9 @@ export async function setGeneratedConversationTitle(id: number, title: string): 
 
 /**
  * Stamp the turn's final context size (`usage.totalTokens` of its last LLM call) onto meta.
- * The conversation row rides every GET /api/conversations/:id response, so the client's
- * "conversation too long" gate works on reload without usage rows on the display wire.
+ * The server-side "conversation too long" gate reads it from `conv.meta` on the next turn;
+ * the conversation row also rides every GET /api/conversations/:id response, so the client's
+ * banner works on reload without usage rows on the display wire.
  */
 export async function setLastContextTokens(id: number, tokens: number): Promise<void> {
   if (!Number.isFinite(tokens) || tokens <= 0) return;

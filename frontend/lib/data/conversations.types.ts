@@ -34,8 +34,9 @@ export interface ConversationMeta {
   /** True once an AI-generated title has been written to `title` (vs the raw first message). */
   titleGenerated?: boolean;
   /** `usage.totalTokens` of the turn's last LLM call — the whole conversation is re-sent every
-   *  call, so this IS the current context size. Stamped at turn end; drives the client's
-   *  "conversation too long" nudge without shipping usage rows over the display wire. */
+   *  call, so this IS the current context size. Stamped at turn end; drives the server-side
+   *  "conversation too long" refusal and the client's banner, without shipping usage rows over
+   *  the display wire. */
   lastContextTokens?: number;
   /** Live/most-recent Remote Agent Session for this conversation (see remote-sessions.types). */
   remoteSession?: RemoteSessionRecord;
