@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, FormEvent } from 'react';
-import { useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import { Box, VStack, HStack, Input, Button, Heading, Text } from '@chakra-ui/react';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -11,6 +10,7 @@ import remarkGfm from 'remark-gfm';
 import { Dither } from '@/components/ui/Dither';
 import { ColorModeSwitch } from '@/components/ui/color-mode';
 import { useConfigs } from '@/lib/hooks/useConfigs';
+import { usePrehydratedValue } from '@/lib/hooks/use-prehydrated-value';
 import { OrgConfig } from '@/lib/branding/whitelabel';
 import { OTPInput } from '@/components/auth/OTPInput';
 import { fetchWithCache } from '@/lib/http/fetch-wrapper';
@@ -30,6 +30,10 @@ interface LoginFormProps {
   initialMode?: 'login' | 'register';
   landingHtml?: string;
   enableOrgCreation?: boolean;
+  /** `?register` was present on the URL — read on the server; see app/login/page.tsx. */
+  forceRegister?: boolean;
+  /** `?callbackUrl` — where to land after a successful sign-in. */
+  callbackUrl?: string;
 }
 
 /**
@@ -59,8 +63,9 @@ export function LoginOrRegisterForm({
   initialMode = 'login',
   landingHtml,
   enableOrgCreation = true,
+  forceRegister = false,
+  callbackUrl,
 }: LoginFormProps) {
-  const searchParams = useSearchParams();
   const { config: reduxConfig } = useConfigs();
   const config = orgConfig || reduxConfig;
   const displayName = config.branding.agentName;
@@ -74,7 +79,7 @@ export function LoginOrRegisterForm({
   // `?register` (any value, incl. empty) forces the "Set Up Your Workspace" form — handy for
   // viewing/iterating on it when there's no landing-page button to reach it.
   const [mode, setMode] = useState<'login' | 'register'>(
-    searchParams.get('register') !== null ? 'register' : initialMode,
+    forceRegister ? 'register' : initialMode,
   );
   const [justCreatedOrg, setJustCreatedOrg] = useState<string | null>(null);
 
@@ -103,6 +108,19 @@ export function LoginOrRegisterForm({
   const [registerLoading, setRegisterLoading] = useState(false);
   const [tosAccepted, setTosAccepted] = useState(false);
   const [tosError, setTosError] = useState<string | null>(null);
+
+  // This page is server-rendered and autofocuses its first field, so it is typeable — and
+  // fillable by a password manager — before this bundle hydrates. Every input below is
+  // controlled from state that starts empty, and React resets a controlled input to its props on
+  // the first render after hydration; `useHtmlDark`'s mount effect guarantees one. That is what
+  // silently emptied the email field a moment after load. These refs adopt the live DOM value
+  // into state instead, so nothing typed in that window is lost.
+  const emailRef = usePrehydratedValue(setEmail);
+  const passwordRef = usePrehydratedValue(setPassword);
+  const workspaceNameRef = usePrehydratedValue(setWorkspaceName);
+  const adminNameRef = usePrehydratedValue(setAdminName);
+  const adminEmailRef = usePrehydratedValue(setAdminEmail);
+  const adminPasswordRef = usePrehydratedValue(setAdminPassword);
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
@@ -133,7 +151,7 @@ export function LoginOrRegisterForm({
         setLoginLoading(false);
         return;
       }
-      window.location.href = searchParams.get('callbackUrl') || '/';
+      window.location.href = callbackUrl || '/';
     } catch (err) {
       console.error('Login error:', err);
       setLoginError('An unexpected error occurred');
@@ -188,7 +206,7 @@ export function LoginOrRegisterForm({
         setOtpLoading(false);
         return;
       }
-      window.location.href = searchParams.get('callbackUrl') || '/';
+      window.location.href = callbackUrl || '/';
     } catch (err) {
       console.error('Verify OTP error:', err);
       setLoginError('Failed to verify OTP');
@@ -250,7 +268,7 @@ export function LoginOrRegisterForm({
         setOtpLoading(false);
         return;
       }
-      window.location.href = searchParams.get('callbackUrl') || '/';
+      window.location.href = callbackUrl || '/';
     } catch (err) {
       console.error('Verify email OTP error:', err);
       setLoginError('Failed to verify code');
@@ -427,6 +445,7 @@ export function LoginOrRegisterForm({
                 <VStack gap={4}>
                   <Box w="full">
                     <Input
+                      ref={workspaceNameRef}
                       type="text"
                       aria-label="Workspace name"
                       placeholder="Workspace Name"
@@ -444,6 +463,7 @@ export function LoginOrRegisterForm({
                   </Box>
                   <Box w="full">
                     <Input
+                      ref={adminNameRef}
                       type="text"
                       aria-label="Admin name"
                       placeholder="Your Name"
@@ -458,6 +478,7 @@ export function LoginOrRegisterForm({
                   </Box>
                   <Box w="full">
                     <Input
+                      ref={adminEmailRef}
                       type="email"
                       aria-label="Admin email"
                       placeholder="Email"
@@ -472,6 +493,7 @@ export function LoginOrRegisterForm({
                   </Box>
                   <Box w="full">
                     <Input
+                      ref={adminPasswordRef}
                       type="password"
                       aria-label="Admin password"
                       placeholder="Password"
@@ -558,7 +580,7 @@ export function LoginOrRegisterForm({
 
               {loginMethod === 'emailOtp' ? (
                 <VStack gap={4} w="full">
-                  <Input type="email" fontFamily="mono" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus size="lg" disabled={showOTPInput} />
+                  <Input ref={emailRef} type="email" aria-label="Email" fontFamily="mono" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus size="lg" disabled={showOTPInput} />
                   {!showOTPInput ? (
                     <Button onClick={handleSendEmailOTP} w="full" bg="accent.teal" color="white" size="lg" loading={otpLoading} disabled={otpLoading} _hover={{ bg: 'accent.teal', opacity: 0.9 }}>
                       <LuLogIn />
@@ -585,8 +607,8 @@ export function LoginOrRegisterForm({
                     {/* Focus the password when the email is already filled (e.g. right after creating a
                         workspace, where we land on login with the email prefilled). Autofocusing the
                         email there re-grabbed focus and dropped the user's first password keystrokes. */}
-                    <Input type="email" fontFamily="mono" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus={!email} size="lg" />
-                    <Input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required autoFocus={!!email} size="lg" disabled={showOTPInput} />
+                    <Input ref={emailRef} type="email" aria-label="Email" fontFamily="mono" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus={!email} size="lg" />
+                    <Input ref={passwordRef} type="password" aria-label="Password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required autoFocus={!!email} size="lg" disabled={showOTPInput} />
 
                     {showOTPInput && (
                       <VStack gap={4} w="full" mt={4}>
