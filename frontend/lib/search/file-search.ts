@@ -3,7 +3,6 @@ import { searchInField, type FieldSearchStats } from './file-search-utils';
 import { FilesAPI } from '@/lib/data/files.server';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
-import { canViewFileInUI } from '@/lib/data/helpers/permissions';
 
 /**
  * Search configuration for different file types
@@ -265,40 +264,16 @@ export async function searchFilesInFolder(
     types = Array.isArray(file_types) ? file_types : [file_types];
   }
 
-  // Load all files for search. Search only needs the RAW stored content (the
-  // SEARCH_CONFIGS accessors read plain DB fields), so pass skipEnrichment:
-  // the context loader's fullSchema computation (throws on unmigrated
-  // contexts) and the connection loader's live schema introspection (can
-  // block for minutes) must never run on the search path. Per-type try/catch
-  // on top: an unexpected failure in one type degrades that type's results
-  // instead of failing the whole request.
-  const allFiles: DbFile[] = [];
-  for (const type of types) {
-    try {
-      const { data: typeFiles } = await FilesAPI.getFiles({
-        paths: [searchPath],
-        type,
-        depth
-      }, user);
-
-      // Load full content for search
-      const fileIds = typeFiles.map((f: any) => f.id);
-      if (fileIds.length > 0) {
-        const { data: fullFiles } = await FilesAPI.loadFiles(fileIds, user, { skipEnrichment: true });
-        allFiles.push(...fullFiles);
-      }
-    } catch (error) {
-      // `type` is request-derived — pass it as an argument, never in the format string.
-      console.error('[file-search] Skipping file type — load failed:', type, error);
-    }
-  }
-
-  // Apply visibility filter based on context
-  // 'ui' mode: Filter to viewable types only (for UI search, folder browser)
-  // 'all' mode: No additional filter (for LLM tools - they need full access)
-  const filesToSearch = visibility === 'ui'
-    ? allFiles.filter(file => canViewFileInUI(file, user))
-    : allFiles;
+  // One permission-filtered read for the whole search — see
+  // `FilesAPI.getFilesForSearch` for why this is not `getFiles` + `loadFiles`
+  // per type, and what running no loader buys. Raw stored content is exactly
+  // what the SEARCH_CONFIGS accessors want, so nothing needs enriching; there
+  // is correspondingly no per-type failure to contain, because no per-type
+  // loader runs.
+  const filesToSearch: DbFile[] = await FilesAPI.getFilesForSearch(
+    { path: searchPath, types, depth, visibility },
+    user
+  );
 
   // Execute search with ranking
   const rankedResults = searchFiles(filesToSearch, query);

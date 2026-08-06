@@ -22,7 +22,7 @@ import {
   MoveFileResult,
   DeleteFileResult
 } from './types';
-import { canAccessFile } from './helpers/permissions';
+import { canAccessFile, canViewFileInUI } from './helpers/permissions';
 import { extractReferenceIds } from './helpers/references';
 import { UserFacingError, AccessPermissionError, FileNotFoundError } from '@/lib/errors';
 import { validateFileState } from '@/lib/validation/content-validators';
@@ -243,6 +243,51 @@ class FilesDataLayerServer implements IFilesDataLayer {
       data: transformedFiles,
       metadata: { references: transformedReferences, analytics }
     };
+  }
+
+  /**
+   * Raw permission-filtered rows under a path, for full-text search.
+   *
+   * Deliberately NOT `getFiles` + `loadFiles`. Search reads `name`, `path` and
+   * `content` and nothing else, so every extra those two provide is dead weight
+   * on a path that runs per keystroke: reference expansion, the analytics
+   * summary, an org-config read per call, and — via `extractReferenceIds` — one
+   * child-id query per folder, twice. On one 2160-file / 240-folder workspace
+   * (PGLite) the per-type route cost 494 queries and 242ms per search; this is
+   * 1 query and 80ms on the same data. Round trips grew as `2N + 14` for N
+   * folders, so the collapse to a single query matters far more against a
+   * networked Postgres than the PGLite wall-clock suggests.
+   *
+   * It is still a full scan — cost grows linearly with the number of files
+   * under `path`, not with the query. Making it sublinear means a Postgres
+   * full-text index, not a further reshaping of this method.
+   *
+   * Running no loader also means the context loader's `fullSchema` computation
+   * and the connection loader's live introspection are unreachable from here,
+   * rather than opted out of via `skipEnrichment` — which in turn is why the
+   * raw stored content is safe to hand back: `SEARCH_CONFIGS` never reads a
+   * connection's `config`, so no unredacted secret is scanned or snippeted.
+   */
+  async getFilesForSearch(
+    options: { path: string; types: FileType[]; depth?: number; visibility?: 'ui' | 'all' },
+    user: EffectiveUser
+  ): Promise<DbFile[]> {
+    const { path: searchPath, types, depth = 999, visibility = 'ui' } = options;
+
+    const [rows, overrides] = await Promise.all([
+      DocumentDB.listAll(undefined, [searchPath], depth, true),
+      this._getOverrides(user),
+    ]);
+
+    const typeSet = new Set<string>(types);
+    // 'ui' → viewTypes-narrowed (search results, folder browser).
+    // 'all' → full access, for the LLM tools.
+    return rows.filter(file =>
+      typeSet.has(file.type) &&
+      (visibility === 'ui'
+        ? canViewFileInUI(file, user, overrides)
+        : canAccessFile(file, user, overrides))
+    );
   }
 
   async getFiles(options: GetFilesOptions, user: EffectiveUser): Promise<GetFilesResult> {
