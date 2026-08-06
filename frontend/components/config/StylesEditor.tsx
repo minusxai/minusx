@@ -153,10 +153,12 @@ export default function StylesEditor({
         bg="bg.muted"
       >
         <Text fontSize="sm" color="fg.muted" fontFamily="mono">
-          <strong>Styles:</strong> CSS rules for org branding (logos, colors, etc.)
+          <strong>Styles:</strong> optional CSS overrides on top of the config-driven branding.
+          To change the logo, set <code>{`branding.logoLight`}</code> / <code>{`branding.logoDark`}</code> in
+          the config — custom CSS here is only needed for styling beyond that, and it wins over the derived rules.
         </Text>
         <Text fontSize="xs" color="fg.muted" fontFamily="mono" mt={2}>
-          Example: <code>{`[aria-label="Workspace logo"] { background-image: url('/logo.svg'); }`}</code>
+          Example: <code>{`[aria-label="Workspace logo"] { border-radius: 8px; }`}</code>
         </Text>
       </Box>
     </VStack>

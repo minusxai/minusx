@@ -133,13 +133,25 @@ export const DEFAULT_CONFIG: OrgConfig = {
   analytics: { enabled: true },
 };
 
+/** Keep a branding URL inert inside `url('…')`: allow URL characters only. */
+function cssUrl(url: string): string {
+  return url.replace(/[^\w\-./:?=&%#~+@,]/g, '');
+}
+
 /**
- * Default CSS styles for org branding
- * Uses aria-label selectors to style logo elements
+ * The CSS that paints every in-app `[aria-label="Workspace logo"]` element,
+ * DERIVED from `branding.logoLight`/`logoDark` — so setting the logo in the
+ * org config is the one knob that changes it everywhere (app, emails, share
+ * cards). The layout injects this layer FIRST and the styles document AFTER
+ * it, so hand-written CSS in the styles document still overrides via cascade
+ * order.
  */
-export const DEFAULT_STYLES = `
+export function logoCssFromBranding(branding: Pick<OrgBranding, 'logoLight' | 'logoDark'>): string {
+  const light = cssUrl(branding.logoLight || DEFAULT_CONFIG.branding.logoLight!);
+  const dark = cssUrl(branding.logoDark || DEFAULT_CONFIG.branding.logoDark!);
+  return `
 [aria-label="Workspace logo"] {
-  background-image: url('/logox_dark.svg');
+  background-image: url('${light}');
   background-size: contain;
   background-position: center;
   background-repeat: no-repeat;
@@ -147,9 +159,18 @@ export const DEFAULT_STYLES = `
 }
 
 .dark [aria-label="Workspace logo"] {
-  background-image: url('/logox.svg');
+  background-image: url('${dark}');
 }
 `.trim();
+}
+
+/**
+ * The seeded content of a fresh workspace's styles document — exactly the
+ * derived logo CSS for the default branding. The styles loader treats a
+ * document still equal to this as "no customization" (the config-derived
+ * layer covers the logo), so only intentional edits ever shadow the config.
+ */
+export const DEFAULT_STYLES = logoCssFromBranding(DEFAULT_CONFIG.branding);
 
 /**
  * Deep merge two config objects
