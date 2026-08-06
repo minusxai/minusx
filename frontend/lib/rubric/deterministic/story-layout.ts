@@ -3,16 +3,18 @@
  *
  * A story embed (`<Question>`) is always `width:100%` of its cell; its rendered width is set by
  * the CSS layout AROUND it. We can't resolve real pixels without a browser, but we CAN catch the
- * common structural causes of a cramped chart: a chart packed into a multi-column CSS grid, or
- * pinned to a fixed narrow px width. This module walks the agent-JSX body, resolves each embed's
- * approximate column-width share (grid-track division × percentage widths) and its tightest fixed
- * px cap, and collects param declarations/refs for the undeclared-param rule.
+ * common structural causes of a cramped chart: a chart packed into a modern `<GridItem>` or a
+ * multi-column CSS grid, or pinned to a fixed narrow px width. This module walks the agent-JSX
+ * body, resolves each embed's approximate column-width share (Grid w/cols, CSS grid tracks, and
+ * percentage widths) and its tightest fixed px cap, and collects param declarations/refs for the
+ * undeclared-param rule.
  *
  * Input is the AGENT JSX form (`buildStoryJsx`), where embeds are real `<Question>/<Number>/
  * <Param>` elements with inline `viz`/`params`/`style`, not the stored placeholder-div HTML.
  */
 import { parseJsx } from '@/lib/jsx';
 import type { JsonValue, JsxElement, JsxNode } from '@/lib/jsx';
+import { gridCols, gridItemRect } from '@/lib/story-ui/grid-layout';
 import { extractSqlParams } from './shared';
 
 /** Canonical subset of CSS declarations the width analyzer reads (from inline styles OR class rules). */
@@ -200,7 +202,13 @@ export function scanStoryLayout(bodyJsx: string, cssRules: Record<string, CssDec
   const parsed = parseJsx(bodyJsx);
   if (!parsed.ok) return scan;
 
-  const visit = (node: JsxNode, fraction: number, minPx: number | null, parentTracks: number): void => {
+  const visit = (
+    node: JsxNode,
+    fraction: number,
+    minPx: number | null,
+    parentTracks: number,
+    parentStoryGridCols: number | null,
+  ): void => {
     if (node.type !== 'element') return;
     const el = node;
     const decls = mergedDecls(el, cssRules);
@@ -211,6 +219,15 @@ export function scanStoryLayout(bodyJsx: string, cssRules: Record<string, CssDec
     if (parentTracks > 1) {
       const span = Math.min(spanFromGridColumn(decls.gridColumn), parentTracks);
       frac = (frac * span) / parentTracks;
+    }
+    // Modern <Grid>/<GridItem> geometry is authored in component props, not CSS. The child
+    // item's width is its w/cols share of the story column.
+    if (el.tag === 'GridItem' && parentStoryGridCols !== null) {
+      const rect = gridItemRect({
+        x: attrJson(el, 'x'), y: attrJson(el, 'y'),
+        w: attrJson(el, 'w'), h: attrJson(el, 'h'),
+      }, parentStoryGridCols);
+      frac = (frac * rect.w) / parentStoryGridCols;
     }
     // The element's own width constraints narrow it (and everything inside it) further.
     for (const w of [decls.width, decls.flexBasis, decls.maxWidth]) {
@@ -236,9 +253,10 @@ export function scanStoryLayout(bodyJsx: string, cssRules: Record<string, CssDec
 
     // Columns THIS element establishes for its direct children.
     const childTracks = decls.gridTemplateColumns ? gridTrackCount(decls.gridTemplateColumns) : 1;
-    for (const c of el.children) visit(c, frac, mp, childTracks);
+    const childStoryGridCols = el.tag === 'Grid' ? gridCols(attrJson(el, 'cols')) : null;
+    for (const c of el.children) visit(c, frac, mp, childTracks, childStoryGridCols);
   };
 
-  for (const n of parsed.nodes) visit(n, 1, null, 1);
+  for (const n of parsed.nodes) visit(n, 1, null, 1, null);
   return scan;
 }

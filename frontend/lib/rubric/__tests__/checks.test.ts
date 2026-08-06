@@ -67,8 +67,8 @@ describe('deterministic check catalog', () => {
 // Preserve discipline in the paused catalog so reactivating a check later is safe.
 describe('LLM checklist severity discipline', () => {
   it('has no active runtime checklist', () => {
-    expect(['question', 'dashboard', 'story', 'context'].every((type) =>
-      formatChecklist(type as 'question' | 'dashboard' | 'story' | 'context') === '')).toBe(true);
+    expect((['question', 'dashboard', 'story', 'context'] as const).every((type) =>
+      formatChecklist(type) === '')).toBe(true);
   });
 
   it('harmonious-chart-body is taste-level — warn, not a gate', () => {

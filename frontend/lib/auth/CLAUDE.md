@@ -362,18 +362,19 @@ The constants live beside the rules (`scoring.ts`: weights `0.3/0.3/0.4` for vis
   has no entries. `activeLlmChecks` is the runtime boundary, so `scoreFileLLM` currently makes no
   model call for any file type. Question visual structure is checked deterministically from its
   authoritative V2 `viz` envelope (with legacy `vizSettings` used only when V2 is absent).
-- **Judge voting is configured off.** `JUDGE_VOTES = 1` in `score-llm.server.ts` despite the
-  surrounding comment describing an N-run worst-of aggregation; a check a
-  run omits from its JSON is treated as neither pass nor fail.
+- **Judge voting is dormant and configured to one vote.** Every LLM check is paused. If one is
+  reactivated, `JUDGE_VOTES = 1` in `score-llm.server.ts`; a check the run omits from its JSON is
+  treated as neither pass nor fail.
 - **`CheckFileHealth` scores the last SAVED content**, while the rubric route's POST scores the
   caller-supplied merged content so the score matches the screenshot. A fresh unsaved draft
   therefore scores 0/5 through the tool.
 - **The live thresholds, stated plainly** because they are easy to misremember: `visual-count`
   warns above `MAX_VISUALS = 15`, while `no-visuals` errors at zero; `JUDGE_VOTES = 1`;
   `too-much-text` warns above 400 tokens, while `extreme-text` errors above 800; `typed-number`
-  fires on any of four shapes in prose (`findFactualNumbers`,
-  `deterministic/shared.ts`) — a `$`-prefixed figure, a `%`-suffixed one, a comma-grouped
-  thousands value, *or* a bare run of 5+ digits, so `$12` and `7%` trip it too; and the judge's
+  fires only on clearly formatted metric shapes in prose (`findFactualNumbers`,
+  `deterministic/shared.ts`) — a `$`-prefixed figure, a `%`-suffixed one, or a comma-grouped
+  thousands value. Bare digit runs are ignored as possible ids/years/references; `$12` and `7%`
+  still trip it. The dormant judge's
   model comes from the code-owned grade override `rubric_llm: task('rubric_llm', 'core')` in
   `agents/micro/micro-tasks.ts`.
 

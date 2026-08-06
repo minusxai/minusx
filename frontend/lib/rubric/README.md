@@ -12,10 +12,10 @@ From `frontend/`, regenerate with `npm run generate-rubric-readme`. CI-style dri
 |---|---:|---|---:|---:|---|
 | question | 9 | correctness, clarity | 0 | 7 | none |
 | dashboard | 12 | correctness, clarity | 0 | 7 | none |
-| story | 9 | correctness, clarity, aesthetics | 13 | 0 | aesthetics |
+| story | 10 | correctness, clarity, aesthetics | 0 | 13 | none |
 | context | 3 | correctness, clarity | 0 | 0 | none |
 
-Question and dashboard are deterministic-only at runtime, but their former LLM checks remain cataloged as paused for a later revisit. Context has no LLM checks. Story retains an active LLM checklist.
+All file types are deterministic-only at runtime. Former question, dashboard, and story LLM checks remain cataloged as paused for a later revisit; context has no LLM checks.
 
 ## What runs the rubric
 
@@ -118,32 +118,33 @@ Severity behavior comes from the single `SEVERITY_SCORING` map in `scoring.ts`:
 | Check id | Pass condition | Category | Failure severity |
 |---|---|---|---|
 | `story.no-evidence` | Has live evidence | correctness | error |
-| `story.typed-number` | Numbers are live | correctness | warn |
+| `story.typed-number` | No hardcoded metrics | correctness | warn |
 | `story.undeclared-param` | Params declared | correctness | error |
+| `story.grid-content-invalid` | Grid content is visible | correctness | error |
+| `story.grid-overlap` | Grid items do not overlap | correctness | warn |
 | `story.no-headline` | Has a headline | clarity | warn |
-| `story.no-lead` | Has a lead | clarity | warn |
+| `story.no-lead` | Has a lead description | clarity | warn |
 | `story.embed-too-narrow` | Charts wide enough | clarity | error |
+| `story.modern-root-incomplete` | Modern root is responsive | clarity | warn |
 | `story.no-page-gutter` | Page gutter present | aesthetics | warn |
-| `story.no-design-tokens` | Design tokens defined | aesthetics | warn |
-| `story.too-many-colors` | Palette disciplined | aesthetics | warn |
 
 #### LLM
 
 | Check id | Status | Label | Category | Failure severity | Pass condition | Fix on failure |
 |---|---|---|---|---|---|---|
-| `llm.single-lead` | active | One clear lead | aesthetics | error | The story states ONE clear lead finding — a claim containing a number — near the top. FAIL only when you can point to the problem: no lead claim at all, a lead with no number, or two competing leads. PASS otherwise. | Open with one sentence stating the finding and its number. |
-| `llm.evidence-supports-claims` | active | Claims are supported | aesthetics | error | No stated NUMBER or specific factual claim is contradicted by — or absent from — the charts/numbers shown. Subjective wording ("large", "strong", "meaningful") is NOT a failure. FAIL only when you can point to the specific figure or fact that the visible evidence contradicts or does not contain. PASS otherwise. | Only claim what the referenced chart shows; remove or hedge unsupported statements. |
-| `llm.headlines-are-findings` | active | Headlines state findings | aesthetics | warn | Section headlines state findings/conclusions, not just topics (“Revenue fell 12% in Q3”, not “Revenue”). PASS if headlines are findings. | Rewrite headlines as the finding they introduce, not the topic. |
-| `llm.frame-carries-insight` | active | Frame carries insight | aesthetics | warn | The prose/annotations around each chart carry the insight (what to notice), not a bare chart left to interpret. PASS if framed. | Add a standfirst/annotation to each chart telling the reader what it shows. |
-| `llm.embeds-well-sized` | active | Embeds well-sized | aesthetics | warn | Every chart/number embed fits its frame: no chart squeezed too small or too narrow to read, and no single_value/number stranded in a large mostly-empty box (dead space). Line/area/bar/scatter charts need ≥50% of the column width; pie/funnel need ≥34%. PASS if all embeds are well-proportioned with no wasted space. | Size each embed to its content — give charts room (≥half the column), and shrink single_value/number cards so the figure fills them; drop packed multi-column grids that starve charts of width. |
-| `llm.charts-render-cleanly` | active | Charts render cleanly | aesthetics | warn | Charts render cleanly and honestly: no misleading cratered/partial final period, no overlapping titles or labels, no broken/empty/all-zero plots. PASS if every chart renders without artifacts. | Fix the chart at its source — trim an incomplete final period, resolve overlapping text, and ensure the query returns a clean series before embedding. |
-| `llm.ugly-empty-space-alignment` | active | No ugly empty space | aesthetics | error | There is no LARGE empty region (roughly half a viewport or more of blank space) and no chart or block visibly misaligned with its neighbors. A heading wrapping onto a second line is fine. FAIL only when you can point to the specific blank region or misaligned element. PASS otherwise. | Align charts to a grid and remove large empty regions. |
-| `llm.readable-charts` | active | Charts are readable | aesthetics | error | Chart text is readable: no overlapping labels, no font blending into the background, no tiny text, and no blank/broken/empty chart panel. FAIL only when you can point to the specific illegible label or broken panel. PASS otherwise. | Fix the chart at its source — adjust label placement, font color, and size, and reduce overplotting before embedding. |
-| `llm.text-readable` | active | Text is readable | aesthetics | error | All prose is readable: no tiny font, no low contrast, no cramped or overlapping text. FAIL only when you can point to the specific illegible text. PASS otherwise. | Increase font size, improve contrast, and adjust spacing to avoid cramped or overlapping text. |
-| `llm.no-hand-drawn-charts` | active | No hand-drawn charts | aesthetics | error | Every data visual is a live `<Question>` embed, never an HTML/CSS approximation — no divs-as-bars, width-percentage encodings, CSS gauges, or hand-drawn sparklines standing in for a chart. FAIL only when you can point to the specific hand-built visual encoding data. PASS otherwise. | Replace the hand-built HTML/CSS chart with a live `<Question>` embed carrying a `<viz>` (Vega-Lite) envelope. |
-| `llm.harmonious-chart-body` | active | Charts harmonize with the body | aesthetics | warn | Charts harmonize with the story body: no chart is visually jarring or stylistically inconsistent with the surrounding text and story style. PASS if charts feel integrated and consistent with the story. | Adjust chart styles, colors, and fonts or fix the body of the story to ensure visual harmony. This is critical for maintaining a cohesive visual narrative. |
-| `llm.deliberate-palette` | active | Deliberate palette | aesthetics | warn | The design uses a deliberate palette with one protagonist accent and is NOT a generic AI-default look (cream+serif+terracotta, acid-green-on-black, purple gradients, generic hairline-rule broadsheet). PASS if the palette looks intentional and distinctive. | Choose a deliberate 4–6 color palette with one accent; avoid the default AI looks. |
-| `llm.typographic-craft` | active | Typographic craft | aesthetics | warn | Typography and spacing feel intentional — clear hierarchy, comfortable measure, good contrast and rhythm. PASS if the type feels crafted. | Establish a type scale, generous spacing, and strong heading/body contrast. |
+| `llm.single-lead` | paused | One clear lead | aesthetics | error | The story states ONE clear lead finding — a claim containing a number — near the top. FAIL only when you can point to the problem: no lead claim at all, a lead with no number, or two competing leads. PASS otherwise. | Open with one sentence stating the finding and its number. |
+| `llm.evidence-supports-claims` | paused | Claims are supported | aesthetics | error | No stated NUMBER or specific factual claim is contradicted by — or absent from — the charts/numbers shown. Subjective wording ("large", "strong", "meaningful") is NOT a failure. FAIL only when you can point to the specific figure or fact that the visible evidence contradicts or does not contain. PASS otherwise. | Only claim what the referenced chart shows; remove or hedge unsupported statements. |
+| `llm.headlines-are-findings` | paused | Headlines state findings | aesthetics | warn | Section headlines state findings/conclusions, not just topics (“Revenue fell 12% in Q3”, not “Revenue”). PASS if headlines are findings. | Rewrite headlines as the finding they introduce, not the topic. |
+| `llm.frame-carries-insight` | paused | Frame carries insight | aesthetics | warn | The prose/annotations around each chart carry the insight (what to notice), not a bare chart left to interpret. PASS if framed. | Add a standfirst/annotation to each chart telling the reader what it shows. |
+| `llm.embeds-well-sized` | paused | Embeds well-sized | aesthetics | warn | Every chart/number embed fits its frame: no chart squeezed too small or too narrow to read, and no single_value/number stranded in a large mostly-empty box (dead space). Line/area/bar/scatter charts need ≥50% of the column width; pie/funnel need ≥34%. PASS if all embeds are well-proportioned with no wasted space. | Size each embed to its content — give charts room (≥half the column), and shrink single_value/number cards so the figure fills them; drop packed multi-column grids that starve charts of width. |
+| `llm.charts-render-cleanly` | paused | Charts render cleanly | aesthetics | warn | Charts render cleanly and honestly: no misleading cratered/partial final period, no overlapping titles or labels, no broken/empty/all-zero plots. PASS if every chart renders without artifacts. | Fix the chart at its source — trim an incomplete final period, resolve overlapping text, and ensure the query returns a clean series before embedding. |
+| `llm.ugly-empty-space-alignment` | paused | No ugly empty space | aesthetics | error | There is no LARGE empty region (roughly half a viewport or more of blank space) and no chart or block visibly misaligned with its neighbors. A heading wrapping onto a second line is fine. FAIL only when you can point to the specific blank region or misaligned element. PASS otherwise. | Align charts to a grid and remove large empty regions. |
+| `llm.readable-charts` | paused | Charts are readable | aesthetics | error | Chart text is readable: no overlapping labels, no font blending into the background, no tiny text, and no blank/broken/empty chart panel. FAIL only when you can point to the specific illegible label or broken panel. PASS otherwise. | Fix the chart at its source — adjust label placement, font color, and size, and reduce overplotting before embedding. |
+| `llm.text-readable` | paused | Text is readable | aesthetics | error | All prose is readable: no tiny font, no low contrast, no cramped or overlapping text. FAIL only when you can point to the specific illegible text. PASS otherwise. | Increase font size, improve contrast, and adjust spacing to avoid cramped or overlapping text. |
+| `llm.no-hand-drawn-charts` | paused | No hand-drawn charts | aesthetics | error | Every data visual is a live `<Question>` embed, never an HTML/CSS approximation — no divs-as-bars, width-percentage encodings, CSS gauges, or hand-drawn sparklines standing in for a chart. FAIL only when you can point to the specific hand-built visual encoding data. PASS otherwise. | Replace the hand-built HTML/CSS chart with a live `<Question>` embed carrying a `<viz>` (Vega-Lite) envelope. |
+| `llm.harmonious-chart-body` | paused | Charts harmonize with the body | aesthetics | warn | Charts harmonize with the story body: no chart is visually jarring or stylistically inconsistent with the surrounding text and story style. PASS if charts feel integrated and consistent with the story. | Adjust chart styles, colors, and fonts or fix the body of the story to ensure visual harmony. This is critical for maintaining a cohesive visual narrative. |
+| `llm.deliberate-palette` | paused | Deliberate palette | aesthetics | warn | The design uses a deliberate palette with one protagonist accent and is NOT a generic AI-default look (cream+serif+terracotta, acid-green-on-black, purple gradients, generic hairline-rule broadsheet). PASS if the palette looks intentional and distinctive. | Choose a deliberate 4–6 color palette with one accent; avoid the default AI looks. |
+| `llm.typographic-craft` | paused | Typographic craft | aesthetics | warn | Typography and spacing feel intentional — clear hierarchy, comfortable measure, good contrast and rhythm. PASS if the type feels crafted. | Establish a type scale, generous spacing, and strong heading/body contrast. |
 
 ### Context
 
