@@ -212,6 +212,40 @@ describe('FilesAPI.moveFile — folders', () => {
     expect(other.versions[0].docs[0].childPaths).toEqual(['/org/pfx-other/deep']);
   });
 
+  it('rolls the whole move back when a childPaths rewrite fails (atomicity)', async () => {
+    const srcId = await createFolder('/org/at-src');
+    await createFolder('/org/at-dest');
+
+    const rootCtx = await DocumentDB.getByPath('/org/context');
+    const rootContent = {
+      ...(rootCtx!.content as Record<string, unknown>),
+      versions: [{
+        version: 1,
+        whitelist: '*',
+        docs: [{ title: 'at-doc', content: 'doc', childPaths: ['/org/at-src'] }],
+        createdAt: new Date().toISOString(),
+        createdBy: 1
+      }],
+      published: { all: 1 }
+    };
+    await DocumentDB.update(rootCtx!.id, 'context', '/org/context', rootContent, [], 'seed-at');
+
+    const spy = vi.spyOn(DocumentDB, 'update').mockRejectedValueOnce(new Error('rewrite boom'));
+    try {
+      await expect(
+        FilesAPI.moveFile({ id: srcId, name: 'at-src', newPath: '/org/at-dest/at-src' }, testUser)
+      ).rejects.toThrow('rewrite boom');
+    } finally {
+      spy.mockRestore();
+    }
+
+    // Nothing moved and nothing was rewritten: all-or-nothing.
+    expect(await DocumentDB.getByPath('/org/at-src')).not.toBeNull();
+    expect(await DocumentDB.getByPath('/org/at-dest/at-src')).toBeNull();
+    const root = (await DocumentDB.getByPath('/org/context'))!.content as any;
+    expect(root.versions[0].docs[0].childPaths).toEqual(['/org/at-src']);
+  });
+
   it('delete still cascades the context file with its folder', async () => {
     const folderId = await createFolder('/org/del-me');
     expect(await DocumentDB.getByPath('/org/del-me/context')).not.toBeNull();

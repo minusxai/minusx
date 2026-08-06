@@ -5,7 +5,7 @@
  * break under specific tree SHAPES or specific combinations of the two
  * inheritance halves (`childPaths` on the parent's side, the child's whitelist
  * on the other). The headline case is sibling directories whose paths have the
- * SAME string length (e.g. /org/BSIM vs /org/SMMA) — the shape a folder move
+ * SAME string length (e.g. /org/ALFA vs /org/BETA) — the shape a folder move
  * into a folder creates for the first time.
  *
  * Run: npm test -- context-inheritance-edge.test.ts
@@ -112,19 +112,19 @@ describe('Context inheritance edge cases', () => {
     await getModules().db.exec('DELETE FROM files', []);
 
     mockGetSchema.mockImplementation((name: string) => {
-      if (name === 'starlight') {
+      if (name === 'main_wh') {
         return Promise.resolve({
           schemas: [{
-            schema: 'app_data',
-            tables: [{ table: 'smmf_pnl', columns: [{ name: 'id', type: 'INTEGER' }] }]
+            schema: 'core_data',
+            tables: [{ table: 'pnl', columns: [{ name: 'id', type: 'INTEGER' }] }]
           }]
         } as DatabaseSchema);
       }
       if (name === 'static') {
         return Promise.resolve({
           schemas: [
-            { schema: 'bsim', tables: [{ table: 'accounts', columns: [{ name: 'id', type: 'INTEGER' }] }] },
-            { schema: 'kpi_data', tables: [{ table: 'kpi', columns: [{ name: 'id', type: 'INTEGER' }] }] },
+            { schema: 'finance', tables: [{ table: 'accounts', columns: [{ name: 'id', type: 'INTEGER' }] }] },
+            { schema: 'kpi', tables: [{ table: 'kpi', columns: [{ name: 'id', type: 'INTEGER' }] }] },
             { schema: 's1', tables: [{ table: 't1', columns: [{ name: 'id', type: 'INTEGER' }] }] },
             { schema: 's2', tables: [{ table: 't2', columns: [{ name: 'id', type: 'INTEGER' }] }] }
           ]
@@ -133,80 +133,80 @@ describe('Context inheritance edge cases', () => {
       return Promise.resolve({ schemas: [] } as unknown as DatabaseSchema);
     });
 
-    await mkConnection('starlight');
+    await mkConnection('main_wh');
     await mkConnection('static');
   });
 
   describe('same-length sibling directories', () => {
-    let bsimCtxId: number;
-    let smmaCtxId: number;
-    let smmfCtxId: number;
+    let alfaCtxId: number;
+    let betaCtxId: number;
+    let deepCtxId: number;
 
     beforeEach(async () => {
-      // Root: starlight is for the SMMA subtree, static is for the BSIM subtree.
+      // Root: main_wh is for the BETA subtree, static is for the ALFA subtree.
       await mkContext('/org/context', {
         whitelist: [
-          { name: 'starlight', type: 'connection', children: [
-            { name: 'app_data', type: 'schema', childPaths: ['/org/SMMA'] }
+          { name: 'main_wh', type: 'connection', children: [
+            { name: 'core_data', type: 'schema', childPaths: ['/org/BETA'] }
           ]},
           { name: 'static', type: 'connection', children: [
-            { name: 'bsim', type: 'schema', childPaths: ['/org/BSIM'] },
-            { name: 'kpi_data', type: 'schema', childPaths: ['/org/BSIM'] }
+            { name: 'finance', type: 'schema', childPaths: ['/org/ALFA'] },
+            { name: 'kpi', type: 'schema', childPaths: ['/org/ALFA'] }
           ]}
         ],
         docs: [{ title: 'root-doc', content: 'for everyone' }]
       });
 
-      // /org/BSIM and /org/SMMA are SAME-LENGTH sibling directories.
-      bsimCtxId = await mkContext('/org/BSIM/context', {
+      // /org/ALFA and /org/BETA are SAME-LENGTH sibling directories.
+      alfaCtxId = await mkContext('/org/ALFA/context', {
         whitelist: [
           { name: 'static', type: 'connection', children: [
-            { name: 'bsim', type: 'schema' },
-            { name: 'kpi_data', type: 'schema' }
+            { name: 'finance', type: 'schema' },
+            { name: 'kpi', type: 'schema' }
           ]}
         ],
-        docs: [{ title: 'bsim-doc', content: 'BSIM only' }],
-        views: [mkView('clean_kpi', { schema: 'kpi_data', table: 'kpi' })]
+        docs: [{ title: 'alfa-doc', content: 'ALFA only' }],
+        views: [mkView('clean_kpi', { schema: 'kpi', table: 'kpi' })]
       });
-      smmaCtxId = await mkContext('/org/SMMA/context', { whitelist: '*' });
-      smmfCtxId = await mkContext('/org/SMMA/SMMF/context', { whitelist: '*' });
+      betaCtxId = await mkContext('/org/BETA/context', { whitelist: '*' });
+      deepCtxId = await mkContext('/org/BETA/DEEP/context', { whitelist: '*' });
 
       // Ancestor candidates are scanned in updated_at DESC order. Make the WRONG
-      // candidate (BSIM) the most recently updated one, so any matcher that
+      // candidate (ALFA) the most recently updated one, so any matcher that
       // confuses same-length sibling directories deterministically picks it.
       await new Promise(r => setTimeout(r, 5));
-      const bsim = await DocumentDB.getById(bsimCtxId);
-      await DocumentDB.update(bsimCtxId, 'context', '/org/BSIM/context', bsim!.content as ContextContent, [], 'bump-bsim');
+      const alfa = await DocumentDB.getById(alfaCtxId);
+      await DocumentDB.update(alfaCtxId, 'context', '/org/ALFA/context', alfa!.content as ContextContent, [], 'bump-alfa');
     });
 
-    it('sanity: SMMA inherits only what root offers its subtree', async () => {
-      const smma = await loadContent(smmaCtxId);
-      expect(schemaNames(smma, 'starlight')).toEqual(['app_data']);
-      expect(schemaNames(smma, 'static')).toEqual([]);
+    it('sanity: BETA inherits only what root offers its subtree', async () => {
+      const beta = await loadContent(betaCtxId);
+      expect(schemaNames(beta, 'main_wh')).toEqual(['core_data']);
+      expect(schemaNames(beta, 'static')).toEqual([]);
     });
 
     it('a nested context inherits from its TRUE parent, not a same-length sibling directory', async () => {
-      const smmf = await loadContent(smmfCtxId);
-      // Through root → SMMA, SMMF is offered starlight/app_data and nothing of static.
-      expect(schemaNames(smmf, 'starlight')).toEqual(['app_data']);
-      expect(schemaNames(smmf, 'static')).toEqual([]);
+      const deep = await loadContent(deepCtxId);
+      // Through root → BETA, DEEP is offered main_wh/core_data and nothing of static.
+      expect(schemaNames(deep, 'main_wh')).toEqual(['core_data']);
+      expect(schemaNames(deep, 'static')).toEqual([]);
     });
 
     it('docs of a same-length sibling subtree never leak into a nested context', async () => {
-      const smmf = await loadContent(smmfCtxId);
-      const titles = (smmf.fullDocs ?? []).map(d => d.title);
+      const deep = await loadContent(deepCtxId);
+      const titles = (deep.fullDocs ?? []).map(d => d.title);
       expect(titles).toContain('root-doc');
-      expect(titles).not.toContain('bsim-doc');
+      expect(titles).not.toContain('alfa-doc');
     });
 
     it('views of a same-length sibling subtree never leak into a nested context', async () => {
-      const bsim = await loadContent(bsimCtxId);
+      const alfa = await loadContent(alfaCtxId);
       // The view is real and alive where it is defined…
-      expect((bsim.viewProblems ?? [])).toEqual([]);
-      // …but SMMF must not inherit it: BSIM is not its ancestor.
-      const smmf = await loadContent(smmfCtxId);
-      expect((smmf.parentViews ?? []).map(v => v.name)).not.toContain('clean_kpi');
-      expect(viewNames(smmf)).not.toContain('clean_kpi');
+      expect((alfa.viewProblems ?? [])).toEqual([]);
+      // …but DEEP must not inherit it: ALFA is not its ancestor.
+      const deep = await loadContent(deepCtxId);
+      expect((deep.parentViews ?? []).map(v => v.name)).not.toContain('clean_kpi');
+      expect(viewNames(deep)).not.toContain('clean_kpi');
     });
   });
 

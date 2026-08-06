@@ -1,4 +1,4 @@
-import { QueryResult } from '@/lib/database/adapter/types';
+import { QueryResult, ITransactionContext } from '@/lib/database/adapter/types';
 import type { NextRequest, NextResponse } from 'next/server';
 import type { AuthConfigOptions } from '@/lib/auth/auth-config-options';
 import type { LlmConfig } from '@/lib/llm/llm-config-types';
@@ -25,6 +25,14 @@ export interface PresignedUrl {
  */
 export interface IFileSystemDBModule {
   exec<T = unknown>(sql: string, params?: unknown[]): Promise<QueryResult<T>>;
+  /**
+   * Run `fn` atomically: every statement issued through the given context runs
+   * on ONE dedicated connection, committed on return and rolled back on throw.
+   * Plain `exec('BEGIN')`/`exec('COMMIT')` is NOT a transaction on the pooled
+   * Postgres backend — each exec may use a different pool client — so anything
+   * needing all-or-nothing writes must go through this.
+   */
+  transaction<T>(fn: (tx: ITransactionContext) => Promise<T>): Promise<T>;
   init(): Promise<void>;
   /** Release any held resources (connections, WASM handles). Optional — not all backends need it. */
   close?(): Promise<void>;

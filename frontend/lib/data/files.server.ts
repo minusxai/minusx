@@ -1,5 +1,5 @@
 import 'server-only';
-import { DocumentDB } from '@/lib/database/documents-db';
+import { DocumentDB, DbExecutor } from '@/lib/database/documents-db';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { DbFile, BaseFileContent, FileType, QuestionContent, ConnectionContent, ContextContent, ReportContent, AlertContent, CsvFileInfo } from '@/lib/types';
 import { pruneConnectionSchemaToFiles } from '@/lib/data/helpers/prune-connection-schema';
@@ -49,6 +49,7 @@ import { selectDatabase } from '@/lib/utils/database-selector';
 import { getFileAnalyticsSummary, getFilesAnalyticsSummary, getConversationAnalytics } from '@/lib/analytics/file-analytics.server';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { hashContent } from '@/lib/utils/query-hash';
+import { getModules } from '@/lib/modules/registry';
 import { SharesAPI } from '@/lib/data/shares/shares.server';
 
 /**
@@ -1031,26 +1032,35 @@ class FilesDataLayerServer implements IFilesDataLayer {
       }
 
       const descendantIds = descendants.map(f => f.id);
-      await DocumentDB.moveFolderAndChildren(id, descendantIds, oldPath, newPath, name);
 
       // Context documents reference folders BY PATH in `childPaths` (whitelist
       // nodes, docs, views, semantic models — the parent's "who receives this"
       // half of inheritance). Any context anywhere may grant to the moved folder
       // or its descendants, and contexts inside the moved subtree may grant to
-      // paths that just moved with them — so rewrite across all contexts, after
-      // the path rewrite. Direct DocumentDB write, like the move itself: the
-      // rewrite is mechanical and must not depend on live connectors (gates).
-      const allContexts = await DocumentDB.listAll('context', undefined, -1, true);
-      for (const ctx of allContexts) {
-        if (!ctx.content) continue;
-        const rewritten = rewriteChildPathsForMove(ctx.content, oldPath, newPath);
-        if (rewritten !== ctx.content) {
-          await DocumentDB.update(
-            ctx.id, ctx.name, ctx.path, rewritten, ctx.references ?? [],
-            hashContent({ id: ctx.id, move: [oldPath, newPath], content: rewritten })
-          );
+      // paths that just moved with them — so rewrite across contexts alongside
+      // the path rewrite, in ONE transaction (a dedicated connection via
+      // db.transaction — pool-level BEGIN/COMMIT would not be atomic on
+      // Postgres): a crash must never leave paths moved with grants still
+      // pointing at the old location. Direct DocumentDB writes, like the move
+      // itself: the rewrite is mechanical and must not depend on live
+      // connectors (gates). Candidates are prefiltered in SQL by content
+      // substring so a move never loads every context's content.
+      await getModules().db.transaction(async (txCtx) => {
+        const tx: DbExecutor = { exec: (sql, params) => txCtx.query(sql, params as any[]) };
+        await DocumentDB.moveFolderAndChildren(id, descendantIds, oldPath, newPath, name, tx);
+        const referencing = await DocumentDB.listByTypeContaining('context', oldPath, tx);
+        for (const ctx of referencing) {
+          if (!ctx.content) continue;
+          const rewritten = rewriteChildPathsForMove(ctx.content, oldPath, newPath);
+          if (rewritten !== ctx.content) {
+            await DocumentDB.update(
+              ctx.id, ctx.name, ctx.path, rewritten, ctx.references ?? [],
+              hashContent({ id: ctx.id, move: [oldPath, newPath], content: rewritten }),
+              undefined, tx
+            );
+          }
         }
-      }
+      });
     } else {
       const success = await DocumentDB.updateMetadata(id, name, newPath);
       if (!success) {

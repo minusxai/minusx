@@ -1,5 +1,6 @@
 import { getAdapter } from '@/lib/database/adapter/factory';
 import { IFileSystemDBModule } from '../types';
+import { ITransactionContext } from '@/lib/database/adapter/types';
 
 /**
  * Adapter-backed DB Module — wraps the Postgres adapter singleton with the IFileSystemDBModule interface.
@@ -9,6 +10,11 @@ export class AdapterBackedDBModule implements IFileSystemDBModule {
   async exec<T = unknown>(sql: string, params?: unknown[]) {
     const adapter = await getAdapter();
     return adapter.query<T>(sql, params as any[]);
+  }
+
+  async transaction<T>(fn: (tx: ITransactionContext) => Promise<T>): Promise<T> {
+    const adapter = await getAdapter();
+    return adapter.transaction(fn);
   }
 
   async init(): Promise<void> {

@@ -9,6 +9,17 @@ import { UserFacingError } from '../errors';
 import { stripNulChars } from './sanitize-jsonb';
 
 /**
+ * Statement executor a method can run on: the registry's db module, or a
+ * transaction-bound wrapper so multiple writes commit atomically. Methods that
+ * take `tx?: DbExecutor` run on it when given, so a caller inside
+ * `db.transaction(...)` keeps every statement on the dedicated connection —
+ * plain `exec('BEGIN')` through the pooled Postgres module is NOT a transaction.
+ */
+export type DbExecutor = {
+  exec<T = unknown>(sql: string, params?: unknown[]): Promise<{ rows: T[]; rowCount: number }>;
+};
+
+/**
  * Path uniqueness applies to PUBLISHED files only (partial index
  * idx_files_path_published_unique, WHERE draft = false); drafts are exempt. A 23505 here therefore
  * means another PUBLISHED file already occupies this path — translate it into a clear, actionable
@@ -250,13 +261,14 @@ export class DocumentDB {
     content: BaseFileContent,
     references: number[],
     editId: string,
-    expectedVersion?: number
+    expectedVersion?: number,
+    tx?: DbExecutor
   ): Promise<
     | { alreadyApplied: true; file: DbRow }
     | { conflict: true; file: DbRow }
     | { file: DbRow }
   > {
-    const db = getModules().db;
+    const db = tx ?? getModules().db;
 
     const current = await db.exec<DbRow>('SELECT * FROM files WHERE id = $1', [id]);
     if (current.rows.length === 0) throw new Error(`File ${id} not found`);
@@ -365,14 +377,20 @@ export class DocumentDB {
     descendantIds: number[],
     oldPath: string,
     newPath: string,
-    newName: string
+    newName: string,
+    tx?: DbExecutor
   ): Promise<number> {
+    const db = tx ?? getModules().db;
     if (descendantIds.length === 0) {
-      const updated = await this.updateMetadata(folderId, newName, newPath);
-      return updated ? 1 : 0;
+      // Mirrors updateMetadata (version++ so stale snapshots ConflictError on
+      // their next save), inlined so the write stays on the caller's `tx`.
+      const result = await db.exec(
+        'UPDATE files SET name = $1, path = $2, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $3',
+        [newName, newPath, folderId]
+      );
+      return result.rowCount > 0 ? 1 : 0;
     }
 
-    const db = getModules().db;
     const allIds = [folderId, ...descendantIds];
     const placeholders = allIds.map((_, i) => `$${i + 5}`).join(', ');
     const result = await db.exec(
@@ -389,6 +407,24 @@ export class DocumentDB {
       [folderId, newName, newPath, oldPath, ...allIds]
     );
     return result.rowCount;
+  }
+
+  /**
+   * List files of one type whose serialized content contains `needle`. A cheap
+   * SQL prefilter for callers that would otherwise load every row's content
+   * (context documents can carry multi-MB computed schemas) — the caller still
+   * decides per row whether anything actually matches, so LIKE-wildcard
+   * characters in `needle` are escaped only to avoid under-matching, and a
+   * false positive costs one no-op inspection, never a wrong result.
+   */
+  static async listByTypeContaining(typeFilter: string, needle: string, tx?: DbExecutor): Promise<DbFile[]> {
+    const db = tx ?? getModules().db;
+    const escaped = needle.replace(/[\\%_]/g, (m) => '\\' + m);
+    const result = await db.exec<DbRow>(
+      `SELECT * FROM files WHERE type = $1 AND content::text LIKE '%' || $2 || '%' ESCAPE '\\'`,
+      [typeFilter, escaped]
+    );
+    return result.rows.map((row) => rowToDbFile(row));
   }
 
   static async deleteByIds(ids: number[]): Promise<number> {

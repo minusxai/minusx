@@ -213,7 +213,7 @@ function findNearestAncestorContext(currentPath: string, allContexts: any[]): an
     const ancestorDir = '/' + segments.join('/');
 
     // Match on the context's OWN directory, never on a length-based substring:
-    // sibling directories with same-length paths (/org/BSIM vs /org/SMMA) must
+    // sibling directories with same-length paths (/org/ALFA vs /org/BETA) must
     // never satisfy each other's ancestor lookup.
     const found = allContexts.find(c => {
       if (c.type !== 'context') return false;
