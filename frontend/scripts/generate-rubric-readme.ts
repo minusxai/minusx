@@ -58,11 +58,13 @@ function summaryTable(): string[] {
   const rows = FILE_TYPES.map((fileType) => {
     const deterministic = DETERMINISTIC_CHECKS[fileType];
     const llm = LLM_CHECKS[fileType];
-    return `| ${fileType} | ${deterministic.length} | ${categoryList(deterministic.map((c) => c.category))} | ${llm.length} | ${categoryList(llm.map((c) => c.category))} |`;
+    const active = llm.filter((check) => check.status !== 'paused');
+    const paused = llm.length - active.length;
+    return `| ${fileType} | ${deterministic.length} | ${categoryList(deterministic.map((c) => c.category))} | ${active.length} | ${paused} | ${categoryList(active.map((c) => c.category))} |`;
   });
   return [
-    '| File type | Deterministic checks | Deterministic categories | LLM checks | LLM categories |',
-    '|---|---:|---|---:|---|',
+    '| File type | Deterministic checks | Deterministic categories | Active LLM checks | Paused LLM checks | Active LLM categories |',
+    '|---|---:|---|---:|---:|---|',
     ...rows,
   ];
 }
@@ -110,12 +112,12 @@ function deterministicTable(fileType: RubricFileType): string[] {
 
 function llmTable(fileType: RubricFileType): string[] {
   const checks = LLM_CHECKS[fileType];
-  if (checks.length === 0) return ['_No LLM checks. This file type is deterministic-only._'];
+  if (checks.length === 0) return ['_No cataloged LLM checks. This file type is deterministic-only._'];
   return [
-    '| Check id | Label | Category | Failure severity | Pass condition | Fix on failure |',
-    '|---|---|---|---|---|---|',
+    '| Check id | Status | Label | Category | Failure severity | Pass condition | Fix on failure |',
+    '|---|---|---|---|---|---|---|',
     ...checks.map((check) =>
-      `| ${code(`llm.${check.id}`)} | ${cell(check.label)} | ${check.category} | ${check.severity} | ${cell(check.question)} | ${cell(check.fix)} |`),
+      `| ${code(`llm.${check.id}`)} | ${check.status ?? 'active'} | ${cell(check.label)} | ${check.category} | ${check.severity} | ${cell(check.question)} | ${cell(check.fix)} |`),
   ];
 }
 
@@ -127,7 +129,7 @@ function generate(): string {
     '',
     '# Agent file-health rubric',
     '',
-    'This is the generated inventory of file-health checks and the actions that run them. The deterministic and LLM check tables—including category and failure severity—come from `checks.ts`.',
+    'This is the generated inventory of file-health checks and the actions that run them. The deterministic and LLM check tables—including runtime status, category, and failure severity—come from `checks.ts`.',
     '',
     'From `frontend/`, regenerate with `npm run generate-rubric-readme`. CI-style drift checking is available with `npm run generate-rubric-readme -- --check` and is included in `npm run validate`.',
     '',
@@ -135,11 +137,13 @@ function generate(): string {
     '',
     ...summaryTable(),
     '',
-    'A `context` is a non-visual knowledge file, so it has no LLM checks. For other file types, deterministic checks cover structural correctness and clarity; the LLM checklist adds visual and subjective assessment.',
+    'Question is deterministic-only at runtime, but its former LLM checks remain cataloged as paused for a later revisit. Context has no LLM checks. Dashboard and story retain active LLM checklists.',
     '',
     '## What runs the rubric',
     '',
     ...actionTable(),
+    '',
+    'LLM behavior in this table applies only when a file type has active checks. Paused checks are never sent to the judge.',
     '',
     '`ReadFiles` and app-state projection do not attach a rubric. Rubric feedback is attached where the agent acts (`CreateFile`, `EditFile`, and `ReviewFile`) or when health is explicitly requested.',
     '',

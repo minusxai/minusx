@@ -10,12 +10,12 @@ From `frontend/`, regenerate with `npm run generate-rubric-readme`. CI-style dri
 
 | File type | Deterministic checks | Deterministic categories | LLM checks | LLM categories |
 |---|---:|---|---:|---|
-| question | 8 | correctness, clarity | 7 | aesthetics |
+| question | 10 | correctness, clarity | 0 | none |
 | dashboard | 12 | correctness, clarity | 7 | aesthetics |
 | story | 9 | correctness, clarity, aesthetics | 13 | aesthetics |
 | context | 3 | correctness, clarity | 0 | none |
 
-A `context` is a non-visual knowledge file, so it has no LLM checks. For other file types, deterministic checks cover structural correctness and clarity; the LLM checklist adds visual and subjective assessment.
+Question and context are deterministic-only. Dashboard and story retain LLM checklists while their remaining visual checks are migrated or deliberately retired.
 
 ## What runs the rubric
 
@@ -60,22 +60,16 @@ Severity behavior comes from the single `SEVERITY_SCORING` map in `scoring.ts`:
 | `question.unused-param` | No unused parameters | correctness | warn |
 | `question.viz-config-incomplete` | Chart configured | correctness | error |
 | `question.pie-multi-measure` | Chart fits the data | correctness | warn |
+| `question.honest-scale` | Value scale includes zero | correctness | error |
 | `question.query-too-long` | Query ≤400 tokens | clarity | warn |
 | `question.query-extreme` | Query ≤800 tokens | clarity | error |
 | `question.too-many-series` | Series count OK | clarity | warn |
+| `question.axes-labeled` | Axes are labeled | clarity | warn |
 | `question.no-description` | Has a description | clarity | warn |
 
 #### LLM
 
-| Check id | Label | Category | Failure severity | Pass condition | Fix on failure |
-|---|---|---|---|---|---|
-| `llm.chart-type-fit` | Right chart for the data | aesthetics | error | The chart type matches the analytical intent (comparison → bar/column, trend over time → line, part-of-whole → pie/donut only with ≤5 slices, correlation → scatter, distribution → histogram). FAIL only when you can point to the specific mismatch (e.g. "a pie with 12 slices", "a time trend drawn as a pie"). PASS otherwise. | Switch to the chart type that matches the question (e.g. line for a time trend, bar for a category comparison). |
-| `llm.honest-scale` | Honest axes | aesthetics | error | The value axis is not misleading — bars/areas start at a zero baseline and there is no truncated or dual-axis distortion that exaggerates differences. FAIL only when you can point to the specific axis and how it distorts. PASS otherwise. | Start the value axis at zero (or clearly mark the break); avoid deceptive dual axes. |
-| `llm.axes-labeled` | Axes & legend labeled | aesthetics | warn | Axes have clear titles with units, and any legend/series is labeled. PASS if a reader can tell what each axis and series means. | Add axis titles with units and label the series/legend. |
-| `llm.labels-legible` | Legible labels | aesthetics | warn | Tick and data labels are readable — not overlapping, truncated, or too dense to read. PASS if labels are legible. | Reduce label density, rotate/abbreviate ticks, or filter categories so labels are readable. |
-| `llm.not-overplotted` | Not overplotted | aesthetics | warn | The chart is not overcrowded — few enough series/points/categories (≈≤7 on color) that the pattern is visible. PASS if uncluttered. | Reduce series/categories (top-N, group “other”) or use small multiples. |
-| `llm.takeaway-obvious` | Takeaway in seconds | aesthetics | warn | A reader can grasp the main takeaway within a few seconds. PASS if the point is obvious at a glance. | Sort/highlight the key values, add a title that states the takeaway, or annotate the key point. |
-| `llm.clean-encoding` | Clean, high data-ink | aesthetics | warn | Minimal chart-junk — no unnecessary 3D, heavy gridlines, or decoration; good data-ink ratio. PASS if the encoding is clean. | Remove 3D/gradients/heavy gridlines and non-data decoration. |
+_No LLM checks. This file type is deterministic-only._
 
 ### Dashboard
 

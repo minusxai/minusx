@@ -13,7 +13,7 @@ import { loadFile } from '@/lib/data/files.server';
 import type { QuestionContent } from '@/lib/types';
 import type { DeterministicContext, RubricFileType, RubricReport } from './types';
 import { scoreFileDeterministic } from './registry';
-import { buildVizTypeCtx, referencedQuestionIds } from './refs';
+import { buildVizTypeCtx, questionVizType, referencedQuestionIds } from './refs';
 import { scoreFileLLM, combineReports } from './llm/score-llm.server';
 
 /**
@@ -35,7 +35,7 @@ async function resolveVizTypeCtx(
   const entries = await Promise.all(ids.map(async (id): Promise<readonly [number, string | undefined]> => {
     try {
       const { data } = await loadFile(id, user);
-      return [id, (data?.content as QuestionContent | undefined)?.vizSettings?.type];
+      return [id, questionVizType(data?.content as QuestionContent | undefined)];
     } catch {
       return [id, undefined]; // referenced file gone or no access — that embed's type stays unknown
     }

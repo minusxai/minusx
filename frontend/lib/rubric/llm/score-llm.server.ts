@@ -17,7 +17,7 @@ import type { ImageContent } from '@/orchestrator/llm';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { RubricCategory, RubricFinding, RubricFileType, RubricReport } from '../types';
 import { buildReport } from '../scoring';
-import { LLM_CHECKS, formatChecklist } from '../checks';
+import { activeLlmChecks, formatChecklist } from '../checks';
 
 const CATEGORIES: readonly RubricCategory[] = ['correctness', 'clarity', 'aesthetics'];
 
@@ -47,13 +47,14 @@ function imageBlock(src: string): ImageContent {
 
 /**
  * Score a file with the LLM judge and build its report (`source: 'llm'`). The LLM evaluates a
- * CLOSED checklist (`LLM_CHECKS[fileType]`) pass/fail; each FAIL becomes a finding.
+ * active CLOSED checklist (`activeLlmChecks(fileType)`) pass/fail; each FAIL becomes a finding.
  */
 export async function scoreFileLLM(params: JudgeParams, user: EffectiveUser): Promise<RubricReport> {
   const { fileType, content, screenshotUrl } = params;
-  // The categories the LLM covers for this type (e.g. context has none → no LLM call at all).
-  const assessed = [...new Set(LLM_CHECKS[fileType].map((c) => c.category))];
-  if (LLM_CHECKS[fileType].length === 0) return buildReport(fileType, [], assessed);
+  const checks = activeLlmChecks(fileType);
+  // The categories the active checklist covers (question/context have none → no call at all).
+  const assessed = [...new Set(checks.map((c) => c.category))];
+  if (checks.length === 0) return buildReport(fileType, [], assessed);
 
   const vars: Record<string, string> = {
     file_type: fileType,
@@ -93,7 +94,7 @@ function parseVerdicts(text: string): CheckVerdict[] {
  */
 function findingsFromVotes(fileType: RubricFileType, runs: CheckVerdict[][]): RubricFinding[] {
   const out: RubricFinding[] = [];
-  for (const chk of LLM_CHECKS[fileType]) {
+  for (const chk of activeLlmChecks(fileType)) {
     const fails = runs.flatMap((run) => run.filter((v) => v.id === chk.id && v.applicable !== false && v.pass === false));
     if (fails.length < FAIL_VOTES) continue;
     out.push({
@@ -109,9 +110,8 @@ function findingsFromVotes(fileType: RubricFileType, runs: CheckVerdict[][]): Ru
   return out;
 }
 
-/** Merge a deterministic and an LLM report into one. A category is assessed if EITHER scored it
- *  (every check in `LLM_CHECKS` is categorized `aesthetics`, so in practice the LLM contributes
- *  that category and the deterministic scorer the rest); each finding carries its own `source`. */
+/** Merge a deterministic and an LLM report into one. A category is assessed if EITHER scored it;
+ *  each finding carries its own `source`. Empty LLM checklists contribute no categories. */
 export function combineReports(deterministic: RubricReport, llm: RubricReport): RubricReport {
   const findings = [...deterministic.categories, ...llm.categories].flatMap((c) => c.findings);
   const assessed = CATEGORIES.filter((cat) =>

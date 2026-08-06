@@ -16,11 +16,10 @@ import { AGENT_IMAGE_MAX_PX, AGENT_IMAGE_MAX_H_PX, AGENT_IMAGE_MIN_W_PX } from '
 import { uploadBlobOrEmbed } from '@/lib/object-store/client';
 import { FilesAPI } from '@/lib/data/files';
 import { isRubricFileType, scoreFileDeterministic } from '@/lib/rubric/registry';
-import { buildVizTypeCtx } from '@/lib/rubric/refs';
+import { buildVizTypeCtx, questionVizType } from '@/lib/rubric/refs';
 import { toAgentRubric } from '@/lib/rubric/scoring';
 import type { AgentRubric, DeterministicContext, RubricCategory, RubricGrade, RubricSeverity } from '@/lib/rubric/types';
 import { inlineQuestionFromEl } from '@/lib/data/story/story-question';
-import { envelopeVizType } from '@/lib/viz/viz-templates';
 import type { QuestionContent } from '@/lib/types';
 
 export interface FileReview {
@@ -63,7 +62,8 @@ export function deterministicAgentRubric(fileId: number): AgentRubric | undefine
   const type = selectFile(state, fileId)?.type;
   const content = selectMergedContent(state, fileId);
   if (!type || !isRubricFileType(type) || !content) return undefined;
-  const ctx = buildVizTypeCtx(type, content, (id) => (selectFile(state, id)?.content as QuestionContent | undefined)?.vizSettings?.type);
+  const ctx = buildVizTypeCtx(type, content, (id) =>
+    questionVizType(selectFile(state, id)?.content as QuestionContent | undefined));
   try {
     return toAgentRubric(scoreFileDeterministic(type, content, ctx));
   } catch {
@@ -95,8 +95,8 @@ export function measureStoryEmbeds(fileId: number): DeterministicContext['measur
         ? (selectFile(state, savedId)?.content as QuestionContent | undefined)
         : undefined;
       const vizType = Number.isFinite(savedId)
-        ? (envelopeVizType(savedContent?.viz) ?? savedContent?.vizSettings?.type)
-        : envelopeVizType(inlineQuestionFromEl(el)?.viz);
+        ? questionVizType(savedContent)
+        : questionVizType(inlineQuestionFromEl(el));
       out.push({ ...(vizType ? { vizType } : {}), widthPx, columnPx });
     });
     return out.length ? out : undefined;
