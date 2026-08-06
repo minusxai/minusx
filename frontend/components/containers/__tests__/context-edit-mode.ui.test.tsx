@@ -10,16 +10,24 @@ import { setFile, setEdit } from '@/store/filesSlice';
 import { selectFileEditMode } from '@/store/uiSlice';
 import type { DbFile } from '@/lib/types';
 
+const navigationMocks = vi.hoisted(() => ({
+  replace: vi.fn(),
+}));
+const fileStateMocks = vi.hoisted(() => ({
+  publishFile: vi.fn(async () => ({ id: 4242, name: 'ctx', path: '/org/ctx' })),
+}));
+
 // Stub the heavy editor — surface the edit-mode props as aria-labeled buttons.
 vi.mock('@/components/context/ContextEditorV2', () => {
   const React = require('react');
   return {
     __esModule: true,
-    default: ({ editMode, onCancel, onEditModeChange }: any) =>
+    default: ({ editMode, onCancel, onEditModeChange, onSave }: any) =>
       React.createElement('div', {}, [
         React.createElement('span', { key: 'm', 'aria-label': 'edit-mode-value' }, String(editMode)),
         React.createElement('button', { key: 'c', 'aria-label': 'stub-cancel', onClick: onCancel }, 'cancel'),
         React.createElement('button', { key: 'e', 'aria-label': 'stub-enter-edit', onClick: () => onEditModeChange(true) }, 'edit'),
+        React.createElement('button', { key: 's', 'aria-label': 'stub-save', onClick: onSave }, 'save'),
       ]),
   };
 });
@@ -27,14 +35,14 @@ vi.mock('@/lib/hooks/job-runs-hooks', () => ({
   useJobRuns: () => ({ runs: [], selectedRunId: null, selectedRun: null, isRunning: false, trigger: vi.fn(), selectRun: vi.fn(), reload: vi.fn() }),
 }));
 vi.mock('@/lib/navigation/use-navigation', () => ({
-  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+  useRouter: () => ({ replace: navigationMocks.replace, push: vi.fn() }),
 }));
 // Keep file-state network calls inert; useFile reads the seeded store directly.
 vi.mock('@/lib/file-state/file-state', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/file-state/file-state')>()),
   loadFiles: vi.fn(async () => {}),
   reloadFile: vi.fn(async () => {}),
-  publishFile: vi.fn(async () => ({ id: FILE_ID, name: 'ctx', path: '/org/ctx' })),
+  publishFile: fileStateMocks.publishFile,
   clearFileChanges: vi.fn(),
   editFile: vi.fn(),
 }));
@@ -67,6 +75,11 @@ function seededStore() {
 }
 
 describe('ContextContainerV2 edit mode → Redux fileEditMode', () => {
+  beforeEach(() => {
+    navigationMocks.replace.mockClear();
+    fileStateMocks.publishFile.mockClear();
+  });
+
   it('create mode enters edit mode in Redux on mount', async () => {
     const store = seededStore();
     renderWithProviders(<ContextContainerV2 fileId={FILE_ID} mode="create" />, { store });
@@ -91,5 +104,28 @@ describe('ContextContainerV2 edit mode → Redux fileEditMode', () => {
 
     fireEvent.click(await findByLabelText('stub-cancel'));
     await waitFor(() => expect(selectFileEditMode(store.getState(), FILE_ID)).toBe(false));
+  });
+
+  it('keeps standalone Agents on its current route after saving', async () => {
+    const store = seededStore();
+    const { findByLabelText } = renderWithProviders(
+      <ContextContainerV2 fileId={FILE_ID} standaloneTab="agents" />, { store },
+    );
+
+    fireEvent.click(await findByLabelText('stub-save'));
+
+    await waitFor(() => expect(fileStateMocks.publishFile).toHaveBeenCalledWith({ fileId: FILE_ID }));
+    expect(navigationMocks.replace).not.toHaveBeenCalled();
+  });
+
+  it('still redirects an ordinary context editor to its canonical file URL after saving', async () => {
+    const store = seededStore();
+    const { findByLabelText } = renderWithProviders(
+      <ContextContainerV2 fileId={FILE_ID} />, { store },
+    );
+
+    fireEvent.click(await findByLabelText('stub-save'));
+
+    await waitFor(() => expect(navigationMocks.replace).toHaveBeenCalledWith(`/f/${FILE_ID}-ctx`));
   });
 });
