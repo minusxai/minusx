@@ -23,8 +23,8 @@ import {
 import { editFile } from '@/lib/file-state/file-state';
 import { runMicroTaskClient, buildFileMicroInput } from '@/lib/tools/micro-task';
 import { toaster } from '../ui/toaster';
-import { isUserFacingError } from '@/lib/errors';
-import { redirectAfterSave, hasGeneratableContent } from '@/lib/ui/file-utils';
+import { isUserFacingError, isPathConflictError } from '@/lib/errors';
+import { redirectAfterSave, hasGeneratableContent, pathConflictMessage } from '@/lib/ui/file-utils';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { DocumentContent, FileType } from '@/lib/types';
 import { selectFile } from '@/store/filesSlice';
@@ -165,21 +165,36 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
 
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
 
-  const doSave = useCallback(async () => {
-    setSaveError(null);
+  /** Save + post-save navigation; returns the error instead of throwing so each
+   * surface (banner vs Save modal) can present it its own way. */
+  const performSave = useCallback(async (): Promise<unknown> => {
     try {
       const result = await saveWithChildren();
       dispatchSetEditMode(false);
       redirectAfterSave(result, fileId, router);
+      return null;
     } catch (error) {
-      if (isUserFacingError(error)) {
-        setSaveError(error.message);
-        return;
-      }
-      console.error('Failed to save file:', error);
-      setSaveError('An unexpected error occurred. Please try again.');
+      return error;
     }
   }, [fileId, router, dispatchSetEditMode, saveWithChildren]);
+
+  const doSave = useCallback(async () => {
+    setSaveError(null);
+    const error = await performSave();
+    if (!error) return;
+    // In-place save (no folder choice in sight): a publish-path collision is
+    // reworded around the file's name — the control the user can change here.
+    if (isPathConflictError(error)) {
+      setSaveError(pathConflictMessage(fileType, localName ?? effectiveName ?? 'this file'));
+      return;
+    }
+    if (isUserFacingError(error)) {
+      setSaveError(error.message);
+      return;
+    }
+    console.error('Failed to save file:', error);
+    setSaveError('An unexpected error occurred. Please try again.');
+  }, [performSave, fileType, localName, effectiveName]);
 
   const handleSave = useCallback(() => {
     if (isDraft) {
@@ -191,11 +206,15 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
   }, [fileId, doSave]);
 
   const handleSaveModalConfirm = useCallback(async (name: string, path: string) => {
-    // Update name and path on the virtual file, then save
+    // Update name and path on the virtual file, then save. A failure is
+    // RETHROWN so SaveFileModal stays open and shows it inline next to the
+    // name field — the control that fixes a path conflict.
     await editFile({ fileId, changes: { name, path: `${path}/${name.toLowerCase().replace(/\s+/g, '-')}` } });
     setLocalName(name);
-    doSave();
-  }, [fileId, doSave]);
+    const error = await performSave();
+    if (error) throw error;
+    setIsSaveModalOpen(false);
+  }, [fileId, performSave]);
 
   const handleCancel = useCallback(() => {
     setLocalName(null);

@@ -18,7 +18,8 @@ import { selectEffectiveName, selectMergedContent } from '@/store/filesSlice';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import { GenerateButton } from '../ui/GenerateButton';
 import { runMicroTaskClient, buildFileMicroInput } from '@/lib/tools/micro-task';
-import { hasGeneratableContent } from '@/lib/ui/file-utils';
+import { hasGeneratableContent, pathConflictMessage } from '@/lib/ui/file-utils';
+import { isPathConflictError, isUserFacingError } from '@/lib/errors';
 import { toaster } from '../ui/toaster';
 
 // ---------------------------------------------------------------------------
@@ -186,8 +187,15 @@ interface SaveFileModalProps {
   onClose: () => void;
   fileId: number;
   fileType: string;
-  /** Called with { name, path } when user confirms. Caller handles the actual save. */
-  onSave: (name: string, path: string) => void;
+  /**
+   * Called with { name, path } when user confirms. Caller performs the actual
+   * save. On REJECTION the dialog stays open and shows the error inline,
+   * because the fix (a different name or folder) lives here. On RESOLUTION the
+   * CALLER decides what happens — close, or advance to the next draft (the
+   * Save All walk keys a fresh instance per file) — so the dialog never closes
+   * itself on success; a self-close would race the caller's advance.
+   */
+  onSave: (name: string, path: string) => void | Promise<void>;
   defaultPath?: string;
 }
 
@@ -201,6 +209,19 @@ export default function SaveFileModal({ isOpen, onClose, fileId, fileType, onSav
 
   const [fileName, setFileName] = useState(currentName);
   const [isSuggesting, setIsSuggesting] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // The Save All walk advances `fileId` on the SAME mounted dialog — remounting
+  // (a `key` per file) would overlap two open dialogs for a moment, and the
+  // outgoing one's teardown leaves the body pointer-locked. Reset the per-file
+  // fields in place instead (adjust-state-during-render, per React docs).
+  const [prevFileId, setPrevFileId] = useState(fileId);
+  if (fileId !== prevFileId) {
+    setPrevFileId(fileId);
+    setFileName(currentName);
+    setSaveError(null);
+  }
   const [selectedFolder, setSelectedFolder] = useState(defaultPath ?? rootPath);
   const [expanded, setExpanded] = useState<Set<string>>(() => {
     // Auto-expand the path to the default folder
@@ -281,11 +302,30 @@ export default function SaveFileModal({ isOpen, onClose, fileId, fileType, onSav
     }
   }, [fileId, fileType]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const trimmed = fileName.trim();
-    if (!trimmed) return;
-    onSave(trimmed, selectedFolder);
-    onClose();
+    if (!trimmed || isSaving) return;
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      await onSave(trimmed, selectedFolder);
+    } catch (error) {
+      // A publish-path collision is rewritten into the user's vocabulary — the
+      // name they typed and the folder they picked — with the fix spelled out.
+      if (isPathConflictError(error)) {
+        const folderName = selectedFolder === rootPath
+          ? 'Home'
+          : `"${selectedFolder.substring(selectedFolder.lastIndexOf('/') + 1)}"`;
+        setSaveError(pathConflictMessage(metadata.label, trimmed, folderName));
+      } else if (isUserFacingError(error)) {
+        setSaveError(error.message);
+      } else {
+        console.error('[SaveFileModal] save failed:', error);
+        setSaveError('Something went wrong while saving. Please try again.');
+      }
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleClose = () => {
@@ -334,6 +374,11 @@ export default function SaveFileModal({ isOpen, onClose, fileId, fileType, onSav
                     <GenerateButton label="Suggest a name" loading={isSuggesting} onClick={handleSuggestName} />
                   )}
                 </HStack>
+                {saveError && (
+                  <Text aria-label="Save error" mt={2} fontSize="xs" color="fg.error" lineHeight="1.5">
+                    {saveError}
+                  </Text>
+                )}
               </Box>
 
               {/* Folder tree */}
@@ -381,7 +426,8 @@ export default function SaveFileModal({ isOpen, onClose, fileId, fileType, onSav
                 color="white"
                 _hover={{ opacity: 0.9 }}
                 onClick={handleSave}
-                disabled={!fileName.trim()}
+                disabled={!fileName.trim() || isSaving}
+                loading={isSaving}
               >
                 Save
               </Button>

@@ -5,17 +5,18 @@
 import { DbFile, BaseFileContent } from '../types';
 import { getModules } from '../modules/registry';
 import { DEFAULT_CONVERSATION_NAME } from '../constants';
-import { UserFacingError } from '../errors';
+import { UserFacingError, PUBLISHED_PATH_CONFLICT_MESSAGE } from '../errors';
 import { stripNulChars } from './sanitize-jsonb';
 
 /**
  * Path uniqueness applies to PUBLISHED files only (partial index
  * idx_files_path_published_unique, WHERE draft = false); drafts are exempt. A 23505 here therefore
  * means another PUBLISHED file already occupies this path — translate it into a clear, actionable
- * message instead of letting the raw Postgres constraint error surface to the user.
+ * message instead of letting the raw Postgres constraint error surface to the user. The message
+ * constant lives in `lib/errors` so the client can recognize the condition and rewrite it with
+ * the user's chosen name and folder.
  */
-const PUBLISHED_PATH_CONFLICT_MSG =
-  'A published file already exists at this path. Rename this file before saving.';
+const PUBLISHED_PATH_CONFLICT_MSG = PUBLISHED_PATH_CONFLICT_MESSAGE;
 
 function isPublishedPathConflict(error: unknown): boolean {
   const e = error as { code?: string; message?: string } | null;
