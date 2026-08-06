@@ -358,10 +358,10 @@ The constants live beside the rules (`scoring.ts`: weights `0.3/0.3/0.4` for vis
   category the source did not evaluate is `score: null, assessed: false` and is excluded from
   the weighted mean rather than counted as 5.
 - **Every check in `LLM_CHECKS` is categorized `aesthetics`, but cataloged does not mean active.**
-  Question's seven and dashboard's seven checks have `status: 'paused'`; context has no entries.
-  `activeLlmChecks` is the runtime boundary, so `scoreFileLLM` makes no model call for those three
-  types. Question visual structure is checked deterministically from its authoritative V2 `viz`
-  envelope (with legacy `vizSettings` used only when V2 is absent); story retains active checks.
+  Question's seven, dashboard's seven, and story's thirteen checks have `status: 'paused'`; context
+  has no entries. `activeLlmChecks` is the runtime boundary, so `scoreFileLLM` currently makes no
+  model call for any file type. Question visual structure is checked deterministically from its
+  authoritative V2 `viz` envelope (with legacy `vizSettings` used only when V2 is absent).
 - **Judge voting is configured off.** `JUDGE_VOTES = 1` in `score-llm.server.ts` despite the
   surrounding comment describing an N-run worst-of aggregation; a check a
   run omits from its JSON is treated as neither pass nor fail.
@@ -404,7 +404,7 @@ The constants live beside the rules (`scoring.ts`: weights `0.3/0.3/0.4` for vis
 
 **The viz thresholds are grounded, not invented.** The dashboard visual-count band (roughly 5–9 visuals before a board stops being readable), F-pattern reading hierarchy, chart-fits-the-task, and the ≤7-categories-on-color ceiling come from published BI guidance (AHRQ dashboard design, Tableau and Sigma layout guidance); the chart-type-fit rules come from data-ink-ratio and graphical-perception work. The scoring model itself follows the analytic-rubric and LLM-judge-calibration literature. The story rules trace to our own `skill_stories` prompt — *a story is an argument with live numbers, not decoration*. Retune a constant when evidence says so, but do not treat these numbers as arbitrary defaults picked to make files pass.
 
-**A review without a screenshot is weaker, not equivalent for file types that retain LLM checks.** `scoreFileLLM` still runs for story when no `screenshotUrl` is available, but the prompt then tells the judge to work from markup alone and to mark visual-only checks `applicable: false` — and an inapplicable check can never become a finding. Since every active entry in `LLM_CHECKS` is an aesthetics check, a screenshot-less run silently narrows the judge to the subset it can assess from text. Question/dashboard/context are deterministic-only and skip the call entirely.
+**The LLM review path is currently dormant.** Every cataloged LLM check is paused, so `scoreFileLLM` returns an unassessed report without a model call for question, dashboard, story, or context. If a checklist is reactivated later, screenshot-less reviews remain weaker: the prompt marks visual-only checks `applicable: false`, and an inapplicable check can never become a finding.
 
 **The rubric is never ambient.** It is deliberately not injected into app state or `ReadFiles` results — that was the first version's design and it read as background noise the agent learned to skip. Feedback is delivered only where the agent is already acting: `EditFile` returns the full post-edit review (and degrades to the deterministic half when nothing is mounted to screenshot), `CreateFile` returns the deterministic report because a fresh draft renders nowhere, and `ReviewFile` is the explicit no-edit review. Adding the report to a passive read path re-creates the failure it was moved away from.
 
