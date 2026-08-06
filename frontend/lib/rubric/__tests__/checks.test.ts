@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { formatChecklist, passedChecks, DETERMINISTIC_CHECKS, LLM_CHECKS } from '../checks';
+import { activeLlmChecks, formatChecklist, hasLlmChecks, passedChecks, DETERMINISTIC_CHECKS, LLM_CHECKS } from '../checks';
 import { scoreFileDeterministic } from '../registry';
-import { makeQuestion } from './fixtures';
+import { makeDashboard, makeQuestion } from './fixtures';
 
 describe('passedChecks', () => {
   it('lists checks that did not fire and excludes the ones that did', () => {
@@ -18,13 +18,21 @@ describe('passedChecks', () => {
   });
 
   it('includes LLM checks as passed only when the LLM ran', () => {
-    const base = scoreFileDeterministic('question', makeQuestion());
-    expect(passedChecks('question', base, false).some((c) => c.ruleId.startsWith('llm.'))).toBe(false);
+    const base = scoreFileDeterministic('dashboard', makeDashboard());
+    expect(passedChecks('dashboard', base, false).some((c) => c.ruleId.startsWith('llm.'))).toBe(false);
 
     // simulate the LLM having run (all categories assessed)
     const combined = { ...base, categories: base.categories.map((c) => ({ ...c, assessed: true, score: c.score ?? 5 })) };
-    const ids = passedChecks('question', combined, true).map((c) => c.ruleId);
-    expect(ids).toContain('llm.chart-type-fit'); // an LLM check that didn't fire → shown as passed
+    const ids = passedChecks('dashboard', combined, true).map((c) => c.ruleId);
+    expect(ids).toContain('llm.coherent-narrative'); // an LLM check that didn't fire → shown as passed
+  });
+
+  it('keeps question LLM checks paused and out of the runtime checklist', () => {
+    expect(LLM_CHECKS.question).toHaveLength(7);
+    expect(LLM_CHECKS.question.every((check) => check.status === 'paused')).toBe(true);
+    expect(activeLlmChecks('question')).toEqual([]);
+    expect(hasLlmChecks('question')).toBe(false);
+    expect(formatChecklist('question')).toBe('');
   });
 
   it('does not show an inactive threshold sibling as passed when its group has a finding', () => {

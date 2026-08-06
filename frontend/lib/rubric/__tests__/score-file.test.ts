@@ -23,7 +23,17 @@ beforeEach(() => mockLoad.mockReset());
 
 describe('scoreFile — deterministic half resolves referenced viz types', () => {
   it('keeps the embed-too-narrow finding when the referenced questions are cartesian', async () => {
-    mockLoad.mockResolvedValue({ data: { content: { vizSettings: { type: 'bar' } } } } as unknown as Awaited<ReturnType<typeof loadFile>>);
+    mockLoad.mockResolvedValue({ data: { content: {
+      viz: {
+        version: 2,
+        source: {
+          kind: 'vega-lite',
+          grammar: 'vega-lite@6',
+          spec: { mark: 'bar', encoding: { x: { field: 'region', type: 'nominal' }, y: { field: 'revenue', type: 'quantitative' } } },
+        },
+      },
+      vizSettings: { type: 'table' },
+    } } } as unknown as Awaited<ReturnType<typeof loadFile>>);
     const report = await scoreFile('story', narrowStory, USER);
     const ruleIds = report.categories.flatMap((c) => c.findings).map((f) => f.ruleId);
     expect(ruleIds).toContain('story.embed-too-narrow');
