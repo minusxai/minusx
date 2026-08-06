@@ -226,6 +226,9 @@ export default function ContextEditorV2({
   );
 
   // Compute immediate child paths for path filtering UI
+  // Immediate child folders as RELATIVE names — childPaths entries are stored
+  // relative to this context's folder, so relative names survive moves and
+  // renames of this folder with no rewriting.
   const availableChildPaths = useMemo(() => {
     if (!file?.path) return [];
 
@@ -234,17 +237,16 @@ export default function ContextEditorV2({
     const hiddenNames = new Set(HIDDEN_SYSTEM_FOLDERS.map(f => f.replace('/', '')));
     const allFolders = Object.values(filesState).filter(f => f.type === 'folder');
 
-    // Find immediate child folders (one level deep)
+    // Find immediate child folders (one level deep). Match on a real prefix —
+    // substring-by-length would admit same-length sibling directories.
     const fileDir = file.path.substring(0, file.path.lastIndexOf('/')) || '/';
+    const dirPrefix = fileDir === '/' ? '/' : fileDir + '/';
     const children = allFolders
-      .filter(f => {
-        const relativePath = f.path.substring(fileDir.length);
-        if (!relativePath.startsWith('/')) return false;
-        const segments = relativePath.split('/').filter(Boolean);
-        if (segments.length !== 1) return false; // Immediate child only
-        return !hiddenNames.has(segments[0]); // Exclude system folders
-      })
-      .map(f => decodeURIComponent(f.path));
+      .filter(f => f.path.startsWith(dirPrefix))
+      .map(f => f.path.slice(dirPrefix.length))
+      .filter(rel => rel.split('/').filter(Boolean).length === 1) // Immediate child only
+      .filter(rel => !hiddenNames.has(rel)) // Exclude system folders
+      .map(rel => decodeURIComponent(rel));
 
     return Array.from(new Set(children)).sort();
   }, [file?.path, filesState]);
@@ -588,6 +590,7 @@ export default function ContextEditorV2({
             inheritedDocs={content.fullDocs}
             originalDocs={originalDocs}
             availableChildPaths={availableChildPaths}
+            childPathsBaseDir={file?.path ? (file.path.substring(0, file.path.lastIndexOf('/')) || '/') : undefined}
             mentions={editorMentions}
             editMode={editMode}
           />

@@ -27,6 +27,14 @@ interface ChildPathSelectorProps {
   onChange: (paths: string[] | undefined) => void;
 
   /**
+   * The owning context's folder. childPaths are stored RELATIVE to it; legacy
+   * documents carry absolute entries, so selections are normalized against this
+   * before comparing with `availablePaths` (and emitted relative). Omit when
+   * the caller already passes both sides in the same form.
+   */
+  baseDir?: string;
+
+  /**
    * What this picker scopes, e.g. `data model revenue` / `schema public`. Several
    * pickers share a page, so it is what makes each control addressable
    * ("Child paths for <subject>").
@@ -43,11 +51,16 @@ function getSummaryLabel(selectedPaths: string[] | null | undefined, totalPaths:
 
 export default function ChildPathSelector({
   availablePaths,
-  selectedPaths,
+  selectedPaths: rawSelectedPaths,
   onChange,
   subject,
+  baseDir,
 }: ChildPathSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
+
+  const dirPrefix = baseDir ? (baseDir === '/' ? '/' : baseDir + '/') : undefined;
+  const normalize = (p: string) => (dirPrefix && p.startsWith(dirPrefix) ? p.slice(dirPrefix.length) : p);
+  const selectedPaths = rawSelectedPaths == null ? rawSelectedPaths : rawSelectedPaths.map(normalize);
 
   // If no paths available, don't render
   if (availablePaths.length === 0) {

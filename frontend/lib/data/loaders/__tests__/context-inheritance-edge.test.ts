@@ -359,41 +359,161 @@ describe('Context inheritance edge cases', () => {
     });
   });
 
-  describe('folder move — inheritance recomputes through the new chain', () => {
+  describe('relative childPaths — resolved against the granting context folder', () => {
+    it('a relative whitelist grant scopes exactly like its absolute form', async () => {
+      await mkContext('/org/context', {
+        whitelist: [
+          { name: 'static', type: 'connection', children: [
+            { name: 's1', type: 'schema', childPaths: ['relA'] },
+            { name: 's2', type: 'schema', childPaths: ['/org/relB'] }
+          ]}
+        ]
+      });
+      const aId = await mkContext('/org/relA/context', { whitelist: '*' });
+      const bId = await mkContext('/org/relB/context', { whitelist: '*' });
+
+      expect(schemaNames(await loadContent(aId), 'static')).toEqual(['s1']);
+      expect(schemaNames(await loadContent(bId), 'static')).toEqual(['s2']);
+    });
+
+    it('relative doc/view/model scoping reaches grandchildren through the computed plane', async () => {
+      await mkContext('/org/context', { whitelist: '*' });
+      await mkContext('/org/rp/context', {
+        whitelist: '*',
+        docs: [{ title: 'rp-doc', content: 'x', childPaths: ['kidA'] }],
+        views: [mkView('rp_view', { schema: 's1', table: 't1' }, ['kidA'])],
+        semanticModels: [mkModel('rp_model', ['kidA'])]
+      });
+      const kidAId = await mkContext('/org/rp/kidA/context', { whitelist: '*' });
+      const kidBId = await mkContext('/org/rp/kidB/context', { whitelist: '*' });
+      const grandId = await mkContext('/org/rp/kidA/gk/context', { whitelist: '*' });
+
+      const kidA = await loadContent(kidAId);
+      expect((kidA.fullDocs ?? []).map(d => d.title)).toContain('rp-doc');
+      expect(viewNames(kidA)).toContain('rp_view');
+      expect((kidA.fullSemanticModels ?? []).map(m => m.name)).toContain('rp_model');
+
+      const kidB = await loadContent(kidBId);
+      expect((kidB.fullDocs ?? []).map(d => d.title)).not.toContain('rp-doc');
+      expect(viewNames(kidB)).not.toContain('rp_view');
+
+      // The scoped entries survive the extra inheritance hop: the computed plane
+      // carries them absolutized, so the grandchild's re-check still passes.
+      const grand = await loadContent(grandId);
+      expect((grand.fullDocs ?? []).map(d => d.title)).toContain('rp-doc');
+      expect(viewNames(grand)).toContain('rp_view');
+      expect((grand.fullSemanticModels ?? []).map(m => m.name)).toContain('rp_model');
+    });
+  });
+
+  describe('folder move and rename — scoped childPaths rewrites', () => {
     async function createFolder(path: string): Promise<number> {
       const name = path.split('/').pop()!;
       const result = await FilesAPI.createFile({ name, path, type: 'folder', content: { name } }, user);
       return result.data.id;
     }
 
-    it('a moved folder inherits through its new parent, and rewritten grants obey the strict chain', async () => {
+    beforeEach(async () => {
+      await DocumentDB.create('org', '/org', 'folder', { name: 'org' }, []);
+    });
+
+    it('renaming a granted folder keeps the grant working (relative entry follows the folder)', async () => {
       await mkContext('/org/context', {
         whitelist: [
           { name: 'static', type: 'connection', children: [
-            { name: 's1', type: 'schema', childPaths: ['/org/mv-dest'] },
-            { name: 's2', type: 'schema', childPaths: ['/org/mv-src'] }
+            { name: 's1', type: 'schema', childPaths: ['ren-old'] }
           ]}
         ]
       });
-      await DocumentDB.create('org', '/org', 'folder', { name: 'org' }, []);
+      const srcId = await createFolder('/org/ren-old');
+
+      await FilesAPI.moveFile({ id: srcId, name: 'ren-new', newPath: '/org/ren-new' }, user);
+
+      const root = (await DocumentDB.getByPath('/org/context'))!.content as ContextContent;
+      const staticNode = (root.versions![0].whitelist as Array<{ name: string; children?: Array<{ name: string; childPaths?: string[] }> }>)[0];
+      expect(staticNode.children![0].childPaths).toEqual(['ren-new']);
+
+      const renamedCtx = await DocumentDB.getByPath('/org/ren-new/context');
+      expect(schemaNames(await loadContent(renamedCtx!.id), 'static')).toEqual(['s1']);
+    });
+
+    it('moving within the grantor subtree follows the folder; leaving it goes inert untouched', async () => {
+      // Grantor of both: root (ancestor of old AND new location) — entry follows.
+      await mkContext('/org/context', {
+        whitelist: [
+          { name: 'static', type: 'connection', children: [
+            { name: 's1', type: 'schema', childPaths: ['mv-src'] }
+          ]}
+        ]
+      });
+      // Grantor the folder is LEAVING: its context content must not change.
       const srcId = await createFolder('/org/mv-src');
+      await createFolder('/org/mv-src/inner');
+      const srcCtx = await DocumentDB.getByPath('/org/mv-src/context');
+      const srcContent = {
+        ...(srcCtx!.content as Record<string, unknown>),
+        versions: [{
+          version: 1,
+          whitelist: '*',
+          docs: [
+            { title: 'rel-doc', content: 'x', childPaths: ['inner'] },
+            { title: 'abs-doc', content: 'x', childPaths: ['/org/mv-src/inner'] }
+          ],
+          createdAt: new Date().toISOString(),
+          createdBy: 1
+        }],
+        published: { all: 1 }
+      };
+      await DocumentDB.update(srcCtx!.id, 'context', '/org/mv-src/context', srcContent, [], 'seed-mv-src');
       await createFolder('/org/mv-dest');
 
       await FilesAPI.moveFile({ id: srcId, name: 'mv-src', newPath: '/org/mv-dest/mv-src' }, user);
 
-      // The move rewrote the grant to the folder's new path (no dead reference)…
+      // Root remained an ancestor: its relative entry tracked the folder.
       const root = (await DocumentDB.getByPath('/org/context'))!.content as ContextContent;
-      const staticNode = (root.versions![0].whitelist as Array<{ name: string; children?: Array<{ name: string; childPaths?: string[] }> }>)
-        .find(n => n.name === 'static')!;
-      expect(staticNode.children!.find(c => c.name === 's2')!.childPaths).toEqual(['/org/mv-dest/mv-src']);
+      const staticNode = (root.versions![0].whitelist as Array<{ name: string; children?: Array<{ name: string; childPaths?: string[] }> }>)[0];
+      expect(staticNode.children![0].childPaths).toEqual(['mv-dest/mv-src']);
 
-      // …and the moved context now computes through root → mv-dest: it gains the
-      // destination subtree's grant (s1). The rewritten s2 grant names the moved
-      // folder itself, but the intermediate mv-dest was never offered s2, so the
-      // strict chain keeps it out.
-      const movedCtx = await DocumentDB.getByPath('/org/mv-dest/mv-src/context');
-      const moved = await loadContent(movedCtx!.id);
-      expect(schemaNames(moved, 'static')).toEqual(['s1']);
+      // Inside the moved subtree: relative entries untouched (targets moved along);
+      // legacy absolute entries prefix-rewritten so they stay valid.
+      const moved = (await DocumentDB.getByPath('/org/mv-dest/mv-src/context'))!.content as ContextContent;
+      const docs = moved.versions![0].docs as Array<{ title?: string; childPaths?: string[] }>;
+      expect(docs.find(d => d.title === 'rel-doc')!.childPaths).toEqual(['inner']);
+      expect(docs.find(d => d.title === 'abs-doc')!.childPaths).toEqual(['/org/mv-dest/mv-src/inner']);
+    });
+
+    it('a grant whose target leaves the grantor subtree stays byte-identical (inert, user-owned)', async () => {
+      await mkContext('/org/context', { whitelist: '*' });
+      await createFolder('/org/out-base');
+      const innerId = await createFolder('/org/out-base/inner');
+      const baseCtx = await DocumentDB.getByPath('/org/out-base/context');
+      const baseContent = {
+        ...(baseCtx!.content as Record<string, unknown>),
+        versions: [{
+          version: 1,
+          whitelist: '*',
+          docs: [
+            { title: 'rel-doc', content: 'x', childPaths: ['inner'] },
+            // The legacy absolute form is the canary for over-broad rewrite
+            // scoping: a relative entry that cannot be re-expressed falls back
+            // to itself, but an absolute one WOULD be corrupted.
+            { title: 'abs-doc', content: 'x', childPaths: ['/org/out-base/inner'] }
+          ],
+          createdAt: new Date().toISOString(),
+          createdBy: 1
+        }],
+        published: { all: 1 }
+      };
+      await DocumentDB.update(baseCtx!.id, 'context', '/org/out-base/context', baseContent, [], 'seed-out-base');
+      await createFolder('/org/elsewhere');
+
+      await FilesAPI.moveFile({ id: innerId, name: 'inner', newPath: '/org/elsewhere/inner' }, user);
+
+      // out-base can no longer reach the folder; its content is NOT rewritten.
+      const base = (await DocumentDB.getByPath('/org/out-base/context'))!.content as ContextContent;
+      const docs = base.versions![0].docs as Array<{ title?: string; childPaths?: string[] }>;
+      expect(docs.find(d => d.title === 'rel-doc')!.childPaths).toEqual(['inner']);
+      expect(docs.find(d => d.title === 'abs-doc')!.childPaths).toEqual(['/org/out-base/inner']);
     });
   });
 });

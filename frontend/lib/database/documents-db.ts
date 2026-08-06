@@ -408,24 +408,6 @@ export class DocumentDB {
     return result.rowCount;
   }
 
-  /**
-   * List files of one type whose serialized content contains `needle`. A cheap
-   * SQL prefilter for callers that would otherwise load every row's content
-   * (context documents can carry multi-MB computed schemas) — the caller still
-   * decides per row whether anything actually matches, so LIKE-wildcard
-   * characters in `needle` are escaped only to avoid under-matching, and a
-   * false positive costs one no-op inspection, never a wrong result.
-   */
-  static async listByTypeContaining(typeFilter: string, needle: string): Promise<DbFile[]> {
-    const db = getModules().db;
-    const escaped = needle.replace(/[\\%_]/g, (m) => '\\' + m);
-    const result = await db.exec<DbRow>(
-      `SELECT * FROM files WHERE type = $1 AND content::text LIKE '%' || $2 || '%' ESCAPE '\\'`,
-      [typeFilter, escaped]
-    );
-    return result.rows.map((row) => rowToDbFile(row));
-  }
-
   static async deleteByIds(ids: number[]): Promise<number> {
     if (ids.length === 0) return 0;
     const db = getModules().db;

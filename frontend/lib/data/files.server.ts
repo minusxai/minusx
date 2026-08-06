@@ -1032,24 +1032,41 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
       // Context documents reference folders BY PATH in `childPaths` (whitelist
       // nodes, docs, views, semantic models — the parent's "who receives this"
-      // half of inheritance). Any context anywhere may grant to the moved folder
-      // or its descendants, and contexts inside the moved subtree may grant to
-      // paths that just moved with them — so the path rewrite and the childPaths
-      // rewrites are computed here and applied as ONE statement: a crash must
-      // never leave paths moved with grants still pointing at the old location.
-      // Direct DocumentDB writes, like the move itself: the rewrite is
-      // mechanical and must not depend on live connectors (gates). Candidates
-      // are prefiltered in SQL by content substring so a move never loads every
-      // context's content. A context inside the moved subtree gets its path AND
-      // content in the same row.
+      // half of inheritance). A move rewrites those references in exactly TWO
+      // bounded sets of contexts, and nothing else:
+      //   · contexts INSIDE the moved subtree — their relative entries need no
+      //     change (the targets moved with them), but legacy absolute entries
+      //     are prefix-rewritten so they stay valid;
+      //   · COMMON-ANCESTOR contexts (folder of the context is an ancestor of
+      //     both the old and the new location) — a grant tracks the folder for
+      //     as long as it stays inside the grantor's subtree, which is what
+      //     keeps grants working across renames and moves within the subtree.
+      // A grant whose target LEAVES the grantor's subtree is left byte-identical
+      // and simply stops applying — re-granting is the user's decision.
+      // Everything — path rewrites and content rewrites — applies as ONE
+      // statement, so a crash can never leave paths moved with grants stale.
       const rows: Array<{ id: number; name?: string; path?: string; content?: BaseFileContent; editId?: string }> = [
         { id, name, path: newPath },
         ...descendants.map(d => ({ id: d.id, path: newPath + d.path.slice(oldPath.length) })),
       ];
-      const referencing = await DocumentDB.listByTypeContaining('context', oldPath);
-      for (const ctx of referencing) {
+      const dirOf = (p: string) => p.substring(0, p.lastIndexOf('/')) || '/';
+      const isAncestorDirOf = (dir: string, p: string) => p.startsWith(dir === '/' ? '/' : dir + '/');
+
+      const movedContextIds = descendants.filter(d => d.type === 'context').map(d => d.id);
+      const allContexts = await DocumentDB.listAll('context', undefined, -1, false);
+      const commonAncestorIds = allContexts
+        .filter(c => {
+          const dir = dirOf(c.path);
+          return isAncestorDirOf(dir, oldPath) && isAncestorDirOf(dir, newPath);
+        })
+        .map(c => c.id);
+      const rewriteTargets = await DocumentDB.getByIds([...movedContextIds, ...commonAncestorIds]);
+      for (const ctx of rewriteTargets) {
         if (!ctx.content) continue;
-        const rewritten = rewriteChildPathsForMove(ctx.content, oldPath, newPath);
+        const oldDir = dirOf(ctx.path);
+        const inMovedSubtree = oldDir === oldPath || isAncestorDirOf(oldPath, ctx.path);
+        const newDir = inMovedSubtree ? newPath + oldDir.slice(oldPath.length) : oldDir;
+        const rewritten = rewriteChildPathsForMove(ctx.content, oldPath, newPath, oldDir, newDir);
         if (rewritten === ctx.content) continue;
         const editId = hashContent({ id: ctx.id, move: [oldPath, newPath], content: rewritten });
         const existing = rows.find(r => r.id === ctx.id);

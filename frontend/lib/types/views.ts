@@ -72,7 +72,8 @@ export interface ViewDef {
    * Which child context paths inherit this data model — the same distribution
    * control raw tables have (`WhitelistNode.childPaths`), so a curated model can
    * be handed to one team without being pushed on the whole tree.
-   *   undefined = all children · [] = none · ['/org/team_a'] = that subtree only
+   *   undefined = all children · [] = none · ['team_a'] = that subtree only
+   *   (relative to the defining context's folder; leading '/' = legacy absolute)
    * A child's own opinion is separate: `ContextVersion.viewWhitelist`.
    */
   childPaths?: string[];

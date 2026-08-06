@@ -7,7 +7,7 @@
 import { DatabaseWithSchema, ContextContent, ContextVersion, DocEntry, MetricDef, TableAnnotation, SkillEntry, AgentEntry, ViewDef, SemanticModelV2 } from '@/lib/types';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { FilesAPI } from '@/lib/data/files.server';
-import { applyWhitelistToConnections, appliesToChildPath } from '@/lib/sql/schema-filter';
+import { applyWhitelistToConnections, appliesToChildPath, resolveChildPath } from '@/lib/sql/schema-filter';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { getPublishedVersionForUser as getPublishedVersionForUserId, mergeByName, mergeSkillsByName } from '@/lib/context/context-utils';
 import { applyNameWhitelist } from '@/lib/context/name-whitelist';
@@ -15,6 +15,23 @@ import { applyNameWhitelist } from '@/lib/context/name-whitelist';
 /** Keep only the entries whose `childPaths` reach `currentPath`. */
 function inheritedBy<T extends { childPaths?: string[] | null }>(entries: T[], currentPath: string): T[] {
   return entries.filter((e) => appliesToChildPath(e.childPaths, currentPath));
+}
+
+/**
+ * Copy entries with their `childPaths` resolved to ABSOLUTE paths against the
+ * authoring context's folder. Authored entries store childPaths relative to
+ * that folder; the computed plane (`fullDocs`/`fullViews`/`fullSemanticModels`)
+ * carries them through further inheritance hops, where the authoring folder is
+ * no longer in hand — so entries are absolutized exactly once, at the boundary
+ * where an authored version is lifted into the computed plane. Computed fields
+ * are stripped on save, so the absolute copies never reach authored storage.
+ */
+function withAbsoluteChildPaths<T extends { childPaths?: string[] | null }>(entries: T[], baseDir: string): T[] {
+  return entries.map((e) =>
+    e.childPaths && e.childPaths.length > 0
+      ? { ...e, childPaths: e.childPaths.map((cp) => resolveChildPath(cp, baseDir)) }
+      : e
+  );
 }
 
 /**
@@ -116,6 +133,10 @@ export async function computeSchemaFromWhitelist(
     return EMPTY_COMPUTED;
   }
 
+  // The folder the ancestor's authored entries resolve their relative
+  // childPaths against.
+  const ancestorDir = ancestorContext.path.substring(0, ancestorContext.path.lastIndexOf('/')) || '/';
+
   // The ancestor's fullSchema is what the ancestor exposes (already filtered by its own whitelist).
   // Apply the ancestor's whitelist WITH currentPath = this context's directory to filter
   // by childPaths restrictions (tables/schemas restricted to specific sub-paths).
@@ -123,15 +144,19 @@ export async function computeSchemaFromWhitelist(
   const parentOffering = applyWhitelistToConnections(
     ancestorFullSchema,
     publishedVersion.whitelist,
-    contextDir
+    contextDir,
+    ancestorDir
   );
 
   // Apply own whitelist to the parent's offering
   const fullSchema = applyWhitelistToConnections(parentOffering, whitelist);
 
-  // Accumulate parent's fullDocs + parent's own docs, both filtered by childPaths
+  // Accumulate parent's fullDocs + parent's own docs, both filtered by childPaths.
+  // The ancestor's AUTHORED entries are absolutized here (their relative
+  // childPaths resolve against the ancestor's folder); its full* entries were
+  // absolutized when its own loader lifted them, so they pass through as-is.
   const parentFullDocs = inheritedBy(ancestorContent.fullDocs || [], contextDir);
-  const parentOwnDocs = inheritedBy(publishedVersion.docs || [], contextDir);
+  const parentOwnDocs = inheritedBy(withAbsoluteChildPaths(publishedVersion.docs || [], ancestorDir), contextDir);
   const fullDocs = [...parentFullDocs, ...parentOwnDocs];
   const fullSkills = mergeSkillsByName(ancestorContent.fullSkills || [], ancestorContent.skills || []);
   const fullAgents = mergeByName(ancestorContent.fullAgents || [], ancestorContent.agents || []);
@@ -158,14 +183,14 @@ export async function computeSchemaFromWhitelist(
   // absent from `fullViews`, so the next level down never sees it either.
   const parentViews = inheritedBy([
     ...(ancestorContent.fullViews || []),
-    ...(publishedVersion.views || []).filter((v) => !ancestorBroken.has(v.name)),
+    ...withAbsoluteChildPaths((publishedVersion.views || []).filter((v) => !ancestorBroken.has(v.name)), ancestorDir),
   ], contextDir);
   const fullViews = applyNameWhitelist(parentViews, version.viewWhitelist);
   // Authored semantic models inherit exactly like views (ancestor's inherited +
   // ancestor's own published models); validity gating happens at save, not load.
   const parentSemanticModels = inheritedBy([
     ...(ancestorContent.fullSemanticModels || []),
-    ...(publishedVersion.semanticModels || []),
+    ...withAbsoluteChildPaths(publishedVersion.semanticModels || [], ancestorDir),
   ], contextDir);
   const fullSemanticModels = applyNameWhitelist(parentSemanticModels, version.semanticModelWhitelist);
 

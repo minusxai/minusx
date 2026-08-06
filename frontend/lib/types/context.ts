@@ -24,15 +24,18 @@ import type { ViewDef, ViewProblem } from './views';
  * children:[...]     = expose only listed children
  *
  * childPaths: restricts which sub-folder paths inherit this node
- *   undefined = all children
- *   []        = no children
- *   ['/org/team_a'] = only /org/team_a and its subtree
+ *   undefined   = all children
+ *   []          = no children
+ *   ['team_a']  = only team_a (RELATIVE to the granting context's folder) and its subtree
+ *   ['/org/team_a'] = legacy absolute form, still resolved (leading '/')
+ * Relative entries survive moves/renames of the granting folder untouched;
+ * resolution lives in `lib/sql/schema-filter.ts` (`resolveChildPath`).
  */
 export interface WhitelistNode {
   name: string;
   type: 'connection' | 'schema' | 'table';
   children?: WhitelistNode[];  // undefined = expose all; explicit array = filter to listed
-  childPaths?: string[];       // restrict inheritance to these sub-paths
+  childPaths?: string[];       // restrict inheritance to these sub-paths (relative; leading '/' = legacy absolute)
 }
 
 /**
@@ -67,7 +70,7 @@ export interface DocEntry {
   content: string;           // Markdown documentation content
   title?: string;            // Optional: short human-readable title for this doc entry
   description?: string;      // Optional: one-line summary of what this doc covers
-  childPaths?: string[];     // Optional: which child paths inherit this doc
+  childPaths?: string[];     // Optional: which child paths inherit this doc (relative to the context's folder; leading '/' = legacy absolute)
   draft?: boolean;           // Optional: if true, excluded from agent-facing outputs
   alwaysInclude?: boolean;   // Optional: if true, stays inline in the system prompt every
                              // turn; otherwise lazy-loaded on demand via the LoadContext tool
