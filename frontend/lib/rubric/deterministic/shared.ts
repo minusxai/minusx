@@ -2,7 +2,8 @@
  * Pure helpers shared by the deterministic scorers. No I/O, no query results — everything
  * here is a function of file content only.
  */
-import type { RubricCategory, RubricFinding, RubricSeverity } from '../types';
+import type { RubricFinding } from '../types';
+import { deterministicCheck } from '../checks';
 
 /** Rough token estimate (~4 chars/token) — used for query-size rules. */
 export function estimateTokens(text: string): number {
@@ -48,16 +49,22 @@ export function findFactualNumbers(text: string): string[] {
   return (text.match(re) ?? []).map((s) => s.trim());
 }
 
-/** Small constructor so scorers stay declarative. `deduction` sets a warn's weight
- *  (default 1, lightest 0.25); errors ignore it — they gate the score to 0. */
+/** Small constructor so scorers stay declarative. Category and severity come from the
+ *  centralized check catalog. */
 export function finding(
   ruleId: string,
-  category: RubricCategory,
-  severity: RubricSeverity,
   title: string,
   detail: string,
   fix: string,
-  deduction?: number,
 ): RubricFinding {
-  return { ruleId, category, severity, title, detail, fix, source: 'rule', ...(deduction !== undefined ? { deduction } : {}) };
+  const check = deterministicCheck(ruleId);
+  return {
+    ruleId,
+    category: check.category,
+    severity: check.severity,
+    title,
+    detail,
+    fix,
+    source: 'rule',
+  };
 }

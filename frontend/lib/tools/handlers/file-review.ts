@@ -206,7 +206,7 @@ const JUDGE_UNAVAILABLE_NOTE =
  * The rubric as echoed in a TOOL STATUS: every EditFile appends one permanently to the
  * conversation, so it carries only what the skill loop acts on — `overall`/`grade` to know when to
  * stop, and per finding the id, severity, short title, and the imperative `fix`. The prose fields
- * (`detail`, `source`, `deduction`) are dropped, and a `warn`'s `fix` is clipped; `error` findings
+ * (`source`) is dropped, and a `warn`'s `fix` is clipped; `error` findings
  * (which gate the score to 0 and MUST be fixed) keep their full instruction.
  */
 export interface CompactRubricFinding {

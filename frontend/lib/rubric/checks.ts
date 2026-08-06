@@ -9,59 +9,77 @@
  *   the old open-ended "find any problems" prompt.
  */
 import type { RubricCategory, RubricFileType, RubricReport, RubricSeverity } from './types';
+import { immutableMap } from '@/lib/utils/immutable-collections';
 
 export interface RubricCheck {
   ruleId: string;
   label: string;            // positive phrasing shown when the check passed
   category: RubricCategory;
+  severity: RubricSeverity;
+  /** Mutually exclusive threshold checks share a group. If one fires, siblings are not passed. */
+  passGroup?: string;
 }
 
-const DETERMINISTIC_CHECKS: Record<RubricFileType, RubricCheck[]> = {
+export const DETERMINISTIC_CHECKS: Record<RubricFileType, RubricCheck[]> = {
   question: [
-    { ruleId: 'question.undeclared-param', label: 'Parameters declared', category: 'correctness' },
-    { ruleId: 'question.unused-param', label: 'No unused parameters', category: 'correctness' },
-    { ruleId: 'question.viz-config-incomplete', label: 'Chart configured', category: 'correctness' },
-    { ruleId: 'question.pie-multi-measure', label: 'Chart fits the data', category: 'correctness' },
-    { ruleId: 'question.query-too-long', label: 'Query size OK', category: 'clarity' },
-    { ruleId: 'question.too-many-series', label: 'Series count OK', category: 'clarity' },
-    { ruleId: 'question.no-description', label: 'Has a description', category: 'clarity' },
+    { ruleId: 'question.undeclared-param', label: 'Parameters declared', category: 'correctness', severity: 'error' },
+    { ruleId: 'question.unused-param', label: 'No unused parameters', category: 'correctness', severity: 'warn' },
+    { ruleId: 'question.viz-config-incomplete', label: 'Chart configured', category: 'correctness', severity: 'error' },
+    { ruleId: 'question.pie-multi-measure', label: 'Chart fits the data', category: 'correctness', severity: 'warn' },
+    { ruleId: 'question.query-too-long', label: 'Query ≤400 tokens', category: 'clarity', severity: 'warn', passGroup: 'question.query-size' },
+    { ruleId: 'question.query-extreme', label: 'Query ≤800 tokens', category: 'clarity', severity: 'error', passGroup: 'question.query-size' },
+    { ruleId: 'question.too-many-series', label: 'Series count OK', category: 'clarity', severity: 'warn' },
+    { ruleId: 'question.no-description', label: 'Has a description', category: 'clarity', severity: 'warn' },
   ],
   dashboard: [
-    { ruleId: 'dashboard.asset-not-in-layout', label: 'All assets laid out', category: 'correctness' },
-    { ruleId: 'dashboard.layout-orphan', label: 'No orphan tiles', category: 'correctness' },
-    { ruleId: 'dashboard.tile-overlap', label: 'No overlapping tiles', category: 'correctness' },
-    { ruleId: 'dashboard.duplicate-question', label: 'No duplicate questions', category: 'correctness' },
-    { ruleId: 'dashboard.tile-too-small', label: 'Tiles large enough', category: 'clarity' },
-    { ruleId: 'dashboard.plot-too-small', label: 'Plots ≥3×3', category: 'clarity' },
-    { ruleId: 'dashboard.visual-count', label: 'Visual count OK', category: 'clarity' },
-    { ruleId: 'dashboard.too-much-text', label: 'Text is concise', category: 'clarity' },
-    { ruleId: 'dashboard.no-parameters', label: 'Has parameters', category: 'clarity' },
-    { ruleId: 'dashboard.no-description', label: 'Has a description', category: 'clarity' },
+    { ruleId: 'dashboard.asset-not-in-layout', label: 'All assets laid out', category: 'correctness', severity: 'error' },
+    { ruleId: 'dashboard.layout-orphan', label: 'No orphan tiles', category: 'correctness', severity: 'error' },
+    { ruleId: 'dashboard.tile-overlap', label: 'No overlapping tiles', category: 'correctness', severity: 'warn' },
+    { ruleId: 'dashboard.duplicate-question', label: 'No duplicate questions', category: 'correctness', severity: 'warn' },
+    { ruleId: 'dashboard.tile-too-small', label: 'Tiles large enough', category: 'clarity', severity: 'warn' },
+    { ruleId: 'dashboard.plot-too-small', label: 'Plots ≥3×3', category: 'clarity', severity: 'warn' },
+    { ruleId: 'dashboard.no-visuals', label: 'Has at least one visual', category: 'clarity', severity: 'error', passGroup: 'dashboard.visual-count' },
+    { ruleId: 'dashboard.visual-count', label: 'At most 15 visuals', category: 'clarity', severity: 'warn', passGroup: 'dashboard.visual-count' },
+    { ruleId: 'dashboard.too-much-text', label: 'Text ≤400 tokens', category: 'clarity', severity: 'warn', passGroup: 'dashboard.text-size' },
+    { ruleId: 'dashboard.extreme-text', label: 'Text ≤800 tokens', category: 'clarity', severity: 'error', passGroup: 'dashboard.text-size' },
+    { ruleId: 'dashboard.no-parameters', label: 'Has parameters', category: 'clarity', severity: 'warn' },
+    { ruleId: 'dashboard.no-description', label: 'Has a description', category: 'clarity', severity: 'warn' },
   ],
   story: [
-    { ruleId: 'story.no-evidence', label: 'Has live evidence', category: 'correctness' },
-    { ruleId: 'story.typed-number', label: 'Numbers are live', category: 'correctness' },
-    { ruleId: 'story.undeclared-param', label: 'Params declared', category: 'correctness' },
-    { ruleId: 'story.no-headline', label: 'Has a headline', category: 'clarity' },
-    { ruleId: 'story.no-lead', label: 'Has a lead', category: 'clarity' },
-    { ruleId: 'story.embed-too-narrow', label: 'Charts wide enough', category: 'clarity' },
-    { ruleId: 'story.no-page-gutter', label: 'Page gutter present', category: 'aesthetics' },
-    { ruleId: 'story.no-design-tokens', label: 'Design tokens defined', category: 'aesthetics' },
-    { ruleId: 'story.too-many-colors', label: 'Palette disciplined', category: 'aesthetics' },
+    { ruleId: 'story.no-evidence', label: 'Has live evidence', category: 'correctness', severity: 'error' },
+    { ruleId: 'story.typed-number', label: 'Numbers are live', category: 'correctness', severity: 'warn' },
+    { ruleId: 'story.undeclared-param', label: 'Params declared', category: 'correctness', severity: 'error' },
+    { ruleId: 'story.no-headline', label: 'Has a headline', category: 'clarity', severity: 'warn' },
+    { ruleId: 'story.no-lead', label: 'Has a lead', category: 'clarity', severity: 'warn' },
+    { ruleId: 'story.embed-too-narrow', label: 'Charts wide enough', category: 'clarity', severity: 'error' },
+    { ruleId: 'story.no-page-gutter', label: 'Page gutter present', category: 'aesthetics', severity: 'warn' },
+    { ruleId: 'story.no-design-tokens', label: 'Design tokens defined', category: 'aesthetics', severity: 'warn' },
+    { ruleId: 'story.too-many-colors', label: 'Palette disciplined', category: 'aesthetics', severity: 'warn' },
   ],
   context: [
-    { ruleId: 'context.metric-no-sql', label: 'Metrics have SQL', category: 'correctness' },
-    { ruleId: 'context.empty', label: 'Not empty', category: 'clarity' },
-    { ruleId: 'context.doc-too-long', label: 'Docs are concise', category: 'clarity' },
+    { ruleId: 'context.metric-no-sql', label: 'Metrics have SQL', category: 'correctness', severity: 'warn' },
+    { ruleId: 'context.empty', label: 'Not empty', category: 'clarity', severity: 'warn' },
+    { ruleId: 'context.doc-too-long', label: 'Docs are concise', category: 'clarity', severity: 'error' },
   ],
 };
+
+const DETERMINISTIC_CHECK_BY_ID = immutableMap(
+  Object.values(DETERMINISTIC_CHECKS).flat().map((check) => [check.ruleId, check] as const),
+);
+
+/** Look up deterministic metadata so rule implementations cannot drift on category/severity. */
+export function deterministicCheck(ruleId: string): RubricCheck {
+  const check = DETERMINISTIC_CHECK_BY_ID.get(ruleId);
+  if (!check) throw new Error(`Unknown deterministic rubric check: ${ruleId}`);
+  return check;
+}
 
 // ─── LLM checks (closed set the judge evaluates pass/fail) ───────────────────────────────────
 
 export interface LlmCheck {
   id: string;               // stable; finding ruleId is `llm.${id}`
   category: RubricCategory;
-  severity: RubricSeverity;  // deduction if it FAILS
+  severity: RubricSeverity;  // scoring behavior if it FAILS
   label: string;            // neutral name shown in the table (pass or fail)
   question: string;         // the pass-condition the LLM evaluates (PASS = condition holds)
   fix: string;              // actionable fix shown when it fails
@@ -165,7 +183,9 @@ export function formatChecklist(fileType: RubricFileType): string {
   return LLM_CHECKS[fileType].map((c) => `- ${c.id} [${c.category}, ${c.severity}]: ${c.question}`).join('\n');
 }
 
-const llmToRubricCheck = (c: LlmCheck): RubricCheck => ({ ruleId: `llm.${c.id}`, label: c.label, category: c.category });
+const llmToRubricCheck = (c: LlmCheck): RubricCheck => ({
+  ruleId: `llm.${c.id}`, label: c.label, category: c.category, severity: c.severity,
+});
 
 /**
  * Checks that PASSED for a report: not fired and in an assessed category. Deterministic checks
@@ -175,9 +195,15 @@ const llmToRubricCheck = (c: LlmCheck): RubricCheck => ({ ruleId: `llm.${c.id}`,
 export function passedChecks(fileType: RubricFileType, report: RubricReport, llmRan: boolean): RubricCheck[] {
   const fired = new Set(report.categories.flatMap((c) => c.findings).map((f) => f.ruleId));
   const assessed = new Set(report.categories.filter((c) => c.assessed).map((c) => c.category));
-  const keep = (chk: RubricCheck) => !fired.has(chk.ruleId) && assessed.has(chk.category);
-
-  const det = (DETERMINISTIC_CHECKS[fileType] ?? []).filter(keep);
-  const llm = llmRan ? (LLM_CHECKS[fileType] ?? []).map(llmToRubricCheck).filter(keep) : [];
-  return [...det, ...llm];
+  const llm = llmRan ? (LLM_CHECKS[fileType] ?? []).map(llmToRubricCheck) : [];
+  const all = [...(DETERMINISTIC_CHECKS[fileType] ?? []), ...llm];
+  const byId = new Map(all.map((check) => [check.ruleId, check]));
+  const firedGroups = new Set(
+    [...fired].map((ruleId) => byId.get(ruleId)?.passGroup).filter((group): group is string => !!group),
+  );
+  const keep = (check: RubricCheck) =>
+    !fired.has(check.ruleId)
+    && assessed.has(check.category)
+    && (!check.passGroup || !firedGroups.has(check.passGroup));
+  return all.filter(keep);
 }

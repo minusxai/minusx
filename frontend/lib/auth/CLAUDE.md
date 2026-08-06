@@ -368,8 +368,9 @@ The constants live beside the rules (`scoring.ts`: weights `0.3/0.3/0.4` for vis
   caller-supplied merged content so the score matches the screenshot. A fresh unsaved draft
   therefore scores 0/5 through the tool.
 - **The live thresholds, stated plainly** because they are easy to misremember: `visual-count`
-  warns above `MAX_VISUALS = 15`; `JUDGE_VOTES = 1`; `too-much-text` warns above 400 tokens and
-  errors above 800; `typed-number` fires on any of four shapes in prose (`findFactualNumbers`,
+  warns above `MAX_VISUALS = 15`, while `no-visuals` errors at zero; `JUDGE_VOTES = 1`;
+  `too-much-text` warns above 400 tokens, while `extreme-text` errors above 800; `typed-number`
+  fires on any of four shapes in prose (`findFactualNumbers`,
   `deterministic/shared.ts`) — a `$`-prefixed figure, a `%`-suffixed one, a comma-grouped
   thousands value, *or* a bare run of 5+ digits, so `$12` and `7%` trip it too; and the judge's
   model comes from the code-owned grade override `rubric_llm: task('rubric_llm', 'core')` in

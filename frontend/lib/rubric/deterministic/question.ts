@@ -15,21 +15,21 @@ export function scoreQuestion(content: QuestionContent): RubricFinding[] {
   const query = content.query ?? '';
   const viz = content.vizSettings;
 
-  // query-too-long (clarity)
+  // Query size thresholds (clarity): separate checks keep one severity per check.
   const tokens = estimateTokens(query);
   if (tokens > QUERY_TOKENS_ERROR) {
-    out.push(finding('question.query-too-long', 'clarity', 'error', 'Query is very large',
+    out.push(finding('question.query-extreme', 'Query is extremely large',
       `The SQL is ~${tokens} tokens (over ${QUERY_TOKENS_ERROR}).`, SIMPLIFY_FIX));
   } else if (tokens > QUERY_TOKENS_WARN) {
-    out.push(finding('question.query-too-long', 'clarity', 'warn', 'Query is long',
+    out.push(finding('question.query-too-long', 'Query is long',
       `The SQL is ~${tokens} tokens (over ${QUERY_TOKENS_WARN}).`, SIMPLIFY_FIX));
   }
 
   // no-description (clarity)
   if (isBlank(content.description)) {
-    out.push(finding('question.no-description', 'clarity', 'warn', 'No description',
+    out.push(finding('question.no-description', 'No description',
       'The question has no description.',
-      'Add a one-line description stating what this question answers.', 0.25));
+      'Add a one-line description stating what this question answers.'));
   }
 
   // param ↔ :token sync (correctness)
@@ -38,16 +38,16 @@ export function scoreQuestion(content: QuestionContent): RubricFinding[] {
   const declaredSet = new Set(declared);
   for (const name of used) {
     if (!declaredSet.has(name)) {
-      out.push(finding('question.undeclared-param', 'correctness', 'error', 'Undeclared parameter',
+      out.push(finding('question.undeclared-param', 'Undeclared parameter',
         `SQL references :${name} but it is not declared in parameters.`,
         `Declare parameter :${name} (text/number/date) or remove the token.`));
     }
   }
   for (const name of declared) {
     if (!used.has(name)) {
-      out.push(finding('question.unused-param', 'correctness', 'warn', 'Unused parameter',
+      out.push(finding('question.unused-param', 'Unused parameter',
         `Parameter ${name} is declared but never referenced in the SQL.`,
-        `Remove the unused ${name} parameter or reference :${name} in the SQL.`, 0.25));
+        `Remove the unused ${name} parameter or reference :${name} in the SQL.`));
     }
   }
 
@@ -57,7 +57,7 @@ export function scoreQuestion(content: QuestionContent): RubricFinding[] {
     const empty = !pc
       || ((pc.values?.length ?? 0) === 0 && (pc.rows?.length ?? 0) === 0 && (pc.columns?.length ?? 0) === 0);
     if (empty) {
-      out.push(finding('question.viz-config-incomplete', 'correctness', 'error', 'Pivot not configured',
+      out.push(finding('question.viz-config-incomplete', 'Pivot not configured',
         'The pivot chart has no rows, columns, or value measures.',
         'Configure the pivot (rows, columns, at least one value measure) or switch to a table.'));
     }
@@ -65,14 +65,14 @@ export function scoreQuestion(content: QuestionContent): RubricFinding[] {
 
   // pie-multi-measure (correctness — a pie/funnel physically can't represent >1 measure)
   if ((viz?.type === 'pie' || viz?.type === 'funnel') && (viz.yCols?.length ?? 0) > 1) {
-    out.push(finding('question.pie-multi-measure', 'correctness', 'warn', 'Pie/funnel with multiple measures',
+    out.push(finding('question.pie-multi-measure', 'Pie/funnel with multiple measures',
       `A ${viz.type} chart has ${viz.yCols!.length} measures; it can only show one.`,
       'Keep a single yCols value, or use a bar chart to compare multiple measures.'));
   }
 
   // too-many-series (clarity — technically shows the data, just cluttered)
   if ((viz?.type === 'line' || viz?.type === 'bar' || viz?.type === 'area') && (viz.yCols?.length ?? 0) > MAX_SERIES) {
-    out.push(finding('question.too-many-series', 'clarity', 'warn', 'Too many series',
+    out.push(finding('question.too-many-series', 'Too many series',
       `The chart has ${viz.yCols!.length} series (more than ${MAX_SERIES}).`,
       'More than 5 series is hard to read (the ≤7 rule). Split into small multiples or drop series.'));
   }

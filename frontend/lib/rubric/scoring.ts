@@ -1,7 +1,7 @@
 /**
  * Rubric scoring math — pure. Turns a flat findings list into per-category scores and a
  * weighted overall + grade on a coarse **0–5 scale** (deliberately low-resolution to avoid
- * false precision / variance). All tunable constants (deductions, per-type category weights,
+ * false precision / variance). All tunable constants (warning deduction, per-type category weights,
  * grade bands) live here so they can be calibrated against a human gold set later.
  *
  * See `CLAUDE.md` — "Auth, Access Control, Mode Isolation, HTTP Helpers, and the File-Health
@@ -15,18 +15,27 @@ import type {
   RubricFinding,
   RubricGrade,
   RubricReport,
+  RubricSeverity,
 } from './types';
 
 /** Every score starts here (perfect) and findings deduct from it. */
 export const MAX_SCORE = 5;
 export const MIN_SCORE = 0;
 
-/**
- * Points a `warn` finding deducts from its category's 5 when the rule doesn't set its own
- * `deduction`. `error` findings don't deduct — ANY error gates the category AND the overall
- * score to 0 (the file is broken until it's fixed).
- */
-export const DEFAULT_WARN_DEDUCTION = 1;
+export interface SeverityScoringBehavior {
+  /** Points subtracted from the finding's category. Ignored when `gatesCategory` is true. */
+  categoryDeduction: number;
+  /** Whether one finding of this severity forces its category score to 0. */
+  gatesCategory: boolean;
+  /** Whether one finding of this severity forces the overall score to 0. */
+  gatesOverall: boolean;
+}
+
+/** The single severity → scoring-behavior map. Change warning weight or gating behavior here. */
+export const SEVERITY_SCORING: Record<RubricSeverity, SeverityScoringBehavior> = {
+  error: { categoryDeduction: 0, gatesCategory: true, gatesOverall: true },
+  warn: { categoryDeduction: 1, gatesCategory: false, gatesOverall: false },
+};
 
 /** Fixed category order (priority waterfall) — every report emits all three. */
 const CATEGORIES: readonly RubricCategory[] = ['correctness', 'clarity', 'aesthetics'];
@@ -54,12 +63,16 @@ export function gradeFor(overall: number): RubricGrade {
   return 'poor';
 }
 
-const hasError = (findings: RubricFinding[]) => findings.some((f) => f.severity === 'error');
+const gatesCategory = (findings: RubricFinding[]) =>
+  findings.some((finding) => SEVERITY_SCORING[finding.severity].gatesCategory);
+
+const gatesOverall = (findings: RubricFinding[]) =>
+  findings.some((finding) => SEVERITY_SCORING[finding.severity].gatesOverall);
 
 /**
  * Score one category. When `assessed` is false the source didn't evaluate this category (e.g.
  * deterministic aesthetics on a question) — score is `null` and it's excluded from the overall.
- * An `error` finding zeroes the category outright; `warn` findings deduct their weight.
+ * An `error` finding zeroes the category outright; every `warn` finding deducts the fixed amount.
  */
 export function scoreCategory(
   category: RubricCategory,
@@ -68,8 +81,11 @@ export function scoreCategory(
   assessed = true,
 ): RubricCategoryScore {
   if (!assessed) return { category, weight, findings, score: null, assessed: false };
-  if (hasError(findings)) return { category, weight, findings, score: MIN_SCORE, assessed: true };
-  const deduction = findings.reduce((sum, f) => sum + (f.deduction ?? DEFAULT_WARN_DEDUCTION), 0);
+  if (gatesCategory(findings)) return { category, weight, findings, score: MIN_SCORE, assessed: true };
+  const deduction = findings.reduce(
+    (total, finding) => total + SEVERITY_SCORING[finding.severity].categoryDeduction,
+    0,
+  );
   return { category, weight, findings, score: toScore(MAX_SCORE - deduction), assessed: true };
 }
 
@@ -91,9 +107,8 @@ export function buildReport(
   );
   const scored = categories.filter((c): c is RubricCategoryScore & { score: number } => c.assessed && c.score !== null);
   const totalWeight = scored.reduce((sum, c) => sum + c.weight, 0) || 1;
-  // Error gate: ANY error means the file is broken — overall 0 / poor until it's fixed,
-  // regardless of how clean the other categories are.
-  const overall = hasError(findings)
+  // Overall-gating severities force 0 / poor regardless of how clean the other categories are.
+  const overall = gatesOverall(findings)
     ? MIN_SCORE
     : toScore(scored.reduce((sum, c) => sum + c.score * c.weight, 0) / totalWeight);
   return { fileType, overall, grade: gradeFor(overall), categories };

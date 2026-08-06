@@ -15,7 +15,7 @@ import type { FileType } from '@/lib/types';
  * Two levels only (no `info`):
  * - `error`: disqualifying — the file is broken/wrong. ANY error gates the overall score to 0
  *   until fixed (see `scoring.ts`). The agent must ALWAYS fix errors.
- * - `warn`: deducts its `deduction` weight (default 1, lightest 0.25) from the category score.
+ * - `warn`: deducts the fixed amount in `SEVERITY_SCORING.warn` from the category score.
  */
 export type RubricSeverity = 'error' | 'warn';
 
@@ -49,9 +49,6 @@ export interface RubricFinding {
   detail: string;            // what's wrong
   fix: string;               // imperative, agent-actionable
   source: FindingSource;     // 'rule' (deterministic) or 'llm'
-  /** Points a `warn` deducts from its category's 5 (default `DEFAULT_WARN_DEDUCTION` = 1;
-   *  lightest 0.25). Ignored for `error` findings — an error gates the score to 0 outright. */
-  deduction?: number;
 }
 
 export interface RubricCategoryScore {
