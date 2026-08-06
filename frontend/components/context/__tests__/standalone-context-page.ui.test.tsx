@@ -3,7 +3,6 @@ import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import { makeStore } from '@/store/store';
 import { setUser } from '@/store/authSlice';
 import { setFile } from '@/store/filesSlice';
-import { setEnableCustomAgents } from '@/store/uiSlice';
 import type { DbFile, UserRole } from '@/lib/types';
 
 const contextsState = vi.hoisted(() => ({
@@ -32,9 +31,13 @@ vi.mock('@/components/file-browser/Breadcrumb', () => {
   const React = require('react');
   return {
     __esModule: true,
-    default: ({ items }: { items: Array<{ label: string; href?: string }> }) => React.createElement(
+    default: ({ items, currentFileId }: { items: Array<{ label: string; href?: string }>; currentFileId?: number }) => React.createElement(
       'nav',
-      { 'data-testid': 'standalone-breadcrumb', 'data-items': JSON.stringify(items) },
+      {
+        'data-testid': 'standalone-breadcrumb',
+        'data-items': JSON.stringify(items),
+        'data-current-file-id': currentFileId,
+      },
     ),
   };
 });
@@ -88,6 +91,7 @@ describe('StandaloneContextPage', () => {
 
     expect(screen.getByTestId('context-surface')).toHaveAttribute('data-file-id', '22');
     expect(screen.getByTestId('context-surface')).toHaveAttribute('data-surface', 'skills');
+    expect(screen.getByTestId('standalone-breadcrumb')).toHaveAttribute('data-current-file-id', '22');
     expect(JSON.parse(screen.getByTestId('standalone-breadcrumb').getAttribute('data-items') || '[]')).toEqual([
       { label: 'Home', href: '/' },
       { label: store.getState().configs.config.branding.displayName, href: '/p/org' },
@@ -115,12 +119,11 @@ describe('StandaloneContextPage', () => {
     contextsState.contexts = [nearest];
     contextsState.homeContext = nearest;
     store.dispatch(setFile({ file: nearest }));
-    store.dispatch(setEnableCustomAgents(true));
-
     renderWithProviders(<StandaloneContextPage surface="agents" />, { store });
 
     expect(screen.getByTestId('context-surface')).toHaveAttribute('data-file-id', '1008');
     expect(screen.getByTestId('context-surface')).toHaveAttribute('data-surface', 'agents');
+    expect(screen.getByTestId('standalone-breadcrumb')).toHaveAttribute('data-current-file-id', '1008');
     expect(JSON.parse(screen.getByTestId('standalone-breadcrumb').getAttribute('data-items') || '[]')).toEqual([
       { label: 'Home', href: '/' },
       { label: store.getState().configs.config.branding.displayName, href: '/p/org' },

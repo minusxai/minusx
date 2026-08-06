@@ -55,8 +55,6 @@ interface UIState {
   queueStrategy: 'end-of-turn' | 'mid-turn';
   unrestrictedMode: boolean;
   showExpandedMessages: boolean;
-  /** Alpha flag: custom agents (Agents tab on contexts + agent picker in chat). */
-  enableCustomAgents: boolean;
   homePage: {
     showFeedSummary: boolean;
     showRecentQuestions: boolean;
@@ -100,7 +98,6 @@ const initialState: UIState = {
   queueStrategy: 'end-of-turn',
   unrestrictedMode: false,
   showExpandedMessages: false,
-  enableCustomAgents: false,
   homePage: {
     showFeedSummary: true,
     showRecentQuestions: true,
@@ -269,20 +266,14 @@ const uiSlice = createSlice({
         try { localStorage.setItem('showExpandedMessages', String(action.payload)); } catch { /* ignore */ }
       }
     },
-    setEnableCustomAgents: (state, action: PayloadAction<boolean>) => {
-      state.enableCustomAgents = action.payload;
-      if (typeof window !== 'undefined') {
-        try { localStorage.setItem('enableCustomAgents', String(action.payload)); } catch { /* ignore */ }
-      }
-    },
     setHomePageConfig: (state, action: PayloadAction<Partial<UIState['homePage']>>) => {
       Object.assign(state.homePage, action.payload);
       if (typeof window !== 'undefined') {
         try { localStorage.setItem('homePage', JSON.stringify(state.homePage)); } catch { /* ignore */ }
       }
     },
-    setBulkUiFlags: (state, action: PayloadAction<{ leftSidebarCollapsed?: boolean; rightSidebarCollapsed?: boolean; devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; vizV2?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; showExpandedMessages?: boolean; enableCustomAgents?: boolean; homePage?: Partial<UIState['homePage']> }>) => {
-      const { leftSidebarCollapsed, rightSidebarCollapsed, devMode, askForConfirmation, showAdvanced, vizV2, allowChatQueue, queueStrategy, showSuggestedQuestions, showTrustScore, unrestrictedMode, showExpandedMessages, enableCustomAgents, homePage } = action.payload;
+    setBulkUiFlags: (state, action: PayloadAction<{ leftSidebarCollapsed?: boolean; rightSidebarCollapsed?: boolean; devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; vizV2?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; showExpandedMessages?: boolean; homePage?: Partial<UIState['homePage']> }>) => {
+      const { leftSidebarCollapsed, rightSidebarCollapsed, devMode, askForConfirmation, showAdvanced, vizV2, allowChatQueue, queueStrategy, showSuggestedQuestions, showTrustScore, unrestrictedMode, showExpandedMessages, homePage } = action.payload;
       if (leftSidebarCollapsed !== undefined) state.leftSidebarCollapsed = leftSidebarCollapsed;
       if (rightSidebarCollapsed !== undefined) state.rightSidebarCollapsed = rightSidebarCollapsed;
       if (devMode !== undefined) state.devMode = devMode;
@@ -295,7 +286,6 @@ const uiSlice = createSlice({
       if (showTrustScore !== undefined) state.showTrustScore = showTrustScore;
       if (unrestrictedMode !== undefined) state.unrestrictedMode = unrestrictedMode;
       if (showExpandedMessages !== undefined) state.showExpandedMessages = showExpandedMessages;
-      if (enableCustomAgents !== undefined) state.enableCustomAgents = enableCustomAgents;
       if (homePage !== undefined) Object.assign(state.homePage, homePage);
     },
   },
@@ -333,7 +323,6 @@ export const {
   setQueueStrategy,
   setUnrestrictedMode,
   setShowExpandedMessages,
-  setEnableCustomAgents,
   setHomePageConfig,
   setBulkUiFlags,
   pushView,
@@ -391,5 +380,4 @@ export const selectShowSuggestedQuestions = (state: RootState) => state.ui.showS
 export const selectShowTrustScore = (state: RootState) => state.ui.showTrustScore;
 export const selectUnrestrictedMode = (state: RootState) => state.ui.unrestrictedMode;
 export const selectShowExpandedMessages = (state: RootState) => state.ui.showExpandedMessages ?? false;
-export const selectEnableCustomAgents = (state: RootState) => state.ui.enableCustomAgents ?? false;
 export const selectHomePage = (state: RootState) => state.ui.homePage;

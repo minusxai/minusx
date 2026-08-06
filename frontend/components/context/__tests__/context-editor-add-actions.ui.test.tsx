@@ -60,7 +60,7 @@ vi.mock('@/lib/hooks/useConfigs', () => ({
 }));
 
 import ContextEditorV2 from '@/components/context/ContextEditorV2';
-import { setDevMode, setEnableCustomAgents } from '@/store/uiSlice';
+import { setDevMode } from '@/store/uiSlice';
 
 const CONTENT = {
   versions: [{ version: 1, whitelist: [], docs: [], createdAt: '2026-01-01T00:00:00.000Z', createdBy: 1 }],
@@ -80,12 +80,10 @@ function renderEditor(
   tab: 'skills' | 'agents',
   content: ContextContent = CONTENT,
   {
-    enableCustomAgents = tab === 'agents',
     devMode = false,
     role = 'editor',
     standaloneTab,
   }: {
-    enableCustomAgents?: boolean;
     devMode?: boolean;
     role?: UserRole;
     standaloneTab?: 'agents' | 'skills';
@@ -95,7 +93,6 @@ function renderEditor(
   const onChange = vi.fn();
   const onEditModeChange = vi.fn();
   const store = makeStore();
-  if (enableCustomAgents) store.dispatch(setEnableCustomAgents(true));
   if (devMode) store.dispatch(setDevMode(true));
   store.dispatch(setUser({
     id: 1,
@@ -171,6 +168,60 @@ describe('ContextEditorV2 add actions outside edit mode', () => {
     expect(screen.getByText('Configure alerting')).toBeVisible();
   });
 
+  it('filters custom and system skills in the UI and clears the search', () => {
+    renderEditor('skills', {
+      ...CONTENT,
+      skills: [
+        {
+          name: 'pricing_playbook',
+          displayName: 'Pricing playbook',
+          description: 'Commercial packaging guidance',
+          content: 'Use current pricing.',
+          enabled: true,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+          createdBy: 1,
+        },
+        {
+          name: 'incident_response',
+          displayName: 'Incident response',
+          description: 'Production escalation steps',
+          content: 'Follow the incident process.',
+          enabled: true,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+          createdBy: 1,
+        },
+      ],
+    });
+
+    const search = screen.getByLabelText('Search skills');
+    fireEvent.change(search, { target: { value: 'alerting' } });
+
+    expect(screen.getByLabelText('System skill alerts')).toBeVisible();
+    expect(screen.queryByLabelText('System skill dashboards')).not.toBeInTheDocument();
+    expect(screen.queryByText('Pricing playbook')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Skill search results')).toHaveTextContent('1 of 4');
+
+    fireEvent.click(screen.getByLabelText('Clear skill search'));
+
+    expect(search).toHaveValue('');
+    expect(screen.getByText('Pricing playbook')).toBeVisible();
+    expect(screen.getByLabelText('System skill dashboards')).toBeVisible();
+
+    fireEvent.change(search, { target: { value: 'commercial' } });
+
+    expect(screen.getByText('Pricing playbook')).toBeVisible();
+    expect(screen.queryByText('Incident response')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('System skills catalog')).not.toBeInTheDocument();
+
+    fireEvent.change(search, { target: { value: 'missing skill' } });
+
+    expect(screen.getByText('No skills match “missing skill”')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear search' }));
+    expect(screen.getByText('Incident response')).toBeVisible();
+  });
+
   it('shows Add skill and keeps a friendly display name alongside its canonical key', async () => {
     const { onChange, onEditModeChange } = renderEditor('skills');
 
@@ -200,24 +251,7 @@ describe('ContextEditorV2 add actions outside edit mode', () => {
     expect(nameInput).toHaveValue('Revenue & Growth / Q3');
   });
 
-  // The custom-agents surface is alpha: without the flag the editor must look
-  // exactly like it did pre-agents — no tab, and a ?tab=agents deep link falls
-  // back to Databases instead of rendering a hidden surface.
-  it('hides the Agents tab unless the Custom Agents alpha flag is on', () => {
-    renderEditor('skills', CONTENT, { enableCustomAgents: false });
-
-    expect(screen.queryByRole('tab', { name: /Agents/ })).not.toBeInTheDocument();
-  });
-
-  it('falls back to the Databases tab when a ?tab=agents deep link arrives with the flag off', () => {
-    renderEditor('agents', CONTENT, { enableCustomAgents: false });
-
-    expect(screen.queryByRole('tab', { name: /Agents/ })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Add agent')).not.toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Databases' })).toHaveAttribute('aria-selected', 'true');
-  });
-
-  it('shows the Agents tab when the Custom Agents alpha flag is on', () => {
+  it('shows the Agents tab without a feature flag', () => {
     renderEditor('agents');
 
     expect(screen.getByRole('tab', { name: /Agents/ })).toHaveAttribute('aria-selected', 'true');

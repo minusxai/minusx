@@ -35,7 +35,7 @@ export function DataLoader() {
   // Restore persisted UI flags after hydration — one dispatch instead of a re-render cycle per flag
   useEffect(() => {
     try {
-      const flags: { leftSidebarCollapsed?: boolean; rightSidebarCollapsed?: boolean; devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; vizV2?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; showExpandedMessages?: boolean; enableCustomAgents?: boolean; homePage?: Record<string, unknown> } = {};
+      const flags: { leftSidebarCollapsed?: boolean; rightSidebarCollapsed?: boolean; devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; vizV2?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean; showExpandedMessages?: boolean; homePage?: Record<string, unknown> } = {};
       const leftSidebarCollapsed = readStoredBoolean('leftSidebarCollapsed');
       if (leftSidebarCollapsed !== undefined) flags.leftSidebarCollapsed = leftSidebarCollapsed;
       const rightSidebarCollapsed = readStoredBoolean('rightSidebarCollapsed');
@@ -66,8 +66,8 @@ export function DataLoader() {
       if (unrestricted !== null) flags.unrestrictedMode = unrestricted === 'true';
       const expandedMsgs = localStorage.getItem('showExpandedMessages');
       if (expandedMsgs !== null) flags.showExpandedMessages = expandedMsgs === 'true';
-      const customAgents = localStorage.getItem('enableCustomAgents');
-      if (customAgents !== null) flags.enableCustomAgents = customAgents === 'true';
+      // Custom agents graduated from their alpha flag; discard the obsolete preference.
+      localStorage.removeItem('enableCustomAgents');
       const hp = localStorage.getItem('homePage');
       if (hp !== null) { try { flags.homePage = JSON.parse(hp); } catch { /* ignore */ } }
       if (Object.keys(flags).length > 0) dispatch(setBulkUiFlags(flags));

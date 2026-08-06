@@ -8,8 +8,8 @@
  */
 
 import { useState } from 'react';
-import { Badge, Box, Button, HStack, Icon, SimpleGrid, Switch, Tabs, Text, VStack } from '@chakra-ui/react';
-import { LuPencil, LuPlay, LuPlus, LuTrash2 } from 'react-icons/lu';
+import { Badge, Box, Button, HStack, Icon, IconButton, Input, SimpleGrid, Switch, Tabs, Text, VStack } from '@chakra-ui/react';
+import { LuPencil, LuPlay, LuPlus, LuSearch, LuTrash2, LuX } from 'react-icons/lu';
 import Link from 'next/link';
 import type { AgentEntry, ContextContent } from '@/lib/types';
 import { mergeSkillsByName } from '@/lib/context/context-utils';
@@ -54,14 +54,28 @@ export function AgentsTabContent({
   getAgentExploreHref,
 }: AgentsTabContentProps) {
   const [builder, setBuilder] = useState<BuilderState>(null);
+  const [agentQuery, setAgentQuery] = useState('');
   const agents = content.agents || [];
   const inheritedAgents = content.fullAgents || [];
   // Draft agents are authoring state. Viewers only see runnable, published
   // agents; editors/admins retain the full roster so they can publish drafts.
-  const visibleAgentEntries = agents
+  const eligibleAgentEntries = agents
     .map((agent, index) => ({ agent, index }))
     .filter(({ agent }) => canAddAgent || agent.enabled);
-  const visibleInheritedAgents = inheritedAgents.filter(agent => canAddAgent || agent.enabled);
+  const eligibleInheritedAgents = inheritedAgents.filter(agent => canAddAgent || agent.enabled);
+  const normalizedAgentQuery = agentQuery.trim().toLowerCase().replace(/[_-]+/g, ' ');
+  const isSearching = normalizedAgentQuery.length > 0;
+  const matchesAgentQuery = (agent: AgentEntry) => !isSearching || [
+    agent.displayName,
+    agent.name,
+    agent.description,
+    agent.prompt,
+  ].some((value) => value?.toLowerCase().replace(/[_-]+/g, ' ').includes(normalizedAgentQuery));
+  const visibleAgentEntries = eligibleAgentEntries.filter(({ agent }) => matchesAgentQuery(agent));
+  const visibleInheritedAgents = eligibleInheritedAgents.filter(matchesAgentQuery);
+  const totalAgentCount = eligibleAgentEntries.length + eligibleInheritedAgents.length;
+  const visibleAgentCount = visibleAgentEntries.length + visibleInheritedAgents.length;
+  const hasNoMatches = isSearching && visibleAgentCount === 0;
   const userSkills = mergeSkillsByName(content.fullSkills || [], content.skills || [])
     .filter((skill) => skill.enabled)
     .map((skill) => ({
@@ -116,19 +130,8 @@ export function AgentsTabContent({
             />
           ) : (
             <>
-              <HStack justify="space-between" align="end" gap={4}>
-                <Box>
-                  <HStack gap={2}>
-                    <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.12em" color="fg.muted">
-                      Custom agents
-                    </Text>
-                    <Badge size="xs" colorPalette="teal" variant="subtle">{visibleAgentEntries.length}</Badge>
-                  </HStack>
-                  <Text fontSize="sm" color="fg.subtle" mt={1}>
-                    Personas available to everyone using this Knowledge Base.
-                  </Text>
-                </Box>
-                {canAddAgent && (
+              {canAddAgent && (
+                <HStack justify="flex-end">
                   <Button
                     aria-label="Add agent"
                     size="xs"
@@ -143,8 +146,97 @@ export function AgentsTabContent({
                     <LuPlus />
                     Add agent
                   </Button>
+                </HStack>
+              )}
+
+              <HStack gap={3} align="center">
+                <Box
+                  position="relative"
+                  flex="1"
+                  minW={0}
+                  border="1px solid"
+                  borderColor="border.default"
+                  borderRadius="md"
+                  bg="bg.subtle"
+                  _focusWithin={{
+                    borderColor: 'accent.teal',
+                    boxShadow: '0 0 0 1px var(--chakra-colors-accent-teal)',
+                  }}
+                  transition="border-color 160ms ease, box-shadow 160ms ease"
+                >
+                  <Icon
+                    as={LuSearch}
+                    position="absolute"
+                    left={3}
+                    top="50%"
+                    transform="translateY(-50%)"
+                    color="fg.muted"
+                    boxSize={4}
+                    pointerEvents="none"
+                  />
+                  <Input
+                    aria-label="Search agents"
+                    value={agentQuery}
+                    onChange={(event) => setAgentQuery(event.target.value)}
+                    placeholder="Search agents by name, description, or instructions…"
+                    border="none"
+                    bg="transparent"
+                    fontFamily="mono"
+                    fontSize="sm"
+                    pl={9}
+                    pr={agentQuery ? 10 : 3}
+                    _focus={{ outline: 'none', boxShadow: 'none' }}
+                  />
+                  {agentQuery && (
+                    <IconButton
+                      aria-label="Clear agent search"
+                      position="absolute"
+                      right={1.5}
+                      top="50%"
+                      transform="translateY(-50%)"
+                      size="2xs"
+                      variant="ghost"
+                      color="fg.subtle"
+                      onClick={() => setAgentQuery('')}
+                      _hover={{ color: 'fg.default', bg: 'bg.muted' }}
+                    >
+                      <LuX size={13} />
+                    </IconButton>
+                  )}
+                </Box>
+                {isSearching && (
+                  <Badge
+                    aria-label="Agent search results"
+                    size="sm"
+                    variant="subtle"
+                    colorPalette={hasNoMatches ? 'gray' : 'teal'}
+                    borderRadius="full"
+                    px={2.5}
+                    py={1}
+                    whiteSpace="nowrap"
+                  >
+                    {visibleAgentCount} of {totalAgentCount}
+                  </Badge>
                 )}
               </HStack>
+
+              {hasNoMatches && (
+                <Box
+                  py={8}
+                  px={5}
+                  border="1px dashed"
+                  borderColor="border.default"
+                  borderRadius="lg"
+                  textAlign="center"
+                  bg="bg.subtle"
+                >
+                  <Text fontSize="sm" fontWeight="700">No agents match “{agentQuery.trim()}”</Text>
+                  <Text fontSize="xs" color="fg.muted" mt={1}>Try another name, description, or instruction.</Text>
+                  <Button size="xs" variant="ghost" colorPalette="teal" mt={3} onClick={() => setAgentQuery('')}>
+                    Clear search
+                  </Button>
+                </Box>
+              )}
 
               {visibleAgentEntries.length > 0 && (
                 <SimpleGrid aria-label="Agent roster" columns={{ base: 1, xl: 2 }} gap={4} alignItems="stretch">
@@ -281,7 +373,7 @@ export function AgentsTabContent({
                   ))}
                 </SimpleGrid>
               )}
-              {visibleAgentEntries.length === 0 && (
+              {!isSearching && visibleAgentEntries.length === 0 && (
                 <Box
                   border="1px dashed"
                   borderColor="border.default"

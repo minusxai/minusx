@@ -6,7 +6,6 @@ import { useContexts } from '@/lib/hooks/useContexts';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { useAppSelector } from '@/store/hooks';
 import { selectContextFromPath } from '@/store/filesSlice';
-import { selectEnableCustomAgents } from '@/store/uiSlice';
 import { canEdit } from '@/lib/auth/role-helpers';
 import { selectConfig } from '@/store/configsSlice';
 import Breadcrumb from '@/components/file-browser/Breadcrumb';
@@ -40,7 +39,6 @@ export default function StandaloneContextPage({
 }: StandaloneContextPageProps) {
   const user = useAppSelector(state => state.auth.user);
   const config = useAppSelector(selectConfig);
-  const enableCustomAgents = useAppSelector(selectEnableCustomAgents);
   const { contexts, homeContext, loading, error } = useContexts();
   const homePath = user
     ? resolveHomeFolderSync(user.mode, user.home_folder || '')
@@ -62,15 +60,6 @@ export default function StandaloneContextPage({
       <SurfaceMessage
         title="Skills"
         message="Skills are available to editors and admins."
-      />
-    );
-  }
-
-  if (surface === 'agents' && !enableCustomAgents) {
-    return (
-      <SurfaceMessage
-        title="Agents"
-        message="Custom agents are not enabled for this workspace."
       />
     );
   }
@@ -118,7 +107,7 @@ export default function StandaloneContextPage({
       pt={{ base: 5, md: 8 }}
     >
       <Box mb={{ base: 2, md: 4 }}>
-        <Breadcrumb items={breadcrumbItems} />
+        <Breadcrumb items={breadcrumbItems} currentFileId={resolvedContext.id} />
       </Box>
       <ContextContainerV2 fileId={resolvedContext.id} standaloneTab={surface} />
     </Box>

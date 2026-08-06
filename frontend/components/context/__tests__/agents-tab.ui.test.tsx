@@ -191,6 +191,58 @@ describe('AgentsTabContent — read view', () => {
     expect(card).not.toHaveTextContent('Full catalog');
     expect(card.textContent?.match(/None/g)).toHaveLength(2);
   });
+
+  it('filters local and inherited agents in the UI and clears the search', () => {
+    renderTab({
+      content: {
+        ...content,
+        agents: [
+          mkAgent({
+            name: 'cfo_agent',
+            displayName: 'CFO Agent',
+            description: 'Financial planning specialist',
+            prompt: 'Analyze budgets and forecasts.',
+          }),
+          mkAgent({
+            name: 'ops_agent',
+            displayName: 'Operations Agent',
+            description: 'Production workflow specialist',
+            prompt: 'Analyze inventory and fulfillment.',
+          }),
+        ],
+        fullAgents: [mkAgent({
+          name: 'inherited_sales',
+          displayName: 'Inherited Sales',
+          description: 'Inherited revenue specialist',
+        })],
+      },
+    });
+
+    const search = screen.getByLabelText('Search agents');
+    fireEvent.change(search, { target: { value: 'financial planning' } });
+
+    expect(screen.getByLabelText('Agent cfo_agent')).toBeVisible();
+    expect(screen.queryByLabelText('Agent ops_agent')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Inherited agent inherited_sales')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Agent search results')).toHaveTextContent('1 of 3');
+
+    fireEvent.change(search, { target: { value: 'inventory' } });
+    expect(screen.getByLabelText('Agent ops_agent')).toBeVisible();
+    expect(screen.queryByLabelText('Agent cfo_agent')).not.toBeInTheDocument();
+
+    fireEvent.change(search, { target: { value: 'inherited revenue' } });
+    expect(screen.getByLabelText('Inherited agent inherited_sales')).toBeVisible();
+    expect(screen.queryByLabelText('Agent ops_agent')).not.toBeInTheDocument();
+
+    fireEvent.change(search, { target: { value: 'missing agent' } });
+    expect(screen.getByText('No agents match “missing agent”')).toBeVisible();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear search' }));
+    expect(search).toHaveValue('');
+    expect(screen.getByLabelText('Agent cfo_agent')).toBeVisible();
+    expect(screen.getByLabelText('Agent ops_agent')).toBeVisible();
+    expect(screen.getByLabelText('Inherited agent inherited_sales')).toBeVisible();
+  });
 });
 
 describe('AgentsTabContent — builder', () => {

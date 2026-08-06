@@ -22,7 +22,7 @@ import { ConversationsAPI } from '@/lib/data/conversations';
 import { useContext } from '@/lib/hooks/useContext';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { toaster } from '@/components/ui/toaster';
-import { selectChatAttachments, selectEnableCustomAgents, selectShowExpandedMessages, selectUnrestrictedMode, setChatAgentSelection, setChatGradeSelection, setSidebarPendingSlashCommand } from '@/store/uiSlice';
+import { selectChatAttachments, selectShowExpandedMessages, selectUnrestrictedMode, setChatAgentSelection, setChatGradeSelection, setSidebarPendingSlashCommand } from '@/store/uiSlice';
 import { selectAllowChatQueue } from '@/store/uiSlice';
 import { appStateWithFileScreenshot, markersEnabledForAppState } from '@/lib/screenshot/app-state-screenshot';
 import { readViewportPointer } from '@/lib/screenshot/read-viewport';
@@ -194,26 +194,20 @@ export default function ChatInterface({
 
   const chatSkills = contextInfo.availableSkills;
 
-  // Custom agents defined on the resolved context (enabled only). Alpha-gated:
-  // with the flag off, no options reach the picker (which then hides its row)
-  // and no selection is ever sent. The picker shows them; the pointer is only
-  // SENT when the selection still resolves — a stale selection (agent deleted /
-  // context switched) is flagged "(missing)" in the popover and the turn
-  // truthfully runs as the default analyst.
-  const enableCustomAgents = useAppSelector(selectEnableCustomAgents);
+  // Custom agents defined on the resolved context (enabled only). The picker
+  // shows them; the pointer is only sent when the selection still resolves —
+  // a stale selection (agent deleted / context switched) is flagged "(missing)"
+  // in the popover and the turn truthfully runs as the default analyst.
   const chatAgentOptions = useMemo(
-    () => enableCustomAgents
-      ? (contextInfo.agents ?? []).map(agent => ({
-        name: agent.name,
-        displayName: agent.displayName,
-        description: agent.description,
-      }))
-      : [],
-    [contextInfo.agents, enableCustomAgents],
+    () => (contextInfo.agents ?? []).map(agent => ({
+      name: agent.name,
+      displayName: agent.displayName,
+      description: agent.description,
+    })),
+    [contextInfo.agents],
   );
-  const visibleSelectedAgent = enableCustomAgents ? selectedAgent : null;
-  const effectiveSelectedAgent = visibleSelectedAgent && chatAgentOptions.some(agent => agent.name === visibleSelectedAgent)
-    ? visibleSelectedAgent
+  const effectiveSelectedAgent = selectedAgent && chatAgentOptions.some(agent => agent.name === selectedAgent)
+    ? selectedAgent
     : null;
 
   const uniqueSkills = useCallback((skills: SkillMention[]) => {
@@ -1176,7 +1170,7 @@ export default function ChatInterface({
               selectedGrade={selectedGrade}
               onGradeChange={setSelectedGrade}
               agentOptions={chatAgentOptions}
-              selectedAgent={visibleSelectedAgent}
+              selectedAgent={selectedAgent}
               onAgentChange={setSelectedAgent}
               container={container}
               isCompact={isCompact}

@@ -312,7 +312,11 @@ export default function ContextContainerV2({
       if (typeof fileId === 'number') {
         const result = await publishFile({ fileId });
         handleEditModeChange(false);
-        redirectAfterSave(result, fileId, router);
+        // Standalone Agents/Skills are alternate surfaces over this context
+        // file, so a successful save should keep the user on that surface.
+        if (!standaloneTab) {
+          redirectAfterSave(result, fileId, router);
+        }
       }
     } catch (error) {
       // User-facing errors should be shown in UI
@@ -325,7 +329,7 @@ export default function ContextContainerV2({
       console.error('Failed to save context:', error);
       setSaveError('An unexpected error occurred. Please try again.');
     }
-  }, [currentContent, fileId, router, handleEditModeChange]);
+  }, [currentContent, fileId, router, handleEditModeChange, standaloneTab]);
 
   // Cancel handler - discard local changes without reloading
   const handleCancel = useCallback(() => {

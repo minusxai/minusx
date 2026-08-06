@@ -28,7 +28,6 @@ import CodeView from '../views/CodeView';
 import { useAppSelector } from '@/store/hooks';
 import { shallowEqual } from 'react-redux';
 import { selectConnectionsLoading, selectPersistableContent, selectMergedContent } from '@/store/filesSlice';
-import { selectEnableCustomAgents } from '@/store/uiSlice';
 import { HIDDEN_SYSTEM_FOLDERS } from '@/lib/mode/path-resolver';
 import { canEdit } from '@/lib/auth/role-helpers';
 import { useContext as useKnowledgeContext } from '@/lib/hooks/useContext';
@@ -149,23 +148,11 @@ export default function ContextEditorV2({
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  // Alpha flag (Settings → Developer Tools → Alpha Flags): custom agents are
-  // hidden entirely — no tab, and ?tab=agents deep links fall back to Databases.
-  const enableCustomAgents = useAppSelector(selectEnableCustomAgents);
-
   type TopTab = 'databases' | 'docs' | 'skills' | 'agents' | 'evals';
-  const validTabs: TopTab[] = enableCustomAgents
-    ? ['databases', 'docs', 'skills', 'agents', 'evals']
-    : ['databases', 'docs', 'skills', 'evals'];
+  const validTabs: TopTab[] = ['databases', 'docs', 'skills', 'agents', 'evals'];
   const parseTab = (val: string | null): TopTab => validTabs.includes(val as TopTab) ? val as TopTab : 'databases';
 
   const [topTab, setTopTabState] = useState<TopTab>(() => parseTab(searchParams.get('tab')));
-
-  // If the flag is switched off while the Agents tab is open, land on Databases
-  // rather than an empty tab body.
-  useEffect(() => {
-    if (!enableCustomAgents && topTab === 'agents') setTopTabState('databases');
-  }, [enableCustomAgents, topTab]);
 
   const setTopTab = useCallback((tab: TopTab) => {
     setTopTabState(tab);
@@ -459,7 +446,7 @@ export default function ContextEditorV2({
     />
   );
 
-  const agentsTabContent = enableCustomAgents ? (
+  const agentsTabContent = (
     <AgentsTabContent
       activeTab={activeTab}
       colorMode={colorMode}
@@ -481,7 +468,7 @@ export default function ContextEditorV2({
         currentSearchParams: searchParams,
       })}
     />
-  ) : null;
+  );
 
   if (standaloneTab) {
     const title = standaloneTab === 'agents' ? 'Agents' : 'Skills';
@@ -683,12 +670,10 @@ export default function ContextEditorV2({
             Skills
             <TabCount count={(content.skills?.length ?? 0) + systemSkills.length} />
           </Tabs.Trigger>
-          {enableCustomAgents && (
-            <Tabs.Trigger value="agents" fontFamily="mono" fontSize="sm">
-              Agents
-              <TabCount count={content.agents?.length ?? 0} />
-            </Tabs.Trigger>
-          )}
+          <Tabs.Trigger value="agents" fontFamily="mono" fontSize="sm">
+            Agents
+            <TabCount count={content.agents?.length ?? 0} />
+          </Tabs.Trigger>
           <Tabs.Trigger value="evals" fontFamily="mono" fontSize="sm">
             Evals
             <TabCount count={content.evals?.length ?? 0} />

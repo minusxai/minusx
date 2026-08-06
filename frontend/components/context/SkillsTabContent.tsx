@@ -12,7 +12,7 @@
  * survives the toggle, matching pre-extraction behavior.
  */
 
-import { Box, VStack, HStack, Button, Text, Badge, Collapsible, Icon, Tabs, SimpleGrid } from '@chakra-ui/react';
+import { Box, VStack, HStack, Button, Text, Badge, Collapsible, Icon, IconButton, Input, Tabs, SimpleGrid } from '@chakra-ui/react';
 import { useState } from 'react';
 import {
   LuBell,
@@ -32,6 +32,7 @@ import {
   LuSearch,
   LuSlidersHorizontal,
   LuSparkles,
+  LuX,
 } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
 import type { ContextContent, SkillEntry } from '@/lib/types';
@@ -157,138 +158,249 @@ export function SkillsTabContent({
   onDeleteSkill,
 }: SkillsTabContentProps) {
   const [newlyAddedSkillIndex, setNewlyAddedSkillIndex] = useState<number | null>(null);
+  const [skillQuery, setSkillQuery] = useState('');
+  const normalizedSkillQuery = skillQuery.trim().toLowerCase().replace(/[_-]+/g, ' ');
+  const isSearching = normalizedSkillQuery.length > 0;
+  const matchesQuery = (...values: Array<string | undefined>) => !isSearching || values.some((value) => (
+    value?.toLowerCase().replace(/[_-]+/g, ' ').includes(normalizedSkillQuery)
+  ));
+  const visibleUserSkills = (content.skills || [])
+    .map((skill, index) => ({ skill, index }))
+    .filter(({ skill }) => matchesQuery(skill.displayName, skill.name, skill.description));
+  const visibleSystemSkills = systemSkills.filter((skill) => matchesQuery(skill.name, skill.description));
+  const totalSkillCount = (content.skills?.length ?? 0) + systemSkills.length;
+  const visibleSkillCount = visibleUserSkills.length + visibleSystemSkills.length;
+  const hasNoMatches = isSearching && visibleSkillCount === 0;
+  const userSkillsExpanded = isSearching || userSkillsOpen;
+  const systemSkillsExpanded = isSearching || systemSkillsOpen;
 
   return (
     <Tabs.Content value="skills">
       {activeTab === 'picker' ? (
         <VStack gap={7} align="stretch">
-          <Collapsible.Root open={userSkillsOpen} onOpenChange={(e) => onUserSkillsOpenChange(e.open)}>
-            <Box>
-              <Collapsible.Trigger asChild>
-                <HStack justify="space-between" cursor="pointer" gap={4}>
-                  <HStack gap={3} minW={0}>
-                    <Box
-                      display="grid"
-                      placeItems="center"
-                      w="30px"
-                      h="30px"
-                      borderRadius="md"
-                      bg="accent.teal/10"
-                      color="accent.teal"
-                      flexShrink={0}
-                    >
-                      <Icon as={userSkillsOpen ? LuChevronDown : LuChevronRight} boxSize={4} />
-                    </Box>
-                    <Box minW={0} textAlign="left">
-                      <HStack gap={2}>
-                        <Text fontSize="sm" fontWeight="700" color="fg.default">Your skills</Text>
-                        <Badge size="xs" colorPalette="teal" variant="subtle">{content.skills?.length ?? 0}</Badge>
-                      </HStack>
-                      <Text fontSize="xs" color="fg.muted" mt={0.5} truncate>
-                        Custom instructions maintained in this Knowledge Base.
-                      </Text>
-                    </Box>
-                  </HStack>
-                  {canAddSkill && (
-                    <Button
-                      aria-label="Add skill"
-                      size="xs"
-                      variant="outline"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setNewlyAddedSkillIndex(content.skills?.length ?? 0);
-                        onAddSkill();
-                      }}
-                    >
-                      <LuPlus />
-                      Add skill
-                    </Button>
-                  )}
-                </HStack>
-              </Collapsible.Trigger>
-              <Collapsible.Content>
-                <VStack align="stretch" gap={3} pt={4}>
-                  {(content.skills || []).map((skill, index) => {
-                    const siblingNames = new Set((content.skills || [])
-                      .filter((_, otherIndex) => otherIndex !== index)
-                      .map(other => other.name.trim().toLowerCase()));
-                    return (
-                      <SkillEditorCard
-                        key={`skill-${index}`}
-                        skill={skill}
-                        index={index}
-                        canManageSkills={canManageSkills}
-                        initiallyExpanded={index === newlyAddedSkillIndex}
-                        mentions={mentions}
-                        siblingNames={siblingNames}
-                        systemSkillNames={systemSkillNames}
-                        onUpdate={onUpdateSkill}
-                        onDelete={onDeleteSkill}
-                      />
-                    );
-                  })}
-                  {(content.skills || []).length === 0 && (
-                    <Text py={5} textAlign="center" fontSize="sm" color="fg.muted">
-                      No custom skills yet.
-                    </Text>
-                  )}
-                </VStack>
-              </Collapsible.Content>
-            </Box>
-          </Collapsible.Root>
-
-          <Collapsible.Root open={systemSkillsOpen} onOpenChange={(e) => onSystemSkillsOpenChange(e.open)}>
-            <Box pt={5} borderTop="1px solid" borderColor="border.muted">
-              <Collapsible.Trigger asChild>
-                <HStack justify="space-between" cursor="pointer" gap={4}>
-                  <HStack gap={3} minW={0}>
-                    <Box
-                      display="grid"
-                      placeItems="center"
-                      w="30px"
-                      h="30px"
-                      borderRadius="md"
-                      bg="bg.muted"
-                      color="fg.muted"
-                      flexShrink={0}
-                    >
-                      <Icon as={systemSkillsOpen ? LuChevronDown : LuChevronRight} boxSize={4} />
-                    </Box>
-                    <Box minW={0} textAlign="left">
-                      <HStack gap={2}>
-                        <Text fontSize="sm" fontWeight="700" color="fg.default">System skills</Text>
-                        <Badge size="xs" colorPalette="gray" variant="subtle">{systemSkills.length}</Badge>
-                      </HStack>
-                      <Text fontSize="xs" color="fg.muted" mt={0.5} truncate>
-                        Built-in product knowledge maintained by MinusX.
-                      </Text>
-                    </Box>
-                  </HStack>
-                  <HStack gap={1.5} color="fg.subtle" flexShrink={0}>
-                    <Icon as={LuLockKeyhole} boxSize={3} />
-                    <Text fontSize="2xs" fontWeight="700" textTransform="uppercase" letterSpacing="wide">
-                      Read only
-                    </Text>
-                  </HStack>
-                </HStack>
-              </Collapsible.Trigger>
-              <Collapsible.Content>
-                <SimpleGrid
-                  aria-label="System skills catalog"
-                  columns={{ base: 1, lg: 2 }}
-                  gap={3}
-                  pt={4}
+          <HStack gap={3} align="center">
+            <Box
+              position="relative"
+              flex="1"
+              border="1px solid"
+              borderColor="border.default"
+              borderRadius="md"
+              bg="bg.subtle"
+              _focusWithin={{
+                borderColor: 'accent.teal',
+                boxShadow: '0 0 0 1px var(--chakra-colors-accent-teal)',
+              }}
+              transition="border-color 160ms ease, box-shadow 160ms ease"
+            >
+              <Icon
+                as={LuSearch}
+                position="absolute"
+                left={3}
+                top="50%"
+                transform="translateY(-50%)"
+                color="fg.muted"
+                boxSize={4}
+                pointerEvents="none"
+              />
+              <Input
+                aria-label="Search skills"
+                value={skillQuery}
+                onChange={(event) => setSkillQuery(event.target.value)}
+                placeholder="Search skills by name or description…"
+                border="none"
+                bg="transparent"
+                fontFamily="mono"
+                fontSize="sm"
+                pl={9}
+                pr={skillQuery ? 10 : 3}
+                _focus={{ outline: 'none', boxShadow: 'none' }}
+              />
+              {skillQuery && (
+                <IconButton
+                  aria-label="Clear skill search"
+                  position="absolute"
+                  right={1.5}
+                  top="50%"
+                  transform="translateY(-50%)"
+                  size="2xs"
+                  variant="ghost"
+                  color="fg.subtle"
+                  onClick={() => setSkillQuery('')}
+                  _hover={{ color: 'fg.default', bg: 'bg.muted' }}
                 >
-                  {systemSkills.map(skill => (
-                    <SystemSkillTile key={skill.name} skill={skill} />
-                  ))}
-                  {systemSkills.length === 0 && (
-                    <Text fontSize="sm" color="fg.muted">System skills are not loaded yet.</Text>
-                  )}
-                </SimpleGrid>
-              </Collapsible.Content>
+                  <LuX size={13} />
+                </IconButton>
+              )}
             </Box>
-          </Collapsible.Root>
+            {isSearching && (
+              <Badge
+                aria-label="Skill search results"
+                size="sm"
+                variant="subtle"
+                colorPalette={hasNoMatches ? 'gray' : 'teal'}
+                borderRadius="full"
+                px={2.5}
+                py={1}
+                whiteSpace="nowrap"
+              >
+                {visibleSkillCount} of {totalSkillCount}
+              </Badge>
+            )}
+          </HStack>
+
+          {hasNoMatches && (
+            <Box
+              py={8}
+              px={5}
+              border="1px dashed"
+              borderColor="border.default"
+              borderRadius="lg"
+              textAlign="center"
+              bg="bg.subtle"
+            >
+              <Text fontSize="sm" fontWeight="700">No skills match “{skillQuery.trim()}”</Text>
+              <Text fontSize="xs" color="fg.muted" mt={1}>Try another name or description.</Text>
+              <Button size="xs" variant="ghost" colorPalette="teal" mt={3} onClick={() => setSkillQuery('')}>
+                Clear search
+              </Button>
+            </Box>
+          )}
+
+          {!hasNoMatches && (!isSearching || visibleUserSkills.length > 0) && (
+            <Collapsible.Root open={userSkillsExpanded} onOpenChange={(e) => onUserSkillsOpenChange(e.open)}>
+              <Box>
+                <Collapsible.Trigger asChild>
+                  <HStack justify="space-between" cursor="pointer" gap={4}>
+                    <HStack gap={3} minW={0}>
+                      <Box
+                        display="grid"
+                        placeItems="center"
+                        w="30px"
+                        h="30px"
+                        borderRadius="md"
+                        bg="accent.teal/10"
+                        color="accent.teal"
+                        flexShrink={0}
+                      >
+                        <Icon as={userSkillsExpanded ? LuChevronDown : LuChevronRight} boxSize={4} />
+                      </Box>
+                      <Box minW={0} textAlign="left">
+                        <HStack gap={2}>
+                          <Text fontSize="sm" fontWeight="700" color="fg.default">Your skills</Text>
+                          <Badge size="xs" colorPalette="teal" variant="subtle">
+                            {isSearching ? visibleUserSkills.length : (content.skills?.length ?? 0)}
+                          </Badge>
+                        </HStack>
+                        <Text fontSize="xs" color="fg.muted" mt={0.5} truncate>
+                          Custom instructions maintained in this Knowledge Base.
+                        </Text>
+                      </Box>
+                    </HStack>
+                    {canAddSkill && (
+                      <Button
+                        aria-label="Add skill"
+                        size="xs"
+                        variant="outline"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setNewlyAddedSkillIndex(content.skills?.length ?? 0);
+                          onAddSkill();
+                        }}
+                      >
+                        <LuPlus />
+                        Add skill
+                      </Button>
+                    )}
+                  </HStack>
+                </Collapsible.Trigger>
+                <Collapsible.Content>
+                  <VStack align="stretch" gap={3} pt={4}>
+                    {visibleUserSkills.map(({ skill, index }) => {
+                      const siblingNames = new Set((content.skills || [])
+                        .filter((_, otherIndex) => otherIndex !== index)
+                        .map(other => other.name.trim().toLowerCase()));
+                      return (
+                        <SkillEditorCard
+                          key={`skill-${index}`}
+                          skill={skill}
+                          index={index}
+                          canManageSkills={canManageSkills}
+                          initiallyExpanded={index === newlyAddedSkillIndex}
+                          mentions={mentions}
+                          siblingNames={siblingNames}
+                          systemSkillNames={systemSkillNames}
+                          onUpdate={onUpdateSkill}
+                          onDelete={onDeleteSkill}
+                        />
+                      );
+                    })}
+                    {!isSearching && (content.skills || []).length === 0 && (
+                      <Text py={5} textAlign="center" fontSize="sm" color="fg.muted">
+                        No custom skills yet.
+                      </Text>
+                    )}
+                  </VStack>
+                </Collapsible.Content>
+              </Box>
+            </Collapsible.Root>
+          )}
+
+          {!hasNoMatches && (!isSearching || visibleSystemSkills.length > 0) && (
+            <Collapsible.Root open={systemSkillsExpanded} onOpenChange={(e) => onSystemSkillsOpenChange(e.open)}>
+              <Box pt={5} borderTop="1px solid" borderColor="border.muted">
+                <Collapsible.Trigger asChild>
+                  <HStack justify="space-between" cursor="pointer" gap={4}>
+                    <HStack gap={3} minW={0}>
+                      <Box
+                        display="grid"
+                        placeItems="center"
+                        w="30px"
+                        h="30px"
+                        borderRadius="md"
+                        bg="bg.muted"
+                        color="fg.muted"
+                        flexShrink={0}
+                      >
+                        <Icon as={systemSkillsExpanded ? LuChevronDown : LuChevronRight} boxSize={4} />
+                      </Box>
+                      <Box minW={0} textAlign="left">
+                        <HStack gap={2}>
+                          <Text fontSize="sm" fontWeight="700" color="fg.default">System skills</Text>
+                          <Badge size="xs" colorPalette="gray" variant="subtle">
+                            {isSearching ? visibleSystemSkills.length : systemSkills.length}
+                          </Badge>
+                        </HStack>
+                        <Text fontSize="xs" color="fg.muted" mt={0.5} truncate>
+                          Built-in product knowledge maintained by MinusX.
+                        </Text>
+                      </Box>
+                    </HStack>
+                    <HStack gap={1.5} color="fg.subtle" flexShrink={0}>
+                      <Icon as={LuLockKeyhole} boxSize={3} />
+                      <Text fontSize="2xs" fontWeight="700" textTransform="uppercase" letterSpacing="wide">
+                        Read only
+                      </Text>
+                    </HStack>
+                  </HStack>
+                </Collapsible.Trigger>
+                <Collapsible.Content>
+                  <SimpleGrid
+                    aria-label="System skills catalog"
+                    columns={{ base: 1, lg: 2 }}
+                    gap={3}
+                    pt={4}
+                  >
+                    {visibleSystemSkills.map(skill => (
+                      <SystemSkillTile key={skill.name} skill={skill} />
+                    ))}
+                    {!isSearching && systemSkills.length === 0 && (
+                      <Text fontSize="sm" color="fg.muted">System skills are not loaded yet.</Text>
+                    )}
+                  </SimpleGrid>
+                </Collapsible.Content>
+              </Box>
+            </Collapsible.Root>
+          )}
         </VStack>
       ) : (
         <Box
