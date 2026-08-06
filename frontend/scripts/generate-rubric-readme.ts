@@ -137,7 +137,7 @@ function generate(): string {
     '',
     ...summaryTable(),
     '',
-    'Question is deterministic-only at runtime, but its former LLM checks remain cataloged as paused for a later revisit. Context has no LLM checks. Dashboard and story retain active LLM checklists.',
+    'Question and dashboard are deterministic-only at runtime, but their former LLM checks remain cataloged as paused for a later revisit. Context has no LLM checks. Story retains an active LLM checklist.',
     '',
     '## What runs the rubric',
     '',

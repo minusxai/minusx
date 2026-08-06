@@ -11,11 +11,11 @@ From `frontend/`, regenerate with `npm run generate-rubric-readme`. CI-style dri
 | File type | Deterministic checks | Deterministic categories | Active LLM checks | Paused LLM checks | Active LLM categories |
 |---|---:|---|---:|---:|---|
 | question | 9 | correctness, clarity | 0 | 7 | none |
-| dashboard | 12 | correctness, clarity | 7 | 0 | aesthetics |
+| dashboard | 12 | correctness, clarity | 0 | 7 | none |
 | story | 9 | correctness, clarity, aesthetics | 13 | 0 | aesthetics |
 | context | 3 | correctness, clarity | 0 | 0 | none |
 
-Question is deterministic-only at runtime, but its former LLM checks remain cataloged as paused for a later revisit. Context has no LLM checks. Dashboard and story retain active LLM checklists.
+Question and dashboard are deterministic-only at runtime, but their former LLM checks remain cataloged as paused for a later revisit. Context has no LLM checks. Story retains an active LLM checklist.
 
 ## What runs the rubric
 
@@ -103,13 +103,13 @@ Severity behavior comes from the single `SEVERITY_SCORING` map in `scoring.ts`:
 
 | Check id | Status | Label | Category | Failure severity | Pass condition | Fix on failure |
 |---|---|---|---|---|---|---|
-| `llm.coherent-narrative` | active | Coherent story | aesthetics | warn | The tiles together answer one coherent question, not a random grid of unrelated charts. PASS if coherent. | Group related tiles and drop charts that don’t serve the dashboard’s decision. |
-| `llm.clear-hierarchy` | active | Clear hierarchy | aesthetics | warn | There is a clear visual hierarchy — the most important metric is prominent (larger / top-left, F-pattern). PASS if the eye is guided to what matters. | Promote the headline KPI (bigger tile, top-left) and de-emphasize secondary charts. |
-| `llm.plots-readable` | active | Plots readable at tile size | aesthetics | error | Each chart is legible at its tile size (for example, a line chart with a time axis in a 2-wide tile is too cramped). FAIL only when you can point to the specific cramped/illegible tile. PASS otherwise. | Enlarge cramped tiles or simplify the chart so it reads at tile size. |
-| `llm.non-overlapping-plot-text` | active | No overlapping plot text | aesthetics | error | No chart text (labels, titles, annotations) overlaps other text. FAIL only when you can point to the specific overlapping text. PASS otherwise. | Adjust text placement or tile size to prevent overlapping text. |
-| `llm.consistent-formatting` | active | Consistent formatting | aesthetics | warn | Number formats, date formats, colors, and title styling are consistent across tiles. PASS if consistent. | Unify number/date formats, the color palette, and title styling across tiles. |
-| `llm.uncluttered-layout` | active | Uncluttered layout | aesthetics | warn | The layout is balanced with adequate whitespace — not cramped, lopsided, or overflowing. PASS if well-composed. | Add spacing, align tiles to the grid, and balance the composition. |
-| `llm.clean-text-styling` | active | Clean text styling | aesthetics | warn | Text elements (titles, labels, and text tiles) have appropriate, even padding/spacing and look clean — no cramped, oversized, or unnatural/weird padding (especially top/bottom padding). PASS if text is cleanly and consistently spaced. | Give text consistent, comfortable padding aligned to the grid; remove cramped or oddly large/uneven spacing. |
+| `llm.coherent-narrative` | paused | Coherent story | aesthetics | warn | The tiles together answer one coherent question, not a random grid of unrelated charts. PASS if coherent. | Group related tiles and drop charts that don’t serve the dashboard’s decision. |
+| `llm.clear-hierarchy` | paused | Clear hierarchy | aesthetics | warn | There is a clear visual hierarchy — the most important metric is prominent (larger / top-left, F-pattern). PASS if the eye is guided to what matters. | Promote the headline KPI (bigger tile, top-left) and de-emphasize secondary charts. |
+| `llm.plots-readable` | paused | Plots readable at tile size | aesthetics | error | Each chart is legible at its tile size (for example, a line chart with a time axis in a 2-wide tile is too cramped). FAIL only when you can point to the specific cramped/illegible tile. PASS otherwise. | Enlarge cramped tiles or simplify the chart so it reads at tile size. |
+| `llm.non-overlapping-plot-text` | paused | No overlapping plot text | aesthetics | error | No chart text (labels, titles, annotations) overlaps other text. FAIL only when you can point to the specific overlapping text. PASS otherwise. | Adjust text placement or tile size to prevent overlapping text. |
+| `llm.consistent-formatting` | paused | Consistent formatting | aesthetics | warn | Number formats, date formats, colors, and title styling are consistent across tiles. PASS if consistent. | Unify number/date formats, the color palette, and title styling across tiles. |
+| `llm.uncluttered-layout` | paused | Uncluttered layout | aesthetics | warn | The layout is balanced with adequate whitespace — not cramped, lopsided, or overflowing. PASS if well-composed. | Add spacing, align tiles to the grid, and balance the composition. |
+| `llm.clean-text-styling` | paused | Clean text styling | aesthetics | warn | Text elements (titles, labels, and text tiles) have appropriate, even padding/spacing and look clean — no cramped, oversized, or unnatural/weird padding (especially top/bottom padding). PASS if text is cleanly and consistently spaced. | Give text consistent, comfortable padding aligned to the grid; remove cramped or oddly large/uneven spacing. |
 
 ### Story
 

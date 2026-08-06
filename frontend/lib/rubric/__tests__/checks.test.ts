@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { activeLlmChecks, formatChecklist, hasLlmChecks, passedChecks, DETERMINISTIC_CHECKS, LLM_CHECKS } from '../checks';
 import { scoreFileDeterministic } from '../registry';
-import { makeDashboard, makeQuestion } from './fixtures';
+import { makeQuestion, makeStory } from './fixtures';
 
 describe('passedChecks', () => {
   it('lists checks that did not fire and excludes the ones that did', () => {
@@ -18,21 +18,26 @@ describe('passedChecks', () => {
   });
 
   it('includes LLM checks as passed only when the LLM ran', () => {
-    const base = scoreFileDeterministic('dashboard', makeDashboard());
-    expect(passedChecks('dashboard', base, false).some((c) => c.ruleId.startsWith('llm.'))).toBe(false);
+    const base = scoreFileDeterministic('story', makeStory());
+    expect(passedChecks('story', base, false).some((c) => c.ruleId.startsWith('llm.'))).toBe(false);
 
     // simulate the LLM having run (all categories assessed)
     const combined = { ...base, categories: base.categories.map((c) => ({ ...c, assessed: true, score: c.score ?? 5 })) };
-    const ids = passedChecks('dashboard', combined, true).map((c) => c.ruleId);
-    expect(ids).toContain('llm.coherent-narrative'); // an LLM check that didn't fire → shown as passed
+    const ids = passedChecks('story', combined, true).map((c) => c.ruleId);
+    expect(ids).toContain('llm.embeds-well-sized'); // an active LLM check that didn't fire → passed
   });
 
-  it('keeps question LLM checks paused and out of the runtime checklist', () => {
+  it('keeps question and dashboard LLM checks paused and out of runtime checklists', () => {
     expect(LLM_CHECKS.question).toHaveLength(7);
     expect(LLM_CHECKS.question.every((check) => check.status === 'paused')).toBe(true);
+    expect(LLM_CHECKS.dashboard).toHaveLength(7);
+    expect(LLM_CHECKS.dashboard.every((check) => check.status === 'paused')).toBe(true);
     expect(activeLlmChecks('question')).toEqual([]);
+    expect(activeLlmChecks('dashboard')).toEqual([]);
     expect(hasLlmChecks('question')).toBe(false);
+    expect(hasLlmChecks('dashboard')).toBe(false);
     expect(formatChecklist('question')).toBe('');
+    expect(formatChecklist('dashboard')).toBe('');
   });
 
   it('does not show an inactive threshold sibling as passed when its group has a finding', () => {
