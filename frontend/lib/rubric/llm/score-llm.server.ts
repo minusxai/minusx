@@ -52,7 +52,7 @@ function imageBlock(src: string): ImageContent {
 export async function scoreFileLLM(params: JudgeParams, user: EffectiveUser): Promise<RubricReport> {
   const { fileType, content, screenshotUrl } = params;
   const checks = activeLlmChecks(fileType);
-  // The categories the active checklist covers (question/dashboard/context have none → no call).
+  // No current file type has active checks, so this returns before making a model call.
   const assessed = [...new Set(checks.map((c) => c.category))];
   if (checks.length === 0) return buildReport(fileType, [], assessed);
 

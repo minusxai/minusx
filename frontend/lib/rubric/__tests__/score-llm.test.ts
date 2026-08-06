@@ -13,87 +13,21 @@ import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 
 const mockRun = vi.mocked(runMicroTask);
 const USER = { userId: 1, email: 'u@example.com', name: 'U', role: 'admin', home_folder: '/org', mode: 'org' } as EffectiveUser;
-const reply = (checks: unknown[]) => JSON.stringify({ checks });
 
 beforeEach(() => mockRun.mockReset());
 
 describe('scoreFileLLM', () => {
-  it('runs the rubric_llm micro-task with the checklist + screenshot and turns FAILS into findings', async () => {
-    mockRun.mockResolvedValue(reply([
-      { id: 'readable-charts', pass: false, reason: 'the revenue chart labels overlap' },
-      { id: 'typographic-craft', pass: true, reason: 'the hierarchy is clear' },
-    ]));
-    const report = await scoreFileLLM({ fileType: 'story', content: makeStory(), screenshotUrl: 'data:image/jpeg;base64,AAAA' }, USER);
-
-    // routed through the shared runner with the checklist var + image
-    const [taskKey, vars, user, images] = mockRun.mock.calls[0];
-    expect(taskKey).toBe('rubric_llm');
-    expect(vars.checklist).toContain('readable-charts');
-    expect(vars.markup).toContain('Revenue climbed');
-    expect(user).toBe(USER);
-    expect(images?.[0]).toEqual({ type: 'image', data: 'AAAA', mimeType: 'image/jpeg' });
-
-    // the failed check → a finding using the catalog's category/severity/label/fix, tagged source llm
-    const f = report.categories.flatMap((c) => c.findings).find((x) => x.ruleId === 'llm.readable-charts');
-    expect(f?.source).toBe('llm');
-    expect(f?.severity).toBe('error');
-    expect(f?.category).toBe('aesthetics');
-    expect(f?.title).toBe('Charts are readable');
-    expect(f?.detail).toContain('overlap');
-    expect(report.overall).toBeLessThan(5);
-  });
-
-  it('scores an all-pass checklist at 5', async () => {
-    mockRun.mockResolvedValue(reply([{ id: 'readable-charts', pass: true, reason: 'ok' }]));
-    expect((await scoreFileLLM({ fileType: 'story', content: makeStory() }, USER)).overall).toBe(5);
-  });
-
-  it('ignores unknown ids and applicable:false checks', async () => {
-    mockRun.mockResolvedValue(reply([
-      { id: 'not-a-real-check', pass: false, reason: 'x' },
-      { id: 'readable-charts', applicable: false, pass: false, reason: 'no rendered plots' },
-    ]));
-    expect((await scoreFileLLM({ fileType: 'story', content: makeStory() }, USER)).overall).toBe(5);
-  });
-
-  it('returns an empty report when the reply is not valid JSON', async () => {
-    mockRun.mockResolvedValue('I could not review this.');
-    expect((await scoreFileLLM({ fileType: 'story', content: makeStory() }, USER)).overall).toBe(5);
-  });
-
-  it('does not call the LLM for a deterministic-only question', async () => {
-    const report = await scoreFileLLM({ fileType: 'question', content: makeQuestion() }, USER);
+  it('does not call the LLM while every file-type checklist is paused', async () => {
+    const reports = await Promise.all([
+      scoreFileLLM({ fileType: 'question', content: makeQuestion() }, USER),
+      scoreFileLLM({ fileType: 'dashboard', content: makeDashboard() }, USER),
+      scoreFileLLM({ fileType: 'story', content: makeStory(), screenshotUrl: 'data:image/jpeg;base64,AAAA' }, USER),
+      scoreFileLLM({ fileType: 'context', content: {} }, USER),
+    ]);
     expect(mockRun).not.toHaveBeenCalled();
-    expect(report.categories.every((category) => !category.assessed)).toBe(true);
-  });
-
-  it('does not call the LLM for a deterministic-only dashboard', async () => {
-    const report = await scoreFileLLM({ fileType: 'dashboard', content: makeDashboard() }, USER);
-    expect(mockRun).not.toHaveBeenCalled();
-    expect(report.categories.every((category) => !category.assessed)).toBe(true);
-  });
-
-  it('aggregates the judge run(s) into findings (worst-of)', async () => {
-    // Each run returns the same failing verdict for embeds-well-sized → a finding regardless of how
-    // many votes JUDGE_VOTES runs (worst-of: any run that fails a check triggers it).
-    mockRun.mockResolvedValue(reply([
-      { id: 'embeds-well-sized', pass: false, reason: 'dead space in the gauge cards' },
-      { id: 'charts-render-cleanly', pass: true, reason: 'ok' },
-    ]));
-    const report = await scoreFileLLM({ fileType: 'story', content: makeStory(), screenshotUrl: 'data:image/jpeg;base64,AAAA' }, USER);
-    const f = report.categories.flatMap((c) => c.findings).find((x) => x.ruleId === 'llm.embeds-well-sized');
-    expect(f?.detail).toContain('dead space');
-  });
-
-  it('turns a failed story embed-rendering check into a finding', async () => {
-    mockRun.mockResolvedValue(reply([
-      { id: 'embeds-well-sized', pass: false, reason: 'the single_value floats in a large empty box' },
-      { id: 'charts-render-cleanly', pass: true, reason: 'ok' },
-    ]));
-    const report = await scoreFileLLM({ fileType: 'story', content: makeStory(), screenshotUrl: 'data:image/jpeg;base64,AAAA' }, USER);
-    const f = report.categories.flatMap((c) => c.findings).find((x) => x.ruleId === 'llm.embeds-well-sized');
-    expect(f?.source).toBe('llm');
-    expect(f?.detail).toContain('empty box');
+    for (const report of reports) {
+      expect(report.categories.every((category) => !category.assessed)).toBe(true);
+    }
   });
 });
 
