@@ -20,8 +20,8 @@ const SCORERS: Record<RubricFileType, DeterministicScorer> = {
 
 /**
  * Which categories the deterministic scorer actually evaluates per file type. Uncovered
- * categories stay unassessed rather than receiving a misleading 5/5. Question is currently
- * deterministic-only; dashboard's remaining judge checks cover aesthetics.
+ * categories stay unassessed rather than receiving a misleading 5/5. Question and dashboard are
+ * currently deterministic-only; story retains active judge checks.
  */
 const DETERMINISTIC_COVERAGE: Record<RubricFileType, RubricCategory[]> = {
   question: ['correctness', 'clarity'],
