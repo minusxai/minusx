@@ -236,12 +236,20 @@ secret in its environment.
 
 `frontend/lib/branding/whitelabel.ts` owns the `OrgConfig` shape (branding, links, messaging
 webhooks, `accessRules`, `supportedFileTypes`, `allowedVizTypes`, `chartColorPalette`, `setupWizard`,
-`bots`, `credits`, `llm`, `gateway`, `remoteAgentsEnabled`), the `DEFAULT_CONFIG` fallback, the `DEFAULT_STYLES`
-CSS, and `mergeConfig`. It owns *no* loading and *no* Redux: `frontend/lib/data/configs.server.ts`
+`bots`, `credits`, `llm`, `gateway`, `remoteAgentsEnabled`), the `DEFAULT_CONFIG` fallback,
+`logoCssFromBranding` (with `DEFAULT_STYLES` = that CSS for the default branding), and `mergeConfig`.
+It owns *no* loading and *no* Redux: `frontend/lib/data/configs.server.ts`
 reads the org config document, validates it, and calls `mergeConfig(DEFAULT_CONFIG, dbContent)`;
 `app/layout.tsx` and `app/login/page.tsx` fall back to `DEFAULT_CONFIG` when there is no document;
 `frontend/lib/database/import-export.ts` and `app/api/admin/reset-tutorial/route.ts` substitute
 `DEFAULT_STYLES` into the seed template.
+
+**The in-app logo is driven by `branding.logoLight`/`logoDark` alone.** The layout injects
+`logoCssFromBranding(config.branding)` (painting every `[aria-label="Workspace logo"]`) and then the
+styles document AFTER it, so hand-written custom CSS overrides via cascade order. The styles loader
+(`_loadStyles`) returns **custom CSS only**: a missing document, or one still byte-equal to the
+seeded `DEFAULT_STYLES`, reads as "no customization" and returns `''` — a seed carrying the default
+URLs must not shadow the config-set logo.
 
 Merge semantics, and they differ per field:
 - `branding` / `links` — key-wise shallow merge, with **empty strings filtered out** so a blank form

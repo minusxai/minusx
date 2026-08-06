@@ -9,7 +9,7 @@ import { Inter, JetBrains_Mono } from 'next/font/google';
 import { getEffectiveUser, type EffectiveUser } from '@/lib/auth/auth-helpers';
 import { E2E_HEADER } from '@/lib/auth/e2e-runtime';
 import { getConfigs, getConfigsForMode, getOrgStyles, getStylesForMode } from '@/lib/data/configs.server';
-import { OrgConfig, DEFAULT_CONFIG, DEFAULT_STYLES, getBrandTagline } from '@/lib/branding/whitelabel';
+import { OrgConfig, DEFAULT_CONFIG, logoCssFromBranding, getBrandTagline } from '@/lib/branding/whitelabel';
 import { redactRawConfigSecrets } from '@/lib/secrets/config-secret-specs';
 import { ANALYTICS_CONFIG, DISABLE_APP_STATE_IMAGES, MAX_CONCURRENT_QUERIES, MX_EGRESS_IPS, QUERY_TIMEOUT_MS, TELEMETRY_LEVEL } from '@/lib/config';
 import { parseAnalyticsConfig } from '@/lib/constants';
@@ -158,19 +158,23 @@ export default async function RootLayout({
     }
   }
 
-  // Load org styles (CSS for logos, etc.)
-  let orgStyles = DEFAULT_STYLES;
+  // Two style layers: the logo CSS DERIVED from the org config's branding
+  // (the one knob that changes the logo everywhere), then any hand-written
+  // custom styles AFTER it so they win via cascade order. The styles loader
+  // returns '' when the styles document is absent or still the untouched seed.
+  let customStyles = '';
   if (initialData.user) {
     try {
-      orgStyles = await getOrgStyles(initialData.user);
+      customStyles = await getOrgStyles(initialData.user);
     } catch (error) {
       console.error('[Layout] Failed to load styles for user:', error);
     }
   } else {
     try {
-      orgStyles = await getStylesForMode();
+      customStyles = await getStylesForMode();
     } catch {}
   }
+  const orgStyles = `${logoCssFromBranding(initialData.config.branding)}\n${customStyles}`;
 
   return (
     <html

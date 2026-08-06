@@ -167,21 +167,20 @@ export async function saveRawConfig(mode: Mode, content: Partial<OrgConfig>): Pr
 }
 
 /**
- * Load styles.css
+ * Load the CUSTOM styles CSS — hand-written overrides only. The logo rules are
+ * DERIVED from `OrgConfig.branding` (`logoCssFromBranding`) and injected by the
+ * layout as a layer BEFORE this one, so:
+ *   · no document, or one still byte-equal to the seeded `DEFAULT_STYLES`,
+ *     means "no customization" and returns '' — the config alone drives the
+ *     logo (a seed carrying the default URLs must not shadow the config);
+ *   · anything an admin actually wrote is returned verbatim and wins over the
+ *     derived layer via cascade order.
  * @private
  */
 async function _loadStyles(mode: Mode = DEFAULT_MODE): Promise<string> {
   try {
-    console.log(`[Styles] Loading styles (mode: ${mode})`);
     const stylesPath = resolvePath(mode, '/configs/styles');
     const doc = await DocumentDB.getByPath(stylesPath);
-
-    console.log(`[Styles] Document found:`, !!doc);
-    if (doc) {
-      console.log(`[Styles] Document type:`, doc.type);
-      console.log(`[Styles] Content type:`, typeof doc.content);
-      console.log(`[Styles] Content:`, JSON.stringify(doc.content).substring(0, 200));
-    }
 
     if (doc && doc.content && typeof doc.content === 'object') {
       const content = doc.content as any;
@@ -189,7 +188,11 @@ async function _loadStyles(mode: Mode = DEFAULT_MODE): Promise<string> {
       // Extract CSS from content.styles
       if (typeof content.styles === 'string') {
         const css = content.styles;
-        console.log(`[Styles] Successfully loaded CSS (${css.length} chars)`);
+
+        // The untouched seed is not a customization.
+        if (css.trim() === DEFAULT_STYLES.trim()) {
+          return '';
+        }
 
         // Validate CSS safety
         // Note: @import url() is allowed for custom font imports (e.g., Google Fonts)
@@ -202,7 +205,7 @@ async function _loadStyles(mode: Mode = DEFAULT_MODE): Promise<string> {
         for (const pattern of dangerousPatterns) {
           if (pattern.test(css)) {
             console.warn('[Styles] Rejected styles.css with dangerous pattern');
-            return DEFAULT_STYLES;
+            return '';
           }
         }
 
@@ -210,15 +213,12 @@ async function _loadStyles(mode: Mode = DEFAULT_MODE): Promise<string> {
       } else {
         console.warn(`[Styles] content.styles is not a string, type:`, typeof content.styles);
       }
-    } else {
-      console.warn(`[Styles] Invalid document structure - doc:`, !!doc, 'content:', typeof doc?.content);
     }
   } catch (error) {
     console.error('[Styles] Error loading styles:', error);
   }
 
-  console.log('[Styles] Falling back to DEFAULT_STYLES');
-  return DEFAULT_STYLES;
+  return '';
 }
 
 /**
