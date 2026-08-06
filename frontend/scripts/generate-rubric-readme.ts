@@ -12,6 +12,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DETERMINISTIC_CHECKS, LLM_CHECKS } from '../lib/rubric/checks';
+import { SEVERITY_SCORING } from '../lib/rubric/scoring';
 import type { RubricCategory, RubricFileType, RubricSeverity } from '../lib/rubric/types';
 
 const FRONTEND_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -90,6 +91,21 @@ function actionTable(): string[] {
   ];
 }
 
+function severityScoringTable(): string[] {
+  return [
+    '| Severity | Category behavior | Overall behavior |',
+    '|---|---|---|',
+    ...(['error', 'warn'] as const).map((severity) => {
+      const behavior = SEVERITY_SCORING[severity];
+      const category = behavior.gatesCategory
+        ? 'Set category score to 0'
+        : `Deduct ${behavior.categoryDeduction} per finding`;
+      const overall = behavior.gatesOverall ? 'Set overall score to 0' : 'Use weighted category scores';
+      return `| ${code(severity)} | ${category} | ${overall} |`;
+    }),
+  ];
+}
+
 function deterministicTable(fileType: RubricFileType): string[] {
   return [
     '| Check id | Pass condition | Category | Failure severity |',
@@ -136,8 +152,11 @@ function generate(): string {
     '',
     '## Scoring',
     '',
-    '- Every assessed category starts at 5. Every warning deducts 1 point from its category.',
-    '- Any error sets its category and the overall score to 0 until fixed.',
+    'Severity behavior comes from the single `SEVERITY_SCORING` map in `scoring.ts`:',
+    '',
+    ...severityScoringTable(),
+    '',
+    '- Every assessed category starts at 5, then applies the category behavior above.',
     '- Scores round to the nearest 0.5. Grades are `good` at 4 or above, `fair` at 2.5–3.5, and `poor` below 2.5.',
     '- Question, dashboard, and story weights are 30% correctness, 30% clarity, and 40% aesthetics. Context is 50% correctness and 50% clarity.',
     '- Unassessed categories are excluded rather than treated as passing. A deterministic-only visual-file score therefore does not claim an aesthetics score.',
