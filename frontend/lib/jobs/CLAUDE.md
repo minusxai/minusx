@@ -72,8 +72,8 @@ consent screen still names it, since the token authorizes the whole surface. Thi
 a second hand-typed copy of the list on the consent screen understates the grant the moment a tool
 is registered in `server.ts` alone.
 
-**`lib/search/`** — pure ranking/snippet logic for file search and database-schema search,
-plus the schema-result size cap. No DB access of its own beyond `FilesAPI`.
+**`lib/search/`** — ranking/snippet logic for file search and database-schema search, plus the
+schema-result size cap. No DB access of its own beyond `FilesAPI`.
 
 **`lib/spreadsheet/`** — direct-data ("spreadsheet") question sources: validation,
 materialization into a `QueryResult`, and a content-addressed cache identity that reuses the
@@ -224,6 +224,14 @@ appEventRegistry.publish(AppEvents.X, payload)          registry.ts (never await
   (`config`, `styles`, `session`, `users`, `explore`, and the `*_run` outputs) are deliberately
   absent, so they are unfindable via `SearchFiles`. **Adding a searchable file type means adding a
   row here** — nothing fails or warns if you forget.
+- **`searchFilesInFolder` loads through `FilesAPI.getFilesForSearch`, not `getFiles` + `loadFiles`.**
+  That method is one `listAll` returning raw permission-filtered rows, because everything the normal
+  pair adds is dead weight per keystroke — reference expansion, the analytics summary, a per-call
+  org-config read, and one child-id query per folder, twice. The per-type route cost 494 queries and
+  242ms on a 2160-file workspace (PGLite); this is 1 query and 80ms. It also applies
+  `canViewFileInUI` (UI) vs `canAccessFile` (`visibility: 'all'`, the LLM tools) itself, so widening
+  what a viewer sees is a one-line mistake — `__tests__/file-search-folder.test.ts` pins viewTypes
+  exclusion, mode isolation and home-folder scoping for exactly that reason.
 - **`capSchemaResult` exists because one schema can exhaust the context window.** A wide
   warehouse serializes to millions of characters and the whole conversation is re-sent every
   turn; the cap keeps whole tables in order up to `SCHEMA_RESULT_MAX_CHARS` (60k) and annotates

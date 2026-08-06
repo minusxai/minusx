@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, KeyboardEvent } from 'react';
+import { useState, useEffect, useRef, useCallback, KeyboardEvent } from 'react';
 import {
   Box,
   Input,
@@ -27,24 +27,45 @@ export default function FileSearchBar({ onResultClick }: FileSearchBarProps) {
   const [results, setResults] = useState<SearchResultMetadata[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [showDropdown, setShowDropdown] = useState(false);
+  // `pending` covers the whole silent stretch — debounce AND request — that
+  // `loading` misses: `loading` only flips once the debounce fires, so without
+  // this the user's first search sat behind a blank screen for ~500ms.
+  const [pending, setPending] = useState(false);
   const [searchError, setSearchError] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  // Bumped by every new search and by every dismissal. A response whose ticket
+  // no longer matches is stale — it must neither overwrite newer results nor
+  // reopen a dropdown the user has already closed.
+  const requestSeq = useRef(0);
   const { navigate } = useNavigationGuard();
 
   // Use centralized fetch with automatic deduplication
   const [searchFiles, { loading }] = useFetchManual(API.files.search);
+
+  // The dropdown opens on intent, not on arrival: `pending` is set on the
+  // keystroke so the spinner is on screen before the request is even sent.
+  const dropdownOpen = showDropdown || pending;
+
+  const closeDropdown = useCallback(() => {
+    setShowDropdown(false);
+    setPending(false);
+    requestSeq.current += 1; // any in-flight response is now unwanted
+  }, []);
 
   // Debounced search effect
   useEffect(() => {
     if (!query.trim()) {
       setResults([]);
       setShowDropdown(false);
+      setPending(false);
       setSearchError(false);
       return;
     }
+
+    const ticket = ++requestSeq.current;
 
     const timeoutId = setTimeout(async () => {
       try {
@@ -52,16 +73,20 @@ export default function FileSearchBar({ onResultClick }: FileSearchBarProps) {
           query: query.trim(),
           limit: 10 // Show top 10 results
         }) as any;
+        if (requestSeq.current !== ticket) return;
         setResults(data.results || []);
         setSearchError(false);
         setShowDropdown(true);
         setSelectedIndex(0);
       } catch (error) {
         console.error('Search error:', error);
+        if (requestSeq.current !== ticket) return;
         setResults([]);
         // Surface the failure instead of leaving the widget inert
         setSearchError(true);
         setShowDropdown(true);
+      } finally {
+        if (requestSeq.current === ticket) setPending(false);
       }
     }, 300);
 
@@ -77,19 +102,19 @@ export default function FileSearchBar({ onResultClick }: FileSearchBarProps) {
         (dropdownRef.current && dropdownRef.current.contains(target));
 
       if (!clickedInside) {
-        setShowDropdown(false);
+        closeDropdown();
         setIsFocused(false);
       }
     }
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [closeDropdown]);
 
   const handleNavigate = (result: SearchResultMetadata) => {
     setQuery('');
     setResults([]);
-    setShowDropdown(false);
+    closeDropdown();
     setIsFocused(false);
     inputRef.current?.blur();
 
@@ -106,10 +131,12 @@ export default function FileSearchBar({ onResultClick }: FileSearchBarProps) {
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (!showDropdown || results.length === 0) {
+    // Escape must also dismiss a search that is merely pending — otherwise the
+    // response lands later and reopens a dropdown the user already closed.
+    if (!dropdownOpen || results.length === 0) {
       if (e.key === 'Escape') {
         inputRef.current?.blur();
-        setShowDropdown(false);
+        closeDropdown();
         setIsFocused(false);
       }
       return;
@@ -132,7 +159,7 @@ export default function FileSearchBar({ onResultClick }: FileSearchBarProps) {
         break;
       case 'Escape':
         e.preventDefault();
-        setShowDropdown(false);
+        closeDropdown();
         setIsFocused(false);
         inputRef.current?.blur();
         break;
@@ -160,7 +187,13 @@ export default function FileSearchBar({ onResultClick }: FileSearchBarProps) {
         <Input
           ref={inputRef}
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            const next = e.target.value;
+            setQuery(next);
+            // Batched into the same render as the query, so the spinner is on
+            // screen from the keystroke itself — not one frame later.
+            setPending(next.trim().length > 0);
+          }}
           onKeyDown={handleKeyDown}
           onFocus={() => {
             setIsFocused(true);
@@ -185,7 +218,7 @@ export default function FileSearchBar({ onResultClick }: FileSearchBarProps) {
       </HStack>
 
       {/* Dropdown Results */}
-      {showDropdown && (
+      {dropdownOpen && (
         <Portal>
           {/* Accessing containerRef during render for Portal positioning — intentional ref read in render */}
           {/* eslint-disable react-hooks/refs */}
@@ -204,8 +237,8 @@ export default function FileSearchBar({ onResultClick }: FileSearchBarProps) {
             boxShadow="lg"
             zIndex={9999}
           >
-            {loading ? (
-              <Box p={4} display="flex" alignItems="center" justifyContent="center">
+            {pending || loading ? (
+              <Box p={4} display="flex" alignItems="center" justifyContent="center" aria-label="Searching">
                 <Spinner size="sm" color="accent.teal" mr={2} />
                 <Text fontSize="sm" color="fg.muted">
                   Searching...

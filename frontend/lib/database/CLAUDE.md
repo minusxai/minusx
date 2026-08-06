@@ -167,10 +167,12 @@ each with a targeted `no-restricted-syntax` eslint-disable.
 
 `LoaderOptions` (`loaders/types.ts`) carries three flags, and the third is the second way to skip
 the fan-out: `refresh` (block on fresh data), `backgroundRefresh` (serve cached, refresh behind),
-and `skipEnrichment` (serve the stored content — used by file search, which must not pay a
-minutes-long introspection and must not hit the context loader's throw on a version-less document).
+and `skipEnrichment` (serve the stored content, for callers that must not pay a minutes-long
+introspection or hit the context loader's throw on a version-less document).
 `skipEnrichment` deliberately does **not** skip sanitisation: `connectionLoader` still runs
 `getSafeConfig` after it, because a redaction that an option can turn off is not a boundary.
+File search does not use it — `getFilesForSearch` runs no loader at all, so those two hazards are
+unreachable from that path rather than opted out of.
 
 **Loaders** (`loaders/registry.ts`, four entries; every other type is `defaultLoader`):
 - `connection-loader.ts` — stale-while-revalidate schema cache. Fresh (<24h) cache is served as-is;
@@ -384,7 +386,13 @@ connector on first use. After adding a migration, `npm run update-workspace-temp
 - **`getByIds` filters non-positive ids** before building the `IN (…)` list: virtual/placeholder file
   ids are negative and can exceed `int4`, which would throw `22003`.
 - **`getFiles` pre-fetches folder children in one query** (`resolveChildIdsCached`) — the N+1 fix for
-  Sentry MINUSX-BI-9, where 19 `path LIKE` round-trips fired in a single `/api/files` call.
+  Sentry MINUSX-BI-9, where 19 `path LIKE` round-trips fired in a single `/api/files` call. **The fix
+  is partial, in two ways.** `childIdsByParent` is keyed by the parent paths of children that were
+  found, so a folder with *no* children is never a key, misses the cache, and takes the
+  `resolveChildIds` fallback — one query each. And `loadFiles` resolves with the bare
+  `resolveChildIds`, with no cache at all. A workspace of N folders therefore still costs ~2N
+  `path LIKE` queries when both are called over the same set (measured on a 240-folder workspace:
+  494 `listAll` calls, i.e. `2N + 14`).
 - **`batchSaveFiles(dryRun: true)`** goes straight to `DocumentDB.batchSave`, whose preflight is
   PURE READS — path conflicts (against published rows and between batch entries) are detected by
   SELECT and nothing is ever written. Client-side `BEGIN`/`ROLLBACK` through the pooled Postgres

@@ -103,6 +103,102 @@ describe('searchFilesInFolder — resilience', () => {
   });
 });
 
+/**
+ * Search is a UI surface, so it filters with `canViewFileInUI` — strictly
+ * narrower than `canAccessFile`. Nothing pinned this before; these are the
+ * guard for it, because search resolves its own permissions rather than
+ * inheriting them from a FilesAPI call.
+ */
+describe('searchFilesInFolder — permission filtering', () => {
+  setupTestDb(TEST_DB_PATH);
+
+  const viewer = (overrides: Partial<EffectiveUser> = {}): EffectiveUser => ({
+    userId: 2, email: 'v@y.z', name: 'V', role: 'viewer', home_folder: '', mode: 'org', ...overrides,
+  } as unknown as EffectiveUser);
+
+  it('hides accessible-but-not-viewable types (connection, context) from a viewer', async () => {
+    await DocumentDB.create('acme_warehouse', '/org/database/acme_warehouse', 'connection',
+      { type: 'postgres', config: { host: 'h' } } as any, [], undefined, false);
+    await DocumentDB.create('acme_context', '/org/acme_context', 'context',
+      { description: 'acme rules', versions: [] } as any, [], undefined, false);
+    await DocumentDB.create('acme_question', '/org/acme_question', 'question',
+      { description: 'acme revenue', query: 'SELECT 1' } as any, [], undefined, false);
+
+    const asAdmin = await searchFilesInFolder({ query: 'acme' }, USER);
+    expect(asAdmin.results.some(r => r.type === 'connection')).toBe(true);
+    expect(asAdmin.results.some(r => r.type === 'context')).toBe(true);
+
+    const asViewer = await searchFilesInFolder({ query: 'acme' }, viewer());
+    // viewTypes excludes both for a viewer, even though allowedTypes permits them.
+    expect(asViewer.results.some(r => r.type === 'connection')).toBe(false);
+    expect(asViewer.results.some(r => r.type === 'context')).toBe(false);
+    expect(asViewer.results.some(r => r.name === 'acme_question')).toBe(true);
+  });
+
+  it('enforces mode isolation — a tutorial file never surfaces for an org user', async () => {
+    await DocumentDB.create('zebra_tutorial', '/tutorial/zebra_tutorial', 'question',
+      { description: 'zebra', query: 'SELECT 1' } as any, [], undefined, false);
+    await DocumentDB.create('zebra_org', '/org/zebra_org', 'question',
+      { description: 'zebra', query: 'SELECT 1' } as any, [], undefined, false);
+
+    const { results } = await searchFilesInFolder({ query: 'zebra' }, USER);
+    expect(results.some(r => r.name === 'zebra_org')).toBe(true);
+    expect(results.some(r => r.path.startsWith('/tutorial'))).toBe(false);
+  });
+
+  it('scopes a non-admin to their home folder', async () => {
+    await DocumentDB.create('quokka_mine', '/org/team-a/quokka_mine', 'question',
+      { description: 'quokka', query: 'SELECT 1' } as any, [], undefined, false);
+    await DocumentDB.create('quokka_theirs', '/org/team-b/quokka_theirs', 'question',
+      { description: 'quokka', query: 'SELECT 1' } as any, [], undefined, false);
+
+    const { results } = await searchFilesInFolder(
+      { query: 'quokka', folder_path: '/org' },
+      viewer({ home_folder: '/org/team-a' }),
+    );
+    expect(results.some(r => r.name === 'quokka_mine')).toBe(true);
+    expect(results.some(r => r.name === 'quokka_theirs')).toBe(false);
+  });
+
+  it("visibility: 'all' widens to canAccessFile — the LLM/MCP callers still see connections", async () => {
+    await DocumentDB.create('badger_warehouse', '/org/database/badger_warehouse', 'connection',
+      { type: 'postgres', config: { host: 'h' } } as any, [], undefined, false);
+
+    const v = viewer();
+    // A viewer may ACCESS a connection but not VIEW it. The two callers of this
+    // branch (SearchFiles, lib/mcp/server.ts) depend on the wider one.
+    const ui = await searchFilesInFolder({ query: 'badger' }, v);
+    const all = await searchFilesInFolder({ query: 'badger', visibility: 'all' }, v);
+
+    expect(ui.results.some(r => r.type === 'connection')).toBe(false);
+    expect(all.results.some(r => r.name === 'badger_warehouse')).toBe(true);
+  });
+
+  it("visibility: 'all' is still bounded by canAccessFile — it is not a bypass", async () => {
+    await DocumentDB.create('otter_theirs', '/org/team-b/otter_theirs', 'question',
+      { description: 'otter', query: 'SELECT 1' } as any, [], undefined, false);
+
+    const { results } = await searchFilesInFolder(
+      { query: 'otter', folder_path: '/org', visibility: 'all' },
+      viewer({ home_folder: '/org/team-a' }),
+    );
+    expect(results.some(r => r.name === 'otter_theirs')).toBe(false);
+  });
+
+  it('never leaks a connection secret into a result snippet', async () => {
+    await DocumentDB.create('kestrel_db', '/org/database/kestrel_db', 'connection',
+      { type: 'postgres', config: { password: 'hunter2', host: 'kestrel' } } as any,
+      [], undefined, false);
+
+    const { results } = await searchFilesInFolder({ query: 'kestrel' }, USER);
+    const hit = results.find(r => r.name === 'kestrel_db');
+    expect(hit).toBeDefined();
+    // SEARCH_CONFIGS only scans name/path for a connection, so no config value
+    // can reach a snippet — pinned here because search reads raw stored content.
+    expect(JSON.stringify(hit)).not.toContain('hunter2');
+  });
+});
+
 describe('loaders — skipEnrichment contract', () => {
   setupTestDb(TEST_DB_PATH);
 
