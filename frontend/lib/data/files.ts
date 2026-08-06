@@ -16,6 +16,32 @@ export class ConflictError extends Error {
 const API_BASE = '';  // Same origin
 
 /**
+ * Turn an API error body into the right throwable. Typed server errors
+ * (`error.type` + `error.message`, the `handleApiError` serialization of
+ * `UserFacingError` and subclasses) deserialize back into `UserFacingError`,
+ * which the save UIs display VERBATIM — an actionable message ("A published
+ * file already exists at this path. Rename this file before saving.") that
+ * falls through this as a plain Error collapses to the generic
+ * "An unexpected error occurred" toast instead. Untyped bodies keep the legacy
+ * message heuristics.
+ */
+function throwFromErrorBody(errorData: any, fileId: number, fallback: string): never {
+  if (errorData.error?.type && errorData.error?.message) {
+    throw deserializeError(errorData.error as SerializedError);
+  }
+  const errorMessage = errorData.error?.message || errorData.message || errorData.error || fallback;
+  if (typeof errorMessage === 'string') {
+    if (errorMessage.includes('not found')) {
+      throw new FileNotFoundError(fileId);
+    }
+    if (errorMessage.includes('permission') || errorMessage.includes('access') || errorMessage.includes('home folder')) {
+      throw new AccessPermissionError(errorMessage);
+    }
+  }
+  throw new Error(errorMessage);
+}
+
+/**
  * Client-side implementation of files data layer
  * Uses HTTP calls to API routes
  *
@@ -141,25 +167,7 @@ class FilesDataLayerClient implements IFilesDataLayer {
         throw new ConflictError(errorData.error.currentFile);
       }
 
-      // Check if this is a serialized error from the server
-      if (errorData.error?.type && errorData.error?.message) {
-        throw deserializeError(errorData.error as SerializedError);
-      }
-
-      // Fallback: Handle nested error structure
-      const errorMessage = errorData.error?.message || errorData.message || errorData.error || `Failed to save file ${id}: ${res.statusText}`;
-
-      // Check for file not found
-      if (errorMessage.includes('not found')) {
-        throw new FileNotFoundError(id);
-      }
-
-      // Check for permission errors
-      if (errorMessage.includes('permission') || errorMessage.includes('access') || errorMessage.includes('home folder')) {
-        throw new AccessPermissionError(errorMessage);
-      }
-
-      throw new Error(errorMessage);
+      throwFromErrorBody(errorData, id, `Failed to save file ${id}: ${res.statusText}`);
     }
 
     const json = await res.json();
@@ -196,8 +204,7 @@ class FilesDataLayerClient implements IFilesDataLayer {
 
     if (!res.ok) {
       const errorData = await res.json().catch(() => ({}));
-      const errorMessage = errorData.error?.message || errorData.message || errorData.error || `Failed to batch save files: ${res.statusText}`;
-      throw new Error(errorMessage);
+      throwFromErrorBody(errorData, inputs[0]?.id ?? 0, `Failed to batch save files: ${res.statusText}`);
     }
 
     const json = await res.json();

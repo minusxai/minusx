@@ -150,27 +150,24 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
     setSaveModalFileId(first.id);
   }, [dirtyFiles, exitEditMode]);
 
+  // A rejection propagates to SaveFileModal, which stays open and shows the
+  // error inline next to the name field — the control that fixes a path
+  // conflict. The queued drafts keep waiting; cancelling the dialog clears
+  // them. On success the modal does NOT close itself — advancing (or clearing)
+  // `saveModalFileId` here is what closes/replaces it.
   const handleSaveModalConfirm = useCallback(async (name: string, path: string) => {
     if (saveModalFileId === null) return;
     const slug = name.toLowerCase().replace(/\s+/g, '-');
-    try {
-      await editFile({ fileId: saveModalFileId, changes: { name, path: `${path}/${slug}` } });
-      await publishAll([saveModalFileId]);
-      exitEditMode(saveModalFileId);
-      // Advance to the next queued draft, re-opening its SaveFileModal. Setting
-      // the next id after the awaits beats SaveFileModal's onClose reset.
-      if (pendingSaveAllIds !== null && pendingSaveAllIds.length > 0) {
-        const [nextId, ...rest] = pendingSaveAllIds;
-        setPendingSaveAllIds(rest);
-        setSelectedFileId(nextId);
-        setSaveModalFileId(nextId);
-      } else {
-        setPendingSaveAllIds(null);
-        setSaveModalFileId(null);
-      }
-    } catch (err) {
-      // Same surface as handleSaveAll: a failed save must never be silent.
-      setPublishError(err instanceof Error ? err.message : 'Failed to save. Please try again.');
+    await editFile({ fileId: saveModalFileId, changes: { name, path: `${path}/${slug}` } });
+    await publishAll([saveModalFileId]);
+    exitEditMode(saveModalFileId);
+    // Advance to the next queued draft, re-opening its SaveFileModal.
+    if (pendingSaveAllIds !== null && pendingSaveAllIds.length > 0) {
+      const [nextId, ...rest] = pendingSaveAllIds;
+      setPendingSaveAllIds(rest);
+      setSelectedFileId(nextId);
+      setSaveModalFileId(nextId);
+    } else {
       setPendingSaveAllIds(null);
       setSaveModalFileId(null);
     }
@@ -367,7 +364,6 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
     </Dialog.Root>
     {saveModalFileId !== null && (
       <SaveFileModal
-        key={saveModalFileId}
         isOpen={true}
         onClose={() => { setSaveModalFileId(null); setPendingSaveAllIds(null); }}
         fileId={saveModalFileId}

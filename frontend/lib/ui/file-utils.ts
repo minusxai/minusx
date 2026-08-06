@@ -35,6 +35,20 @@ export function redirectAfterSave(
  *   - dashboard / report → at least one `asset`
  *   - notebook / report  → at least one `cell`
  */
+/**
+ * Guided copy for a publish-path collision, in the user's vocabulary (the name
+ * they typed and the folder they picked — never "path"). `folderName` is given
+ * when a folder choice exists (the Save modal); without it the copy only asks
+ * for a different name (the in-place rename banner).
+ */
+export function pathConflictMessage(typeLabel: string, name: string, folderName?: string): string {
+  const where = folderName ? `in ${folderName}` : 'in this folder';
+  const fix = folderName
+    ? 'Choose a different name, or save it to another folder.'
+    : 'Choose a different name.';
+  return `A ${typeLabel.toLowerCase()} named "${name}" already exists ${where}. ${fix}`;
+}
+
 export function hasGeneratableContent(_fileType: string, content: unknown): boolean {
   const c = content as Record<string, unknown> | undefined | null;
   if (!c) return false;

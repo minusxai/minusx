@@ -94,6 +94,21 @@ export function isUserFacingError(error: unknown): error is UserFacingError {
 }
 
 /**
+ * The one message the server sends for a publish-path collision (the partial
+ * unique index on published paths). Lives here — not in `documents-db` — so
+ * the CLIENT can recognize the condition (`isPathConflictError`) and replace
+ * it with copy that names the user's chosen name and folder; the raw form
+ * remains what travels over the wire.
+ */
+export const PUBLISHED_PATH_CONFLICT_MESSAGE =
+  'A published file already exists at this path. Rename this file before saving.';
+
+/** Is this the publish-path collision, as surfaced to the client? */
+export function isPathConflictError(error: unknown): boolean {
+  return isUserFacingError(error) && error.message === PUBLISHED_PATH_CONFLICT_MESSAGE;
+}
+
+/**
  * Deserialize error from API response
  * Reconstructs the appropriate error class based on type
  */
