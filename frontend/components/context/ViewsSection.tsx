@@ -235,6 +235,7 @@ export default function ViewsSection({
                   subject={`data model ${v.name}`}
                   availablePaths={availableChildPaths}
                   selectedPaths={v.childPaths}
+                  baseDir={contextPath.substring(0, contextPath.lastIndexOf('/')) || '/'}
                   onChange={(paths) => patch(index!, { childPaths: paths })}
                 />
               </Box>

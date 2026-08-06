@@ -501,13 +501,15 @@ interface ModelCardProps {
   onToggleInclude?: () => void;
   /** Own rows only: child folders this model can be scoped to. */
   availableChildPaths: string[];
+  /** Folder of the owning context — resolves legacy absolute childPaths. */
+  childPathsBaseDir?: string;
 }
 
 function ModelCard({
   m, i, inherited, open, onToggle, editMode, connection, options,
   modelIssues, metricIssues, testStatus, onTest, canTest,
   patchModel, commitName, onDelete, onPrimaryPicked, openJoins, toggleJoinOpen,
-  declined, onToggleInclude, availableChildPaths,
+  declined, onToggleInclude, availableChildPaths, childPathsBaseDir,
 }: ModelCardProps) {
   const canEdit = editMode && !inherited;
   const columnsOf = useModelColumns(m, options, connection, canEdit && open);
@@ -985,6 +987,7 @@ function ModelCard({
               subject={`semantic model ${m.name}`}
               availablePaths={availableChildPaths}
               selectedPaths={m.childPaths}
+              baseDir={childPathsBaseDir}
               onChange={(paths) => patchModel({ childPaths: paths })}
             />
           )}
@@ -1306,6 +1309,7 @@ export default function SemanticModelsSection({
         declined={!nameWhitelisted(semanticModelWhitelist, m.name)}
         onToggleInclude={editMode && onWhitelistChange ? () => toggleInclude(m.name) : undefined}
         availableChildPaths={availableChildPaths}
+        childPathsBaseDir={contextPath ? (contextPath.substring(0, contextPath.lastIndexOf('/')) || '/') : undefined}
         openJoins={openJoins}
         toggleJoinOpen={(j) => setOpenJoins((prev) => {
           const next = new Set(prev);

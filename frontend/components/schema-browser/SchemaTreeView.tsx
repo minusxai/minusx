@@ -41,6 +41,7 @@ interface SchemaTreeViewProps {
   // NEW: Path filtering options
   showPathFilter?: boolean;  // Enable path filtering UI
   availableChildPaths?: string[];  // List of immediate child paths
+  childPathsBaseDir?: string;  // Folder of the owning context — resolves legacy absolute childPaths
 
   // Table preview callback (for question page only)
   onTablePreview?: (schemaName: string, tableName: string) => void;
@@ -78,6 +79,7 @@ export default function SchemaTreeView({
   showStats = false,
   showPathFilter = false,
   availableChildPaths = [],
+  childPathsBaseDir,
   onTablePreview,
   schemaError,
   connectionName,
@@ -505,6 +507,7 @@ export default function SchemaTreeView({
                 showColumns={showColumns}
                 showPathFilter={showPathFilter}
                 availableChildPaths={availableChildPaths}
+                childPathsBaseDir={childPathsBaseDir}
                 onTablePreview={onTablePreview}
                 connectionName={connectionName}
                 searchQuery={searchQuery}

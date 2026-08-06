@@ -43,7 +43,7 @@ import { extractConnectionSecrets, mergeExistingSecretRefs } from '@/lib/secrets
 import { extractConfigSecrets, modeFromPhysicalPath } from '@/lib/secrets/config-secrets.server';
 import { restoreRedactedConfigSecrets } from '@/lib/secrets/config-secret-specs';
 import { computeSchemaFromWhitelist } from './loaders/context-loader-utils';
-import { makeDefaultContextContent, resolveVersionWhitelist } from '@/lib/context/context-utils';
+import { makeDefaultContextContent, resolveVersionWhitelist, rewriteChildPathsForMove } from '@/lib/context/context-utils';
 import { COMPUTED_CONTEXT_FIELDS } from '@/lib/types/context';
 import { selectDatabase } from '@/lib/utils/database-selector';
 import { getFileAnalyticsSummary, getFilesAnalyticsSummary, getConversationAnalytics } from '@/lib/analytics/file-analytics.server';
@@ -1030,8 +1030,54 @@ class FilesDataLayerServer implements IFilesDataLayer {
         );
       }
 
-      const descendantIds = descendants.map(f => f.id);
-      await DocumentDB.moveFolderAndChildren(id, descendantIds, oldPath, newPath, name);
+      // Context documents reference folders BY PATH in `childPaths` (whitelist
+      // nodes, docs, views, semantic models — the parent's "who receives this"
+      // half of inheritance). A move rewrites those references in exactly TWO
+      // bounded sets of contexts, and nothing else:
+      //   · contexts INSIDE the moved subtree — their relative entries need no
+      //     change (the targets moved with them), but legacy absolute entries
+      //     are prefix-rewritten so they stay valid;
+      //   · COMMON-ANCESTOR contexts (folder of the context is an ancestor of
+      //     both the old and the new location) — a grant tracks the folder for
+      //     as long as it stays inside the grantor's subtree, which is what
+      //     keeps grants working across renames and moves within the subtree.
+      // A grant whose target LEAVES the grantor's subtree is left byte-identical
+      // and simply stops applying — re-granting is the user's decision.
+      // Everything — path rewrites and content rewrites — applies as ONE
+      // statement, so a crash can never leave paths moved with grants stale.
+      const rows: Array<{ id: number; name?: string; path?: string; content?: BaseFileContent; editId?: string }> = [
+        { id, name, path: newPath },
+        ...descendants.map(d => ({ id: d.id, path: newPath + d.path.slice(oldPath.length) })),
+      ];
+      const dirOf = (p: string) => p.substring(0, p.lastIndexOf('/')) || '/';
+      const isAncestorDirOf = (dir: string, p: string) => p.startsWith(dir === '/' ? '/' : dir + '/');
+
+      const movedContextIds = descendants.filter(d => d.type === 'context').map(d => d.id);
+      const allContexts = await DocumentDB.listAll('context', undefined, -1, false);
+      const commonAncestorIds = allContexts
+        .filter(c => {
+          const dir = dirOf(c.path);
+          return isAncestorDirOf(dir, oldPath) && isAncestorDirOf(dir, newPath);
+        })
+        .map(c => c.id);
+      const rewriteTargets = await DocumentDB.getByIds([...movedContextIds, ...commonAncestorIds]);
+      for (const ctx of rewriteTargets) {
+        if (!ctx.content) continue;
+        const oldDir = dirOf(ctx.path);
+        const inMovedSubtree = oldDir === oldPath || isAncestorDirOf(oldPath, ctx.path);
+        const newDir = inMovedSubtree ? newPath + oldDir.slice(oldPath.length) : oldDir;
+        const rewritten = rewriteChildPathsForMove(ctx.content, oldPath, newPath, oldDir, newDir);
+        if (rewritten === ctx.content) continue;
+        const editId = hashContent({ id: ctx.id, move: [oldPath, newPath], content: rewritten });
+        const existing = rows.find(r => r.id === ctx.id);
+        if (existing) {
+          existing.content = rewritten;
+          existing.editId = editId;
+        } else {
+          rows.push({ id: ctx.id, content: rewritten, editId });
+        }
+      }
+      await DocumentDB.applyFolderMove(rows);
     } else {
       const success = await DocumentDB.updateMetadata(id, name, newPath);
       if (!success) {

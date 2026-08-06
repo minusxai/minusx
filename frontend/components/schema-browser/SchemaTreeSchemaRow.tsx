@@ -48,6 +48,7 @@ interface SchemaTreeSchemaRowProps {
   showColumns: boolean;
   showPathFilter: boolean;
   availableChildPaths: string[];
+  childPathsBaseDir?: string;
   onTablePreview?: (schemaName: string, tableName: string) => void;
   connectionName?: string;
   searchQuery: string;
@@ -94,6 +95,7 @@ export default function SchemaTreeSchemaRow({
   showColumns,
   showPathFilter,
   availableChildPaths,
+  childPathsBaseDir,
   onTablePreview,
   connectionName,
   searchQuery,
@@ -209,6 +211,7 @@ export default function SchemaTreeSchemaRow({
               <ChildPathSelector
                 subject={`schema ${schemaItem.schema}`}
                 availablePaths={availableChildPaths}
+                baseDir={childPathsBaseDir}
                 selectedPaths={(() => {
                   const item = whitelist.find(
                     w => w.type === 'schema' && w.name === schemaItem.schema
@@ -375,6 +378,7 @@ export default function SchemaTreeSchemaRow({
                           <ChildPathSelector
                             subject={`table ${schemaItem.schema}.${table.table}`}
                             availablePaths={availableChildPaths}
+                            baseDir={childPathsBaseDir}
                             selectedPaths={(() => {
                               const item = whitelist.find(
                                 w => w.type === 'table' && w.name === table.table && w.schema === schemaItem.schema

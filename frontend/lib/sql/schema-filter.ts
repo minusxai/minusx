@@ -12,6 +12,19 @@ import { getPublishedVersion } from '../context/context-utils';
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * Resolve one `childPaths` entry to an absolute folder path. Entries are
+ * RELATIVE to the granting context's folder (`baseDir`) — `"team_a/sub"` in
+ * `/org/context` means `/org/team_a/sub` — so a folder's internal grants
+ * survive moves of the folder itself with no rewriting. A leading `/` is the
+ * legacy absolute form and resolves to itself, which is what keeps
+ * pre-relative documents working without a migration.
+ */
+export function resolveChildPath(cp: string, baseDir?: string): string {
+  if (cp.startsWith('/') || !baseDir) return cp;
+  return baseDir === '/' ? `/${cp}` : `${baseDir}/${cp}`;
+}
+
+/**
  * Check whether a `childPaths` restriction allows the given currentPath.
  * - undefined childPaths → no restriction (always passes)
  * - empty array → blocks all paths
@@ -19,19 +32,22 @@ import { getPublishedVersion } from '../context/context-utils';
  *
  * ONE predicate for every inheritable thing that carries `childPaths` — whitelist
  * nodes, docs, data models (views) and semantic models — so "which children
- * receive this?" means exactly the same everywhere.
+ * receive this?" means exactly the same everywhere. `baseDir` is the granting
+ * context's folder, used to resolve relative entries; callers that only ever
+ * see absolutized entries (the computed plane) may omit it.
  */
-export function appliesToChildPath(childPaths: string[] | null | undefined, currentPath?: string): boolean {
+export function appliesToChildPath(childPaths: string[] | null | undefined, currentPath?: string, baseDir?: string): boolean {
   if (!childPaths) return true;            // no restriction
   if (!currentPath) return true;           // no path given → include all
   if (childPaths.length === 0) return false;  // empty → nowhere
-  return childPaths.some(cp =>
-    currentPath === cp || currentPath.startsWith(cp + '/')
-  );
+  return childPaths.some(cp => {
+    const abs = resolveChildPath(cp, baseDir);
+    return currentPath === abs || currentPath.startsWith(abs + '/');
+  });
 }
 
-const childPathAllowed = (node: WhitelistNode, currentPath?: string): boolean =>
-  appliesToChildPath(node.childPaths, currentPath);
+const childPathAllowed = (node: WhitelistNode, currentPath?: string, baseDir?: string): boolean =>
+  appliesToChildPath(node.childPaths, currentPath, baseDir);
 
 /**
  * Apply a single connection-level WhitelistNode to a DatabaseSchema.
@@ -40,14 +56,16 @@ const childPathAllowed = (node: WhitelistNode, currentPath?: string): boolean =>
  * @param fullSchema  - Full schema for this connection
  * @param connNode    - WhitelistNode of type:'connection'
  * @param currentPath - Optional requesting path (used for childPaths filtering)
+ * @param baseDir     - Folder of the context that AUTHORED the whitelist; resolves relative childPaths
  */
 export function filterSchemaByWhitelistNode(
   fullSchema: DatabaseSchema,
   connNode: WhitelistNode,
   currentPath?: string,
+  baseDir?: string,
 ): DatabaseSchema {
   // Check connection-level childPaths
-  if (!childPathAllowed(connNode, currentPath)) {
+  if (!childPathAllowed(connNode, currentPath, baseDir)) {
     return { ...fullSchema, schemas: [] };
   }
 
@@ -67,7 +85,7 @@ export function filterSchemaByWhitelistNode(
     if (!schemaNode) return [];
 
     // Check schema-level childPaths
-    if (!childPathAllowed(schemaNode, currentPath)) return [];
+    if (!childPathAllowed(schemaNode, currentPath, baseDir)) return [];
 
     // children:undefined → expose all tables
     if (schemaNode.children === undefined) {
@@ -83,7 +101,7 @@ export function filterSchemaByWhitelistNode(
     const filteredTables = schema.tables.filter(table => {
       const tableNode = schemaNode.children!.find(n => n.name === table.table);
       if (!tableNode) return false;
-      return childPathAllowed(tableNode, currentPath);
+      return childPathAllowed(tableNode, currentPath, baseDir);
     });
 
     if (filteredTables.length === 0) return [];
@@ -102,11 +120,13 @@ export function filterSchemaByWhitelistNode(
  * @param connections  - Available connections (each with databaseName + schemas)
  * @param whitelist    - Whitelist to apply
  * @param currentPath  - Optional requesting path (used for childPaths filtering)
+ * @param baseDir      - Folder of the context that AUTHORED the whitelist; resolves relative childPaths
  */
 export function applyWhitelistToConnections(
   connections: DatabaseWithSchema[],
   whitelist: Whitelist,
   currentPath?: string,
+  baseDir?: string,
 ): DatabaseWithSchema[] {
   if (whitelist === '*') return connections;
 
@@ -115,12 +135,13 @@ export function applyWhitelistToConnections(
     if (!connNode) return [];
 
     // Check connection-level childPaths
-    if (!childPathAllowed(connNode, currentPath)) return [];
+    if (!childPathAllowed(connNode, currentPath, baseDir)) return [];
 
     const filteredSchema = filterSchemaByWhitelistNode(
       { schemas: conn.schemas, updated_at: conn.updated_at || new Date().toISOString() },
       connNode,
       currentPath,
+      baseDir,
     );
 
     if (filteredSchema.schemas.length === 0) return [];

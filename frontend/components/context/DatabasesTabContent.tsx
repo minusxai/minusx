@@ -391,6 +391,7 @@ export function DatabasesTabContent({
                               showStats={true}
                               showPathFilter={true}
                               availableChildPaths={availableChildPaths}
+                              childPathsBaseDir={contextPath.substring(0, contextPath.lastIndexOf('/')) || '/'}
                               connectionWhitelisted={isConnectionWildcard}
                               connectionName={database.databaseName}
                               annotations={content.annotations || []}

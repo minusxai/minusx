@@ -17,6 +17,72 @@ export function findDocsMissingMeta(docs: (DocEntry | string)[]): number[] {
 }
 
 /**
+ * Rewrite the `childPaths` entries of ONE context document that track a moved
+ * folder — wherever the field appears: whitelist nodes (any nesting level),
+ * docs, views and semantic models all carry it.
+ *
+ * Only two bounded sets of contexts are ever rewritten by a move, and this is
+ * the rewriter both use. An entry matches when it RESOLVES (relative entries
+ * against `resolveBase`, the context's folder before the move; legacy absolute
+ * entries as themselves) to the moved folder or something inside it. A match
+ * is rewritten form-preservingly: absolute stays absolute at the new location;
+ * relative is re-expressed against `writeBase`, the context's folder after the
+ * move — which is why a moved context's own relative grants come out unchanged
+ * (their targets moved with it). Prefix-similar siblings (`/org/a` vs
+ * `/org/ab`) never match.
+ *
+ * Deliberately a DEEP WALK keyed on the property name rather than an
+ * enumeration of the four carriers: a fold that lists fields drops the next
+ * carrier someone adds. Only string-array values under a key named exactly
+ * `childPaths` are touched; document prose and every other field pass through
+ * untouched. Returns the original object identity when nothing changed, so
+ * callers can use identity to skip a write.
+ */
+export function rewriteChildPathsForMove<T>(
+  value: T,
+  oldPath: string,
+  newPath: string,
+  resolveBase: string,
+  writeBase: string
+): T {
+  const rewriteEntry = (p: string): string => {
+    const abs = p.startsWith('/') ? p : (resolveBase === '/' ? `/${p}` : `${resolveBase}/${p}`);
+    if (abs !== oldPath && !abs.startsWith(oldPath + '/')) return p;
+    const newAbs = newPath + abs.slice(oldPath.length);
+    if (p.startsWith('/')) return newAbs;
+    const prefix = writeBase === '/' ? '/' : writeBase + '/';
+    return newAbs.startsWith(prefix) ? newAbs.slice(prefix.length) : p;
+  };
+  if (Array.isArray(value)) {
+    let changed = false;
+    const next = value.map((v) => {
+      const nv = rewriteChildPathsForMove(v, oldPath, newPath, resolveBase, writeBase);
+      if (nv !== v) changed = true;
+      return nv;
+    });
+    return (changed ? next : value) as T;
+  }
+  if (value !== null && typeof value === 'object') {
+    let changed = false;
+    const next: Record<string, unknown> = {};
+    for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
+      if (key === 'childPaths' && Array.isArray(v) && v.every((p) => typeof p === 'string')) {
+        const rewritten = (v as string[]).map(rewriteEntry);
+        const same = rewritten.every((p, i) => p === (v as string[])[i]);
+        next[key] = same ? v : rewritten;
+        if (!same) changed = true;
+      } else {
+        const nv = rewriteChildPathsForMove(v, oldPath, newPath, resolveBase, writeBase);
+        next[key] = nv;
+        if (nv !== v) changed = true;
+      }
+    }
+    return (changed ? next : value) as T;
+  }
+  return value;
+}
+
+/**
  * Count whitelist items (schemas/tables) that still exist in the loader-resolved
  * `fullSchema`. Stale entries — pointing at a deleted connection, schema, or
  * table — are excluded, so the count reflects what the agent actually sees

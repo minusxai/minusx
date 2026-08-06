@@ -86,6 +86,8 @@ interface ContextDocsEditorProps {
   originalDocs?: DocEntry[];
   /** Child folder paths offered by the child-path selector. */
   availableChildPaths?: string[];
+  /** Folder of the owning context — resolves legacy absolute childPaths. */
+  childPathsBaseDir?: string;
   /** Enables the @ / @@ mention typeahead (tables, questions, dashboards, stories). */
   mentions?: MentionsConfig;
   editMode?: boolean;
@@ -117,6 +119,7 @@ export default function ContextDocsEditor({
   inheritedDocs,
   originalDocs,
   availableChildPaths = [],
+  childPathsBaseDir,
   mentions,
   editMode = true,
   editorHeight = '500px',
@@ -543,6 +546,7 @@ export default function ContextDocsEditor({
                         subject={`doc ${docEntry.title || index + 1}`}
                         availablePaths={availableChildPaths}
                         selectedPaths={docEntry.childPaths}
+                        baseDir={childPathsBaseDir}
                         onChange={(paths) => handleChildPathsChange(index, paths)}
                       />
                     </Box>

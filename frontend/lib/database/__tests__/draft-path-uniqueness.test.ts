@@ -60,6 +60,67 @@ describe('draft path uniqueness (partial unique index)', () => {
     const row = await DocumentDB.getById(draftId);
     expect(row?.draft).toBe(false);
   });
+
+  it('dryRun is READ-ONLY: no write statement is ever issued', async () => {
+    // The preflight must never write. Write-then-rollback is not equivalent:
+    // on the pooled Postgres backend each exec can use a different pool client,
+    // so BEGIN/ROLLBACK do not bracket the updates and a "rolled back" preflight
+    // actually commits. Read-only is the only version that is correct everywhere.
+    const draftId = await mk('Preflight', '/org/Preflight', true);
+    const { getModules } = await import('@/lib/modules/registry');
+    const db = getModules().db;
+    const spy = vi.spyOn(db, 'exec');
+    try {
+      const res = await DocumentDB.batchSave([
+        { id: draftId, name: 'Preflight', path: '/org/Preflight', content, references: [] },
+      ], true);
+      expect(res.success).toBe(true);
+      const writes = spy.mock.calls.filter(([sql]) =>
+        /^\s*(UPDATE|INSERT|DELETE|BEGIN|COMMIT|ROLLBACK)/i.test(String(sql)));
+      expect(writes).toEqual([]);
+    } finally {
+      spy.mockRestore();
+    }
+    const row = await DocumentDB.getById(draftId);
+    expect(row?.draft).toBe(true);
+  });
+
+  it('dryRun reports a publish-path conflict without writing', async () => {
+    await mk('Owner2', '/org/Taken2', false);
+    const draftId = await mk('Contender2', '/org/Taken2', true);
+    const res = await DocumentDB.batchSave([
+      { id: draftId, name: 'Contender2', path: '/org/Taken2', content, references: [] },
+    ], true);
+    expect(res.success).toBe(false);
+    expect(res.errors[0].id).toBe(draftId);
+    expect(res.errors[0].error).toMatch(/already exists|rename/i);
+    expect((await DocumentDB.getById(draftId))?.draft).toBe(true);
+  });
+
+  it('dryRun catches two batch entries publishing to the SAME path', async () => {
+    const a = await mk('Dup A', '/org/DupTarget', true);
+    const b = await mk('Dup B', '/org/DupTarget', true);
+    const res = await DocumentDB.batchSave([
+      { id: a, name: 'Dup A', path: '/org/DupTarget', content, references: [] },
+      { id: b, name: 'Dup B', path: '/org/DupTarget', content, references: [] },
+    ], true);
+    expect(res.success).toBe(false);
+    expect(res.errors[0].error).toMatch(/already exists|rename/i);
+  });
+
+  it('a real batch is all-or-nothing: a conflict on ANY entry leaves every entry unwritten', async () => {
+    await mk('Blocker', '/org/Blocked', false);
+    const okId = await mk('Fine', '/org/Fine', true);
+    const badId = await mk('Collides', '/org/Blocked', true);
+    const res = await DocumentDB.batchSave([
+      { id: okId, name: 'Fine', path: '/org/Fine', content, references: [] },
+      { id: badId, name: 'Collides', path: '/org/Blocked', content, references: [] },
+    ]);
+    expect(res.success).toBe(false);
+    // The conflict-free first entry must not have been published either.
+    expect((await DocumentDB.getById(okId))?.draft).toBe(true);
+    expect((await DocumentDB.getById(badId))?.draft).toBe(true);
+  });
 });
 
 // EXISTING-DEPLOYMENT migration path: a pre-existing DB carried the legacy global UNIQUE(path)
