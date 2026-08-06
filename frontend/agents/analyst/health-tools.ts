@@ -10,8 +10,8 @@ import type { AnalystAgentContext } from './types';
 
 // ─── CheckFileHealth ──────────────────────────────────────────────────────────
 // Server tool: scores a question/dashboard/story's health and returns actionable findings.
-// The same deterministic report is auto-injected on every read; this tool lets the agent
-// re-check on demand (e.g. after an edit) and optionally add the LLM visual-quality judge.
+// CreateFile/EditFile/ReviewFile return rubric feedback at action time; this tool lets the agent
+// re-check saved content on demand and optionally add the LLM visual-quality judge.
 
 const CheckFileHealthParams = Type.Object({
   fileId: Type.Number({ description: 'ID of the file to health-check (question, dashboard, or story).' }),
