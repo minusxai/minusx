@@ -1,6 +1,8 @@
 import type { QuestionContent } from '@/lib/types';
+import { getEnvelopeVizType, getPivotConfig, getZoneFields } from '@/lib/viz/encoding-edit';
 import type { RubricFinding } from '../types';
 import { estimateTokens, extractSqlParams, finding, isBlank } from './shared';
+import { questionVegaLiteSpec, unlabeledAxesDetail } from './question-vega';
 
 const QUERY_TOKENS_WARN = 400;
 const QUERY_TOKENS_ERROR = 800;
@@ -13,7 +15,18 @@ const SIMPLIFY_FIX =
 export function scoreQuestion(content: QuestionContent): RubricFinding[] {
   const out: RubricFinding[] = [];
   const query = content.query ?? '';
-  const viz = content.vizSettings;
+  // V2 is authoritative whenever present. Legacy settings are only a fallback for files that
+  // have not been upgraded yet — never mix fields from both representations.
+  const envelope = content.viz ?? undefined;
+  const legacy = envelope ? undefined : content.vizSettings ?? undefined;
+  const vizType = envelope ? getEnvelopeVizType(envelope) : legacy?.type;
+  const measureChannel = vizType === 'pie' ? 'theta'
+    : vizType === 'funnel' ? 'value'
+      : vizType === 'bar' || vizType === 'line' || vizType === 'area' ? 'y'
+        : undefined;
+  const measureFields = envelope
+    ? measureChannel ? getZoneFields(envelope, measureChannel) : []
+    : legacy?.yCols ?? [];
 
   // Query size thresholds (clarity): separate checks keep one severity per check.
   const tokens = estimateTokens(query);
@@ -52,8 +65,8 @@ export function scoreQuestion(content: QuestionContent): RubricFinding[] {
   }
 
   // viz-config-incomplete (correctness) — only pivot genuinely requires its config
-  if (viz?.type === 'pivot') {
-    const pc = viz.pivotConfig;
+  if (vizType === 'pivot') {
+    const pc = envelope ? getPivotConfig(envelope) : legacy?.pivotConfig;
     const empty = !pc
       || ((pc.values?.length ?? 0) === 0 && (pc.rows?.length ?? 0) === 0 && (pc.columns?.length ?? 0) === 0);
     if (empty) {
@@ -64,17 +77,26 @@ export function scoreQuestion(content: QuestionContent): RubricFinding[] {
   }
 
   // pie-multi-measure (correctness — a pie/funnel physically can't represent >1 measure)
-  if ((viz?.type === 'pie' || viz?.type === 'funnel') && (viz.yCols?.length ?? 0) > 1) {
+  if ((vizType === 'pie' || vizType === 'funnel') && measureFields.length > 1) {
     out.push(finding('question.pie-multi-measure', 'Pie/funnel with multiple measures',
-      `A ${viz.type} chart has ${viz.yCols!.length} measures; it can only show one.`,
-      'Keep a single yCols value, or use a bar chart to compare multiple measures.'));
+      `A ${vizType} chart has ${measureFields.length} measures; it can only show one.`,
+      'Keep a single value measure, or use a bar chart to compare multiple measures.'));
   }
 
   // too-many-series (clarity — technically shows the data, just cluttered)
-  if ((viz?.type === 'line' || viz?.type === 'bar' || viz?.type === 'area') && (viz.yCols?.length ?? 0) > MAX_SERIES) {
+  if ((vizType === 'line' || vizType === 'bar' || vizType === 'area') && measureFields.length > MAX_SERIES) {
     out.push(finding('question.too-many-series', 'Too many series',
-      `The chart has ${viz.yCols!.length} series (more than ${MAX_SERIES}).`,
+      `The chart has ${measureFields.length} series (more than ${MAX_SERIES}).`,
       'More than 5 series is hard to read (the ≤7 rule). Split into small multiples or drop series.'));
+  }
+
+  // Vega-backed checks: inspect the canonical V2 spec (or a legacy file's deterministic V2
+  // conversion). Native Vega is intentionally skipped — its scale/axis graph is not Vega-Lite.
+  const spec = questionVegaLiteSpec(content);
+  const axesDetail = spec ? unlabeledAxesDetail(spec, vizType) : undefined;
+  if (axesDetail) {
+    out.push(finding('question.axes-labeled', 'Axis labels suppressed', axesDetail,
+      'Show tick labels and give the axis a clear title (Vega-Lite may derive it from the field).'));
   }
 
   return out;

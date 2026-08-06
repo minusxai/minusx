@@ -6,7 +6,18 @@
  */
 import { extractSavedQuestionIds } from '@/lib/data/story/story-question';
 import type { DashboardContent, StoryContent } from '@/lib/types';
+import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
+import { getEnvelopeVizType } from '@/lib/viz/encoding-edit';
 import type { DeterministicContext } from './types';
+
+/** Resolve a question's chart type. V2 `viz` is authoritative; V1 `vizSettings` is fallback-only. */
+export function questionVizType(content: {
+  viz?: VizEnvelope | null;
+  vizSettings?: { type?: string } | null;
+} | null | undefined): string | undefined {
+  if (content?.viz) return getEnvelopeVizType(content.viz) ?? undefined;
+  return content?.vizSettings?.type;
+}
 
 export function referencedQuestionIds(fileType: string, content: unknown): number[] {
   if (fileType === 'dashboard') {

@@ -19,9 +19,9 @@ import { FilesAPI } from '@/lib/data/files';
 import type { RootState } from '@/store/store';
 import { useScreenshot } from '@/lib/hooks/useScreenshot';
 import { isRubricFileType, scoreFileDeterministic } from '@/lib/rubric/registry';
-import { passedChecks } from '@/lib/rubric/checks';
+import { hasLlmChecks, passedChecks } from '@/lib/rubric/checks';
 import { shapeContextForAgent } from '@/lib/context/context-agent-view';
-import { buildVizTypeCtx } from '@/lib/rubric/refs';
+import { buildVizTypeCtx, questionVizType } from '@/lib/rubric/refs';
 import type { DeterministicContext, FindingSource, RubricCategory, RubricFileType, RubricReport, RubricSeverity } from '@/lib/rubric/types';
 import type { QuestionContent } from '@/lib/types';
 
@@ -69,8 +69,6 @@ const SOURCE: Record<FindingSource, { label: string; color: string }> = {
 };
 const sourceOf = (ruleId: string): FindingSource => (ruleId.startsWith('llm.') ? 'llm' : 'rule');
 
-const HAS_LLM = (fileType: string) => fileType !== 'context'; // context is deterministic-only
-
 // The content the deterministic scorer expects. Context is scored on its agent-flattened shape.
 function scorableContent(fileType: string, content: unknown): unknown {
   return fileType === 'context' ? shapeContextForAgent(content ?? {}) : content;
@@ -81,7 +79,8 @@ function scorableContent(fileType: string, content: unknown): unknown {
 // the question file, not in the dashboard/story content, so resolve it from Redux. Dashboards list
 // their questions in `assets`; a story's saved embeds are `data-question-id` refs in its body.
 function vizTypeCtx(fileType: string, content: unknown, state: RootState): DeterministicContext | undefined {
-  return buildVizTypeCtx(fileType, content, (id) => (selectFile(state, id)?.content as QuestionContent | undefined)?.vizSettings?.type);
+  return buildVizTypeCtx(fileType, content, (id) =>
+    questionVizType(selectFile(state, id)?.content as QuestionContent | undefined));
 }
 
 export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType: string }) {
@@ -233,13 +232,15 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
                           <Text fontFamily="mono" color="fg.default" minW="26px" textAlign="right">{c.score}</Text>
                         </HStack>
                       ) : (
-                        <Text color="fg.subtle" fontStyle="italic">not scored · run visual review</Text>
+                        <Text color="fg.subtle" fontStyle="italic">
+                          {hasLlmChecks(fileType) ? 'not scored · run visual review' : 'not scored'}
+                        </Text>
                       )}
                     </HStack>
                   ))}
                 </VStack>
 
-                {HAS_LLM(fileType) && (
+                {hasLlmChecks(fileType) && (
                   <Button
                     aria-label="Run visual review with the LLM judge"
                     size="xs"
@@ -263,7 +264,7 @@ export function FileHealthBadge({ fileId, fileType }: { fileId: number; fileType
                   <Text fontSize="2xs" color="accent.danger">Visual review failed: {judgeError}</Text>
                 )}
 
-                {HAS_LLM(fileType) && !llmRan && (
+                {hasLlmChecks(fileType) && !llmRan && (
                   <Text
                     aria-label="Structural checks only — run visual review to add visual checks"
                     fontSize="2xs"

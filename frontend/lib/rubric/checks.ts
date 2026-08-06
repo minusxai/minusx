@@ -3,10 +3,9 @@
  *
  * - DETERMINISTIC_CHECKS: mirrors the static rules in `deterministic/*` (ruleId must match the
  *   finding a rule emits). Used to show which static checks PASSED.
- * - LLM_CHECKS: the CLOSED set of visual/subjective checks the LLM judge evaluates. Each is a
- *   specific pass/fail question grounded in data-viz research; the judge returns true/false +
- *   evidence per check, and `score-llm.server.ts` turns failures into findings. This replaces
- *   the old open-ended "find any problems" prompt.
+ * - LLM_CHECKS: the catalog of visual/subjective checks. Active entries form the CLOSED set the
+ *   judge evaluates; paused entries stay documented without entering prompts or scores. Each is
+ *   a specific pass/fail question, and `score-llm.server.ts` turns active failures into findings.
  */
 import type { RubricCategory, RubricFileType, RubricReport, RubricSeverity } from './types';
 import { immutableMap } from '@/lib/utils/immutable-collections';
@@ -25,10 +24,11 @@ export const DETERMINISTIC_CHECKS: Record<RubricFileType, RubricCheck[]> = {
     { ruleId: 'question.undeclared-param', label: 'Parameters declared', category: 'correctness', severity: 'error' },
     { ruleId: 'question.unused-param', label: 'No unused parameters', category: 'correctness', severity: 'warn' },
     { ruleId: 'question.viz-config-incomplete', label: 'Chart configured', category: 'correctness', severity: 'error' },
-    { ruleId: 'question.pie-multi-measure', label: 'Chart fits the data', category: 'correctness', severity: 'warn' },
+    { ruleId: 'question.pie-multi-measure', label: 'Pie/funnel has one measure', category: 'correctness', severity: 'warn' },
     { ruleId: 'question.query-too-long', label: 'Query ≤400 tokens', category: 'clarity', severity: 'warn', passGroup: 'question.query-size' },
     { ruleId: 'question.query-extreme', label: 'Query ≤800 tokens', category: 'clarity', severity: 'error', passGroup: 'question.query-size' },
     { ruleId: 'question.too-many-series', label: 'Series count OK', category: 'clarity', severity: 'warn' },
+    { ruleId: 'question.axes-labeled', label: 'Axes are visible', category: 'clarity', severity: 'warn' },
     { ruleId: 'question.no-description', label: 'Has a description', category: 'clarity', severity: 'warn' },
   ],
   dashboard: [
@@ -74,7 +74,7 @@ export function deterministicCheck(ruleId: string): RubricCheck {
   return check;
 }
 
-// ─── LLM checks (closed set the judge evaluates pass/fail) ───────────────────────────────────
+// ─── LLM checks (catalog; active subset is judged pass/fail) ─────────────────────────────
 
 export interface LlmCheck {
   id: string;               // stable; finding ruleId is `llm.${id}`
@@ -83,29 +83,33 @@ export interface LlmCheck {
   label: string;            // neutral name shown in the table (pass or fail)
   question: string;         // the pass-condition the LLM evaluates (PASS = condition holds)
   fix: string;              // actionable fix shown when it fails
+  /** Paused checks remain documented but are excluded from prompts, scoring, and pass rows. */
+  status?: 'active' | 'paused';
 }
 
 export const LLM_CHECKS: Record<RubricFileType, LlmCheck[]> = {
+  // Paused, not deleted: question scoring is deterministic-only for now, while these remain in
+  // the catalog/README for an explicit revisit. `activeLlmChecks` is the runtime boundary.
   question: [
-    { id: 'chart-type-fit', category: 'aesthetics', severity: 'error', label: 'Right chart for the data',
+    { id: 'chart-type-fit', category: 'aesthetics', severity: 'error', status: 'paused', label: 'Right chart for the data',
       question: 'The chart type matches the analytical intent (comparison → bar/column, trend over time → line, part-of-whole → pie/donut only with ≤5 slices, correlation → scatter, distribution → histogram). FAIL only when you can point to the specific mismatch (e.g. "a pie with 12 slices", "a time trend drawn as a pie"). PASS otherwise.',
       fix: 'Switch to the chart type that matches the question (e.g. line for a time trend, bar for a category comparison).' },
-    { id: 'honest-scale', category: 'aesthetics', severity: 'error', label: 'Honest axes',
+    { id: 'honest-scale', category: 'aesthetics', severity: 'error', status: 'paused', label: 'Honest axes',
       question: 'The value axis is not misleading — bars/areas start at a zero baseline and there is no truncated or dual-axis distortion that exaggerates differences. FAIL only when you can point to the specific axis and how it distorts. PASS otherwise.',
       fix: 'Start the value axis at zero (or clearly mark the break); avoid deceptive dual axes.' },
-    { id: 'axes-labeled', category: 'aesthetics', severity: 'warn', label: 'Axes & legend labeled',
+    { id: 'axes-labeled', category: 'aesthetics', severity: 'warn', status: 'paused', label: 'Axes & legend labeled',
       question: 'Axes have clear titles with units, and any legend/series is labeled. PASS if a reader can tell what each axis and series means.',
       fix: 'Add axis titles with units and label the series/legend.' },
-    { id: 'labels-legible', category: 'aesthetics', severity: 'warn', label: 'Legible labels',
+    { id: 'labels-legible', category: 'aesthetics', severity: 'warn', status: 'paused', label: 'Legible labels',
       question: 'Tick and data labels are readable — not overlapping, truncated, or too dense to read. PASS if labels are legible.',
       fix: 'Reduce label density, rotate/abbreviate ticks, or filter categories so labels are readable.' },
-    { id: 'not-overplotted', category: 'aesthetics', severity: 'warn', label: 'Not overplotted',
+    { id: 'not-overplotted', category: 'aesthetics', severity: 'warn', status: 'paused', label: 'Not overplotted',
       question: 'The chart is not overcrowded — few enough series/points/categories (≈≤7 on color) that the pattern is visible. PASS if uncluttered.',
       fix: 'Reduce series/categories (top-N, group “other”) or use small multiples.' },
-    { id: 'takeaway-obvious', category: 'aesthetics', severity: 'warn', label: 'Takeaway in seconds',
+    { id: 'takeaway-obvious', category: 'aesthetics', severity: 'warn', status: 'paused', label: 'Takeaway in seconds',
       question: 'A reader can grasp the main takeaway within a few seconds. PASS if the point is obvious at a glance.',
       fix: 'Sort/highlight the key values, add a title that states the takeaway, or annotate the key point.' },
-    { id: 'clean-encoding', category: 'aesthetics', severity: 'warn', label: 'Clean, high data-ink',
+    { id: 'clean-encoding', category: 'aesthetics', severity: 'warn', status: 'paused', label: 'Clean, high data-ink',
       question: 'Minimal chart-junk — no unnecessary 3D, heavy gridlines, or decoration; good data-ink ratio. PASS if the encoding is clean.',
       fix: 'Remove 3D/gradients/heavy gridlines and non-data decoration.' },
   ],
@@ -180,7 +184,18 @@ export const LLM_CHECKS: Record<RubricFileType, LlmCheck[]> = {
  *  tagged with its severity: an `error` check gates the file's score to 0, so the judge is told
  *  (in the prompt) to fail those only on an unambiguous, pointable defect. */
 export function formatChecklist(fileType: RubricFileType): string {
-  return LLM_CHECKS[fileType].map((c) => `- ${c.id} [${c.category}, ${c.severity}]: ${c.question}`).join('\n');
+  return activeLlmChecks(fileType).map((c) => `- ${c.id} [${c.category}, ${c.severity}]: ${c.question}`).join('\n');
+}
+
+/** Runtime checklist. Paused catalog entries remain documented but never reach the judge. */
+export function activeLlmChecks(fileType: RubricFileType): LlmCheck[] {
+  return LLM_CHECKS[fileType].filter((check) => check.status !== 'paused');
+}
+
+/** Whether this file type currently has an active judge checklist. */
+export function hasLlmChecks(fileType: string): fileType is RubricFileType {
+  const checks = LLM_CHECKS[fileType as RubricFileType];
+  return Array.isArray(checks) && checks.some((check) => check.status !== 'paused');
 }
 
 const llmToRubricCheck = (c: LlmCheck): RubricCheck => ({
@@ -195,7 +210,7 @@ const llmToRubricCheck = (c: LlmCheck): RubricCheck => ({
 export function passedChecks(fileType: RubricFileType, report: RubricReport, llmRan: boolean): RubricCheck[] {
   const fired = new Set(report.categories.flatMap((c) => c.findings).map((f) => f.ruleId));
   const assessed = new Set(report.categories.filter((c) => c.assessed).map((c) => c.category));
-  const llm = llmRan ? (LLM_CHECKS[fileType] ?? []).map(llmToRubricCheck) : [];
+  const llm = llmRan ? activeLlmChecks(fileType).map(llmToRubricCheck) : [];
   const all = [...(DETERMINISTIC_CHECKS[fileType] ?? []), ...llm];
   const byId = new Map(all.map((check) => [check.ruleId, check]));
   const firedGroups = new Set(
