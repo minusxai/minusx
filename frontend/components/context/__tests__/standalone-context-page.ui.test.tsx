@@ -31,9 +31,13 @@ vi.mock('@/components/file-browser/Breadcrumb', () => {
   const React = require('react');
   return {
     __esModule: true,
-    default: ({ items }: { items: Array<{ label: string; href?: string }> }) => React.createElement(
+    default: ({ items, currentFileId }: { items: Array<{ label: string; href?: string }>; currentFileId?: number }) => React.createElement(
       'nav',
-      { 'data-testid': 'standalone-breadcrumb', 'data-items': JSON.stringify(items) },
+      {
+        'data-testid': 'standalone-breadcrumb',
+        'data-items': JSON.stringify(items),
+        'data-current-file-id': currentFileId,
+      },
     ),
   };
 });
@@ -87,6 +91,7 @@ describe('StandaloneContextPage', () => {
 
     expect(screen.getByTestId('context-surface')).toHaveAttribute('data-file-id', '22');
     expect(screen.getByTestId('context-surface')).toHaveAttribute('data-surface', 'skills');
+    expect(screen.getByTestId('standalone-breadcrumb')).toHaveAttribute('data-current-file-id', '22');
     expect(JSON.parse(screen.getByTestId('standalone-breadcrumb').getAttribute('data-items') || '[]')).toEqual([
       { label: 'Home', href: '/' },
       { label: store.getState().configs.config.branding.displayName, href: '/p/org' },
@@ -118,6 +123,7 @@ describe('StandaloneContextPage', () => {
 
     expect(screen.getByTestId('context-surface')).toHaveAttribute('data-file-id', '1008');
     expect(screen.getByTestId('context-surface')).toHaveAttribute('data-surface', 'agents');
+    expect(screen.getByTestId('standalone-breadcrumb')).toHaveAttribute('data-current-file-id', '1008');
     expect(JSON.parse(screen.getByTestId('standalone-breadcrumb').getAttribute('data-items') || '[]')).toEqual([
       { label: 'Home', href: '/' },
       { label: store.getState().configs.config.branding.displayName, href: '/p/org' },

@@ -107,7 +107,7 @@ export default function StandaloneContextPage({
       pt={{ base: 5, md: 8 }}
     >
       <Box mb={{ base: 2, md: 4 }}>
-        <Breadcrumb items={breadcrumbItems} />
+        <Breadcrumb items={breadcrumbItems} currentFileId={resolvedContext.id} />
       </Box>
       <ContextContainerV2 fileId={resolvedContext.id} standaloneTab={surface} />
     </Box>
