@@ -241,7 +241,7 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
 
   // Drag and drop handlers
   const handleDragStart = (e: React.DragEvent, file: DbFile) => {
-    if (file.type === 'folder' || !canDeleteFileType(file.type)) return;
+    if (!canDeleteFileType(file.type)) return;
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('fileId', file.id.toString());
     setDraggedFileId(file.id);
@@ -297,6 +297,14 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
 
     const draggedFile = files.find(f => f.id === fileId);
     if (!draggedFile) return;
+
+    // A folder must not move into its own subtree — the server refuses it, but
+    // refusing here avoids surfacing that as an error alert.
+    if (draggedFile.type === 'folder' && targetFolder.path.startsWith(`${draggedFile.path}/`)) {
+      setDropTargetId(null);
+      setDraggedFileId(null);
+      return;
+    }
 
     // Construct new path: targetFolder.path + '/' + draggedFile.name
     const newPath = `${targetFolder.path}/${draggedFile.name}`;
