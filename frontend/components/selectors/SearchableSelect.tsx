@@ -262,18 +262,32 @@ function SearchablePicker({
                             <Icon as={option.icon} boxSize={s.iconSize} color={isSelected ? 'fg' : 'fg.muted'} flexShrink={0} mt="1px" />
                           )}
                           <Box minW={0} flex={1}>
-                            <HStack gap={s.gap} minW={0}>
+                            <HStack gap={s.gap} minW={0} overflow="hidden">
                               <Text
                                 fontSize="xs"
                                 fontWeight={isSelected ? '600' : '400'}
+                                minW={0}
+                                maxW={option.subtitle ? '55%' : '100%'}
+                                flexShrink={1}
                                 whiteSpace="nowrap"
                                 overflow="hidden"
                                 textOverflow="ellipsis"
+                                title={option.label}
                               >
                                 {option.label}
                               </Text>
                               {option.subtitle && (
-                                <Text fontSize="2xs" color="fg.muted" fontFamily="mono" whiteSpace="nowrap">
+                                <Text
+                                  fontSize="2xs"
+                                  color="fg.muted"
+                                  fontFamily="mono"
+                                  minW={0}
+                                  flex={1}
+                                  whiteSpace="nowrap"
+                                  overflow="hidden"
+                                  textOverflow="ellipsis"
+                                  title={option.subtitle}
+                                >
                                   {option.subtitle}
                                 </Text>
                               )}

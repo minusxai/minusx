@@ -3,7 +3,6 @@ import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import { makeStore } from '@/store/store';
 import { setUser } from '@/store/authSlice';
 import { setFile } from '@/store/filesSlice';
-import { setEnableCustomAgents } from '@/store/uiSlice';
 import type { DbFile, UserRole } from '@/lib/types';
 
 const contextsState = vi.hoisted(() => ({
@@ -115,8 +114,6 @@ describe('StandaloneContextPage', () => {
     contextsState.contexts = [nearest];
     contextsState.homeContext = nearest;
     store.dispatch(setFile({ file: nearest }));
-    store.dispatch(setEnableCustomAgents(true));
-
     renderWithProviders(<StandaloneContextPage surface="agents" />, { store });
 
     expect(screen.getByTestId('context-surface')).toHaveAttribute('data-file-id', '1008');

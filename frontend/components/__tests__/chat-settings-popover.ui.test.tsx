@@ -193,9 +193,8 @@ describe('ChatSettingsPopover', () => {
     expect(trigger).toHaveTextContent('Analyst agent');
   });
 
-  // No custom agents (alpha flag off, or the context defines none) → the Agent
-  // picker still renders, offering only the default analyst — same as before
-  // custom agents existed.
+  // No custom agents on the context → the Agent picker still renders, offering
+  // only the default analyst.
   it('keeps the Agent picker with only the default option when no custom agents exist', async () => {
     const user = userEvent.setup();
     renderWithProviders(

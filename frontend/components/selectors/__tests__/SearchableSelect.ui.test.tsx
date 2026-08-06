@@ -98,6 +98,29 @@ describe('SearchableSelect', () => {
     expect(screen.getByLabelText('Lite')).not.toHaveTextContent('Optimized');
   });
 
+  it('truncates a long inline subtitle before the selection indicator', async () => {
+    const subtitle = 'Analyzes financial performance, explains variances, forecasts trends, and identifies risks.';
+    renderWithProviders(
+      <SearchableSelect
+        value="cfo"
+        onChange={() => {}}
+        options={[{ value: 'cfo', label: 'CFO Agent', subtitle }]}
+        label="Agent picker"
+      />,
+    );
+    const user = userEvent.setup();
+
+    await user.click(screen.getByLabelText('Agent picker'));
+    const subtitleElement = await screen.findByTitle(subtitle);
+
+    expect(subtitleElement).toHaveStyle({
+      minWidth: '0',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
+    });
+  });
+
   it('matches against the subtitle (model id) too, and shows an empty message on no hit', async () => {
     renderWithProviders(
       <SearchableSelect value="" onChange={() => {}} options={OPTIONS} label="Model picker" />,

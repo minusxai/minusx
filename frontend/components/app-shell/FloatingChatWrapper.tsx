@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import { Box } from '@chakra-ui/react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { selectEnableCustomAgents, setRightSidebarCollapsed, setSidebarPendingMessage, setChatAgentSelection, setChatGradeSelection, setSidebarPendingSlashCommand, setActiveSidebarSection, addChatAttachment } from '@/store/uiSlice';
+import { setRightSidebarCollapsed, setSidebarPendingMessage, setChatAgentSelection, setChatGradeSelection, setSidebarPendingSlashCommand, setActiveSidebarSection, addChatAttachment } from '@/store/uiSlice';
 import { useContext } from '@/lib/hooks/useContext';
 import { useClearChat, useSlashCommands, tryExecuteSlashCommand } from '../explore/slash-commands';
 import { selectDatabase } from '@/lib/utils/database-selector';
@@ -40,7 +40,6 @@ export default function FloatingChatWrapper({
   const rightSidebarWidth = useAppSelector(state => state.ui.rightSidebarWidth);
   const selectedGrade = useAppSelector(state => state.ui.chatGradeSelection);
   const selectedAgent = useAppSelector(state => state.ui.chatAgentSelection);
-  const enableCustomAgents = useAppSelector(selectEnableCustomAgents);
 
   // Load context databases using the shared context path from the parent
   const effectiveContextPath = selectedContextPath || filePath || '/';
@@ -101,12 +100,12 @@ export default function FloatingChatWrapper({
         onDatabaseChange={handleDatabaseChange}
         selectedGrade={selectedGrade}
         onGradeChange={handleGradeChange}
-        agentOptions={enableCustomAgents ? (contextInfo.agents ?? []).map(agent => ({
+        agentOptions={(contextInfo.agents ?? []).map(agent => ({
           name: agent.name,
           displayName: agent.displayName,
           description: agent.description,
-        })) : []}
-        selectedAgent={enableCustomAgents ? selectedAgent : null}
+        }))}
+        selectedAgent={selectedAgent}
         onAgentChange={handleAgentChange}
         container="floating"
         isCompact={true}

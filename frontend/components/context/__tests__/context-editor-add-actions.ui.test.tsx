@@ -60,7 +60,7 @@ vi.mock('@/lib/hooks/useConfigs', () => ({
 }));
 
 import ContextEditorV2 from '@/components/context/ContextEditorV2';
-import { setDevMode, setEnableCustomAgents } from '@/store/uiSlice';
+import { setDevMode } from '@/store/uiSlice';
 
 const CONTENT = {
   versions: [{ version: 1, whitelist: [], docs: [], createdAt: '2026-01-01T00:00:00.000Z', createdBy: 1 }],
@@ -80,12 +80,10 @@ function renderEditor(
   tab: 'skills' | 'agents',
   content: ContextContent = CONTENT,
   {
-    enableCustomAgents = tab === 'agents',
     devMode = false,
     role = 'editor',
     standaloneTab,
   }: {
-    enableCustomAgents?: boolean;
     devMode?: boolean;
     role?: UserRole;
     standaloneTab?: 'agents' | 'skills';
@@ -95,7 +93,6 @@ function renderEditor(
   const onChange = vi.fn();
   const onEditModeChange = vi.fn();
   const store = makeStore();
-  if (enableCustomAgents) store.dispatch(setEnableCustomAgents(true));
   if (devMode) store.dispatch(setDevMode(true));
   store.dispatch(setUser({
     id: 1,
@@ -254,24 +251,7 @@ describe('ContextEditorV2 add actions outside edit mode', () => {
     expect(nameInput).toHaveValue('Revenue & Growth / Q3');
   });
 
-  // The custom-agents surface is alpha: without the flag the editor must look
-  // exactly like it did pre-agents — no tab, and a ?tab=agents deep link falls
-  // back to Databases instead of rendering a hidden surface.
-  it('hides the Agents tab unless the Custom Agents alpha flag is on', () => {
-    renderEditor('skills', CONTENT, { enableCustomAgents: false });
-
-    expect(screen.queryByRole('tab', { name: /Agents/ })).not.toBeInTheDocument();
-  });
-
-  it('falls back to the Databases tab when a ?tab=agents deep link arrives with the flag off', () => {
-    renderEditor('agents', CONTENT, { enableCustomAgents: false });
-
-    expect(screen.queryByRole('tab', { name: /Agents/ })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Add agent')).not.toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Databases' })).toHaveAttribute('aria-selected', 'true');
-  });
-
-  it('shows the Agents tab when the Custom Agents alpha flag is on', () => {
+  it('shows the Agents tab without a feature flag', () => {
     renderEditor('agents');
 
     expect(screen.getByRole('tab', { name: /Agents/ })).toHaveAttribute('aria-selected', 'true');

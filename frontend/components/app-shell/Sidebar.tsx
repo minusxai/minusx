@@ -14,7 +14,7 @@ import CreateMenu from './CreateMenu';
 import { CreditsUsageBars } from '../settings/CreditsCard';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectEffectiveUser } from '@/store/authSlice';
-import { toggleLeftSidebar, selectDevMode, setDevMode, selectShowAdvanced, toggleColorMode, selectEnableCustomAgents } from '@/store/uiSlice';
+import { toggleLeftSidebar, selectDevMode, setDevMode, selectShowAdvanced, toggleColorMode } from '@/store/uiSlice';
 import { selectContextFromPath } from '@/store/filesSlice';
 import { APP_VERSION } from '@/lib/constants';
 import { exitImpersonation } from '@/lib/navigation/url-utils';
@@ -76,7 +76,6 @@ export default function Sidebar() {
   const isCollapsed = useAppSelector((state) => state.ui.leftSidebarCollapsed);
   const showDebug = useAppSelector(selectDevMode);
   const showAdvanced = useAppSelector(selectShowAdvanced);
-  const enableCustomAgents = useAppSelector(selectEnableCustomAgents);
   const colorMode = useAppSelector((state) => state.ui.colorMode);
   const pathname = usePathname();
   const { navigate } = useNavigationGuard();
@@ -141,7 +140,7 @@ export default function Sidebar() {
   const contextId = resolvedContext?.id && resolvedContext.id > 0 ? resolvedContext.id : null;
   const canAccessSkillsPage = effectiveUser?.role ? canEdit(effectiveUser.role) : false;
   const skillsPageHref = canAccessSkillsPage && contextId ? `/skills?context=${contextId}` : null;
-  const agentsPageHref = enableCustomAgents && contextId
+  const agentsPageHref = contextId
     ? `/agents?context=${contextId}`
     : null;
 

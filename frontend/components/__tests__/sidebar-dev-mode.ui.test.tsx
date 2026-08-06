@@ -8,7 +8,6 @@ import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import * as storeModule from '@/store/store';
 import { setUser } from '@/store/authSlice';
 import { setFile } from '@/store/filesSlice';
-import { setEnableCustomAgents } from '@/store/uiSlice';
 import type { DbFile, UserRole } from '@/lib/types';
 import { NavigationGuardProvider } from '@/lib/navigation/NavigationGuardProvider';
 
@@ -34,11 +33,7 @@ function setup(role: UserRole) {
   return testStore;
 }
 
-function addKnowledgeBase(
-  store: ReturnType<typeof storeModule.makeStore>,
-  { enableCustomAgents = true }: { enableCustomAgents?: boolean } = {},
-) {
-  if (enableCustomAgents) store.dispatch(setEnableCustomAgents(true));
+function addKnowledgeBase(store: ReturnType<typeof storeModule.makeStore>) {
   store.dispatch(setFile({
     file: {
       id: 1008,
@@ -108,7 +103,7 @@ describe('Sidebar context feature navigation', () => {
     'shows the resolved standalone Skills page to %s users',
     (role) => {
       const store = setup(role);
-      addKnowledgeBase(store, { enableCustomAgents: false });
+      addKnowledgeBase(store);
       renderSidebar(store);
 
       expect(screen.getByLabelText('Skills').closest('a')).toHaveAttribute(
@@ -118,12 +113,12 @@ describe('Sidebar context feature navigation', () => {
     },
   );
 
-  it('hides Skills from viewers', () => {
+  it('hides Skills from viewers but keeps the read-only Agents page', () => {
     const store = setup('viewer');
-    addKnowledgeBase(store, { enableCustomAgents: false });
+    addKnowledgeBase(store);
     renderSidebar(store);
 
-    expect(screen.queryByLabelText('Agents')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Agents')).toBeInTheDocument();
     expect(screen.queryByLabelText('Skills')).not.toBeInTheDocument();
   });
 });

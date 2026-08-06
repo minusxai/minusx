@@ -406,12 +406,8 @@ very component the saved card uses, `components/context/AgentReadView.tsx` — s
 is byte-for-byte what is stored, with no second formatting path to drift. The Skills step lists only
 enabled user-defined Knowledge Base skills and sanitizes legacy system names out of edited definitions;
 system/page skills are intentionally invisible because the runtime loads them from `PAGE_SKILL_MAP`.
-The feature is alpha-gated on
-`uiSlice.enableCustomAgents`: with the flag off the editor tab is not rendered *and* the chat picker
-receives an empty option list, so no `custom_agent` pointer is ever sent. The gate is on both the
-authoring and the sending side, not just the visible one. When the gate is on, `app-shell/Sidebar.tsx`
-adds Agents to the Analytics navigation for every role; Skills is available there independently of the
-agents gate for editors/admins only. Both links carry the nearest context selected by `selectContextFromPath`, the same selector
+`app-shell/Sidebar.tsx` adds Agents to the Analytics navigation for every role; Skills is available
+there for editors/admins only. Both links carry the nearest context selected by `selectContextFromPath`, the same selector
 used by chat. `components/context/StandaloneContextPage.tsx` owns the `/agents` and `/skills` route
 resolution and passes `standaloneTab` through `ContextContainerV2` to `ContextEditorV2`, which reuses the
 existing `AgentsTabContent` / `SkillsTabContent` bodies without the Knowledge Base file header or tab

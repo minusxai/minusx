@@ -74,7 +74,7 @@ vi.mock('@/components/explore/ChatInput', () => ({
 }));
 
 import ChatInterface from '@/components/explore/ChatInterface';
-import { setChatGradeSelection, setEnableCustomAgents } from '@/store/uiSlice';
+import { setChatGradeSelection } from '@/store/uiSlice';
 
 describe('Chat honors the selected context file', () => {
   beforeEach(() => {
@@ -118,9 +118,7 @@ describe('Chat honors the selected context file', () => {
     });
   });
 
-  // Custom agents are alpha-gated: with the flag off, the context's agents are
-  // never offered as picker options and a selection is never sent to the server.
-  it('withholds custom agents from the picker and the turn when the alpha flag is off', async () => {
+  it('offers custom agents without a feature flag and omits the pointer until one is selected', async () => {
     const store = makeStore();
     store.dispatch(createConversation({ conversationID: 1, agent: 'AnalystAgent' }));
 
@@ -129,9 +127,8 @@ describe('Chat honors the selected context file', () => {
       { store },
     );
 
-    expect(await screen.findByTestId('chat-agent-options')).toHaveTextContent('none');
+    expect(await screen.findByTestId('chat-agent-options')).toHaveTextContent('sales_helper');
 
-    fireEvent.click(screen.getByLabelText('Select chat agent'));
     fireEvent.click(screen.getByLabelText('Send message'));
 
     await waitFor(() => {
@@ -143,7 +140,6 @@ describe('Chat honors the selected context file', () => {
 
   it('sends the selected custom agent as agent_args.custom_agent', async () => {
     const store = makeStore();
-    store.dispatch(setEnableCustomAgents(true));
     store.dispatch(createConversation({ conversationID: 1, agent: 'AnalystAgent' }));
 
     renderWithProviders(
@@ -161,7 +157,6 @@ describe('Chat honors the selected context file', () => {
 
   it('preselects a custom agent supplied by an Explore deep link', async () => {
     const store = makeStore();
-    store.dispatch(setEnableCustomAgents(true));
 
     renderWithProviders(
       <ChatInterface
