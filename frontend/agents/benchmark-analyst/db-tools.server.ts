@@ -44,6 +44,22 @@ import type { ContextContent } from '@/lib/types';
 import type { QueryIR } from '@/lib/sql/ir-types';
 
 /**
+ * The path all production DB tools anchor their context resolution at: the
+ * open file's path when the side chat is on a file (`anchorPath`, derived
+ * server-side from app_state), else the user's home folder. One helper so
+ * ExecuteQuery's whitelist, SearchDBSchema's views, and RunSemanticQuery's
+ * models can never resolve from different contexts within one turn.
+ */
+function turnAnchorPath(
+  context: { anchorPath?: string; homeFolder?: string },
+  user: EffectiveUser,
+): string {
+  return context.anchorPath
+    ?? context.homeFolder
+    ?? resolveHomeFolderSync(user.mode, user.home_folder || '');
+}
+
+/**
  * Production ExecuteQuery variant. Overrides `_initialiseConnectors` to a
  * no-op (production context carries no embedded connector configs) and
  * routes the fallback through the durable query cache over `runQueryStream`,
@@ -93,9 +109,10 @@ export class ExecuteQuery extends BaseExecuteQuery {
     // otherwise be served its rows. Errors (whitelist violation, unknown view)
     // surface as tool errors naming the offending table/view, which is exactly
     // what the model needs to correct itself.
-    const anchor: QueryAnchor = (this.context as { homeFolder?: string }).homeFolder
-      ? { kind: 'file', path: (this.context as { homeFolder: string }).homeFolder }
-      : { kind: 'homeFolder' };
+    const anchor: QueryAnchor = {
+      kind: 'file',
+      path: turnAnchorPath(this.context as { anchorPath?: string; homeFolder?: string }, user),
+    };
     const { executedQuery } = await resolveQueryForExecution({
       sql: query, connectionName: connectionId, user, anchor,
     });
@@ -162,7 +179,7 @@ export class ExecuteQuery extends BaseExecuteQuery {
  * context loader) but absent from the connection's introspected schema — so
  * without this a whitelisted view is undiscoverable by schema search and the
  * agent second-guesses views it was told about. Context resolution mirrors
- * RunSemanticQuery below (nearest context for the user's home folder), and
+ * RunSemanticQuery below (nearest context for the turn anchor), and
  * the per-run table whitelist in `run()` applies to view tables like any
  * other, so a view outside the whitelist stays hidden (fail closed).
  */
@@ -176,8 +193,7 @@ export class SearchDBSchema extends BaseSearchDBSchema {
     if (!user) return [];
     const schemas = await loadConnectionSchema(connection, user);
 
-    const basePath = (this.context as { homeFolder?: string }).homeFolder
-      ?? resolveHomeFolderSync(user.mode, user.home_folder || '');
+    const basePath = turnAnchorPath(this.context as { anchorPath?: string; homeFolder?: string }, user);
     let contextContent: ContextContent | null = null;
     try {
       contextContent = await loadNearestContext(user, basePath);
@@ -260,7 +276,7 @@ export class FuzzyMatch extends MXTool<typeof FuzzyMatchParams, RemoteAnalystCon
  * SQL), so chat display works identically.
  *
  * Model resolution mirrors POST /api/semantic-models: nearest context for the
- * user's home folder (`loadNearestContext`), authored models = inherited
+ * turn anchor (`loadNearestContext`), authored models = inherited
  * `fullSemanticModels` + the user-visible published version's own
  * (`resolveModelsForContext`).
  */
@@ -295,8 +311,8 @@ export class RunSemanticQuery extends MXTool<typeof RunSemanticQueryParams, Remo
       return fail('RunSemanticQuery: missing effectiveUser on agent context — cannot resolve the semantic model. This is a server bug; please report.');
     }
 
-    // Nearest context for the user's home folder — the same anchor chat uses.
-    const basePath = this.context.homeFolder ?? resolveHomeFolderSync(user.mode, user.home_folder || '');
+    // Nearest context for the turn anchor — the same anchor every DB tool uses.
+    const basePath = turnAnchorPath(this.context, user);
     let contextContent: ContextContent | null = null;
     try {
       contextContent = await loadNearestContext(user, basePath);

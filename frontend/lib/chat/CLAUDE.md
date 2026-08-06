@@ -398,6 +398,15 @@ sees *and* what Redux stores.
 - **`buildServerAgentArgs` deliberately leaves the connection unset** when several are available and
   none was selected (Slack / remote / cron). Locking to the first one sent every Slack query to the
   wrong database; the agent picks per query via `ListDBConnections`.
+- **The turn is governed by the TURN ANCHOR, not the home folder.** `deriveTurnAnchorPath`
+  (`agent-args.server.ts`) extracts the open file's path from `agent_args.app_state` when the side
+  chat is on a file page (mode-guarded; folder/explore/absent → home folder). It feeds
+  `buildServerAgentArgs` (nearest-context lookup: docs, schema, skills, custom agents) and rides on
+  the agent context as `anchorPath`, where the production DB tools (ExecuteQuery whitelist/views,
+  SearchDBSchema, RunSemanticQuery) anchor their context resolution. Anchoring at the home folder
+  instead made a side chat on a question governed by a *different* context than the question's own
+  execution — the agent was refused `_views.*` the file itself could run, and LoadContext could not
+  see the file's context docs (`lib/chat/__tests__/turn-anchor.test.ts`).
 
 ## Key files
 

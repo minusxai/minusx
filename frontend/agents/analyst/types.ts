@@ -42,6 +42,14 @@ export interface RemoteAnalystContext extends BenchmarkAnalystContext {
   schema?: { schema: string; tables: string[] }[];
   /** Resolved home-folder path; injected into the prompt. */
   homeFolder?: string;
+  /**
+   * The TURN ANCHOR: the open file's path when the side chat is on a file page
+   * (derived server-side from agent_args.app_state via `deriveTurnAnchorPath`).
+   * Governs which context the DB tools resolve — ExecuteQuery's whitelist/views
+   * and SearchDBSchema/RunSemanticQuery's nearest context — so the tools agree
+   * with the file's own execution path. Absent → tools anchor at `homeFolder`.
+   */
+  anchorPath?: string;
   /** User role (admin/editor/viewer); injected into the prompt. */
   role?: string;
   /** Display/branding name the agent introduces itself as. */

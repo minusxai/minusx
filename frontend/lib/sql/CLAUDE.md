@@ -145,7 +145,10 @@ so cache keys are computed over the resolved SQL.
 **The `QueryAnchor` is required, not inferred**, because the surfaces genuinely differ:
 `{kind:'file', path}` governs a question by the nearest context to
 **its own path** (what makes a locked-down team folder lock its questions down), `{kind:'homeFolder'}`
-governs free-form chat and MCP, which have no file in hand.
+governs free-form chat and MCP, which have no file in hand. The agent's DB tools anchor at the
+**turn anchor** (`deriveTurnAnchorPath` in `lib/chat/agent-args.server.ts`): the open file's path
+when the side chat is on a file page, else the home folder — so a side chat on a question is
+governed by the same context as the question's own execution.
 
 **Metadata is whitelisted too.** The suggestion surfaces (`lib/data/completions/completions.server.ts`
 — mentions, table and column suggestions) resolve the whitelist server-side through
