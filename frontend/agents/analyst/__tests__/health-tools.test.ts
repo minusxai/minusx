@@ -44,7 +44,7 @@ describe('CheckFileHealth', () => {
     const report = (res.details as { report: RubricReport }).report;
     const undeclared = report.categories.flatMap((c) => c.findings).find((f) => f.ruleId === 'question.undeclared-param');
     expect(undeclared?.source).toBe('rule');
-    // an error dropped the score below perfect (exact value depends on tuned deductions/weights)
+    // an error dropped the score below perfect (exact value depends on category weights)
     expect(report.categories.find((c) => c.category === 'correctness')!.score!).toBeLessThan(5);
     expect(report.overall).toBeLessThan(5);
   });

@@ -75,7 +75,7 @@ describe('CreateFile / EditFile — rubric v2 feedback', () => {
     expect(findings.some((f: any) => f.ruleId === 'question.undeclared-param' && f.severity === 'error')).toBe(true);
   });
 
-  it('CreateFile echoes the COMPACT rubric in its projected status (no source/deduction prose)', async () => {
+  it('CreateFile echoes the COMPACT rubric in its projected status (no source prose)', async () => {
     const res = await executeToolCall(tool('CreateFile', {
       file_type: 'question', path: '/org', name: 'Broken Q2',
       content: { query: 'SELECT * FROM t WHERE d > :start', parameters: [] },
@@ -86,7 +86,6 @@ describe('CreateFile / EditFile — rubric v2 feedback', () => {
     expect(findings.length).toBeGreaterThan(0);
     for (const f of findings) {
       expect(f).not.toHaveProperty('source');
-      expect(f).not.toHaveProperty('deduction');
     }
   });
 

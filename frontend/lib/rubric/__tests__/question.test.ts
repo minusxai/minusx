@@ -13,12 +13,14 @@ describe('scoreQuestion', () => {
     expect(f?.severity).toBe('warn');
 
     const error = scoreQuestion(makeQuestion({ query: 'x'.repeat(3300) })); // ~825 tokens
-    expect(error.find((x) => x.ruleId === 'question.query-too-long')?.severity).toBe('error');
+    expect(error.find((x) => x.ruleId === 'question.query-extreme')?.severity).toBe('error');
+    expect(ids(error)).not.toContain('question.query-too-long');
   });
 
   it('does not flag a query just under the warn threshold', () => {
     const findings = scoreQuestion(makeQuestion({ query: 'x'.repeat(1500) })); // ~375 tokens
     expect(ids(findings)).not.toContain('question.query-too-long');
+    expect(ids(findings)).not.toContain('question.query-extreme');
   });
 
   it('flags a :token referenced in SQL but not declared', () => {
@@ -46,7 +48,6 @@ describe('scoreQuestion', () => {
     }));
     const unused = findings.find((x) => x.ruleId === 'question.unused-param');
     expect(unused?.severity).toBe('warn');
-    expect(unused?.deduction).toBe(0.25);
   });
 
   it('flags a pivot with no pivotConfig, but not a configured one', () => {

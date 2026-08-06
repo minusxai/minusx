@@ -32,7 +32,6 @@ describe('scoreStory', () => {
     const story = `<div class="story"><style>{\`.story{color:#111}\`}</style><h1>Title</h1><Question id={7} /></div>`;
     const tokens = scoreStory(makeStory({ story })).find((x) => x.ruleId === 'story.no-design-tokens');
     expect(tokens?.severity).toBe('warn');
-    expect(tokens?.deduction).toBe(0.5);
   });
 
   it('flags a story with too many colors', () => {
@@ -40,13 +39,11 @@ describe('scoreStory', () => {
     const story = `<div class="story"><style>{\`.story{font-family:Inter;${colors.map((c, i) => `.c${i}{color:${c}}`).join(' ')}\`}</style><h1>T</h1><Question id={7} /></div>`;
     const colorsFinding = scoreStory(makeStory({ story })).find((x) => x.ruleId === 'story.too-many-colors');
     expect(colorsFinding?.severity).toBe('warn');
-    expect(colorsFinding?.deduction).toBe(0.25);
   });
 
   it('flags a blank description as no-lead', () => {
     const lead = scoreStory(makeStory({ description: '' })).find((x) => x.ruleId === 'story.no-lead');
     expect(lead?.severity).toBe('warn');
-    expect(lead?.deduction).toBe(0.25);
   });
 
   it('returns no findings for a healthy story', () => {
