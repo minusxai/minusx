@@ -291,8 +291,8 @@ export class DocumentDB {
    * published rows AND between entries of this batch — are detected by SELECT.
    * With `dryRun` that is the whole call: a preflight never writes. (It must
    * not: on the pooled Postgres backend `exec('BEGIN')`/`exec('ROLLBACK')` do
-   * not bracket the statements between them, so the old write-then-rollback
-   * preflight actually committed.)
+   * not bracket the statements between them, so a write-then-rollback
+   * preflight would actually commit.)
    *
    * The write phase is ONE `UPDATE … FROM (VALUES …)` — atomic on every
    * backend with no client-side transaction, same pattern as

@@ -1,5 +1,5 @@
 /**
- * QA run metrics (Tests/QA/Evals Arch V3 — measured flows).
+ * QA run metrics — measured flows.
  *
  * A per-test fixture that lets flows record structured results — numbers,
  * pass/fail, screenshots — as rows keyed by (flow, metric). Each Playwright

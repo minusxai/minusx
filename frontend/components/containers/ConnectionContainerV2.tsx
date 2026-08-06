@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * ConnectionContainer V2 - Phase 2 Implementation
- * Smart component using Core Patterns with useFile hook and filesSlice
+ * Container for the connection form: all Redux/file-state for the page
+ * (useFile + filesSlice), passed to ConnectionFormV2 as plain props.
  *
  * Writes go through the unified file endpoints, not the connections API:
  * publishFile → PATCH /api/files/[id] for both create and edit (a draft already

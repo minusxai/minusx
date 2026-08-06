@@ -66,7 +66,7 @@ export function DataLoader() {
       if (unrestricted !== null) flags.unrestrictedMode = unrestricted === 'true';
       const expandedMsgs = localStorage.getItem('showExpandedMessages');
       if (expandedMsgs !== null) flags.showExpandedMessages = expandedMsgs === 'true';
-      // Custom agents graduated from their alpha flag; discard the obsolete preference.
+      // 'enableCustomAgents' is no longer a setting; clear any stored value.
       localStorage.removeItem('enableCustomAgents');
       const hp = localStorage.getItem('homePage');
       if (hp !== null) { try { flags.homePage = JSON.parse(hp); } catch { /* ignore */ } }

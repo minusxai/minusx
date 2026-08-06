@@ -408,8 +408,8 @@ export async function duplicateFile(fileId: number): Promise<number> {
  * dryRunSave - Validate a batch save without committing to the database.
  *
  * Collects all dirty files (optionally scoped by fileIds) and runs batchSaveFiles
- * with dryRun:true — the server wraps everything in a transaction that always rolls
- * back. Useful for pre-flight checks that catch cross-file path conflicts before
+ * with dryRun:true — the server's preflight is pure reads and never writes.
+ * Useful for pre-flight checks that catch cross-file path conflicts before
  * the user actually commits.
  *
  * @param fileIds - Optional list of file IDs to scope the dry run to.

@@ -49,8 +49,8 @@ Connection credentials are stored securely in the documents database. For produc
 
 If your database only accepts connections from known addresses, allow the IPs MinusX
 connects **from**. On MinusX Cloud those addresses are shown directly in the connection
-form for the engines it applies to — PostgreSQL and ClickHouse — and again if a connection
-test fails, so you can copy them straight into your firewall rule.
+form for the engines it applies to — PostgreSQL and ClickHouse — and highlighted if a
+connection test fails, so you can copy them straight into your firewall rule.
 
 BigQuery and Athena are reached over their public service endpoints and authorised by
 credentials rather than source IP, so no allowlisting is needed for those.
