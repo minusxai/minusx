@@ -1,6 +1,7 @@
 import 'server-only';
 import { join, resolve } from 'path';
 import { parseFrameAncestors } from '@/lib/auth/embed';
+import { parseEgressIps } from '@/lib/ui/egress-hint';
 import { parseTelemetryLevel } from '@/lib/telemetry';
 
 /**
@@ -25,6 +26,9 @@ interface EnvironmentConfig {
   // Iframe embedding: when set, auth cookies become SameSite=None;Secure and a
   // frame-ancestors CSP is applied. '*' = allow any origin; or a comma/space list.
   EMBED_ALLOWED_ORIGINS: string | undefined;
+  // Source IPs a customer allows through their DB firewall (this deployment's
+  // egress, not its inbound address). Unset on self-hosted: no hint is shown.
+  MX_EGRESS_IPS: string | undefined;
   EVENTS_FORWARD_RULES: string | undefined;
   DB_TYPE: 'postgres' | 'pglite';
   DATABASE_URL: string;
@@ -135,6 +139,7 @@ const config: EnvironmentConfig = {
   ADMIN_PWD: process.env.ADMIN_PWD,
   E2E_RUNTIME_SECRET: process.env.E2E_RUNTIME_SECRET,
   EMBED_ALLOWED_ORIGINS: process.env.EMBED_ALLOWED_ORIGINS,
+  MX_EGRESS_IPS: process.env.MX_EGRESS_IPS,
   EVENTS_FORWARD_RULES: process.env.EVENTS_FORWARD_RULES,
 
   DB_TYPE: getOptional(process.env.DB_TYPE, 'pglite') as 'postgres' | 'pglite',
@@ -241,6 +246,13 @@ export const E2E_RUNTIME_SECRET = config.E2E_RUNTIME_SECRET;
 export const EMBED_ENABLED = (config.EMBED_ALLOWED_ORIGINS ?? '').trim().length > 0;
 /** CSP `frame-ancestors` value; '' when embedding is disabled or set to '*' (no restriction). */
 export const EMBED_FRAME_ANCESTORS = parseFrameAncestors(config.EMBED_ALLOWED_ORIGINS);
+
+/**
+ * This deployment's egress IPs, shown to users so they can allow them through a
+ * database firewall. Empty on self-hosted (unset), where the egress address is
+ * the operator's own and no hint should appear.
+ */
+export const MX_EGRESS_IPS = parseEgressIps(config.MX_EGRESS_IPS);
 
 export interface EventForwardRule { pattern: RegExp; url: string }
 /**

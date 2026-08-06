@@ -40,6 +40,7 @@ import ConnectionTablesBrowser from '../schema-browser/ConnectionTablesBrowser';
 import StaticTablesBrowser from '../schema-browser/StaticTablesBrowser';
 import { useContext as useContextHook } from '@/lib/hooks/useContext';
 import { BigQueryConfig, PostgreSQLConfig, CsvConfig, GoogleSheetsConfig, AthenaConfig, StaticConnectionConfig, DuckDBConfig, SqliteConfig, ClickHouseConfig } from './connection-configs';
+import EgressIpHint from './connection-configs/EgressIpHint';
 import { cursorBlinkKeyframes } from '@/lib/ui/animations';
 import { CONNECTION_TYPES } from '@/lib/ui/connection-type-options';
 import { useTypewriter } from '@/lib/ui/use-typewriter';
@@ -84,6 +85,9 @@ interface ConnectionFormV2Props {
   onStaticSelect?: (tab: 'csv' | 'sheets') => void;
   /** Skip the type selection step and go straight to configure (type already set on content). */
   skipTypeSelection?: boolean;
+  /** Deployment egress IPs (MX_EGRESS_IPS), sourced by the container — this view
+   *  is Redux-restricted. Empty on self-hosted, where no hint should appear. */
+  egressIps?: string[];
   colorMode: 'light' | 'dark';
   userMode: Mode;
   showJson: boolean;
@@ -108,6 +112,7 @@ export default function ConnectionFormV2({
   wizardMode = false,
   onStaticSelect,
   skipTypeSelection = false,
+  egressIps = [],
   colorMode,
   userMode,
   showJson,
@@ -966,6 +971,17 @@ export default function ConnectionFormV2({
             mode={mode}
           />
         )}
+
+        {/* Which source IPs the customer must allow through their DB firewall.
+            Self-gating: renders nothing unless the deployment publishes egress
+            IPs and this engine is reached over the network. A failed test is
+            when this is actually being asked, so it hardens rather than
+            duplicating itself lower down. */}
+        <EgressIpHint
+          connectionType={content.type}
+          ips={egressIps}
+          emphasis={!!testResult && !testResult.success}
+        />
 
         {/* Actions */}
         <HStack gap={3} pt={2} justify="flex-end">

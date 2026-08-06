@@ -12,6 +12,7 @@
  */
 import { useAppSelector } from '@/store/hooks';
 import { selectIsDirty, selectEffectiveName, type FileId } from '@/store/filesSlice';
+import { selectEgressIps } from '@/store/configsSlice';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { editFile, publishFile, reloadFile } from '@/lib/file-state/file-state';
 import { redirectAfterSave } from '@/lib/ui/file-utils';
@@ -61,6 +62,8 @@ export default function ConnectionContainerV2({
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
   const effectiveName = useAppSelector(state => selectEffectiveName(state, fileId)) || '';
   const userMode = useAppSelector(state => state.auth.user?.mode) || 'org';
+  // Deployment egress IPs for the DB-firewall hint; the form is a Redux-restricted view.
+  const egressIps = useAppSelector(selectEgressIps);
   const colorMode = useAppSelector((state) => state.ui.colorMode);
   const showJson = useAppSelector((state) => state.ui.devMode);
   const homeFolder = useAppSelector((state) => state.auth.user?.home_folder) || '';
@@ -155,6 +158,7 @@ export default function ConnectionContainerV2({
 
   return (
     <ConnectionFormV2
+      egressIps={egressIps}
       content={currentContent}
       fileName={effectiveName}
       isDirty={isDirty}

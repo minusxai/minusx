@@ -113,6 +113,12 @@ browser, and only accumulates a fatal error on a real server. The one required s
 `''` and non-finite input as "unset", so `MAX_CONCURRENT_QUERIES=` falls back to `10` rather than
 becoming `NaN`.
 
+`MX_EGRESS_IPS` is parsed by `parseEgressIps` (`lib/ui/egress-hint.ts`) into the IPs a customer
+must allow through their database firewall — this deployment's **egress** address, not the address
+it is reached on, which is why it is configured rather than derived from the request. Unset is the
+off switch and is how self-hosted installs opt out: there the egress address is the operator's own.
+The same module decides which engines the hint applies to, so file-backed sources never show it.
+
 Two derived exports do real work rather than pass a value through:
 `EVENTS_FORWARD_RULES` parses a JSON `{ "<event-type regex>": "<webhook url>" }` map and *skips*
 invalid JSON or a bad regex with a `console.error` — a malformed rule never crashes boot; and
@@ -398,6 +404,7 @@ on every edit.
 |---|---|
 | Add a file type, change its icon/color/height/markers | `frontend/lib/ui/file-metadata.ts` |
 | Wire a file type to its viewer | `frontend/lib/ui/fileComponents.tsx` |
+| Change which engines show the DB-firewall IP hint | `frontend/lib/ui/egress-hint.ts` |
 | Add a server env var / secret | `frontend/lib/config.ts` (name must not collide with `constants.ts`) |
 | Add a client-safe or build-stamped constant | `frontend/lib/constants.ts` |
 | Understand why a config name collision fails `tsc` | `frontend/lib/__checks__/config-constants-no-overlap.ts` |

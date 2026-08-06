@@ -18,6 +18,10 @@ export interface ConfigsState {
   // Org config `credits.enabled` (admin-editable, not an env var), hydrated from
   // SSR preloadedState. When false, the credits usage module is hidden throughout the UI.
   creditsEnabled: boolean;
+  // Server-side runtime env (MX_EGRESS_IPS), hydrated from SSR preloadedState.
+  // Source IPs a customer allows through their DB firewall. Empty on self-hosted,
+  // where the egress address is the operator's own and no hint is shown.
+  egressIps: string[];
 }
 
 const initialState: ConfigsState = {
@@ -27,6 +31,7 @@ const initialState: ConfigsState = {
   maxConcurrentQueries: 10,
   queryTimeoutMs: 120_000,
   creditsEnabled: false,
+  egressIps: [],
 };
 
 const configsSlice = createSlice({
@@ -51,3 +56,4 @@ export const selectDisableAppStateImages = (state: RootState) => state.configs.d
 export const selectMaxConcurrentQueries = (state: RootState) => state.configs.maxConcurrentQueries;
 export const selectQueryTimeoutMs = (state: RootState) => state.configs.queryTimeoutMs;
 export const selectCreditsEnabled = (state: RootState) => state.configs.creditsEnabled;
+export const selectEgressIps = (state: RootState) => state.configs.egressIps;
