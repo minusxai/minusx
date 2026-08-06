@@ -9,17 +9,6 @@ import { UserFacingError } from '../errors';
 import { stripNulChars } from './sanitize-jsonb';
 
 /**
- * Statement executor a method can run on: the registry's db module, or a
- * transaction-bound wrapper so multiple writes commit atomically. Methods that
- * take `tx?: DbExecutor` run on it when given, so a caller inside
- * `db.transaction(...)` keeps every statement on the dedicated connection —
- * plain `exec('BEGIN')` through the pooled Postgres module is NOT a transaction.
- */
-export type DbExecutor = {
-  exec<T = unknown>(sql: string, params?: unknown[]): Promise<{ rows: T[]; rowCount: number }>;
-};
-
-/**
  * Path uniqueness applies to PUBLISHED files only (partial index
  * idx_files_path_published_unique, WHERE draft = false); drafts are exempt. A 23505 here therefore
  * means another PUBLISHED file already occupies this path — translate it into a clear, actionable
@@ -261,14 +250,13 @@ export class DocumentDB {
     content: BaseFileContent,
     references: number[],
     editId: string,
-    expectedVersion?: number,
-    tx?: DbExecutor
+    expectedVersion?: number
   ): Promise<
     | { alreadyApplied: true; file: DbRow }
     | { conflict: true; file: DbRow }
     | { file: DbRow }
   > {
-    const db = tx ?? getModules().db;
+    const db = getModules().db;
 
     const current = await db.exec<DbRow>('SELECT * FROM files WHERE id = $1', [id]);
     if (current.rows.length === 0) throw new Error(`File ${id} not found`);
@@ -372,39 +360,50 @@ export class DocumentDB {
     return result.rowCount > 0;
   }
 
-  static async moveFolderAndChildren(
-    folderId: number,
-    descendantIds: number[],
-    oldPath: string,
-    newPath: string,
-    newName: string,
-    tx?: DbExecutor
+  /**
+   * Apply a folder move as ONE statement. Every row a move touches lives in
+   * the same `files` table — the folder (rename + path), its descendants (path
+   * prefix), and any context document whose `childPaths` referenced the moved
+   * subtree (content + edit id) — so the whole move is a single
+   * `UPDATE … FROM (VALUES …)`. A single statement is atomic on every backend
+   * with no client-side transaction machinery: PGLite, pooled Postgres (where
+   * `exec('BEGIN')`/`exec('COMMIT')` would NOT be a transaction — each exec
+   * may use a different pool client), and wrappers that put their own
+   * transaction around each exec. A NULL column in a row's VALUES entry keeps
+   * the current value; version++ on every touched row so any stale snapshot
+   * gets a ConflictError on its next save rather than silently resurrecting
+   * the old path.
+   */
+  static async applyFolderMove(
+    rows: Array<{ id: number; name?: string; path?: string; content?: BaseFileContent; editId?: string }>
   ): Promise<number> {
-    const db = tx ?? getModules().db;
-    if (descendantIds.length === 0) {
-      // Mirrors updateMetadata (version++ so stale snapshots ConflictError on
-      // their next save), inlined so the write stays on the caller's `tx`.
-      const result = await db.exec(
-        'UPDATE files SET name = $1, path = $2, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = $3',
-        [newName, newPath, folderId]
+    if (rows.length === 0) return 0;
+    const db = getModules().db;
+    const values: string[] = [];
+    const params: unknown[] = [];
+    for (const r of rows) {
+      const base = params.length;
+      values.push(`($${base + 1}::int, $${base + 2}::text, $${base + 3}::text, $${base + 4}::jsonb, $${base + 5}::text)`);
+      params.push(
+        r.id,
+        r.name ?? null,
+        r.path ?? null,
+        r.content !== undefined ? JSON.stringify(stripNulChars(r.content)) : null,
+        r.editId ?? null
       );
-      return result.rowCount > 0 ? 1 : 0;
     }
-
-    const allIds = [folderId, ...descendantIds];
-    const placeholders = allIds.map((_, i) => `$${i + 5}`).join(', ');
     const result = await db.exec(
-      `UPDATE files
+      `UPDATE files f
        SET
-         name = CASE WHEN id = $1 THEN $2 ELSE name END,
-         path = CASE
-           WHEN id = $1 THEN $3
-           ELSE $3 || substr(path, length($4) + 1)
-         END,
-         version = version + 1,
+         name = COALESCE(v.name, f.name),
+         path = COALESCE(v.path, f.path),
+         content = COALESCE(v.content, f.content),
+         last_edit_id = COALESCE(v.edit_id, f.last_edit_id),
+         version = f.version + 1,
          updated_at = CURRENT_TIMESTAMP
-       WHERE id IN (${placeholders})`,
-      [folderId, newName, newPath, oldPath, ...allIds]
+       FROM (VALUES ${values.join(', ')}) AS v(id, name, path, content, edit_id)
+       WHERE f.id = v.id`,
+      params
     );
     return result.rowCount;
   }
@@ -417,8 +416,8 @@ export class DocumentDB {
    * characters in `needle` are escaped only to avoid under-matching, and a
    * false positive costs one no-op inspection, never a wrong result.
    */
-  static async listByTypeContaining(typeFilter: string, needle: string, tx?: DbExecutor): Promise<DbFile[]> {
-    const db = tx ?? getModules().db;
+  static async listByTypeContaining(typeFilter: string, needle: string): Promise<DbFile[]> {
+    const db = getModules().db;
     const escaped = needle.replace(/[\\%_]/g, (m) => '\\' + m);
     const result = await db.exec<DbRow>(
       `SELECT * FROM files WHERE type = $1 AND content::text LIKE '%' || $2 || '%' ESCAPE '\\'`,

@@ -5,7 +5,7 @@
  * Scenario: tab A moves a question; tab B (with the file cached) edits
  * content and Saves. Before this fix, B's stale `path` overwrote the DB
  * column → file moves back. After the fix:
- *   - `moveFile` bumps `version` (updateMetadata, moveFolderAndChildren).
+ *   - `moveFile` bumps `version` (updateMetadata, applyFolderMove).
  *   - `publishFile` conflict-retry takes serverFile.name/path unconditionally.
  *   - `publishAll` passes `expectedVersion`; server returns per-file conflicts;
  *     client retries each via `publishFile`.
@@ -136,13 +136,16 @@ describe('Stale-tab save does not relocate moved files', () => {
     expect(after!.version).toBe(2);
   });
 
-  it('moveFolderAndChildren bumps version on folder + every descendant', async () => {
+  it('applyFolderMove bumps version on folder + every descendant', async () => {
     const folderId = await mkPublished('mvfolder', '/org/mvfolder', 'folder', { description: '' }, []);
     const childId = await mkPublished('child', '/org/mvfolder/child', 'question', makeQuestion(), []);
     const folderBefore = await DocumentDB.getById(folderId);
     const childBefore = await DocumentDB.getById(childId);
 
-    await DocumentDB.moveFolderAndChildren(folderId, [childId], '/org/mvfolder', '/org/staram/mvfolder', 'mvfolder');
+    await DocumentDB.applyFolderMove([
+      { id: folderId, name: 'mvfolder', path: '/org/staram/mvfolder' },
+      { id: childId, path: '/org/staram/mvfolder/child' },
+    ]);
 
     const folderAfter = await DocumentDB.getById(folderId);
     const childAfter = await DocumentDB.getById(childId);

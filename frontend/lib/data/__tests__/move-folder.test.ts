@@ -212,8 +212,9 @@ describe('FilesAPI.moveFile — folders', () => {
     expect(other.versions[0].docs[0].childPaths).toEqual(['/org/pfx-other/deep']);
   });
 
-  it('rolls the whole move back when a childPaths rewrite fails (atomicity)', async () => {
+  it('a move that fails mid-statement changes nothing — paths or childPaths (atomicity)', async () => {
     const srcId = await createFolder('/org/at-src');
+    await createFolder('/org/at-src/sub');
     await createFolder('/org/at-dest');
 
     const rootCtx = await DocumentDB.getByPath('/org/context');
@@ -230,17 +231,18 @@ describe('FilesAPI.moveFile — folders', () => {
     };
     await DocumentDB.update(rootCtx!.id, 'context', '/org/context', rootContent, [], 'seed-at');
 
-    const spy = vi.spyOn(DocumentDB, 'update').mockRejectedValueOnce(new Error('rewrite boom'));
-    try {
-      await expect(
-        FilesAPI.moveFile({ id: srcId, name: 'at-src', newPath: '/org/at-dest/at-src' }, testUser)
-      ).rejects.toThrow('rewrite boom');
-    } finally {
-      spy.mockRestore();
-    }
+    // Real fault injection: a PUBLISHED file already occupies a path the move
+    // needs, so the single UPDATE trips the published-path unique index part-way
+    // through its rows. The statement must roll back AS A WHOLE.
+    await DocumentDB.create('squatter', '/org/at-dest/at-src/sub', 'question', { sql: '' }, [], undefined, false);
+
+    await expect(
+      FilesAPI.moveFile({ id: srcId, name: 'at-src', newPath: '/org/at-dest/at-src' }, testUser)
+    ).rejects.toThrow();
 
     // Nothing moved and nothing was rewritten: all-or-nothing.
     expect(await DocumentDB.getByPath('/org/at-src')).not.toBeNull();
+    expect(await DocumentDB.getByPath('/org/at-src/sub')).not.toBeNull();
     expect(await DocumentDB.getByPath('/org/at-dest/at-src')).toBeNull();
     const root = (await DocumentDB.getByPath('/org/context'))!.content as any;
     expect(root.versions[0].docs[0].childPaths).toEqual(['/org/at-src']);

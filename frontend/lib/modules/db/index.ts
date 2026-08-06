@@ -1,6 +1,6 @@
 import { getAdapter, resetAdapter } from '@/lib/database/adapter/factory';
 import { IFileSystemDBModule } from '../types';
-import { QueryResult, ITransactionContext } from '@/lib/database/adapter/types';
+import { QueryResult } from '@/lib/database/adapter/types';
 
 /**
  * PGLite-backed File System DB module.
@@ -19,11 +19,6 @@ export class DBModule implements IFileSystemDBModule {
       return { rows: [], rowCount: 0 } as QueryResult<T>;
     }
     return adapter.query<T>(sql, params as any[] | undefined);
-  }
-
-  async transaction<T>(fn: (tx: ITransactionContext) => Promise<T>): Promise<T> {
-    const adapter = await getAdapter();
-    return adapter.transaction(fn);
   }
 
   async init(): Promise<void> {
