@@ -138,7 +138,6 @@ describe('EditFile — surfaced execution failures + compact rubric', () => {
       expect(f.detail.length).toBeLessThanOrEqual(140);
       // the non-actionable fields are dropped from the echo
       expect(f.source).toBeUndefined();
-      expect(f.deduction).toBeUndefined();
     }
     // errors keep their full `fix` (the skill loop acts on it); warns keep a clipped one
     const err = findings.find((f: any) => f.severity === 'error');

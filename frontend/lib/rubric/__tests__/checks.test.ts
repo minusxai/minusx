@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatChecklist, passedChecks, LLM_CHECKS } from '../checks';
+import { formatChecklist, passedChecks, DETERMINISTIC_CHECKS, LLM_CHECKS } from '../checks';
 import { scoreFileDeterministic } from '../registry';
 import { makeQuestion } from './fixtures';
 
@@ -25,6 +25,24 @@ describe('passedChecks', () => {
     const combined = { ...base, categories: base.categories.map((c) => ({ ...c, assessed: true, score: c.score ?? 5 })) };
     const ids = passedChecks('question', combined, true).map((c) => c.ruleId);
     expect(ids).toContain('llm.chart-type-fit'); // an LLM check that didn't fire → shown as passed
+  });
+
+  it('does not show an inactive threshold sibling as passed when its group has a finding', () => {
+    const report = scoreFileDeterministic('question', makeQuestion({ query: 'x'.repeat(3300) }));
+    const ids = passedChecks('question', report, false).map((check) => check.ruleId);
+    expect(ids).not.toContain('question.query-extreme'); // fired
+    expect(ids).not.toContain('question.query-too-long'); // same threshold group, not a pass
+  });
+});
+
+describe('deterministic check catalog', () => {
+  it('gives every threshold level its own check with one severity', () => {
+    expect(DETERMINISTIC_CHECKS.question.find((c) => c.ruleId === 'question.undeclared-param')?.severity).toBe('error');
+    expect(DETERMINISTIC_CHECKS.question.find((c) => c.ruleId === 'question.query-too-long')?.severity).toBe('warn');
+    expect(DETERMINISTIC_CHECKS.question.find((c) => c.ruleId === 'question.query-extreme')?.severity).toBe('error');
+    for (const checks of Object.values(DETERMINISTIC_CHECKS)) {
+      for (const check of checks) expect(typeof check.severity).toBe('string');
+    }
   });
 });
 
