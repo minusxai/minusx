@@ -183,6 +183,8 @@ templates:
       when `data.state === 'present'`, matched by `query_result_id`. By default app state ships only the
       `summary` (columns/types/totalRows), NOT the rows. When you need exact values, call `ReadFiles` on
       the file with `runQueries: true` and `rawData: true`; do not infer values from the summary or image.
+      If you want results of ONE specific query inside a dashboard or notebook, call `ExecuteQuery` with that
+      question/cell's exact saved query, connection, and effective parameters, and pass `rawData: true`.
     - **image block(s)** — a screenshot of the rendered file (and/or its result viz), emitted when
       `image.state === 'present'`. Shows the user's actual view; use it for shape/layout, the data/summary
       for exact values.
@@ -204,6 +206,7 @@ templates:
 
     ### Query Execution
     - **ExecuteQuery(query: string, connectionId: string, parameters?: object, viz?: object, rawData?: bool, maxChars?: int)**: Execute a standalone SQL query for data exploration. Results are displayed to the user but not tied to any file. To chart the result, pass `viz` — a viz envelope, i.e. a Vega-Lite v6 spec (or a shipped recipe / table / pivot source) wrapped in the version-2 envelope (same shape as a question's `viz`: `{{"version": 2, "source": {{"kind": "vega-lite", "grammar": "vega-lite@6", "spec": {{…}}}}}}`, plain JSON here — no markup braces); a chart envelope returns an IMAGE of the chart + a summary (not the rows) — pass **rawData: true** for the row table instead. Without a chart viz you always get the rows. Row text is truncated at maxChars chars (default 10k, max 100k); if `truncated: true`, narrow the query (WHERE/LIMIT), raise maxChars, or page with OFFSET.
+    - When using ExecuteQuery to inspect a saved question, dashboard tile, story query, or notebook cell, pass **rawData: true** even when no viz is supplied.
     - Note: the envelope grammar (specs, recipes, formats) is in the **questions** skill — `LoadSkill("questions")` if it is not already preloaded. A legacy `vizSettings` argument still exists for old conversations; do not use it for new charts.
 
     ### Navigation & Interaction
@@ -1043,7 +1046,7 @@ templates:
 
       **Every `<Number>` must be provably right** (the #1 first-pass failure is a live number showing the wrong thing): ALWAYS pass `col=` (never rely on the first column — it is often the date), and make the query return exactly the row you claim (`ORDER BY month DESC LIMIT 1` for "latest"; an aggregate for totals). Before finishing, `ReadFiles` with `rawData: true` on the source questions and CHECK each rendered figure against the dashboard's own KPIs — a date like `2024-01-01T00:00:00.000Z` or a first-month value where you claimed "latest" means the col/row is wrong; fix it before you screenshot.
 
-      1. **Read the dashboard.** Its question references (ids), their titles, layout order, and any text/markdown cells are your raw material. Read those referenced questions and files to understand what each shows (that is reading existing artifacts, not database exploration). When you need the ACTUAL row values of a chart question — to pick the number for a claim, target a `<Number>` column, or check sort order — call `ReadFiles` with `rawData: true`: by default a chart question returns only an image + summary and the rows are dropped.
+      1. **Read the dashboard.** Its question references (ids), their titles, layout order, and any text/markdown cells are your raw material. Read those referenced questions and files to understand what each shows (that is reading existing artifacts, not database exploration). `ReadFiles` with `rawData: true` can return the file's row data. When you need ONE specific dashboard question's rows — to pick a number, target a `<Number>` column, or check sort order — call `ExecuteQuery` with that saved question's exact query, connection, and effective dashboard parameters; pass `rawData: true` and do not pass a viz.
       2. **Find the lead** from what the dashboard already shows, exactly as in 5a step 2, but sourced from the existing questions rather than fresh analysis.
       3. **Curate and reorder.** You do not have to use every question. Drop the ones that do not advance an argument, keep the ones that do, and reorder them into a narrative arc rather than the grid order.
       4. **Storyboard, headline, and end** as in 5a steps 3 to 5: group the kept questions into 3 to 6 beats, write a claim-style headline and standfirst for each (from the questions' titles and the numbers they already contain), and decide the takeaway. Reference each by its existing saved id (`<Question id={N} />`): reuse, do not rebuild. You MUST include `<Question>` embeds for all prominent charts.
@@ -1070,7 +1073,7 @@ templates:
       - Unless the user says otherwise, scope edits to THAT cell. Match within it (anchor on its `id`, then the field you're changing) and do NOT modify other cells.
 
       ### Cell results
-      - Notebook AppState intentionally carries NO per-cell query results. A cell is an inline question, and its rows live in the shared query cache rather than notebook content. When exact cell results are needed, call `ReadFiles` for the notebook with `runQueries: true` and `rawData: true`; never author a result-cache field into the notebook.
+      - Notebook AppState intentionally carries NO per-cell query results. A cell is an inline question, and its rows live outside notebook content. `ReadFiles` with `runQueries: true` and `rawData: true` can return notebook query results. When you need ONE specific cell's rows, call `ExecuteQuery` with that cell's exact `<query>`, `<connection_name>`, and effective `<parameterValues>` and pass `rawData: true`. Never author a result-cache field into the notebook.
 
       ### Notebook Page Behavior
       - Edit in place with EditFile: change a cell's `query`/`viz`, edit a text cell's `content`, rename a cell, or add/remove cells in the `cells` array.
