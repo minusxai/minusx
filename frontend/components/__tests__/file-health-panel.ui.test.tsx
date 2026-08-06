@@ -1,9 +1,9 @@
 /**
  * FileHealthBadge UI test — the health badge computes the deterministic rubric client-side
- * from Redux content, and opens a panel with findings + a visual-review action.
+ * from Redux content and opens a panel with deterministic findings.
  */
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { makeStore } from '@/store/store';
 import { setFile, setEdit } from '@/store/filesSlice';
@@ -11,8 +11,8 @@ import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import { FileHealthBadge } from '@/components/file-browser/FileHealthPanel';
 import type { DbFile } from '@/lib/types';
 
-// The visual-review capture needs a real DOM element + rasterizer, which jsdom lacks — stub the
-// screenshot hook so runJudge reaches the POST. We only assert what the panel SENDS to the route.
+// The badge initializes the screenshot hook even though all visual-review actions are currently
+// hidden; stub its browser-only rasterizer for jsdom.
 vi.mock('@/lib/hooks/useScreenshot', () => ({
   useScreenshot: () => ({
     captureFileView: vi.fn().mockResolvedValue(new Blob(['x'], { type: 'image/jpeg' })),
@@ -25,30 +25,13 @@ function seedQuestion(store: ReturnType<typeof makeStore>, id: number, content: 
 }
 
 describe('FileHealthBadge', () => {
-  afterEach(() => vi.unstubAllGlobals());
-
-  // The screenshot the judge grades is the LIVE DOM (merged content), so the panel must POST the
-  // merged content too — otherwise the judge scores stale saved content against a fresh picture.
-  it('runJudge posts the merged (live-edited) content, not the saved DB content', async () => {
+  it('does not offer a visual-review action while every LLM checklist is paused', async () => {
     const store = makeStore();
     seedQuestion(store, 40, { description: 'saved desc', query: 'SELECT 1', vizSettings: { type: 'table' }, parameters: [], connection_name: 'w' });
-    // Unsaved agent/user edit → merged content diverges from the saved snapshot.
-    store.dispatch(setEdit({ fileId: 40, edits: { description: 'LIVE EDIT' } }));
-
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: { report: { overall: 3, grade: 'fair', categories: [] } } }),
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
     renderWithProviders(<FileHealthBadge fileId={40} fileType="question" />, { store });
     await userEvent.click(await screen.findByLabelText(/File health:/));
-    await userEvent.click(await screen.findByLabelText('Run visual review with the LLM judge'));
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    const body = JSON.parse(init.body as string);
-    expect(body.content).toMatchObject({ description: 'LIVE EDIT' });
+    expect(screen.queryByLabelText('Run visual review with the LLM judge')).toBeNull();
+    expect(screen.queryByLabelText(/structural checks only/i)).toBeNull();
   });
 
 
@@ -60,26 +43,6 @@ describe('FileHealthBadge', () => {
     const badge = await screen.findByLabelText(/File health:/);
     expect(badge.getAttribute('aria-label')).toContain('of 5');
     expect(badge.getAttribute('aria-label')).toContain('good'); // clean question
-  });
-
-  it('opens a panel with the visual-review action', async () => {
-    const store = makeStore();
-    // Unhealthy: :start referenced but undeclared → a correctness finding.
-    seedQuestion(store, 2, { description: '', query: 'SELECT * FROM t WHERE d > :start', vizSettings: { type: 'table' }, parameters: [], connection_name: 'w' });
-    renderWithProviders(<FileHealthBadge fileId={2} fileType="question" />, { store });
-
-    await userEvent.click(await screen.findByLabelText(/File health:/));
-    await waitFor(async () => {
-      expect(await screen.findByLabelText('Run visual review with the LLM judge')).toBeTruthy();
-    });
-  });
-
-  it('flags the pre-visual-review checks as structural-only', async () => {
-    const store = makeStore();
-    seedQuestion(store, 30, { description: '', query: 'SELECT 1', vizSettings: { type: 'table' }, parameters: [], connection_name: 'w' });
-    renderWithProviders(<FileHealthBadge fileId={30} fileType="question" />, { store });
-    await userEvent.click(await screen.findByLabelText(/File health:/));
-    expect(await screen.findByLabelText(/structural checks only/i)).toBeTruthy();
   });
 
   it('renders nothing for a non-scored file type', () => {

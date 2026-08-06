@@ -4,11 +4,9 @@ import { buildStoryJsx } from '@/lib/data/story/story-v2';
 import type { StoryContent } from '@/lib/types';
 import type { DeterministicContext, RubricFinding } from '../types';
 import { immutableSet } from '@/lib/utils/immutable-collections';
-import { distinctHexColors, findFactualNumbers, finding, hasFontFamily, isBlank } from './shared';
+import { gridCols, gridItemRect, type GridItemRect } from '@/lib/story-ui/grid-layout';
+import { findFactualNumbers, finding, isBlank } from './shared';
 import { parseTopLevelClassRules, scanStoryLayout } from './story-layout';
-
-const MIN_COLORS = 2;
-const MAX_COLORS = 10;
 
 // Width thresholds. A story column is ~1280px on desktop; a cartesian plot needs at least half of
 // it to read, a pie/funnel can go narrower. `fraction` is the embed's share of that column; `minPx`
@@ -22,7 +20,7 @@ const MIN_ROUND_PX = 260;
 
 interface StoryScan {
   embeds: number;        // <Question> / <Number> count
-  headings: number;      // <h1>/<h2> count
+  headlines: number;     // <h1>/<h2> count (decks commonly lead with h2 slide titles)
   css: string;           // concatenated <style> content
   proseNumbers: string[]; // factual figures typed into prose (outside embeds/style)
 }
@@ -40,7 +38,7 @@ function walk(nodes: JsxNode[], acc: StoryScan, insideStyle: boolean): void {
     // element
     if (n.tag === 'Question' || n.tag === 'Number') { acc.embeds++; continue; }
     if (n.tag === 'Param') continue;
-    if (/^h[12]$/i.test(n.tag)) acc.headings++;
+    if (/^h[12]$/i.test(n.tag)) acc.headlines++;
     walk(n.children, acc, insideStyle || n.tag.toLowerCase() === 'style');
   }
 }
@@ -84,6 +82,59 @@ function hasPageGutter(nodes: JsxNode[], css: string): boolean {
   return padded >= Math.ceil(children.length / 2);
 }
 
+interface GridHealth {
+  droppedContent: number;
+  overlap?: string;
+}
+
+function rectsOverlap(a: GridItemRect, b: GridItemRect): boolean {
+  return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+}
+
+/** Inspect modern story Grid structure. Non-GridItem direct children are dropped by Grid at
+ * render time; overlapping authored rectangles obscure one another. */
+function inspectGrids(nodes: JsxNode[]): GridHealth {
+  const health: GridHealth = { droppedContent: 0 };
+  const visit = (node: JsxNode): void => {
+    if (node.type !== 'element') return;
+    if (node.tag === 'Grid') {
+      const meaningful = node.children.filter((child) => child.type !== 'text' || child.value.trim() !== '');
+      const items = meaningful.filter((child): child is JsxElement => child.type === 'element' && child.tag === 'GridItem');
+      health.droppedContent += meaningful.length - items.length;
+      if (items.length === 0) health.droppedContent++;
+      const cols = gridCols(staticAttr(node, 'cols'));
+      const rects = items.map((item) => gridItemRect({
+        x: staticAttr(item, 'x'), y: staticAttr(item, 'y'),
+        w: staticAttr(item, 'w'), h: staticAttr(item, 'h'),
+      }, cols));
+      for (let i = 0; i < rects.length && !health.overlap; i++) {
+        for (let j = i + 1; j < rects.length; j++) {
+          if (rectsOverlap(rects[i], rects[j])) {
+            health.overlap = `GridItems ${i + 1} and ${j + 1} overlap at (${rects[i].x},${rects[i].y}) and (${rects[j].x},${rects[j].y}).`;
+            break;
+          }
+        }
+      }
+    }
+    for (const child of node.children) visit(child);
+  };
+  for (const node of nodes) visit(node);
+  return health;
+}
+
+function modernRootProblems(nodes: JsxNode[]): string[] {
+  const root = nodes.find((node): node is JsxElement =>
+    node.type === 'element' && node.tag.toLowerCase() !== 'style');
+  if (!root) return [];
+  const problems: string[] = [];
+  if (staticAttr(root, 'data-design') !== 'tw') problems.push('data-design="tw"');
+  const cls = staticAttr(root, 'className') ?? staticAttr(root, 'class');
+  const classes = typeof cls === 'string' ? cls.split(/\s+/) : [];
+  const ownsContainer = root.tag === 'Grid' || root.tag === 'SlideDeck';
+  if (!ownsContainer && !classes.includes('@container')) problems.push('@container');
+  return problems;
+}
+
 /**
  * A story body is STORED as placeholder-div HTML (`<div data-question-id>`, raw `<style>`); the
  * clean `<Question viz=… />` JSX only exists in the agent markup. Normalize to that agent form so
@@ -104,11 +155,11 @@ export function scoreStory(content: StoryContent, ctx?: DeterministicContext): R
   if (isBlank(content.description)) {
     out.push(finding('story.no-lead', 'No lead',
       'The story has no description/lead.',
-      'State the single lead finding (with its number) in the description.'));
+      'Add a concise description stating the story’s main finding or purpose.'));
   }
 
   const bodyJsx = toAgentBodyJsx(content.story ?? '');
-  const acc: StoryScan = { embeds: 0, headings: 0, css: '', proseNumbers: [] };
+  const acc: StoryScan = { embeds: 0, headlines: 0, css: '', proseNumbers: [] };
   const parsed = parseJsx(bodyJsx);
   if (parsed.ok) walk(parsed.nodes, acc, false);
 
@@ -120,10 +171,10 @@ export function scoreStory(content: StoryContent, ctx?: DeterministicContext): R
   }
 
   // no-headline (clarity)
-  if (acc.headings === 0) {
+  if (acc.headlines === 0) {
     out.push(finding('story.no-headline', 'No headline',
-      'The story body has no <h1>/<h2> heading.',
-      'Add a headline that states the finding (a claim with a number), not a topic.'));
+      'The story body has no <h1>/<h2> headline.',
+      'Add a prominent heading that states the main finding, not merely the topic.'));
   }
 
   // typed-number (correctness)
@@ -134,24 +185,37 @@ export function scoreStory(content: StoryContent, ctx?: DeterministicContext): R
       `Replace the typed figure "${first}" with a live <Number> embed so it can't go stale or be wrong.`));
   }
 
+  // Modern JSX root contract: the marker selects the design system; @container makes all
+  // descendant container-query variants responsive.
+  if (content.format === 'jsx' && parsed.ok) {
+    const missing = modernRootProblems(parsed.nodes);
+    if (missing.length > 0) {
+      out.push(finding('story.modern-root-incomplete', 'Modern story root is incomplete',
+        `The root is missing ${missing.join(' and ')}.`,
+        'Use one root wrapper with `data-design="tw"` and `className="@container w-full …"`.'));
+    }
+  }
+
+  // Modern Grid structure/geometry. These checks are meaningful for legacy JSX too when it uses
+  // the registered Grid components.
+  if (parsed.ok) {
+    const grid = inspectGrids(parsed.nodes);
+    if (grid.droppedContent > 0) {
+      out.push(finding('story.grid-content-invalid', 'Grid contains invisible content',
+        `${grid.droppedContent} direct Grid child item(s) are not GridItem elements (or the Grid is empty); Grid drops them at render time.`,
+        'Wrap every direct Grid child in <GridItem x={...} y={...} w={...} h={...}> and remove empty Grids.'));
+    }
+    if (grid.overlap) {
+      out.push(finding('story.grid-overlap', 'Overlapping story grid items', grid.overlap,
+        'Adjust GridItem x/y/w/h so their 12-column rectangles do not overlap.'));
+    }
+  }
+
   // no-page-gutter (aesthetics) — content flush against the viewport edge
   if (parsed.ok && !hasPageGutter(parsed.nodes, acc.css)) {
     out.push(finding('story.no-page-gutter', 'No page gutter',
       'Neither the root element nor its top-level sections carry horizontal padding — content sits flush against the viewport edge.',
-      'Add a page gutter on the root div (e.g. `px-6 @2xl:px-12`, or padding in its CSS class) so text and charts never touch the edge.'));
-  }
-
-  // design tokens (aesthetics)
-  const colors = distinctHexColors(acc.css);
-  const fonts = hasFontFamily(acc.css);
-  if (colors.length < MIN_COLORS || !fonts) {
-    out.push(finding('story.no-design-tokens', 'Thin design tokens',
-      `The style block defines ${colors.length} color(s)${fonts ? '' : ' and no font-family'}.`,
-      'Define a deliberate palette (4–6 named hex colors) and ~3 font roles before styling.'));
-  } else if (colors.length > MAX_COLORS) {
-    out.push(finding('story.too-many-colors', 'Too many colors',
-      `The style block defines ${colors.length} distinct colors.`,
-      'Reduce to a disciplined 4–6 color palette with one protagonist accent.'));
+      'Add a Tailwind page gutter on the root or its top-level sections (for example `px-6 @2xl:px-12`) so content never touches the edge.'));
   }
 
   // ── layout-aware rules (width + params) ──────────────────────────────────────
@@ -161,7 +225,7 @@ export function scoreStory(content: StoryContent, ctx?: DeterministicContext): R
   // embed-too-narrow (clarity) — cartesian/pie charts squeezed below a legible width.
   // MEASURED widths (real pixels from the rendered iframe, provided by the review path)
   // supersede the static CSS estimate entirely — the static scan only simulates layout from
-  // parseable CSS and is blind to utility-class layouts (Tailwind grids etc.).
+  // parseable CSS plus modern Grid props, but is blind to arbitrary utility-class layouts.
   const narrow: string[] = [];
   if (ctx?.measuredEmbeds) {
     for (const m of ctx.measuredEmbeds) {

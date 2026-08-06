@@ -28,17 +28,9 @@ describe('scoreStory', () => {
     expect(ids(scoreStory(makeStory({ story })))).not.toContain('story.typed-number');
   });
 
-  it('flags a story with too few design tokens', () => {
-    const story = `<div class="story"><style>{\`.story{color:#111}\`}</style><h1>Title</h1><Question id={7} /></div>`;
-    const tokens = scoreStory(makeStory({ story })).find((x) => x.ruleId === 'story.no-design-tokens');
-    expect(tokens?.severity).toBe('warn');
-  });
-
-  it('flags a story with too many colors', () => {
-    const colors = ['#111111', '#222222', '#333333', '#444444', '#555555', '#666666', '#777777', '#888888', '#999999', '#aaaaaa', '#bbbbbb', '#cccccc'];
-    const story = `<div class="story"><style>{\`.story{font-family:Inter;${colors.map((c, i) => `.c${i}{color:${c}}`).join(' ')}\`}</style><h1>T</h1><Question id={7} /></div>`;
-    const colorsFinding = scoreStory(makeStory({ story })).find((x) => x.ruleId === 'story.too-many-colors');
-    expect(colorsFinding?.severity).toBe('warn');
+  it('does not treat a bare long number as a metric (it may be an id or reference)', () => {
+    const story = `<div class="story">${STYLE5}<h1>Account review</h1><p>Account 123456 needs attention.</p><Question id={7} /></div>`;
+    expect(ids(scoreStory(makeStory({ story })))).not.toContain('story.typed-number');
   });
 
   it('flags a blank description as no-lead', () => {
@@ -48,6 +40,52 @@ describe('scoreStory', () => {
 
   it('returns no findings for a healthy story', () => {
     expect(scoreStory(makeStory())).toEqual([]);
+  });
+
+  it('accepts an h2 headline for deck-style stories', () => {
+    const story = `<div class="story">${STYLE5}<h2>Revenue</h2><Question id={7} /></div>`;
+    expect(ids(scoreStory(makeStory({ story })))).not.toContain('story.no-headline');
+  });
+
+  // ─── modern JSX root + Grid contract ───────────────────────────────────────
+  const modern = (inner: string, root = 'data-design="tw" className="@container w-full px-6"') =>
+    makeStory({ format: 'jsx', story: `<div ${root}>${inner}</div>` });
+
+  it('flags a modern story root missing the design marker and container', () => {
+    const findings = scoreStory(modern('<h1>Revenue changed</h1><Question id={7} />', 'className="px-6"'));
+    const finding = findings.find((x) => x.ruleId === 'story.modern-root-incomplete');
+    expect(finding?.severity).toBe('warn');
+    expect(finding?.detail).toContain('data-design');
+    expect(finding?.detail).toContain('@container');
+  });
+
+  it('accepts a complete modern responsive root', () => {
+    expect(ids(scoreStory(modern('<h1>Revenue changed</h1><Question id={7} />'))))
+      .not.toContain('story.modern-root-incomplete');
+  });
+
+  it('recognizes SlideDeck as providing its own @container root', () => {
+    const story = makeStory({
+      format: 'jsx', template: 'deck',
+      story: '<SlideDeck data-design="tw" className="px-6"><Slide><h2>Revenue changed</h2><Question id={7} /></Slide></SlideDeck>',
+    });
+    expect(ids(scoreStory(story))).not.toContain('story.modern-root-incomplete');
+  });
+
+  it('flags direct Grid content that is not wrapped in GridItem because it is dropped', () => {
+    const story = modern('<h1>Revenue changed</h1><Grid><Question id={7} /></Grid>');
+    expect(scoreStory(story).find((x) => x.ruleId === 'story.grid-content-invalid')?.severity).toBe('error');
+  });
+
+  it('flags overlapping GridItem rectangles', () => {
+    const story = modern('<h1>Revenue changed</h1><Grid><GridItem x={0} y={0} w={8} h={4}><Question id={7} /></GridItem><GridItem x={6} y={0} w={6} h={4}><Question id={8} /></GridItem></Grid>');
+    expect(scoreStory(story).find((x) => x.ruleId === 'story.grid-overlap')?.severity).toBe('warn');
+  });
+
+  it('accepts non-overlapping GridItem rectangles', () => {
+    const story = modern('<h1>Revenue changed</h1><Grid><GridItem x={0} y={0} w={6} h={4}><Question id={7} /></GridItem><GridItem x={6} y={0} w={6} h={4}><Question id={8} /></GridItem></Grid>');
+    expect(ids(scoreStory(story))).not.toContain('story.grid-overlap');
+    expect(ids(scoreStory(story))).not.toContain('story.grid-content-invalid');
   });
 
   // ── embed-too-narrow (width) ───────────────────────────────────────────────
@@ -64,6 +102,12 @@ describe('scoreStory', () => {
   it('flags an inline cartesian chart in a 3-column grid without ctx', () => {
     const story = grid(3, `<Question viz={{type:"line"}} query={\`SELECT 1\`} connection="duckdb" /><Question viz={{type:"bar"}} query={\`SELECT 2\`} connection="duckdb" /><Question viz={{type:"area"}} query={\`SELECT 3\`} connection="duckdb" />`);
     expect(scoreStory(makeStory({ story })).find((x) => x.ruleId === 'story.embed-too-narrow')?.severity).toBe('error');
+  });
+
+  it('flags cartesian charts placed in one-third-width modern GridItems', () => {
+    const story = modern('<h1>Revenue changed</h1><Grid><GridItem x={0} y={0} w={4} h={4}><Question id={1} /></GridItem><GridItem x={4} y={0} w={4} h={4}><Question id={2} /></GridItem><GridItem x={8} y={0} w={4} h={4}><Question id={3} /></GridItem></Grid>');
+    const ctx = { vizTypeByQuestionId: { 1: 'line', 2: 'bar', 3: 'area' } };
+    expect(scoreStory(story, ctx).find((x) => x.ruleId === 'story.embed-too-narrow')?.severity).toBe('error');
   });
 
   it('does NOT flag a cartesian chart at full column width', () => {

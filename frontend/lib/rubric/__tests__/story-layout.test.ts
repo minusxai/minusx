@@ -66,6 +66,12 @@ describe('scanStoryLayout', () => {
     expect(scan.embeds[0].minPx).toBe(300);
   });
 
+  it('uses modern GridItem w/cols props to resolve embed width', () => {
+    const jsx = '<Grid cols={12}><GridItem x={0} y={0} w={4} h={4}><Question id={7} /></GridItem></Grid>';
+    const scan = scanStoryLayout(jsx, {});
+    expect(scan.embeds[0].fraction).toBeCloseTo(1 / 3, 5);
+  });
+
   it('collects declared params and per-embed referenced/local params', () => {
     const jsx = `<div>
       <Param name="region" type="text" />

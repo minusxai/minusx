@@ -40,12 +40,12 @@ export function hasFontFamily(css: string): boolean {
 }
 
 /**
- * Factual figures that should be live (`<Number>` / `single_value`) rather than typed into
- * prose: currency, percentages, thousands-grouped numbers, and 5+ digit runs. Deliberately
- * ignores bare 1–4 digit numbers (years like 2019, small counts) to avoid false positives.
+ * Clearly formatted metrics that should usually be live (`<Number>` / `single_value`) rather
+ * than typed into prose: currency, percentages, and thousands-grouped values. Bare digit runs
+ * are deliberately ignored because they are often years, ids, ranks, versions, or citations.
  */
 export function findFactualNumbers(text: string): string[] {
-  const re = /\$\s?\d[\d,]*(?:\.\d+)?|\b\d[\d,]*(?:\.\d+)?\s?%|\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b|\b\d{5,}(?:\.\d+)?\b/g;
+  const re = /\$\s?\d[\d,]*(?:\.\d+)?|\b\d[\d,]*(?:\.\d+)?\s?%|\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b/g;
   return (text.match(re) ?? []).map((s) => s.trim());
 }
 
