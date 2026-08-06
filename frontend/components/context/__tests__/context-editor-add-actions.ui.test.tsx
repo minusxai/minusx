@@ -171,6 +171,60 @@ describe('ContextEditorV2 add actions outside edit mode', () => {
     expect(screen.getByText('Configure alerting')).toBeVisible();
   });
 
+  it('filters custom and system skills in the UI and clears the search', () => {
+    renderEditor('skills', {
+      ...CONTENT,
+      skills: [
+        {
+          name: 'pricing_playbook',
+          displayName: 'Pricing playbook',
+          description: 'Commercial packaging guidance',
+          content: 'Use current pricing.',
+          enabled: true,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+          createdBy: 1,
+        },
+        {
+          name: 'incident_response',
+          displayName: 'Incident response',
+          description: 'Production escalation steps',
+          content: 'Follow the incident process.',
+          enabled: true,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+          createdBy: 1,
+        },
+      ],
+    });
+
+    const search = screen.getByLabelText('Search skills');
+    fireEvent.change(search, { target: { value: 'alerting' } });
+
+    expect(screen.getByLabelText('System skill alerts')).toBeVisible();
+    expect(screen.queryByLabelText('System skill dashboards')).not.toBeInTheDocument();
+    expect(screen.queryByText('Pricing playbook')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Skill search results')).toHaveTextContent('1 of 4');
+
+    fireEvent.click(screen.getByLabelText('Clear skill search'));
+
+    expect(search).toHaveValue('');
+    expect(screen.getByText('Pricing playbook')).toBeVisible();
+    expect(screen.getByLabelText('System skill dashboards')).toBeVisible();
+
+    fireEvent.change(search, { target: { value: 'commercial' } });
+
+    expect(screen.getByText('Pricing playbook')).toBeVisible();
+    expect(screen.queryByText('Incident response')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('System skills catalog')).not.toBeInTheDocument();
+
+    fireEvent.change(search, { target: { value: 'missing skill' } });
+
+    expect(screen.getByText('No skills match “missing skill”')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear search' }));
+    expect(screen.getByText('Incident response')).toBeVisible();
+  });
+
   it('shows Add skill and keeps a friendly display name alongside its canonical key', async () => {
     const { onChange, onEditModeChange } = renderEditor('skills');
 
