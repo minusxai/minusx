@@ -283,9 +283,21 @@ export class DocumentDB {
   }
 
   /**
-   * Batch-save multiple files in a single transaction.
-   * If dryRun is true, the transaction is always rolled back — useful for pre-flight
-   * validation that catches path conflicts across the full set of edits.
+   * Batch-save multiple files atomically.
+   *
+   * The check phase is PURE READS: every target row is loaded, already-applied
+   * entries (same editId) and expectedVersion conflicts are skipped exactly as
+   * the per-file `update` would, and publish-path conflicts — against existing
+   * published rows AND between entries of this batch — are detected by SELECT.
+   * With `dryRun` that is the whole call: a preflight never writes. (It must
+   * not: on the pooled Postgres backend `exec('BEGIN')`/`exec('ROLLBACK')` do
+   * not bracket the statements between them, so the old write-then-rollback
+   * preflight actually committed.)
+   *
+   * The write phase is ONE `UPDATE … FROM (VALUES …)` — atomic on every
+   * backend with no client-side transaction, same pattern as
+   * `applyFolderMove`. The published-path unique index remains the backstop
+   * for races past the SELECT check; either way nothing partial can commit.
    */
   static async batchSave(
     inputs: Array<{
@@ -302,30 +314,81 @@ export class DocumentDB {
     if (inputs.length === 0) return { success: true, errors: [] };
 
     const db = getModules().db;
-    await db.exec('BEGIN');
 
-    let failedId: number = inputs[0].id;
+    const idPlaceholders = inputs.map((_, i) => `$${i + 1}`).join(', ');
+    const current = await db.exec<DbRow>(
+      `SELECT * FROM files WHERE id IN (${idPlaceholders})`,
+      inputs.map((r) => r.id)
+    );
+    const byId = new Map<number, DbRow>(current.rows.map((r) => [r.id, r]));
+
+    const toWrite: typeof inputs = [];
+    const targetPaths = new Set<string>();
+    for (const input of inputs) {
+      const row = byId.get(input.id);
+      if (!row) {
+        return { success: false, errors: [{ id: input.id, error: `File ${input.id} not found` }] };
+      }
+      if (input.editId && input.editId === row.last_edit_id) continue; // already applied
+      if (input.expectedVersion !== undefined && row.version !== input.expectedVersion) continue; // stale entry
+      if (targetPaths.has(input.path)) {
+        return { success: false, errors: [{ id: input.id, error: PUBLISHED_PATH_CONFLICT_MSG }] };
+      }
+      targetPaths.add(input.path);
+      toWrite.push(input);
+    }
+
+    if (toWrite.length > 0) {
+      // A PUBLISHED row already occupying any target path (other than the row
+      // being saved) makes the whole batch a conflict.
+      const pathPlaceholders = toWrite.map((_, i) => `$${i + 1}`).join(', ');
+      const occupied = await db.exec<{ id: number; path: string }>(
+        `SELECT id, path FROM files WHERE draft = false AND path IN (${pathPlaceholders})`,
+        toWrite.map((r) => r.path)
+      );
+      for (const input of toWrite) {
+        const squatter = occupied.rows.find((o) => o.path === input.path && o.id !== input.id);
+        if (squatter) {
+          return { success: false, errors: [{ id: input.id, error: PUBLISHED_PATH_CONFLICT_MSG }] };
+        }
+      }
+    }
+
+    if (dryRun || toWrite.length === 0) return { success: true, errors: [] };
+
+    const values: string[] = [];
+    const params: unknown[] = [];
+    for (const r of toWrite) {
+      const base = params.length;
+      values.push(`($${base + 1}::int, $${base + 2}::text, $${base + 3}::text, $${base + 4}::jsonb, $${base + 5}::jsonb, $${base + 6}::text)`);
+      params.push(
+        r.id, r.name, r.path,
+        JSON.stringify(stripNulChars(r.content)),
+        JSON.stringify(r.references),
+        r.editId ?? String(byId.get(r.id)!.version)
+      );
+    }
     try {
-      for (const input of inputs) {
-        failedId = input.id;
-        await DocumentDB.update(
-          input.id, input.name, input.path, input.content,
-          input.references, input.editId ?? String(Date.now()), input.expectedVersion
-        );
-      }
-
-      if (dryRun) {
-        await db.exec('ROLLBACK');
-      } else {
-        await db.exec('COMMIT');
-      }
-
+      await withPathConflictTranslation(() => db.exec(
+        `UPDATE files f
+         SET
+           name = v.name,
+           path = v.path,
+           content = v.content,
+           file_references = v.file_references,
+           last_edit_id = v.edit_id,
+           version = f.version + 1,
+           draft = false,
+           updated_at = CURRENT_TIMESTAMP
+         FROM (VALUES ${values.join(', ')}) AS v(id, name, path, content, file_references, edit_id)
+         WHERE f.id = v.id`,
+        params
+      ));
       return { success: true, errors: [] };
     } catch (error: any) {
-      try { await db.exec('ROLLBACK'); } catch { /* ignore secondary rollback errors */ }
-      // DocumentDB.update already translates a published-path unique violation into a clear
-      // UserFacingError ("rename this file before saving"), so error.message is user-ready here.
-      return { success: false, errors: [{ id: failedId, error: error.message ?? String(error) }] };
+      // Race past the SELECT check: the unique index aborted the statement, so
+      // nothing was written; attribution falls back to the first entry.
+      return { success: false, errors: [{ id: toWrite[0].id, error: error.message ?? String(error) }] };
     }
   }
 

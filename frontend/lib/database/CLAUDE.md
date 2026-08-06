@@ -385,10 +385,15 @@ connector on first use. After adding a migration, `npm run update-workspace-temp
   ids are negative and can exceed `int4`, which would throw `22003`.
 - **`getFiles` pre-fetches folder children in one query** (`resolveChildIdsCached`) — the N+1 fix for
   Sentry MINUSX-BI-9, where 19 `path LIKE` round-trips fired in a single `/api/files` call.
-- **`batchSaveFiles(dryRun: true)`** goes straight to `DocumentDB.batchSave`, which runs the whole set
-  in a transaction and always `ROLLBACK`s — it deliberately skips the per-file permission and gate
-  logic that the non-dry-run loop applies. The non-dry-run loop is best-effort: `ConflictError`s
-  accumulate in `conflicts` and do not abort, any other error propagates.
+- **`batchSaveFiles(dryRun: true)`** goes straight to `DocumentDB.batchSave`, whose preflight is
+  PURE READS — path conflicts (against published rows and between batch entries) are detected by
+  SELECT and nothing is ever written. Client-side `BEGIN`/`ROLLBACK` through the pooled Postgres
+  module is not a transaction (each exec may use a different pool client), so a write-then-rollback
+  preflight would actually commit; read-only is the only correct shape. It deliberately skips the
+  per-file permission and gate logic that the non-dry-run loop applies. `batchSave`'s write phase is
+  one `UPDATE … FROM (VALUES …)` (same pattern as `applyFolderMove`) so a real batch is
+  all-or-nothing on every backend. The non-dry-run `batchSaveFiles` loop is best-effort:
+  `ConflictError`s accumulate in `conflicts` and do not abort, any other error propagates.
 - **Deleting a `context` is normally forbidden**, except when the folder holds more than one, or when
   its parent folder is itself part of the subtree being deleted.
 - **Dead code in this slice:** `checkFileAccess` (superseded by `canAccessFile`, only tests call it);

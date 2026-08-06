@@ -1,12 +1,12 @@
 'use client';
 
 import { Box, IconButton, Menu, Portal, HStack, Icon, Button, Text, Dialog, CloseButton, Input } from '@chakra-ui/react';
-import { LuEllipsis, LuTrash2, LuFolderInput, LuListChecks, LuGlobe, LuCopy, LuEye } from 'react-icons/lu';
+import { LuEllipsis, LuTrash2, LuFolderInput, LuListChecks, LuGlobe, LuCopy, LuEye, LuPencilLine } from 'react-icons/lu';
 import { useState } from 'react';
 import { useAccessRules } from '@/lib/auth/access-rules.client';
 import { useStableCallback } from '@/lib/hooks/use-stable-callback';
 import { FileType } from '@/lib/types';
-import { deleteFile, duplicateFile } from '@/lib/file-state/file-state';
+import { deleteFile, duplicateFile, moveFile } from '@/lib/file-state/file-state';
 import { useAppSelector } from '@/store/hooks';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import MoveFileModal from '../modals/MoveFileModal';
@@ -26,6 +26,10 @@ interface FileActionMenuProps {
 export default function FileActionMenu({ fileId, fileName, filePath, fileType, size = 'sm', onSelect, canDelete }: FileActionMenuProps) {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
+  const [isRenameOpen, setIsRenameOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState(fileName);
+  const [renameBusy, setRenameBusy] = useState(false);
+  const [renameError, setRenameError] = useState<string | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [promoteOpen, setPromoteOpen] = useState(false);
   const [promoteName, setPromoteName] = useState('');
@@ -73,6 +77,25 @@ export default function FileActionMenu({ fileId, fileName, filePath, fileType, s
       await duplicateFile(fileId);
     } catch (error) {
       console.error('Error duplicating file:', error);
+    }
+  };
+
+  // A rename is a move within the same parent — the same server path folder
+  // moves take, so context childPaths grants follow the renamed folder.
+  const trimmedRename = renameValue.trim();
+  const renameValid = trimmedRename.length > 0 && trimmedRename !== fileName && !trimmedRename.includes('/');
+  const handleRenameConfirm = async () => {
+    if (!renameValid) return;
+    setRenameBusy(true);
+    setRenameError(null);
+    try {
+      const parentDir = filePath.substring(0, filePath.lastIndexOf('/'));
+      await moveFile(fileId, trimmedRename, `${parentDir}/${trimmedRename}`);
+      setIsRenameOpen(false);
+    } catch (error) {
+      setRenameError(error instanceof Error ? error.message : 'Could not rename');
+    } finally {
+      setRenameBusy(false);
     }
   };
 
@@ -185,6 +208,23 @@ export default function FileActionMenu({ fileId, fileName, filePath, fileType, s
             )}
             {canDeleteOrMove && (
               <Menu.Item
+                value="rename"
+                cursor="pointer"
+                borderRadius="sm"
+                px={3}
+                py={2}
+                _hover={{ bg: 'bg.muted' }}
+                onClick={() => { setRenameValue(fileName); setRenameError(null); setIsRenameOpen(true); }}
+                aria-label="Rename"
+              >
+                <HStack gap={2}>
+                  <Icon as={LuPencilLine} boxSize={4} />
+                  <span>Rename</span>
+                </HStack>
+              </Menu.Item>
+            )}
+            {canDeleteOrMove && (
+              <Menu.Item
                 value="move"
                 cursor="pointer"
                 borderRadius="sm"
@@ -237,6 +277,52 @@ export default function FileActionMenu({ fileId, fileName, filePath, fileType, s
           fileName={fileName}
         />
       )}
+
+      {/* Rename */}
+      <Dialog.Root open={isRenameOpen} onOpenChange={(e: { open: boolean }) => setIsRenameOpen(e.open)}>
+        <Portal>
+          <Dialog.Backdrop />
+          <Dialog.Positioner>
+            <Dialog.Content bg="bg.surface" borderRadius="lg" border="1px solid" borderColor="border.default" shadow="xl" p={0} my={12}>
+              <Dialog.Header px={6} py={4} borderBottom="1px solid" borderColor="border.default">
+                <Dialog.Title fontSize="lg" fontWeight="700" fontFamily="mono">Rename</Dialog.Title>
+              </Dialog.Header>
+              <Dialog.Body px={6} py={5}>
+                <Input
+                  aria-label="New name"
+                  size="sm"
+                  fontFamily="mono"
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleRenameConfirm(); }}
+                />
+                {renameError && (
+                  <Text aria-label="Rename error" mt={2} fontSize="xs" fontFamily="mono" color="fg.error">
+                    {renameError}
+                  </Text>
+                )}
+              </Dialog.Body>
+              <Dialog.Footer px={6} py={4} gap={3} borderTop="1px solid" borderColor="border.default" justifyContent="flex-end">
+                <Dialog.ActionTrigger asChild>
+                  <Button px={4} variant="outline" fontFamily="mono">Cancel</Button>
+                </Dialog.ActionTrigger>
+                <Button
+                  aria-label="Confirm rename"
+                  px={4} bg="accent.teal" color="white" fontFamily="mono"
+                  onClick={handleRenameConfirm}
+                  disabled={!renameValid || renameBusy}
+                  loading={renameBusy}
+                >
+                  Rename
+                </Button>
+              </Dialog.Footer>
+              <Dialog.CloseTrigger asChild>
+                <CloseButton size="sm" top={4} right={4} />
+              </Dialog.CloseTrigger>
+            </Dialog.Content>
+          </Dialog.Positioner>
+        </Portal>
+      </Dialog.Root>
 
       {/* Delete Confirmation Dialog */}
       <Dialog.Root open={isDeleteDialogOpen} onOpenChange={handleDeleteDialogOpenChange}>
