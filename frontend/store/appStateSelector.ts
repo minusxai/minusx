@@ -43,20 +43,18 @@ export const selectAppState = createSelector(
       const [augmented] = selectAugmentedFiles(partialState, [pathState.id]);
       if (!augmented) return { appState: null, loading: true };
       const compressed = compressAugmentedFile(augmented, APP_STATE_LIMIT_CHARS);
-      // Tell the agent which notebook cell the user is currently working on, so
-      // edits/suggestions target the right cell. Injected into the app-state
-      // snapshot only (not persisted to the file).
-      if (compressed.fileState?.type === 'notebook' && compressed.fileState.content) {
-        const activeCellId = notebookActiveCell[pathState.id];
-        if (activeCellId) {
-          compressed.fileState = {
-            ...compressed.fileState,
-            content: { ...(compressed.fileState.content as Record<string, unknown>), activeCellId } as typeof compressed.fileState.content,
-          };
-        }
-      }
+      // Active-cell focus is explicit UI metadata, not notebook content. Putting
+      // it into compressed content loses it at the LLM projection boundary,
+      // where duplicate JSON content is intentionally stripped in favor of markup.
+      const activeCellId = compressed.fileState?.type === 'notebook'
+        ? notebookActiveCell[pathState.id]
+        : undefined;
       return {
-        appState: { type: 'file', state: compressed },
+        appState: {
+          type: 'file',
+          state: compressed,
+          ...(activeCellId ? { ui: { notebookActiveCellId: activeCellId } } : {}),
+        },
         loading: file.loading || false,
       };
     }
@@ -158,7 +156,7 @@ export const selectAppStateWithUI = createSelector(
     return {
       appState: {
         ...appState,
-        ui: { openModal: openModalForTop(top, fileState) },
+        ui: { ...appState.ui, openModal: openModalForTop(top, fileState) },
       },
       loading,
     };

@@ -28,9 +28,9 @@ import CellInsertZone from './notebook/CellInsertZone';
 import { NotebookEmptyState } from '@/components/views/shared/empty-states';
 import { useFileToolbarActions, type FileToolbarAction } from '@/components/file-toolbar/FileToolbarContext';
 import { usePresentation } from '@/components/file-toolbar/PresentationContext';
-import { captureNotebookCellResult, removeNotebookCellResult } from '@/lib/file-state/file-state';
 import { useConnections } from '@/lib/hooks/useConnections';
 import { selectDatabase } from '@/lib/utils/database-selector';
+import { createDefaultTableViz } from '@/lib/data/story/template-defaults';
 import type {
   NotebookContent, NotebookCell, NotebookSqlCell as SqlCell,
 } from '@/lib/types';
@@ -39,6 +39,8 @@ interface NotebookViewProps {
   content: NotebookContent;
   onChange: (updates: Partial<NotebookContent>) => void;
   readOnly?: boolean;
+  /** Same workspace format flag as standalone question pages. */
+  vizV2Enabled?: boolean;
   /** Notebook file path, for SQL-cell schema autocomplete / context lookup. */
   filePath?: string;
   fileId?: number;
@@ -91,7 +93,7 @@ function AddCellButton({ icon: Icon, label, accent, ariaLabel, onClick }: {
 const EMPTY_EXECUTED: Record<string, Executed> = {};
 
 export default function NotebookView({
-  content, onChange, readOnly = false, filePath, fileId, activeCellId, onActivateCell, showDevMarkers, colorMode,
+  content, onChange, readOnly = false, vizV2Enabled = true, filePath, fileId, activeCellId, onActivateCell, showDevMarkers, colorMode,
   reduxExecuted, onReduxExecutedChange,
 }: NotebookViewProps) {
   const cells = content.cells ?? [];
@@ -109,9 +111,7 @@ export default function NotebookView({
 
   const removeCell = useCallback((id: string) => {
     commit(cellsRef.current.filter(c => c.id !== id));
-    // Drop the deleted cell's cached result so it doesn't linger in content.
-    if (fileId !== undefined && !readOnly) removeNotebookCellResult(fileId, id);
-  }, [commit, fileId, readOnly]);
+  }, [commit]);
 
   // A new SQL cell defaults to the most recent SQL cell's connection; with no
   // prior SQL cell (e.g. the first cell), it falls back to the first available
@@ -124,7 +124,7 @@ export default function NotebookView({
     const lastSql = [...cellsRef.current].reverse().find((c): c is SqlCell => c.type === 'sql');
     const connection_name = lastSql?.connection_name || selectDatabase(Object.values(connections));
     return {
-      type: 'sql', id: newId(), name: null, query: '', vizSettings: { type: 'table' },
+      type: 'sql', id: newId(), name: null, query: '', viz: createDefaultTableViz(),
       parameters: [], parameterValues: {}, connection_name,
     };
   }, [connections]);
@@ -165,13 +165,6 @@ export default function NotebookView({
     }
   }, [fileId, onReduxExecutedChange]);
 
-  // Cache a cell's freshly-run result into the notebook content so it survives a
-  // reload (real, editable notebooks only — drafts/read-only don't persist).
-  const persistCellResult = useCallback((cellId: string, executed: Executed, data: unknown) => {
-    if (fileId === undefined || readOnly) return;
-    captureNotebookCellResult(fileId, cellId, executed, data as Parameters<typeof captureNotebookCellResult>[3]);
-  }, [fileId, readOnly]);
-
   // Present (reading) mode is the generic fullscreen flag (shared header Present
   // button). The notebook overrides its layout for it: code/editor chrome is hidden
   // and cells render in their read-only reading layout.
@@ -205,6 +198,7 @@ export default function NotebookView({
                   cell={cell}
                   presentMode
                   readOnly
+                  vizV2Enabled={vizV2Enabled}
                   filePath={filePath}
                   executed={executedById[cell.id] ?? null}
                   onExecutedChange={(e) => setCellExecuted(cell.id, e)}
@@ -287,10 +281,10 @@ export default function NotebookView({
                         onToggleCollapse={() => toggleCollapse(cell.id)}
                         runNonce={runNonce}
                         readOnly={readOnly}
+                        vizV2Enabled={vizV2Enabled}
                         filePath={filePath}
                         executed={executedById[cell.id] ?? null}
                         onExecutedChange={(e) => setCellExecuted(cell.id, e)}
-                        onPersistResult={persistCellResult}
                         onCellChange={updateCell}
                         onRemove={removeCell}
                       />

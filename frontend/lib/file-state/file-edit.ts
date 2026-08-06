@@ -75,8 +75,7 @@ export async function editFile(options: EditFileOptions): Promise<void> {
     const currentPersistableChanges = state.files.files[fileId].persistableChanges || {};
     const mergedChanges = deepMerge(currentPersistableChanges, changes.content);
 
-    // REPLACE-semantics keys (same class as cellResults, see setNotebookCellResults):
-    // the Viz V2 envelope is always written whole — deep-merging deltas resurrects
+    // The Viz V2 envelope is always written whole — deep-merging deltas resurrects
     // deleted encoding channels and mangles spec arrays — specs are never deep-merged.
     if (changes.content != null && 'viz' in changes.content) {
       (mergedChanges as Record<string, unknown>).viz = (changes.content as Record<string, unknown>).viz;

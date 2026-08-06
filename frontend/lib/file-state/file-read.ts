@@ -21,13 +21,14 @@ import { CACHE_TTL } from '@/lib/constants/cache';
 import { isHiddenSystemPath } from '@/lib/mode/path-resolver';
 import { canViewFileType } from '@/lib/auth/access-rules.client';
 import { getRootParams } from '@/lib/data/helpers/param-resolution';
-import type { AugmentedFile, QuestionContent } from '@/lib/types';
+import type { AugmentedFile, NotebookContent, QuestionContent } from '@/lib/types';
 import type { LoadError } from '@/lib/types/errors';
 import { createLoadErrorFromException } from '@/lib/types/errors';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
 import { getQueryResult } from '@/lib/file-state/query-results';
 import { cacheSpreadsheetSource } from '@/lib/spreadsheet/result-cache';
 import { getQuestionExecution } from '@/lib/spreadsheet/question-source';
+import { buildQueryParamValues } from '@/lib/sql/sql-params';
 import { hashString, PromiseManager } from '@/lib/file-state/shared';
 import type {
   ReadFilesOptions,
@@ -170,22 +171,38 @@ export async function readFiles(
         ...a.references.map(f => ({ f, inherited: {} as Record<string, unknown> })),
       ];
       for (const { f, inherited } of entries) {
-        if (f.type !== 'question') continue;
-        const content = f.content as QuestionContent | undefined;
-        const execution = getQuestionExecution(content, inherited);
-        if (!execution) continue;
-        if (execution.kind === 'spreadsheet') {
-          cacheSpreadsheetSource(execution.spreadsheet);
+        if (f.type === 'notebook') {
+          const content = f.content as NotebookContent | undefined;
+          for (const cell of content?.cells ?? []) {
+            if (cell.type !== 'sql' || !cell.query || !cell.connection_name) continue;
+            runs.push(getQueryResult({
+              query: cell.query,
+              params: buildQueryParamValues(cell.parameters ?? [], cell.parameterValues ?? {}, {}),
+              database: cell.connection_name,
+              filePath: f.path,
+              fileId: f.id,
+              fileVersion: f.version,
+            }, signal ? { signal } : undefined));
+          }
           continue;
         }
-        runs.push(getQueryResult({
-          query: execution.query,
-          params: execution.params,
-          database: execution.database,
-          filePath: f.path,
-          fileId: f.id,
-          fileVersion: f.version,
-        }, signal ? { signal } : undefined));
+        if (f.type === 'question') {
+          const content = f.content as QuestionContent | undefined;
+          const execution = getQuestionExecution(content, inherited);
+          if (!execution) continue;
+          if (execution.kind === 'spreadsheet') {
+            cacheSpreadsheetSource(execution.spreadsheet);
+            continue;
+          }
+          runs.push(getQueryResult({
+            query: execution.query,
+            params: execution.params,
+            database: execution.database,
+            filePath: f.path,
+            fileId: f.id,
+            fileVersion: f.version,
+          }, signal ? { signal } : undefined));
+        }
       }
     }
     await Promise.allSettled(runs);

@@ -55,11 +55,21 @@ export function extractReferences(file: DbFile): number[] {
   return extractReferencesFromContent(file.content as BaseFileContent, file.type as FileType);
 }
 
-/** Strip legacy queryResultId persisted inside question content */
-function stripQueryResultId(file: DbFile): DbFile['content'] {
-  if (file.type !== 'question' || !file.content) return file.content;
-  const { queryResultId: _, ...rest } = file.content as any;
-  return rest as DbFile['content'];
+/** Strip result-cache fields that older files persisted inside authored content. */
+function stripLegacyResultContent(file: DbFile): DbFile['content'] {
+  if (!file.content) return file.content;
+  if (file.type === 'question') {
+    const { queryResultId: _, ...rest } = file.content as any;
+    return rest as DbFile['content'];
+  }
+  if (file.type === 'notebook') {
+    // Notebook results now follow question results: query-cache only, never file
+    // content. Dropping legacy snapshots on ingestion means the next publish
+    // naturally cleans old notebooks without a database migration.
+    const { cellResults: _, ...rest } = file.content as any;
+    return rest as DbFile['content'];
+  }
+  return file.content;
 }
 
 /** Compute the query result cache key for a question file */
@@ -78,7 +88,7 @@ function computeQueryResultId(file: DbFile): string | undefined {
  * code (dbFileToCompressedAugmented) so they stay in sync.
  */
 export function dbFileToFileState(file: DbFile): FileState {
-  const content = sortObjectKeysDeep(stripQueryResultId(file)) as DbFile['content'];
+  const content = sortObjectKeysDeep(stripLegacyResultContent(file)) as DbFile['content'];
   return {
     ...file,
     content,
@@ -155,10 +165,8 @@ function deriveFacets(fs: FileState): DerivedFacets {
     const execution = getQuestionExecution(qc);
     if (execution) queryResultId = getQueryHash(execution.query, execution.params, execution.database);
   }
-  // Notebooks: drop system-managed cached cell results from the model's view.
-  // The agent already gets cell results via queryResults; the raw snapshots would
-  // bloat its context and tempt it to author the field. mergedContent is a fresh
-  // object here, so this never mutates Redux state.
+  // Defense for stale in-memory notebook state created before result snapshots
+  // moved out of authored content. Normal files were already cleaned at ingest.
   if (fs.type === 'notebook' && mergedContent && 'cellResults' in mergedContent) {
     delete (mergedContent as any).cellResults;
   }

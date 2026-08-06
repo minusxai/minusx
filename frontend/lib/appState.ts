@@ -23,6 +23,8 @@ export interface FolderState {
  * modal/overlay state without needing a separate API call.
  */
 export interface AppStateUI {
+  /** Ephemeral notebook focus — tells the agent which inline question "this cell" means. */
+  notebookActiveCellId?: string;
   openModal?: {
     type: 'question' | 'create-question';
     fileId: number;
@@ -51,6 +53,28 @@ export type AppState =
       state: null; // No additional state needed for explore page at this time
       ui?: AppStateUI;
     };
+
+/**
+ * Minimize the browser→chat wire payload after screenshot capture has used the
+ * rich client state to key the rendered view.
+ *
+ * Query rows are never needed in AppState itself: standalone files send only
+ * result summaries, while notebooks send no per-cell results at all. Exact rows
+ * remain available through ReadFiles. This happens client-side so data we know
+ * the prompt projector will discard does not cross the network first.
+ */
+export function appStateForChatTransport(appState: AppState | null | undefined): AppState | null | undefined {
+  if (!appState || appState.type !== 'file' || !appState.state) return appState;
+  const isNotebook = appState.state.fileState?.type === 'notebook';
+  const queryResults = isNotebook
+    ? []
+    : (appState.state.queryResults ?? []).map(result => ({
+        ...result,
+        data: '',
+        shownRows: 0,
+      }));
+  return { ...appState, state: { ...appState.state, queryResults } };
+}
 
 /**
  * Project AppState for the LLM: strip the JSON `content` from file states (the agent reads the
