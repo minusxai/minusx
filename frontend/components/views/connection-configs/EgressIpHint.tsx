@@ -38,9 +38,9 @@ export default function EgressIpHint({ connectionType, ips, emphasis = false }: 
         </Box>
         <Box>
           <Text fontSize="xs" color="fg.muted">
-            {emphasis
-              ? 'If your database restricts access by IP, allow these source addresses:'
-              : 'If your database restricts access by IP, allow these source addresses.'}
+            {`If your database restricts access by IP, allow ${
+              ips.length === 1 ? 'this source address' : 'these source addresses'
+            }${emphasis ? ':' : '.'}`}
           </Text>
           <HStack gap={1.5} mt={1.5} wrap="wrap">
             {ips.map(ip => (

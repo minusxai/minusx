@@ -97,6 +97,15 @@ describe('ConnectionFormV2 via ConnectionContainerV2', () => {
       expect(hint.textContent).toContain('35.1.2.3');
     });
 
+    it('reads correctly with a single IP (the common deployment)', () => {
+      const store = setupWithEgress(['34.34.220.153']);
+      renderWithProviders(<ConnectionContainerV2 fileId={CONNECTION_ID} />, { store });
+      fireEvent.click(screen.getByLabelText('Settings view'));
+      const hint = screen.getByLabelText('Database firewall allowlist');
+      expect(hint.textContent).toContain('this source address');
+      expect(hint.textContent).not.toContain('these source addresses');
+    });
+
     it('shows nothing when unset — that is how self-hosted opts out', () => {
       const store = setupWithEgress([]);
       renderWithProviders(<ConnectionContainerV2 fileId={CONNECTION_ID} />, { store });
