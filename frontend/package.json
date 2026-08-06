@@ -11,7 +11,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint --cache",
-    "validate": "concurrently -g --names tsc,eslint,docs \"tsc --noEmit\" \"eslint --cache --quiet\" \"tsx scripts/check-docs-consistency.ts\"",
+    "validate": "concurrently -g --names tsc,eslint,docs,rubric-docs \"tsc --noEmit\" \"eslint --cache --quiet\" \"tsx scripts/check-docs-consistency.ts\" \"tsx scripts/generate-rubric-readme.ts --check\"",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:main": "vitest run --project=node",
@@ -36,6 +36,7 @@
     "generate-story-ui-classes": "tsx scripts/generate-story-ui-classes.ts",
     "generate-app-theme-css": "tsx --conditions react-server scripts/generate-app-theme-css.ts",
     "generate-dashboard-chrome-css": "tsx --conditions react-server scripts/generate-dashboard-chrome-css.ts",
+    "generate-rubric-readme": "tsx scripts/generate-rubric-readme.ts",
     "generate-theme-previews": "tsx --conditions react-server scripts/generate-theme-previews.ts",
     "check-docs": "tsx scripts/check-docs-consistency.ts"
   },

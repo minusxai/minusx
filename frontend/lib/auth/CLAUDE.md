@@ -239,7 +239,7 @@ Skills is editor/admin-only. Editor/admin changes save back through the context 
         └───────────────► combineReports() ◄──────────┘
                                 │
                           buildReport(fileType, findings, assessed)   ← scoring.ts
-                          · category = 5 − Σ deduction, rounded to 0.5
+                          · category = 5 − Σ severity deduction, rounded to 0.5
                           · ANY error ⇒ that category AND overall = 0
                           · overall = weighted mean over ASSESSED categories only
                                 │
@@ -395,7 +395,7 @@ The constants live beside the rules (`scoring.ts`: weights `0.3/0.3/0.4` for vis
 | MCP bearer tokens / PKCE codes | `lib/oauth/db.ts`, `lib/mcp/auth.ts` |
 | Add or retune a deterministic health rule | `lib/rubric/deterministic/*.ts` + `lib/rubric/checks.ts` |
 | Add or retune an LLM judge check | `lib/rubric/checks.ts` (`LLM_CHECKS`) + `micro.rubric_llm` prompt |
-| Change scoring weights, deductions, grade bands | `lib/rubric/scoring.ts` |
+| Change severity scoring behavior, category weights, or grade bands | `lib/rubric/scoring.ts` |
 | Score a new file type | `lib/rubric/registry.ts` (`SCORERS` + `DETERMINISTIC_COVERAGE`) |
 
 **Why the rubric is analytic rather than one number, and how a new rule finds its home.** Quality is decomposed into atomic, independently-scored criteria because a single holistic score suffers halo effects, is not individually actionable, and calibrates poorly against human judgment — and because a judging LLM forced into structured per-criterion output is markedly less verbose and less position-biased. The three categories are a priority waterfall, so every rule has exactly one home: `correctness` ("if ignored, is it wrong, broken, or dishonest?"), then `clarity` ("it is correct, but is it hard to understand at a glance?"), then `aesthetics` ("it works and reads fine, but does it look unpolished?"). A rule belongs to the *first* category whose question it fails. The scale is deliberately coarse (0–5, rounded to 0.5) to avoid false precision, and **each category's baseline is 5 no matter how many rules it contains** — a category is penalized only for actual findings. That property is what makes the rubric extensible: adding a more granular check can never harshen the score of a clean file.
