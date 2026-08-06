@@ -18,7 +18,7 @@ set -euo pipefail
 #   (first-run gated; API keys are extracted into the secrets store).
 # - Piped stdin is the script itself, so ALL prompts read from /dev/tty; with
 #   no TTY (CI) or an existing workspace (upgrade), the interview is skipped
-#   and this is a plain pull-and-start (the pre-interview behavior).
+#   and this is a plain pull-and-start.
 
 # ── config ───────────────────────────────────────────────────────────────────
 

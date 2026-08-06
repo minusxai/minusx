@@ -170,7 +170,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
       return ref.path === modePrefix || ref.path.startsWith(modePrefix + '/');
     });
 
-    // Apply custom loaders AFTER permission checks (Phase 3)
+    // Apply custom loaders AFTER permission checks
     const loaderStart = Date.now();
     const loader = getLoader(file.type);
     const transformedFile = await loader(file, user, options);

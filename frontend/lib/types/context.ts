@@ -135,11 +135,13 @@ export interface AgentEntry {
   /** append = inject into the default analyst prompt; replace = swap out the
    *  instructional body (dynamic schema/context/skills sections are kept). */
   promptMode: 'append' | 'replace';
-  /** Skill names (system or user) whose full content is inlined in the prompt. */
+  /** User-defined skill names whose full content is inlined in the prompt.
+   *  System skills are page-managed; any system names saved here are ignored. */
   preloadSkills: string[];
-  /** Skill names available in the on-demand catalog (LoadSkill). Non-empty
-   *  selections are combined with preloadSkills into the custom agent's exact
-   *  skill allowlist; [] means no on-demand skills. */
+  /** User-defined skill names available in the on-demand catalog (LoadSkill).
+   *  Combined with preloadSkills into the custom agent's exact user-skill
+   *  allowlist; [] means no on-demand user skills. System skills stay in the
+   *  catalog regardless. */
   includeSkills: string[];
   gradeOverride?: LlmGrade;           // default LLM grade; an explicit user pick wins
   enabled: boolean;

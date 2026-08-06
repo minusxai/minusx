@@ -23,7 +23,7 @@ export interface WhitelistItem {
   type: 'schema' | 'table';
   name: string;
   schema?: string;
-  childPaths?: string[];  // NEW: Optional child path filtering
+  childPaths?: string[];  // Optional child path filtering
 }
 
 interface SchemaTreeViewProps {
@@ -38,7 +38,7 @@ interface SchemaTreeViewProps {
   showColumns?: boolean;
   showStats?: boolean;
 
-  // NEW: Path filtering options
+  // Path filtering options
   showPathFilter?: boolean;  // Enable path filtering UI
   availableChildPaths?: string[];  // List of immediate child paths
   childPathsBaseDir?: string;  // Folder of the owning context — resolves legacy absolute childPaths

@@ -303,11 +303,12 @@ prevents them — never read `window`, `Math.random()` or `Date.now()` during re
 
 Both suites locate controls by `aria-label` via `getByLabel` — 55 of the ~67 locators across
 `test/e2e`, `test/qa` and `test/flows`. A control without one is a missing `aria-label` on the
-component, not a reason to use a different query. The three standing exceptions are structural, not
+component, not a reason to use a different query. The standing exceptions are structural, not
 loopholes: `getByPlaceholder` in the two `auth.setup.ts` files (the login form), and `.locator()`
 over the `data-*` DOM contract (`[data-file-id]`, `svg[data-mx-story-svg] foreignObject`) in
-`test/e2e/story-lifecycle.spec.ts`, `test/qa/dashboard-theme.spec.ts` and
-`test/qa/story-create.eval.spec.ts`, where the target is an iframe surface rather than a control.
+`test/e2e/story-lifecycle.spec.ts`, `test/qa/dashboard-theme.spec.ts`,
+`test/qa/story-create.eval.spec.ts` and `test/qa/capture-width.spec.ts`, where the target is a
+file view or iframe surface rather than a control.
 
 ## CI
 

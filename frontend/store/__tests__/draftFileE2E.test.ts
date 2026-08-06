@@ -9,8 +9,9 @@
  *      shadows the published file at the same path.
  *   3. getById() returns draft files — they are directly accessible.
  *   4. DocumentDB.update() always sets draft: false (first real save publishes the file).
- *   5. DocumentDB.batchSave(files, dryRun: true) wraps in a transaction that always
- *      rolls back — reports the first failing file's id + error without touching the DB.
+ *   5. DocumentDB.batchSave(files, dryRun: true) is a pure-read preflight — path
+ *      conflicts are detected by SELECT and it reports the failing file's id + error
+ *      without ever issuing a write.
  *   6. createDraftFile() replaces createVirtualFile(): calls the server, gets a real
  *      positive ID with draft: true, stores the file in Redux with that ID.
  *   7. dryRunSave() collects all dirty Redux files and batch-saves them with dryRun:true.
@@ -221,7 +222,7 @@ describe('DocumentDB.batchSave dryRun', () => {
     expect(result.success).toBe(true);
     expect(result.errors).toHaveLength(0);
 
-    // DB is UNCHANGED — the transaction was rolled back
+    // DB is UNCHANGED — a dryRun never writes
     const afterA = await DocumentDB.getById(fileAId);
     expect((afterA!.content as QuestionContent).description).toBe('file-a');
     expect(afterA!.version).toBe(fileA!.version);  // version not incremented
@@ -250,7 +251,7 @@ describe('DocumentDB.batchSave dryRun', () => {
   });
 
   it('dryRun:true returns error on path conflict without committing', async () => {
-    // Attempt to move File A to File B's path (UNIQUE constraint violation)
+    // Attempt to move File A to File B's path (conflicts with a published row)
     const fileA = await DocumentDB.getById(fileAId);
     const result = await DocumentDB.batchSave(
       [{
