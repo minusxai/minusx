@@ -9,7 +9,7 @@ import type { AgentSkillSelection, AgentUserSkillCatalogItem, Attachment, SkillM
 import ConvoDebugContainer from './ConvoDebugContainer';
 import UsageDialog from './UsageDialog';
 import { useClearChat, useSlashCommands, tryExecuteSlashCommand } from './slash-commands';
-import { AppState } from '@/lib/appState';
+import { appStateForChatTransport, type AppState } from '@/lib/appState';
 import { shouldInjectLargeFileSkill } from '@/lib/projection/app-state-size';
 import dynamic from 'next/dynamic';
 import ThinkingIndicator from './ThinkingIndicator';
@@ -601,7 +601,7 @@ export default function ChatInterface({
 
     // Measured on the PROJECTED app state (what the LLM actually receives) — not the raw Redux
     // object, which carries query-result rows and reference content the projection pass strips.
-    if (shouldInjectLargeFileSkill(appState) && !agentSelectedSkills.some(s => s.name === 'large_file')) {
+    if (shouldInjectLargeFileSkill(appStateForChatTransport(appState)) && !agentSelectedSkills.some(s => s.name === 'large_file')) {
       agentSelectedSkills.push({ type: 'system', name: 'large_file' });
     }
 
@@ -664,7 +664,9 @@ export default function ChatInterface({
     const colorMode = probeState.ui.colorMode as 'light' | 'dark';
     const disableAppStateImages = selectDisableAppStateImages(probeState);
     const agentArgs = buildAgentArgsForMessage(' ', chatAttachments);
-    agentArgs.app_state = await appStateWithFileScreenshot(appState, colorMode, disableAppStateImages);
+    agentArgs.app_state = appStateForChatTransport(
+      await appStateWithFileScreenshot(appState, colorMode, disableAppStateImages),
+    );
     return {
       conversationID,
       user_message: ' ',
@@ -799,7 +801,9 @@ export default function ChatInterface({
       // the one-slot cache in app-state-screenshot.ts makes a repeated send of an UNCHANGED view a
       // hit, and otherwise this awaits the snapdom capture behind the "preparing" indicator rather
       // than dropping the image.
-      appStateForSend = await appStateWithFileScreenshot(appState, colorMode, disableAppStateImages);
+      appStateForSend = appStateForChatTransport(
+        await appStateWithFileScreenshot(appState, colorMode, disableAppStateImages),
+      );
 
       // Resolve conversation — normally pre-created on mount, but fall back to inline creation
       // if the user sends before the pre-creation fetch completes (rare race condition).

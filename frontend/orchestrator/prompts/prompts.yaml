@@ -181,8 +181,8 @@ templates:
       reference's markup, `ReadFiles` it.
     - **`<query_data query_result_id=…>` block** — a query result's rows as a GFM markdown table, emitted only
       when `data.state === 'present'`, matched by `query_result_id`. By default app state ships only the
-      `summary` (columns/types/totalRows), NOT the rows — call `ReadFiles` on the file to get the rows when
-      you need exact values.
+      `summary` (columns/types/totalRows), NOT the rows. When you need exact values, call `ReadFiles` on
+      the file with `runQueries: true` and `rawData: true`; do not infer values from the summary or image.
     - **image block(s)** — a screenshot of the rendered file (and/or its result viz), emitted when
       `image.state === 'present'`. Shows the user's actual view; use it for shape/layout, the data/summary
       for exact values.
@@ -198,7 +198,7 @@ templates:
     ## Available Tools:
 
     ### File Reading & Editing
-    - **ReadFiles(fileIds: int[], maxChars?: int, runQueries?: bool, rawData?: bool)**: Load one or more files. Returns AugmentedFile objects (see File State Schema). This is how you get a reference's `<file_markup>` and a question's result. For a question whose viz is a renderable chart you get an IMAGE of the chart + a column/row summary by default; pass **rawData: true** to get the actual `<query_data>` rows instead (files with no chart viz — table/pivot/number — always return rows). Row data is truncated at maxChars chars (default 10k, max 100k). Set runQueries: false to skip query execution and load metadata only.
+    - **ReadFiles(fileIds: int[], maxChars?: int, runQueries?: bool, rawData?: bool)**: Load one or more files. Returns AugmentedFile objects (see File State Schema). This is how you get a reference's `<file_markup>` and a file's query results. When current results are needed, always pass **runQueries: true** rather than relying on the execution default. For exact row values, also pass **rawData: true**: a question whose viz is a renderable chart otherwise returns an IMAGE + column/row summary instead of `<query_data>` (files with no chart viz — table/pivot/number — always return rows). Row data is truncated at maxChars chars (default 10k, max 100k). Set runQueries: false to skip query execution and load metadata only.
     - **EditFile(fileId: int, changes: [{{oldMatch, newMatch, replaceAll?}}], rawData?: bool)**: Apply each find-and-replace in order on the file's `markup` (the JSX/XML edit surface — NOT JSON). Copy each `oldMatch` directly from the file's `<file_markup>` block (in AppState / ReadFiles). Changes are staged as drafts — not saved until published. Returns a STATUS (`{{success, isDirty, diff}}`) plus the updated query RESULT — NOT the markup (you already know your edit from your `changes`): for a question whose viz is a renderable chart you get an IMAGE of the chart + a column/row summary, otherwise rows + summary; pass **rawData: true** to get the rows even for a chart viz. Verify `isDirty: true` in the status.
     - **PublishAll**: Opens a review modal showing all dirty files. Call ONLY when the user explicitly asks to save/publish, or right before Navigate away from a dirty file (tell the user why). Never as part of some other task — staged drafts are the normal end state of an edit. Returns immediately if nothing is dirty.
 
@@ -1070,7 +1070,7 @@ templates:
       - Unless the user says otherwise, scope edits to THAT cell. Match within it (anchor on its `id`, then the field you're changing) and do NOT modify other cells.
 
       ### Cell results
-      - Notebook AppState intentionally carries NO per-cell query results. A cell is an inline question, and its rows live in the shared query cache rather than notebook content. Call `ReadFiles` with `runQueries: true` for the notebook when exact cell results are needed; never author a result-cache field into the notebook.
+      - Notebook AppState intentionally carries NO per-cell query results. A cell is an inline question, and its rows live in the shared query cache rather than notebook content. When exact cell results are needed, call `ReadFiles` for the notebook with `runQueries: true` and `rawData: true`; never author a result-cache field into the notebook.
 
       ### Notebook Page Behavior
       - Edit in place with EditFile: change a cell's `query`/`viz`, edit a text cell's `content`, rename a cell, or add/remove cells in the `cells` array.

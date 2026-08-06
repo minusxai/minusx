@@ -21,8 +21,8 @@ describe('getSupportedFileTypes', () => {
     expect(getSupportedFileTypes(override)).toEqual(override);
   });
 
-  it('can make a normally-unsupported type supported via override', () => {
-    expect(SUPPORTED_FILE_TYPES).not.toContain('notebook');
+  it('keeps directly creatable notebooks in the supported set', () => {
+    expect(SUPPORTED_FILE_TYPES).toContain('notebook');
     expect(getSupportedFileTypes(['question', 'notebook'])).toContain('notebook');
   });
 
@@ -35,7 +35,7 @@ describe('getSupportedFileTypes', () => {
 describe('isFileTypeSupported', () => {
   it('uses defaults when no override is given', () => {
     expect(isFileTypeSupported('question')).toBe(true);
-    expect(isFileTypeSupported('notebook')).toBe(false);
+    expect(isFileTypeSupported('notebook')).toBe(true);
   });
 
   it('honors the override when provided', () => {

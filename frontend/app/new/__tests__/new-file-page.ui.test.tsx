@@ -61,6 +61,13 @@ beforeEach(() => {
 });
 
 describe('/new/[type] draft creation', () => {
+  it('allows a notebook draft through the direct /new/notebook route', async () => {
+    await renderNewFilePage('notebook');
+
+    await waitFor(() => expect(h.drafts).toHaveLength(1));
+    expect(h.drafts[0].type).toBe('notebook');
+  });
+
   it('forwards the folder search param to createDraftFile', async () => {
     h.search = `?folder=${encodeURIComponent('/org/tester')}`;
     await renderNewFilePage('question');
