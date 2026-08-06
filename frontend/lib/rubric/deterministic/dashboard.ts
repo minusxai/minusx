@@ -30,37 +30,37 @@ export function scoreDashboard(content: DashboardContent, ctx?: DeterministicCon
 
   // no-description (clarity)
   if (isBlank(content.description)) {
-    out.push(finding('dashboard.no-description', 'clarity', 'warn', 'No description',
+    out.push(finding('dashboard.no-description', 'No description',
       'The dashboard has no description.',
-      "Add a description stating the dashboard's decision purpose.", 0.25));
+      "Add a description stating the dashboard's decision purpose."));
   }
 
-  // no-parameters (clarity, lightest warn — dashboards are far more useful when filterable)
+  // no-parameters (clarity — dashboards are far more useful when filterable)
   if (Object.keys(content.parameterValues ?? {}).length === 0) {
-    out.push(finding('dashboard.no-parameters', 'clarity', 'warn', 'No parameters',
+    out.push(finding('dashboard.no-parameters', 'No parameters',
       'The dashboard has no parameters/filters.',
-      'Add shared parameters (e.g. a date range or region filter) so viewers can slice the data — dashboards are far more useful when interactive.', 0.25));
+      'Add shared parameters (e.g. a date range or region filter) so viewers can slice the data — dashboards are far more useful when interactive.'));
   }
 
-  // visual-count (clarity — too few/many hurts comprehension, not correctness)
+  // Visual-count thresholds (clarity): separate checks keep one severity per check.
   if (questionIds.length < 1) {
-    out.push(finding('dashboard.visual-count', 'clarity', 'error', 'Empty dashboard',
+    out.push(finding('dashboard.no-visuals', 'Empty dashboard',
       'The dashboard has no question visuals.',
       `Add ${MIN_TILE}–${MAX_VISUALS} question tiles that answer the dashboard's decision.`));
   } else if (questionIds.length > MAX_VISUALS) {
-    out.push(finding('dashboard.visual-count', 'clarity', 'warn', 'Too many visuals',
+    out.push(finding('dashboard.visual-count', 'Too many visuals',
       `The dashboard has ${questionIds.length} visuals (more than ${MAX_VISUALS}).`,
       `Keep ${MIN_TILE}–${MAX_VISUALS} visuals per dashboard; split into multiple dashboards or drop low-value charts.`));
   }
 
-  // too-much-text (clarity — a dashboard should be mostly visuals, not walls of prose)
+  // Text-size thresholds (clarity): a dashboard should be mostly visuals, not walls of prose.
   const textTokens = estimateTokens(assets.map((a) => (a.type === 'text' ? a.content ?? '' : '')).join('\n'));
   if (textTokens > MAX_TEXT_TOKENS_ERROR) {
-    out.push(finding('dashboard.too-much-text', 'clarity', 'error', 'Too much text',
+    out.push(finding('dashboard.extreme-text', 'Extreme amount of text',
       `The dashboard's inline text is ~${textTokens} tokens (over ${MAX_TEXT_TOKENS_ERROR}).`,
       'Trim inline text to short annotations — a dashboard should be mostly visuals; move long prose into a story.'));
   } else if (textTokens > MAX_TEXT_TOKENS) {
-    out.push(finding('dashboard.too-much-text', 'clarity', 'warn', 'Too much text',
+    out.push(finding('dashboard.too-much-text', 'Too much text',
       `The dashboard's inline text is ~${textTokens} tokens (over ${MAX_TEXT_TOKENS}).`,
       'Trim inline text to short annotations — a dashboard should be mostly visuals; move long prose into a story.'));
   }
@@ -70,9 +70,9 @@ export function scoreDashboard(content: DashboardContent, ctx?: DeterministicCon
   const dupes = new Set<number>();
   for (const id of questionIds) (seen.has(id) ? dupes : seen).add(id);
   for (const id of dupes) {
-    out.push(finding('dashboard.duplicate-question', 'correctness', 'warn', 'Duplicated question',
+    out.push(finding('dashboard.duplicate-question', 'Duplicated question',
       `Question ${id} is referenced more than once.`,
-      `Reference question ${id} once; parameterize instead of duplicating.`, 0.5));
+      `Reference question ${id} once; parameterize instead of duplicating.`));
   }
 
   if (hasLayout) {
@@ -82,7 +82,7 @@ export function scoreDashboard(content: DashboardContent, ctx?: DeterministicCon
     // asset-not-in-layout (correctness)
     for (const id of questionIdSet) {
       if (!layoutIdSet.has(id)) {
-        out.push(finding('dashboard.asset-not-in-layout', 'correctness', 'error', 'Asset missing from layout',
+        out.push(finding('dashboard.asset-not-in-layout', 'Asset missing from layout',
           `Question ${id} is in assets but has no layout tile.`,
           `Add a layout item for question ${id}, or remove it from assets.`));
       }
@@ -90,7 +90,7 @@ export function scoreDashboard(content: DashboardContent, ctx?: DeterministicCon
     // layout-orphan (correctness)
     for (const id of layoutIdSet) {
       if (!questionIdSet.has(id)) {
-        out.push(finding('dashboard.layout-orphan', 'correctness', 'error', 'Orphan layout item',
+        out.push(finding('dashboard.layout-orphan', 'Orphan layout item',
           `Layout item ${id} has no matching question asset.`,
           `Remove layout item ${id}, or add the matching question to assets.`));
       }
@@ -98,7 +98,7 @@ export function scoreDashboard(content: DashboardContent, ctx?: DeterministicCon
     // tile-too-small (clarity — too small to read)
     for (const it of items) {
       if (typeof it.id === 'number' && (it.w < MIN_TILE_W || it.h < MIN_TILE_H)) {
-        out.push(finding('dashboard.tile-too-small', 'clarity', 'warn', 'Tile too small',
+        out.push(finding('dashboard.tile-too-small', 'Tile too small',
           `Tile ${it.id} is ${it.w}×${it.h} (min ${MIN_TILE_W}×${MIN_TILE_H}).`,
           `Question tiles need ≥${MIN_TILE_W}×${MIN_TILE_H} to be legible; enlarge tile ${it.id}.`));
       }
@@ -110,7 +110,7 @@ export function scoreDashboard(content: DashboardContent, ctx?: DeterministicCon
         if (typeof it.id !== 'number') continue;
         const vt = vizById[it.id];
         if (vt && PLOT_VIZ_TYPES.has(vt) && (it.w < MIN_PLOT_TILE || it.h < MIN_PLOT_TILE)) {
-          out.push(finding('dashboard.plot-too-small', 'clarity', 'warn', 'Plot tile too small',
+          out.push(finding('dashboard.plot-too-small', 'Plot tile too small',
             `Tile ${it.id} is a ${vt} chart at ${it.w}×${it.h}; cartesian plots need ≥${MIN_PLOT_TILE}×${MIN_PLOT_TILE} to read.`,
             `Resize tile ${it.id} to at least ${MIN_PLOT_TILE}×${MIN_PLOT_TILE}, or use a compact viz (single_value / table).`));
         }
@@ -122,7 +122,7 @@ export function scoreDashboard(content: DashboardContent, ctx?: DeterministicCon
     for (let i = 0; i < items.length && !flaggedOverlap; i++) {
       for (let j = i + 1; j < items.length; j++) {
         if (overlaps(items[i], items[j])) {
-          out.push(finding('dashboard.tile-overlap', 'correctness', 'warn', 'Overlapping tiles',
+          out.push(finding('dashboard.tile-overlap', 'Overlapping tiles',
             `Tiles ${items[i].id} and ${items[j].id} overlap on the grid.`,
             "Reposition tiles so their grid rectangles don't overlap."));
           flaggedOverlap = true;

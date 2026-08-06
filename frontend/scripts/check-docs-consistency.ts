@@ -262,7 +262,8 @@ for (const relDoc of CLAUDE_DOCS) {
 
 
 // ── Sweep 4: no plan documents ───────────────────────────────────────────────
-// The only markdown this repo keeps is the doc tree itself plus the root README;
+// The only markdown this repo keeps is the doc tree, the root README, and the generated rubric
+// check inventory;
 // `docs/` is the published site and is .mdx today, allowed here so a legitimate page
 // added later does not trip the gate. Case-insensitive, because a case-insensitive
 // filesystem would otherwise let `Claude.md` through as a non-doc.
@@ -275,7 +276,8 @@ for (const rel of trackedMarkdown) {
   const lower = rel.toLowerCase();
   const base = lower.split('/').pop()!;
   if (base === 'claude.md') continue;          // a module doc, any depth
-  if (lower === 'readme.md') continue;         // the root README only
+  if (lower === 'readme.md') continue;         // the root README
+  if (lower === 'frontend/lib/rubric/readme.md') continue; // generated check inventory
   if (lower.startsWith('docs/')) continue;     // the published site
   stray.push(rel);
 }
@@ -303,7 +305,7 @@ if (failures.length || orphaned.length || unlinked.length || stray.length) {
     report.push(`\ncheck-docs: ${stray.length} markdown file(s) outside the doc tree:\n`);
     for (const t of stray) report.push(`  ${t}`);
     report.push(
-      '\nOnly CLAUDE.md, the root README.md and docs/** are tracked as markdown. A plan or'
+      '\nOnly CLAUDE.md, the root README.md, the generated rubric README.md, and docs/** are tracked as markdown. A plan or'
       + '\ndesign note is stale the day the work lands — keep it outside the repo, or fold what'
       + '\nstays true into the nearest CLAUDE.md.',
     );

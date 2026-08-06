@@ -13,7 +13,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DETERMINISTIC_CHECKS, LLM_CHECKS } from '../lib/rubric/checks';
 import { SEVERITY_SCORING } from '../lib/rubric/scoring';
-import type { RubricCategory, RubricFileType, RubricSeverity } from '../lib/rubric/types';
+import type { RubricCategory, RubricFileType } from '../lib/rubric/types';
 
 const FRONTEND_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUTPUT = join(FRONTEND_ROOT, 'lib/rubric/README.md');
@@ -27,9 +27,6 @@ function validateCatalogs(): void {
       cataloged.add(check.ruleId);
       if (!check.ruleId.startsWith(`${fileType}.`)) {
         throw new Error(`Deterministic check ${check.ruleId} does not belong to ${fileType}`);
-      }
-      if (Array.isArray(check.severity) && check.severity.length === 0) {
-        throw new Error(`Deterministic check ${check.ruleId} has no failure severity`);
       }
     }
   }
@@ -55,10 +52,6 @@ function code(value: string): string {
 function categoryList(categories: Iterable<RubricCategory>): string {
   const set = new Set(categories);
   return CATEGORY_ORDER.filter((category) => set.has(category)).join(', ') || 'none';
-}
-
-function severityList(severity: RubricSeverity | readonly RubricSeverity[]): string {
-  return (typeof severity === 'string' ? [severity] : severity).join(' / ');
 }
 
 function summaryTable(): string[] {
@@ -111,7 +104,7 @@ function deterministicTable(fileType: RubricFileType): string[] {
     '| Check id | Pass condition | Category | Failure severity |',
     '|---|---|---|---|',
     ...DETERMINISTIC_CHECKS[fileType].map((check) =>
-      `| ${code(check.ruleId)} | ${cell(check.label)} | ${check.category} | ${severityList(check.severity)} |`),
+      `| ${code(check.ruleId)} | ${cell(check.label)} | ${check.category} | ${check.severity} |`),
   ];
 }
 

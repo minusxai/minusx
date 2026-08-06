@@ -102,9 +102,9 @@ export function scoreStory(content: StoryContent, ctx?: DeterministicContext): R
 
   // no-lead (clarity) — uses the description field directly, not the body
   if (isBlank(content.description)) {
-    out.push(finding('story.no-lead', 'clarity', 'warn', 'No lead',
+    out.push(finding('story.no-lead', 'No lead',
       'The story has no description/lead.',
-      'State the single lead finding (with its number) in the description.', 0.25));
+      'State the single lead finding (with its number) in the description.'));
   }
 
   const bodyJsx = toAgentBodyJsx(content.story ?? '');
@@ -114,14 +114,14 @@ export function scoreStory(content: StoryContent, ctx?: DeterministicContext): R
 
   // no-evidence (correctness)
   if (acc.embeds === 0) {
-    out.push(finding('story.no-evidence', 'correctness', 'error', 'No live evidence',
+    out.push(finding('story.no-evidence', 'No live evidence',
       'The story body has no <Question> or <Number> embeds.',
       'Back the narrative with at least one live chart (<Question>) or number (<Number>).'));
   }
 
   // no-headline (clarity)
   if (acc.headings === 0) {
-    out.push(finding('story.no-headline', 'clarity', 'warn', 'No headline',
+    out.push(finding('story.no-headline', 'No headline',
       'The story body has no <h1>/<h2> heading.',
       'Add a headline that states the finding (a claim with a number), not a topic.'));
   }
@@ -129,14 +129,14 @@ export function scoreStory(content: StoryContent, ctx?: DeterministicContext): R
   // typed-number (correctness)
   if (acc.proseNumbers.length > 0) {
     const first = acc.proseNumbers[0];
-    out.push(finding('story.typed-number', 'correctness', 'warn', 'Hardcoded number in prose',
+    out.push(finding('story.typed-number', 'Hardcoded number in prose',
       `A factual figure "${first}" is typed into prose instead of a live embed.`,
       `Replace the typed figure "${first}" with a live <Number> embed so it can't go stale or be wrong.`));
   }
 
   // no-page-gutter (aesthetics) — content flush against the viewport edge
   if (parsed.ok && !hasPageGutter(parsed.nodes, acc.css)) {
-    out.push(finding('story.no-page-gutter', 'aesthetics', 'warn', 'No page gutter',
+    out.push(finding('story.no-page-gutter', 'No page gutter',
       'Neither the root element nor its top-level sections carry horizontal padding — content sits flush against the viewport edge.',
       'Add a page gutter on the root div (e.g. `px-6 @2xl:px-12`, or padding in its CSS class) so text and charts never touch the edge.'));
   }
@@ -145,13 +145,13 @@ export function scoreStory(content: StoryContent, ctx?: DeterministicContext): R
   const colors = distinctHexColors(acc.css);
   const fonts = hasFontFamily(acc.css);
   if (colors.length < MIN_COLORS || !fonts) {
-    out.push(finding('story.no-design-tokens', 'aesthetics', 'warn', 'Thin design tokens',
+    out.push(finding('story.no-design-tokens', 'Thin design tokens',
       `The style block defines ${colors.length} color(s)${fonts ? '' : ' and no font-family'}.`,
-      'Define a deliberate palette (4–6 named hex colors) and ~3 font roles before styling.', 0.5));
+      'Define a deliberate palette (4–6 named hex colors) and ~3 font roles before styling.'));
   } else if (colors.length > MAX_COLORS) {
-    out.push(finding('story.too-many-colors', 'aesthetics', 'warn', 'Too many colors',
+    out.push(finding('story.too-many-colors', 'Too many colors',
       `The style block defines ${colors.length} distinct colors.`,
-      'Reduce to a disciplined 4–6 color palette with one protagonist accent.', 0.25));
+      'Reduce to a disciplined 4–6 color palette with one protagonist accent.'));
   }
 
   // ── layout-aware rules (width + params) ──────────────────────────────────────
@@ -190,7 +190,7 @@ export function scoreStory(content: StoryContent, ctx?: DeterministicContext): R
     }
   }
   if (narrow.length > 0) {
-    out.push(finding('story.embed-too-narrow', 'clarity', 'error', 'Chart too narrow',
+    out.push(finding('story.embed-too-narrow', 'Chart too narrow',
       `${narrow.length} chart(s) are squeezed too narrow to read (${narrow[0]}). Cartesian plots (line/area/bar/scatter) need ≥${MIN_CARTESIAN_FRACTION * 100}% of the column; pie/funnel need ≥${Math.round(MIN_ROUND_FRACTION * 100)}%.`,
       'Give charts room: drop packed multi-column grids to 1–2 columns, remove fixed narrow px widths, and let each plot fill its cell (width:100%).'));
   }
@@ -205,7 +205,7 @@ export function scoreStory(content: StoryContent, ctx?: DeterministicContext): R
   }
   if (undeclared.size > 0) {
     const names = [...undeclared];
-    out.push(finding('story.undeclared-param', 'correctness', 'error', 'Undeclared parameter',
+    out.push(finding('story.undeclared-param', 'Undeclared parameter',
       `Inline query param(s) ${names.map((n) => `:${n}`).join(', ')} are referenced but never declared.`,
       `Declare ${names.map((n) => `"${n}"`).join(', ')} via a <Param name="…"> filter, the embed's own params prop, or parameterValues — or remove the :token.`));
   }
