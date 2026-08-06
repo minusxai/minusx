@@ -1066,8 +1066,11 @@ templates:
       - **Text cell** (`<type>text</type>`): `<content>` is markdown.
 
       ### Active cell — edit the RIGHT cell
-      - AppState includes `content.activeCellId`: the cell the user is currently working on.
+      - AppState includes `ui.notebookActiveCellId`: the cell the user is currently working on.
       - Unless the user says otherwise, scope edits to THAT cell. Match within it (anchor on its `id`, then the field you're changing) and do NOT modify other cells.
+
+      ### Cell results
+      - Notebook AppState intentionally carries NO per-cell query results. A cell is an inline question, and its rows live in the shared query cache rather than notebook content. Call `ReadFiles` with `runQueries: true` for the notebook when exact cell results are needed; never author a result-cache field into the notebook.
 
       ### Notebook Page Behavior
       - Edit in place with EditFile: change a cell's `query`/`viz`, edit a text cell's `content`, rename a cell, or add/remove cells in the `cells` array.
