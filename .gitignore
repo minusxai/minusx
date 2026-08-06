@@ -18,3 +18,5 @@ static/
 data/pglite*
 
 frontend/local
+# Dependencies (any level — frontend/.gitignore only covered its own)
+node_modules/
