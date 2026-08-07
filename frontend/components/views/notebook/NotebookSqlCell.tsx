@@ -240,6 +240,7 @@ export default function NotebookSqlCell({
               columns={data?.columns ?? []}
               types={data?.types ?? []}
               rows={data?.rows}
+              filePath={filePath}
               onVizChange={(viz) => handleChange({ viz })}
             />
           </div>
