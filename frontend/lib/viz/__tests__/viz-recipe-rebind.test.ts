@@ -101,6 +101,32 @@ describe('rebindFileRecipe', () => {
     expect(getFileRecipeRef(next)).toMatchObject({ bindings: { category: 'month', value: 'quota' } });
   });
 
+  it('preserves recipe params through a rebind (re-substituted, not dropped)', () => {
+    const PARAM_RECIPE: VizRecipeContent = {
+      ...RECIPE,
+      params: [{ name: 'barColor', label: 'Bar color', default: '#111111' }],
+      template: {
+        layer: [{
+          mark: { type: 'bar', color: '{{barColor}}' },
+          encoding: {
+            x: { field: '{{value}}', type: 'quantitative' },
+            y: { field: '{{category}}', type: '{{category:kind}}' },
+          },
+        }],
+      },
+    };
+    const res = freezeFileRecipe(PARAM_RECIPE, {
+      path: '/org/r', bindings: { category: 'team', value: 'revenue' }, params: { barColor: '#e11d48' },
+    }, COLUMNS);
+    if (!res.ok) throw new Error(res.error);
+    const env = { version: 2, source: res.source } as unknown as VizEnvelope;
+
+    const next = rebindFileRecipe(env, PARAM_RECIPE, { category: 'month', value: 'quota' }, COLUMNS);
+    const spec = (next.source as { spec: Record<string, any> }).spec;
+    expect(spec.layer[0].mark.color).toBe('#e11d48');            // the CHOSEN param survives, not the default
+    expect(getFileRecipeRef(next)!.params).toEqual({ barColor: '#e11d48' }); // and stays in provenance
+  });
+
   it('keeps the previous spec when a slot is emptied (stale until complete)', () => {
     const env = frozen(RECIPE, { category: 'team', value: 'revenue' });
     const next = rebindFileRecipe(env, RECIPE, { category: 'team', value: '' }, COLUMNS);
