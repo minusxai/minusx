@@ -65,6 +65,45 @@ builders in `lib/viz/viz-templates.ts` (`VIZ_TEMPLATES`), each declaring its own
 The `engine` is load-bearing beyond render — it decides which validation path a recipe takes (see
 Validation) and which source kind `lib/viz/detach.ts` freezes to.
 
+## Workspace recipes — `.viz` files and built-ins
+
+Beside the shipped code registry there is a second, DATA-only recipe tier: workspace `viz` files
+plus the built-in defaults in `lib/viz/builtin-recipes.ts`. A recipe file's content
+(`VizRecipeContent` in `lib/validation/atlas-schemas.ts`) is an INERT spec template — a static
+Vega/Vega-Lite spec carrying `{{slot}}` tokens — with declared `bindings` (reusing the
+`VizTemplateBinding` shape) and value-substituted `params`. `lib/viz/recipe-file.ts` owns the whole
+substitution language (whole-value tokens, embedded string tokens, `{{slot:kind}}` — colon, never a
+dot: a dotted token inside braces throws in the prompt template engine when schema text is injected
+into skills), `materializeFileRecipe`, `freezeFileRecipe`, dummy-binding synthesis for save-time
+validation, and `sampleDataForRecipe` for the file viewer's preview.
+
+Identity is the FILE NAME — no name field, no version suffix. `lib/viz/recipe-resolve.ts` resolves
+a folder's visible set: built-ins < root < … < nearest folder, same-name shadowing, sibling
+isolation (pure path math over a file listing; mirrors `findNearestAncestorContext`).
+
+**File recipes always freeze at use** (the shipped registry's header calls this materialize-always):
+the save path substitutes the template and stores a plain `vega`/`vega-lite` source whose
+`detachedFrom.recipe` is the FILE PATH (or a built-in's bare name — anything outside the reserved
+`minusx/` namespace). The renderer never resolves a file; deleting or editing a recipe never
+changes saved charts. The freeze runs in `lib/data/helpers/viz-recipe-freeze.server.ts`, called
+from `FilesAPI.createFile`/`saveFile` for question and notebook content, with loaders injected so
+the helper never imports `files.server`. Column kinds are unknown at save, so `{{slot:kind}}` falls
+back to the slot's first `accepts` kind (the same deliberate under-typing as the static V1→V2
+converter); the panel re-freezes with real columns on any rebind.
+
+Edit surfaces keep a frozen file recipe BINDABLE by injecting its definition:
+`lib/viz/recipe-rebind.ts` (`getFileRecipeRef`, `rebindFileRecipe`, `applyFileRecipeSelection` —
+the selector's auto-bind) plus the optional `FileRecipeEditContext` last argument on
+`encoding-edit`'s zone helpers. `lib/hooks/use-viz-recipes.ts` resolves the catalog browser-side
+(Redux-loaded `viz` files + built-ins) for `VegaVizPanel`'s Workspace selector tiles and rebinding.
+
+Agent surface: the resolved catalog is advertised per turn as the prompt's Chart Recipes section
+(`lib/viz/recipe-prompt.ts`, built in `lib/chat/agent-args.server.ts` — recipes are advertised
+dynamically, never hard-coded in `prompts.yaml`; the `viz_recipes` skill teaches the mechanism
+only). The agent references a recipe in a viz envelope as `{kind:'recipe', recipe:'<name-or-path>',
+bindings}`; the validator defers any non-`minusx/` recipe id to the save-time freeze (bindings are
+still column-checked), and the freeze rejects unknown names listing what is available.
+
 The panel's own selector vocabulary is a third list — `V2_SUPPORTED_VIZ_TYPES` in
 `lib/viz/encoding-edit.ts`. The two lists are not nested: V2 adds `heatmap`, `boxplot` and
 `histogram`, which exist only as spec shapes (a `rect` mark, a `boxplot` mark, a binned `bar`),
@@ -456,7 +495,14 @@ different lifecycles.
 | Task | File |
 |---|---|
 | Add a viz type | `lib/validation/atlas-schemas.ts` (`VIZ_TYPES`) → `lib/viz/from-vizsettings.ts` switch → `components/question/VizTypeSelector.tsx` |
-| Add/change a recipe | `lib/viz/viz-templates.ts` (`VIZ_TEMPLATES`; bump `@2`, never mutate `@1`) |
+| Add/change a SHIPPED recipe | `lib/viz/viz-templates.ts` (`VIZ_TEMPLATES`; bump `@2`, never mutate `@1`) |
+| Add/change a BUILT-IN file recipe | `lib/viz/builtin-recipes.ts` (data, shadowable by workspace files) |
+| Change the recipe-file token language / freeze | `lib/viz/recipe-file.ts` |
+| Change recipe resolution/shadowing | `lib/viz/recipe-resolve.ts` |
+| Change frozen-recipe panel binding / selector auto-bind | `lib/viz/recipe-rebind.ts`, `lib/hooks/use-viz-recipes.ts` |
+| Change the save-time recipe freeze | `lib/data/helpers/viz-recipe-freeze.server.ts` |
+| Change the agent's Chart Recipes advertisement | `lib/viz/recipe-prompt.ts` (+ `lib/chat/agent-args.server.ts`) |
+| Change the recipe file viewer | `components/views/VizRecipeView.tsx`, `components/containers/VizRecipeContainerV2.tsx` |
 | Change how any chart is compiled or themed | `lib/viz/render-vega.ts`, `lib/viz/theme.ts` |
 | Change a panel control / add a spec edit | `lib/viz/encoding-edit.ts` + `components/viz/VegaVizPanel.tsx` |
 | Change agent-facing validation | `lib/viz/validate.ts`, `lib/viz/types.ts`, `lib/viz/validate-remote.ts` |

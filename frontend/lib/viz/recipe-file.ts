@@ -207,6 +207,50 @@ export function freezeFileRecipe(
  * Synthesize placeholder bindings + matching columns from the declared slots, so
  * save-time validation can materialize a recipe with no real query in hand.
  */
+/** Deterministic sample values per kind — previews must render identically everywhere. */
+const SAMPLE_LABELS = ['North', 'South', 'East', 'West', 'Central', 'Coastal'];
+const SAMPLE_NUMBERS = [820, 640, 560, 470, 390, 310];
+
+/**
+ * Sample dataset for previewing a recipe with no real query: slot-NAMED columns
+ * (so axes and tooltips read naturally), one column per slot (multi slots get
+ * one per sample series), and rows shaped by each slot's first `accepts` kind.
+ */
+export function sampleDataForRecipe(content: VizRecipeContent): {
+  bindings: Record<string, string | string[]>;
+  columns: VizResultColumn[];
+  rows: Record<string, unknown>[];
+} {
+  const bindings: Record<string, string | string[]> = {};
+  const columns: VizResultColumn[] = [];
+  const generators: Array<(i: number) => [string, unknown]> = [];
+  let numberSeries = 0;
+  const addColumn = (name: string, kind: VizRecipeAccepts) => {
+    columns.push({ name, kind });
+    if (kind === 'temporal') {
+      generators.push((i) => [name, `2025-${String(i + 1).padStart(2, '0')}-01`]);
+    } else if (kind === 'quantitative') {
+      const offset = numberSeries++ * 90;
+      generators.push((i) => [name, Math.max(40, SAMPLE_NUMBERS[i % SAMPLE_NUMBERS.length] - offset)]);
+    } else {
+      generators.push((i) => [name, SAMPLE_LABELS[i % SAMPLE_LABELS.length]]);
+    }
+  };
+  for (const b of content.bindings) {
+    const kind = b.accepts[0] ?? 'nominal';
+    if (b.multi) {
+      const names = [`${b.name}_a`, `${b.name}_b`];
+      names.forEach((n) => addColumn(n, kind));
+      bindings[b.name] = names;
+    } else {
+      addColumn(b.name, kind);
+      bindings[b.name] = b.name;
+    }
+  }
+  const rows = Array.from({ length: 6 }, (_, i) => Object.fromEntries(generators.map((g) => g(i))));
+  return { bindings, columns, rows };
+}
+
 export function synthesizeDummyBindings(content: VizRecipeContent): {
   bindings: Record<string, string | string[]>;
   columns: VizResultColumn[];

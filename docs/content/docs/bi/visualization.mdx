@@ -140,6 +140,27 @@ For example, if your pivot has "Revenue" and "Cost" as row dimensions, you can a
 
 ---
 
+## Chart recipes
+
+A **chart recipe** is a reusable chart template stored as a workspace file (the *Chart Recipe* file
+type). A recipe declares named binding slots — e.g. `category`, `value`, `target` — and anyone can
+apply it to a question by dropping result columns onto those slots, with no spec editing. MinusX
+ships built-in recipes (bullet, lollipop, range bar), and you (or the agent) can author new ones.
+
+- **Where recipes live** — anywhere in the file tree. A recipe in the root folder is available
+  everywhere; a recipe in a subfolder is available only in that subtree. A same-named recipe in a
+  nearer folder overrides an ancestor's (and a workspace recipe overrides a built-in of the same
+  name), so teams can keep their own variants.
+- **Applying one** — recipes resolved for the current folder appear as tiles in the question
+  visualization panel's type selector, and columns auto-bind to matching slots. The agent sees the
+  same catalog and can apply recipes by name.
+- **Saved charts are self-contained** — applying a recipe stores the fully built chart spec in the
+  question. Renaming, editing, or deleting the recipe file never changes or breaks existing charts;
+  re-apply the recipe to pick up an updated design.
+- **Authoring** — a recipe is a Vega-Lite (or Vega) spec with `{{slot}}` placeholder tokens plus
+  declared slots and optional params. Create one from the Create menu, or ask the agent — invalid
+  templates are rejected at save with the exact problem named.
+
 ## AI-powered visualization
 
 The agent can configure charts for you:

@@ -11,7 +11,7 @@
 import type {
   FileType, BaseFileContent, QuestionContent, DocumentContent, StoryContent, NotebookContent, ConnectionContent,
 } from '@/lib/types';
-import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
+import type { VizEnvelope, VizRecipeContent } from '@/lib/validation/atlas-schemas';
 
 export function createDefaultTableViz(): VizEnvelope {
   return {
@@ -42,6 +42,24 @@ export function getTemplateDefaults(type: FileType, options?: { query?: string }
       return { description: '', story: '' } as StoryContent;
     case 'notebook':
       return { description: '', cells: [] } as NotebookContent;
+    case 'viz':
+      // A minimal valid recipe (must materialize with dummy bindings — the save
+      // validators run it), ready to reshape into whatever the author wants.
+      return {
+        description: 'Describe what this chart shows',
+        engine: 'vega-lite',
+        bindings: [
+          { name: 'category', label: 'Category', accepts: ['nominal', 'temporal'] },
+          { name: 'value', label: 'Value', accepts: ['quantitative'] },
+        ],
+        template: {
+          mark: 'bar',
+          encoding: {
+            x: { field: '{{category}}', type: '{{category:kind}}' },
+            y: { field: '{{value}}', type: 'quantitative' },
+          },
+        },
+      } as VizRecipeContent as unknown as BaseFileContent;
     case 'connection':
       return { type: 'bigquery', config: {} } as ConnectionContent;
     case 'folder':
