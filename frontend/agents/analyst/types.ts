@@ -3,6 +3,7 @@ import type { AgentSkillSelection, AgentUserSkillCatalogItem } from '@/lib/types
 import type { ResolvedContextDocs } from '@/lib/types';
 import type { LlmGrade } from '@/lib/llm/llm-config-types';
 import type { BenchmarkAnalystContext } from '@/agents/benchmark-analyst/types';
+import type { AgentVizRecipeInfo } from '@/lib/viz/recipe-prompt';
 
 /**
  * A custom-agent definition resolved server-side from the context's
@@ -38,6 +39,12 @@ export interface RemoteAnalystContext extends BenchmarkAnalystContext {
   effectiveUser?: EffectiveUser;
   /** Viz types the agent may use (client-resolved from config). Empty/undefined → "all". */
   allowedVizTypes?: string[];
+  /**
+   * Viz recipes resolved server-side for the turn anchor's folder (built-ins +
+   * workspace `.viz` files with shadowing) — rendered as the prompt's Chart
+   * Recipes section. Absent → the section is omitted.
+   */
+  vizRecipes?: AgentVizRecipeInfo[];
   /** Whitelisted schema (client-resolved); injected into the prompt. */
   schema?: { schema: string; tables: string[] }[];
   /** Resolved home-folder path; injected into the prompt. */

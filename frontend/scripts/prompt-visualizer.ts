@@ -76,6 +76,7 @@ function buildVars(pageType: string | null) {
       agent_name: 'MinusX',
       max_steps: '30',
       allowed_viz_types: 'all',
+      viz_recipes: '',
       role: 'editor',
       schema: '«SCHEMA»',
       context: '«CONTEXT»',

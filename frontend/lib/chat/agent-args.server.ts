@@ -22,6 +22,9 @@ import { connectionTypeToDialect } from '@/lib/types';
 import type { ContextContent, DatabaseWithSchema, ResolvedContextDocs, TableAnnotation, AgentSkillSelection, AgentUserSkillCatalogItem } from '@/lib/types';
 import type { ResolvedCustomAgent } from '@/agents/analyst/types';
 import { LLM_GRADES, type LlmGrade } from '@/lib/llm/llm-config-types';
+import { resolveVizRecipes } from '@/lib/viz/recipe-resolve';
+import { toAgentVizRecipeInfo, type AgentVizRecipeInfo } from '@/lib/viz/recipe-prompt';
+import type { VizRecipeContent } from '@/lib/validation/atlas-schemas';
 
 export interface ServerAgentArgs {
   connection_id?: string;
@@ -58,6 +61,12 @@ export interface ServerAgentArgs {
     /** Agent-authored user skills WITH content to merge into selectedSkills. */
     preloadSelections: AgentSkillSelection[];
   };
+  /**
+   * Viz recipes resolved for the turn anchor's folder (built-ins + workspace
+   * `.viz` files, nearest-ancestor shadowing) — the per-turn catalog behind
+   * the prompt's Chart Recipes section. See lib/viz/recipe-resolve.ts.
+   */
+  viz_recipes?: AgentVizRecipeInfo[];
 }
 
 /**
@@ -259,6 +268,32 @@ export async function buildServerAgentArgs(
     // load degrades the turn to the default analyst (deliberate fallback).
   }
 
+  // Viz recipes for the turn anchor's folder. Advertised HERE deliberately:
+  // computed context fields never reach the agent surface (shapeContextForAgent
+  // drops them), so the catalog is built per turn like the schema. Best-effort —
+  // a failure degrades to no Chart Recipes section, never a dead turn.
+  let vizRecipes: AgentVizRecipeInfo[] | undefined;
+  try {
+    const anchor = options?.anchorPath ?? resolveHomeFolderSync(user.mode, user.home_folder || '');
+    const modeRoot = resolvePath(user.mode, '/');
+    const { data: vizFiles } = await FilesAPI.getFiles({ paths: [modeRoot], type: 'viz', depth: -1 }, user);
+    const resolved = [...resolveVizRecipes(
+      vizFiles.map((f) => ({ id: f.id, name: f.name, path: f.path })),
+      anchor,
+    ).values()];
+    const fileIds = resolved.flatMap((r) => (r.source === 'file' ? [r.fileId] : []));
+    const { data: loaded } = fileIds.length > 0 ? await FilesAPI.loadFiles(fileIds, user) : { data: [] };
+    const contentById = new Map(loaded.map((f) => [f.id, f.content as VizRecipeContent]));
+    vizRecipes = resolved
+      .flatMap((r) => {
+        const content = r.source === 'builtin' ? r.content : contentById.get(r.fileId);
+        return content ? [toAgentVizRecipeInfo(r, content)] : [];
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  } catch {
+    // Advertisement is best-effort.
+  }
+
   // Pick a default connection ONLY when there's an unambiguous single target:
   //  1. the UI explicitly selected one (interactive chat), or
   //  2. exactly one connection is available to this context.
@@ -312,5 +347,6 @@ export async function buildServerAgentArgs(
     annotations,
     ...(userSkillCatalog ? { user_skill_catalog: userSkillCatalog } : {}),
     ...(customAgent ? { custom_agent: customAgent } : {}),
+    ...(vizRecipes ? { viz_recipes: vizRecipes } : {}),
   };
 }
