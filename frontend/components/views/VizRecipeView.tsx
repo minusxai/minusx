@@ -45,7 +45,8 @@ export default function VizRecipeView({ content, colorMode }: VizRecipeViewProps
         {preview.error ? (
           <p className="py-6 text-center text-sm text-destructive">{preview.error}</p>
         ) : (
-          <div className="h-[320px]">
+          <div className="flex h-[320px]">
+            {/* VegaChart's root is flex-1 — it sizes from a FLEX parent with a definite height. */}
             <VegaChart envelope={preview.envelope!} rows={preview.rows} colorMode={colorMode} />
           </div>
         )}
