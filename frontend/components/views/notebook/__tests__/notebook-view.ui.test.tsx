@@ -219,6 +219,48 @@ describe('NotebookView', () => {
     expect(cells[2].id).toBe('b');
   });
 
+  it('moves cells up and down from the numbered gutter controls', () => {
+    renderWithProviders(
+      <NotebookView
+        content={{
+          description: null,
+          cells: [sqlCell({ id: 'a' }), textCell({ id: 'b' }), sqlCell({ id: 'c' })],
+        }}
+        onChange={onChange}
+      />
+    );
+
+    const moveUp = screen.getAllByLabelText('Move cell up');
+    const moveDown = screen.getAllByLabelText('Move cell down');
+    expect(moveUp[0]).toBeDisabled();
+    expect(moveDown[2]).toBeDisabled();
+
+    fireEvent.click(moveDown[0]);
+    let cells = onChange.mock.calls.at(-1)![0].cells as NotebookContent['cells'];
+    expect(cells.map(cell => cell.id)).toEqual(['b', 'a', 'c']);
+
+    // Re-render the controlled view with the committed order, then move c upward.
+    onChange.mockClear();
+    renderWithProviders(
+      <NotebookView content={{ description: null, cells }} onChange={onChange} />
+    );
+    fireEvent.click(screen.getAllByLabelText('Move cell up').at(-1)!);
+    cells = onChange.mock.calls.at(-1)![0].cells as NotebookContent['cells'];
+    expect(cells.map(cell => cell.id)).toEqual(['b', 'c', 'a']);
+  });
+
+  it('hides cell movement controls in read-only notebooks', () => {
+    renderWithProviders(
+      <NotebookView
+        content={{ description: null, cells: [sqlCell({ id: 'a' }), textCell({ id: 'b' })] }}
+        onChange={onChange}
+        readOnly
+      />
+    );
+    expect(screen.queryByLabelText('Move cell up')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Move cell down')).not.toBeInTheDocument();
+  });
+
   it('collapses a cell, hiding its body', async () => {
     renderWithProviders(<NotebookView content={{ description: null, cells: [sqlCell()] }} onChange={onChange} />);
     expect(await screen.findByLabelText('SQL editor')).toBeInTheDocument();

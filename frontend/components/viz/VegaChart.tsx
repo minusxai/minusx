@@ -168,15 +168,6 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
           ? computeXLabelAngle(vlSpecRef.current, rowsRef.current, el.clientWidth)
           : null;
         legendPlanRef.current = JSON.stringify({ legend: legendPlan ?? null, xAngle: xLabelAngle });
-        // Theme chart tokens: computed --chart-1..5 at the container (null outside a token
-        // scope → house palette). Resolved per build so a [data-theme] switch recolors.
-        const categoryRange = chartTokenRangeFromElement(el);
-        const { vegaSpec, parserConfig } = toVegaSpec(resolved, colorMode, { legendPlan, xLabelAngle, categoryRange });
-        // Shared-tooltip charts get a guide-line rule injected BEHIND the data (before parse).
-        const tooltipPlan = vlSpecRef.current ? buildTooltipPlan(vlSpecRef.current) : null;
-        const hasGuide = tooltipPlan ? injectGuideMark(vegaSpec as Record<string, unknown>) : false;
-        if (cancelled) return;
-        el.replaceChildren(); // drop any stale chart DOM from a failed predecessor
         const initialSize = sizeOf(el);
         const facetLayout = vlSpecRef.current
           ? computeFacetLayoutPlan(
@@ -186,6 +177,17 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
               initialSize.height,
             )
           : null;
+        // Theme chart tokens: computed --chart-1..5 at the container (null outside a token
+        // scope → house palette). Resolved per build so a [data-theme] switch recolors.
+        const categoryRange = chartTokenRangeFromElement(el);
+        const { vegaSpec, parserConfig } = toVegaSpec(resolved, colorMode, {
+          legendPlan, xLabelAngle, facetLayout, categoryRange,
+        });
+        // Shared-tooltip charts get a guide-line rule injected BEHIND the data (before parse).
+        const tooltipPlan = vlSpecRef.current ? buildTooltipPlan(vlSpecRef.current) : null;
+        const hasGuide = tooltipPlan ? injectGuideMark(vegaSpec as Record<string, unknown>) : false;
+        if (cancelled) return;
+        el.replaceChildren(); // drop any stale chart DOM from a failed predecessor
         view = createVegaView(vegaSpec, rowsRef.current, {
           // Always vega's SVG renderer: captures serialize the live DOM (
           // <canvas> content serializes empty, so charts must be SVG in every captured surface).
@@ -360,7 +362,7 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
       tooltipRef.current = null;
       view?.finalize();
     };
-  }, [envelope, colorMode, legendEpoch, themeEpoch]);
+  }, [envelope, colorMode, legendEpoch, themeEpoch, replanLegendWrap]);
 
   // Rebuild when the surrounding design theme changes: observe data-theme attribute flips in
   // this chart's OWN document (story charts live in the story iframe). Fires only on an actual

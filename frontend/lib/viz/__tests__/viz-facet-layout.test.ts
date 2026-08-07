@@ -26,6 +26,19 @@ const FACET_SPEC = {
   },
 } as Record<string, unknown>;
 
+const DISCRETE_X_FACET_SPEC = {
+  facet: FACET_SPEC.facet,
+  spec: {
+    mark: { type: 'bar' },
+    transform: [{ fold: ['median_score', 'q90_score', 'max_score'], as: ['statistic', 'score'] }],
+    encoding: {
+      x: { field: 'artifact_type', type: 'nominal', title: 'Artifact category' },
+      y: { field: 'score', type: 'quantitative', title: 'Score' },
+      color: { field: 'statistic', type: 'nominal', title: 'Statistic' },
+    },
+  },
+} as Record<string, unknown>;
+
 const CONTEXTS = ['established_company', 'side_project', 'startup', 'unclear'];
 const ARTIFACTS = ['app_or_service', 'content_or_writing', 'dev_tool', 'hardware', 'other', 'project_demo'];
 const ROWS = CONTEXTS.flatMap((project_context, contextIndex) =>
@@ -89,6 +102,33 @@ describe('facet view sizing', () => {
       const size = svgSize(await view.toSVG());
       expect(size.width).toBeLessThanOrEqual(width);
       expect(size.height).toBeLessThanOrEqual(height);
+    } finally {
+      view.finalize();
+    }
+  });
+
+  it('overrides Vega-Lite step sizing so a discrete-x facet fills the same bounds', async () => {
+    const width = 900;
+    const height = 330;
+    const rows = CONTEXTS.flatMap((project_context, contextIndex) =>
+      ARTIFACTS.map((artifact_type, artifactIndex) => ({
+        project_context,
+        artifact_type,
+        median_score: 100 + contextIndex * 10 + artifactIndex,
+        q90_score: 300 + contextIndex * 10 + artifactIndex,
+        max_score: 1_000 + contextIndex * 100 + artifactIndex,
+      })),
+    );
+    const facetLayout = computeFacetLayoutPlan(DISCRETE_X_FACET_SPEC, rows, width, height);
+    const vegaSpec = compileVegaLite(DISCRETE_X_FACET_SPEC, 'light', { facetLayout });
+    const view = createVegaView(vegaSpec, rows, {
+      renderer: 'none', width, height, facetLayout,
+    });
+    try {
+      await view.runAsync();
+      const size = svgSize(await view.toSVG());
+      expect(size.width).toBeGreaterThan(width * 0.85);
+      expect(size.width).toBeLessThanOrEqual(width);
     } finally {
       view.finalize();
     }

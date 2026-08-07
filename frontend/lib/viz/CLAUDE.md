@@ -111,10 +111,14 @@ colorMode in, no Redux). It hard-forces Vega's **SVG** renderer because captures
 DOM and `<canvas>` serializes empty. It rebuilds the view on envelope/colorMode change, pushes
 data-only updates through `view.data()`, and drives root width/height signals from a
 `ResizeObserver`; top-level facets instead receive container-planned `child_width`/`child_height`
-signals because Vega-Lite compiles each panel to those dimensions.
+signals because Vega-Lite compiles each panel to those dimensions. The same plan is seeded into
+the nested facet spec before compilation so a discrete axis cannot replace `child_width` with its
+default category-count × band-step signal and silently undo responsive sizing.
 Several render-time decisions are *compile-time constants* baked before `parse` — the legend
 column count (`computeLegendPlan`) and the x-axis label angle (`computeXLabelAngle`) — so a
-resize that flips either decision bumps an epoch and rebuilds the whole view. It also owns the
+resize that flips either decision bumps an epoch and rebuilds the whole view. The planner descends
+into nested facet specs, so a long faceted-series legend wraps within the outer container instead
+of widening and shifting the facet grid. The component also owns the
 shared multi-series tooltip (`lib/viz/tooltip-plan.ts` builds the plan and HTML,
 `lib/viz/shared-tooltip.ts` positions the card, `lib/viz/guide-mark.ts` injects the guide rule)
 and the interactive-map zoom buttons.

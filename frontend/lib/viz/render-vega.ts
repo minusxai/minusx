@@ -136,7 +136,8 @@ const FACET_DEFAULT_SPACING = 20;
 // A facet child dimension is the DATA rectangle only. Per-column axes/header
 // labels and the view's export padding sit outside it; reserve those before
 // dividing the container so the complete SVG, not just its plots, stays bounded.
-const FACET_OUTER_PADDING_PX = 10;
+const FACET_OUTER_HORIZONTAL_PADDING_PX = 24;
+const FACET_OUTER_VERTICAL_PADDING_PX = 10;
 const FACET_COLUMN_CHROME_PX = 24;
 // Theme legend + facet title/header consume ~90px before per-row x-axis chrome.
 const FACET_SHARED_VERTICAL_CHROME_PX = 90;
@@ -154,15 +155,16 @@ const distinctFacetValues = (
 ): number => {
   const field = def?.field;
   if (typeof field !== 'string') return 1;
-  const values = new Set<unknown>();
+  const values: unknown[] = [];
   for (const row of rows) {
     const value = row[field];
-    if (value != null) values.add(value);
+    if (value != null && !values.includes(value)) values.push(value);
   }
-  if (values.size > 0) return values.size;
+  if (values.length > 0) return values.length;
   // A transformed facet field may not exist in the raw rows. An authored sort
   // array still gives us the intended cardinality; otherwise retain one safe cell.
-  return Array.isArray(def.sort) && def.sort.length > 0 ? def.sort.length : 1;
+  const sort = def?.sort;
+  return Array.isArray(sort) && sort.length > 0 ? sort.length : 1;
 };
 
 const facetSpacing = (spec: Record<string, unknown>, axis: 'row' | 'column'): number => {
@@ -204,7 +206,7 @@ export function computeFacetLayoutPlan(
     const gap = facetSpacing(spec, 'column') * Math.max(0, columns - 1);
     plan.childWidth = Math.max(
       FACET_MIN_CHILD_PX,
-      Math.floor((Math.max(containerWidth, 80) - FACET_OUTER_PADDING_PX - gap) / columns
+      Math.floor((Math.max(containerWidth, 80) - FACET_OUTER_HORIZONTAL_PADDING_PX - gap) / columns
         - FACET_COLUMN_CHROME_PX),
     );
   }
@@ -212,7 +214,7 @@ export function computeFacetLayoutPlan(
     const gap = facetSpacing(spec, 'row') * Math.max(0, rowCount - 1);
     plan.childHeight = Math.max(
       FACET_MIN_CHILD_PX,
-      Math.floor((Math.max(containerHeight, 60) - FACET_OUTER_PADDING_PX - gap
+      Math.floor((Math.max(containerHeight, 60) - FACET_OUTER_VERTICAL_PADDING_PX - gap
         - FACET_SHARED_VERTICAL_CHROME_PX) / rowCount - FACET_ROW_CHROME_PX),
     );
   }
@@ -350,8 +352,12 @@ function hasYField(spec: Record<string, unknown>): boolean {
   const y = (spec.encoding as Record<string, Record<string, unknown>> | undefined)?.y;
   if (y && typeof y === 'object' && 'field' in y) return true;
   const layers = spec.layer;
-  return Array.isArray(layers) && layers.some(l =>
-    l != null && typeof l === 'object' && !Array.isArray(l) && hasYField(l as Record<string, unknown>));
+  if (Array.isArray(layers) && layers.some(l =>
+    l != null && typeof l === 'object' && !Array.isArray(l) && hasYField(l as Record<string, unknown>))) {
+    return true;
+  }
+  const child = record(spec.spec);
+  return child ? hasYField(child) : false;
 }
 
 /** The color-channel def of a unit spec, or the first color among layers. */
@@ -367,6 +373,8 @@ function findColorDef(spec: Record<string, unknown>): Record<string, unknown> | 
       }
     }
   }
+  const child = record(spec.spec);
+  if (child) return findColorDef(child);
   return null;
 }
 
@@ -531,6 +539,8 @@ export interface CompileVegaLiteOptions {
   legendPlan?: LegendWrapPlan | null;
   /** Planned x label angle (computeXLabelAngle) — null/undefined = VL defaults. */
   xLabelAngle?: number | null;
+  /** Initial container-bounded dimensions for top-level facet child plots. */
+  facetLayout?: FacetLayoutPlan | null;
   /**
    * Categorical color range override — the surrounding design theme's `--chart-1..5` tokens
    * (lib/viz/chart-tokens.ts). null/undefined = the house palette. Applied to both engines:
@@ -554,6 +564,24 @@ export function compileVegaLite(
   // shared state — deep-clone here (specs are small).
   const prepared = prepareVegaLiteSpec(JSON.parse(JSON.stringify(spec)) as Record<string, unknown>);
   if (options?.xLabelAngle != null) injectXLabelAngle(prepared, options.xLabelAngle);
+  // A discrete x/y inside a facet normally compiles child_width/child_height as
+  // STEP-DERIVED signals. Runtime signal writes are then overwritten by the next
+  // dataflow pulse. Seed missing child dimensions before compile so both discrete
+  // and continuous facets produce directly resizable child signals. Authored
+  // dimensions remain the opt-out represented by an absent plan dimension.
+  if (options?.facetLayout && 'facet' in prepared) {
+    const child = record(prepared.spec);
+    if (child) {
+      if (options.facetLayout.childWidth != null
+        && !Object.prototype.hasOwnProperty.call(child, 'width')) {
+        child.width = options.facetLayout.childWidth;
+      }
+      if (options.facetLayout.childHeight != null
+        && !Object.prototype.hasOwnProperty.call(child, 'height')) {
+        child.height = options.facetLayout.childHeight;
+      }
+    }
+  }
   // Responsive container fill (`width/height: 'container'` is only valid for
   // single/layer specs). Without an explicit width, VL STEP-SIZES discrete axes
   // (band-step × category count) — a 3-category bar renders ~60px wide instead of
@@ -681,8 +709,9 @@ export async function renderVegaLiteToSvg(
 ): Promise<string> {
   const width = size?.width ?? 640;
   const height = size?.height ?? 400;
+  const legendPlan = computeLegendPlan(spec, rows, width);
   const facetLayout = computeFacetLayoutPlan(spec, rows, width, height);
-  const view = createVegaView(compileVegaLite(spec, mode), rows, {
+  const view = createVegaView(compileVegaLite(spec, mode, { legendPlan, facetLayout }), rows, {
     renderer: 'none',
     ...size,
     facetLayout,
@@ -712,10 +741,13 @@ export async function renderEnvelopeToCanvas(
   const xLabelAngle = resolved.engine === 'vega-lite'
     ? computeXLabelAngle(resolved.spec, rows, opts.width ?? 640)
     : null;
-  const { vegaSpec, parserConfig } = toVegaSpec(resolved, mode, { xLabelAngle });
+  const legendPlan = resolved.engine === 'vega-lite'
+    ? computeLegendPlan(resolved.spec, rows, opts.width ?? 640)
+    : null;
   const facetLayout = resolved.engine === 'vega-lite'
     ? computeFacetLayoutPlan(resolved.spec, rows, opts.width ?? 640, opts.height ?? 400)
     : null;
+  const { vegaSpec, parserConfig } = toVegaSpec(resolved, mode, { legendPlan, xLabelAngle, facetLayout });
   const view = createVegaView(vegaSpec, rows, {
     renderer: 'none', parserConfig, width: opts.width, height: opts.height, facetLayout,
   });
@@ -740,10 +772,13 @@ export async function renderEnvelopeToSvg(
   const xLabelAngle = resolved.engine === 'vega-lite'
     ? computeXLabelAngle(resolved.spec, rows, size?.width ?? 640)
     : null;
-  const { vegaSpec, parserConfig } = toVegaSpec(resolved, mode, { xLabelAngle });
+  const legendPlan = resolved.engine === 'vega-lite'
+    ? computeLegendPlan(resolved.spec, rows, size?.width ?? 640)
+    : null;
   const facetLayout = resolved.engine === 'vega-lite'
     ? computeFacetLayoutPlan(resolved.spec, rows, size?.width ?? 640, size?.height ?? 400)
     : null;
+  const { vegaSpec, parserConfig } = toVegaSpec(resolved, mode, { legendPlan, xLabelAngle, facetLayout });
   const view = createVegaView(vegaSpec, rows, {
     renderer: 'none', parserConfig, ...size, facetLayout,
   });
