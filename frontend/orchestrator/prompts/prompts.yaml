@@ -478,6 +478,54 @@ templates:
 
       ### Semantic Models
       A context version also carries `semanticModels` — authored semantic models (primary + references + dimensions/measures/metrics). Use `LoadSkill("semantic_models")` for the full authoring format and validation rules before adding or editing one.
+  skill_viz_recipes:
+    description: Workspace chart recipes (`viz` files) — authoring reusable spec templates and using them on questions
+    content: |
+      ## Chart Recipes (viz files)
+
+      A `viz` file is a REUSABLE chart recipe: an inert Vega-Lite (or native Vega) spec TEMPLATE with
+      declared binding slots. Anyone can apply it to a question by binding query-result columns to the
+      slots — no spec editing. Recipes are workspace files, so you can author new ones and every chart
+      vocabulary extension is a document, never code.
+
+      ### File Structure
+      The content is read and edited as markup (see the EditFile tool for the markup format). The content schema is:
+      ```json
+      {schema_viz}
+      ```
+
+      ### Template Tokens (the whole substitution language)
+      - A whole-string `"{{slot}}"` value is replaced with the bound column name verbatim. Multi slots substitute the bound ARRAY (e.g. a `fold` field list).
+      - Embedded tokens inside longer strings (e.g. `"title": "Total {{value}}"`) are string-replaced (multi slots cannot embed).
+      - `"{{slot:kind}}"` resolves to the bound column's kind — `quantitative`, `temporal`, or `nominal` — so one recipe adapts its encoding types to what gets bound (e.g. `"type": "{{x:kind}}"`).
+      - Params substitute the same way; a param's `default` fills in when the user omits it.
+      - Any token with no matching binding or param slot is a save-time error. There is NO branching or logic — a recipe is data. If a chart needs computed structure, express it in the grammar (fold/window/stack/bin transforms).
+
+      ### Identity, Shadowing & Scope
+      - A recipe's NAME is its FILE NAME. There is no name field and no version suffix.
+      - Recipes resolve by folder: a file in `/org` is available everywhere; a same-named file in a
+        nearer subfolder SHADOWS the ancestor's for that subtree; built-in default recipes sit below
+        the root and any workspace file of the same name shadows them.
+      - The recipes available in the current folder are listed in your context. Read a recipe file
+        (ReadFiles) to see its template and slots before using or editing it.
+
+      ### Using A Recipe On A Question
+      Author the question's `<viz>` envelope with a recipe source whose `recipe` is the recipe FILE PATH:
+      ```xml
+      <viz>{`{"version": 2, "source": {"kind": "recipe", "recipe": "/org/bullet", "bindings": {"category": "team", "value": "revenue", "target": "quota"}, "params": null, "columnFormats": null}}`}</viz>
+      ```
+      Bindings map slot names → result column names (arrays for multi slots); params must match the
+      recipe's declared params. On save the reference is FROZEN: the substituted spec is stored as a
+      plain `vega-lite`/`vega` source with the recipe path kept in `detachedFrom`, so the chart never
+      breaks if the recipe is later renamed, edited, or deleted. Editing the recipe file changes only
+      charts frozen AFTER the edit — to restyle an existing chart, re-apply the recipe.
+
+      ### Authoring Guidance
+      - Put ALL visual semantics in the template (axes, marks, scales, tooltips, colors) — plain grammar.
+      - Omit `data` — the query result is injected as the named dataset "main". External data URLs are rejected.
+      - Declare `accepts` kinds per slot honestly; they drive the editor's drop-zone hints and the `:kind` fallback.
+      - Write a sharp one-line `description` — it is how the recipe is advertised and discovered.
+      - Presentation reshaping (fold/window/stack/rank/bin) belongs in the template; business logic (joins, governed metrics) belongs in SQL, never in a recipe.
   skill_semantic_models:
     description: Authoring semantic models on a context (SemanticModelV2 JSON — primary/references, dimensions, metrics, save-time validation feedback)
     content: |

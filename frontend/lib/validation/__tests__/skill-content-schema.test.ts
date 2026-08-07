@@ -16,7 +16,7 @@ import {
 
 describe('contentSchemaText — live per-file-type content schema for skills', () => {
   it('covers exactly the Atlas file types that have a TypeBox content schema', () => {
-    expect(ATLAS_SCHEMA_FILE_TYPES).toEqual(['question', 'dashboard', 'story', 'notebook', 'context']);
+    expect(ATLAS_SCHEMA_FILE_TYPES).toEqual(['question', 'dashboard', 'story', 'notebook', 'context', 'viz']);
   });
 
   it('context schema is the flat knowledge view (no whitelist or version bookkeeping)', () => {
@@ -87,7 +87,7 @@ describe('contentSchemaText — live per-file-type content schema for skills', (
 
   it('SCHEMA_TEMPLATE_VARS keys each schema as schema_<type> for prompt injection', () => {
     expect(Object.keys(SCHEMA_TEMPLATE_VARS)).toEqual([
-      'schema_question', 'schema_dashboard', 'schema_story', 'schema_notebook', 'schema_context',
+      'schema_question', 'schema_dashboard', 'schema_story', 'schema_notebook', 'schema_context', 'schema_viz',
     ]);
     expect(SCHEMA_TEMPLATE_VARS.schema_question).toBe(contentSchemaText('question'));
   });
