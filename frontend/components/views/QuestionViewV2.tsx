@@ -868,6 +868,7 @@ export default function QuestionViewV2({
                       columns={queryData?.columns ?? []}
                       types={queryData?.types ?? []}
                       rows={queryData?.rows}
+                      filePath={filePath}
                       onVizChange={(viz) => onChange({ viz })}
                     />
                   </div>
@@ -1082,6 +1083,7 @@ export default function QuestionViewV2({
                       columns={queryData?.columns ?? []}
                       types={queryData?.types ?? []}
                       rows={queryData?.rows}
+                      filePath={filePath}
                       onVizChange={(viz) => onChange({ viz })}
                     />
                   </div>

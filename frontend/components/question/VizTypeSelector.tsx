@@ -24,6 +24,7 @@ import {
   LuChartCandlestick,
   LuChartColumnBig,
   LuBraces,
+  LuBookMarked,
 } from 'react-icons/lu';
 import type { VizSettings } from '@/lib/types';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -158,6 +159,15 @@ interface VizTypeSelectorProps {
   disabledReason?: string;
   /** Offer V2-only entries (heatmap, …) — set by the Vega panel only. */
   includeV2Only?: boolean;
+  /**
+   * Workspace/built-in recipe entries (resolved for the current folder) shown
+   * as an extra "Workspace" group — grouped orientation only. Selection fires
+   * `onRecipeSelect` with the entry's address, never `onChange`.
+   */
+  workspaceRecipes?: ReadonlyArray<{ name: string; description?: string; address: string }>;
+  onRecipeSelect?: (address: string) => void;
+  /** The active frozen recipe's address (highlights its Workspace tile). */
+  activeRecipeAddress?: string | null;
 }
 
 export function VizTypeSelector({
@@ -168,6 +178,9 @@ export function VizTypeSelector({
   disabledTypes,
   disabledReason,
   includeV2Only = false,
+  workspaceRecipes,
+  onRecipeSelect,
+  activeRecipeAddress,
 }: VizTypeSelectorProps) {
   const { config } = useConfigs();
   const allowedVizTypes = config.allowedVizTypes;
@@ -185,6 +198,30 @@ export function VizTypeSelector({
 
     return (
       <div className="mb-2 grid w-full grid-cols-5 gap-1 rounded-md bg-muted/50 p-2">
+        {/* Workspace/built-in recipes: file-defined chart templates for this
+            folder. A tile applies the recipe (auto-bound, frozen on save) via
+            onRecipeSelect — the SelectableVizType union stays untouched. */}
+        {workspaceRecipes?.map(({ name, description, address }) => {
+          const isActive = activeRecipeAddress === address;
+          return (
+            <button
+              key={`recipe:${address}`}
+              type="button"
+              className={`flex flex-col items-center justify-center gap-0.5 rounded-md py-1.5 transition-all duration-[120ms] ease-in-out ${
+                isActive ? 'bg-[#16a085]/15 text-[#16a085]' : 'bg-transparent text-muted-foreground'
+              } cursor-pointer hover:opacity-100 ${isActive ? 'hover:bg-[#16a085]/20' : 'hover:bg-muted hover:text-foreground'}`}
+              onClick={() => onRecipeSelect?.(address)}
+              aria-label={`Recipe ${name}`}
+              aria-pressed={isActive}
+              title={description || name}
+            >
+              <LuBookMarked size={16} />
+              <span className={`max-w-full truncate font-mono text-[10px] leading-none ${isActive ? 'font-bold' : 'font-medium'}`}>
+                {name}
+              </span>
+            </button>
+          );
+        })}
         {allTypes.map(({ type, icon, label, informational, informationalReason }) => {
           const isActive = value === type;
           const isRecommended = recommended?.includes(type) ?? false;
