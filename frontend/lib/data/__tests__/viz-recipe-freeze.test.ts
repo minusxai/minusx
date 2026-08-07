@@ -170,6 +170,16 @@ describe('viz recipe freeze at save', () => {
     expect(source.spec.mark).toBe('bar'); // fully self-contained
   });
 
+  it('a DRAFT recipe file does not resolve — only saved recipes are usable', async () => {
+    // createFile without saveFile leaves draft:true (invisible in listings).
+    await FilesAPI.createFile(
+      { name: 'draft-only', path: '/org/draft-only', type: 'viz', content: KPI_RECIPE }, user,
+    );
+    await expect(
+      createQuestion('/org/q-draft-ref', recipeViz('draft-only', { label: 'label', value: 'value' })),
+    ).rejects.toThrow(/draft-only/); // unknown — the draft is not in the catalog
+  });
+
   it('freezes recipe references inside notebook SQL cells', async () => {
     const notebook: NotebookContent = {
       description: null,
