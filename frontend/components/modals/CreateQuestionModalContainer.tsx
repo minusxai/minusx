@@ -213,7 +213,7 @@ export default function CreateQuestionModalContainer({
   }, [effectiveId]);
 
   // Handle query execution
-  const handleExecute = useCallback(() => {
+  const handleExecute = useCallback((overrideParamValues?: Record<string, any>, overrideQuery?: string) => {
     if (!mergedContent || !effectiveId) return;
 
     if (mergedContent.spreadsheet) {
@@ -234,8 +234,8 @@ export default function CreateQuestionModalContainer({
     }
 
     const newQuery = {
-      query: mergedContent.query,
-      params: mergedContent.parameterValues || {},
+      query: overrideQuery ?? mergedContent.query,
+      params: overrideParamValues ?? mergedContent.parameterValues ?? {},
       database: mergedContent.connection_name
     };
 

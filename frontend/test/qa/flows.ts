@@ -333,9 +333,8 @@ export async function typeQuery(page: Page, sql: string): Promise<void> {
   await page.getByLabel('SQL editor').focus();
   await page.keyboard.type(sql);
   await page.keyboard.press('Escape'); // dismiss any autocomplete suggestion popup
-  // The editor's onChange is debounced (150ms). Wait until the typed SQL lands
-  // in Redux — an immediate Run would otherwise execute the stale (empty)
-  // query and the run silently no-ops.
+  // The shared editor persistence boundary is debounced. Wait until the typed SQL lands
+  // in Redux so subsequent QA steps inspect the same controlled state that the UI sees.
   const fileId = parseInt(new URL(page.url()).pathname.split('/f/')[1], 10);
   const needle = sql.slice(0, 24);
   await assertRedux(

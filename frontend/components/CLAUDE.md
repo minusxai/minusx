@@ -227,8 +227,10 @@ observer is bound to the top realm and goes deaf inside the surface iframe. Widt
   identities live in Redux ephemerals; neither is persisted in notebook content. In edit mode,
   `NotebookView` preserves each cell's DOM ownership order and changes only its flex `order` when
   cells move; physically detaching/reinserting a Monaco host can race its disposed instantiation
-  service. Every notebook SQL editor also receives a stable, cell-specific Monaco model URI, and
-  memoized cell props keep unrelated editors/charts out of the per-keystroke Redux round trip.
+  service. Every notebook SQL editor also receives a stable, cell-specific virtual model key
+  (not a filesystem path). The shared `SqlEditor` owns SQL persistence for every editing surface:
+  Monaco edits locally, controlled updates are coalesced, and Run/blur/unmount flush first;
+  memoized cell props keep unrelated editors/charts out of that Redux round trip.
 - **Redux**: `store/filesSlice` (`selectMergedContent` = content + persistableChanges +
   ephemeralChanges), `store/uiSlice` (edit mode, view mode, view stack, chat flags),
   `store/chatSlice`, `store/authSlice` (`selectEffectiveUser`, `selectView`).

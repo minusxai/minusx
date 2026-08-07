@@ -93,11 +93,17 @@ describe('injectGuideMark', () => {
     expect(injectGuideMark(spec, { facetFields: ['tag_valence'] })).toBe(true);
     const facetSignal = spec.signals.find((signal: { name: string }) => signal.name === 'mxGuideFacet') as { value: unknown };
     expect(facetSignal.value).toBeNull();
-    const cell = spec.marks.find(mark => mark.name === 'cell')!;
+    const cell = spec.marks.find(mark => mark.name === 'cell') as unknown as {
+      marks: Array<{
+        type: string;
+        clip?: boolean;
+        encode?: { update: { opacity: { signal: string } } };
+      }>;
+    };
     expect(cell.marks[0].type).toBe('rule');
     expect(cell.marks[1].type).toBe('area');
     expect(cell.marks[0].clip).toBe(true);
-    expect(cell.marks[0].encode.update.opacity.signal).toContain('parent["tag_valence"] === mxGuideFacet["tag_valence"]');
+    expect(cell.marks[0].encode?.update.opacity.signal).toContain('parent["tag_valence"] === mxGuideFacet["tag_valence"]');
     // The rule belongs to each child plot, never the root/header mark list.
     expect(spec.marks[0].name).toBe('column_header');
   });
@@ -120,7 +126,7 @@ describe('injectGuideMark', () => {
     ];
     const facetLayout = { columns: 2, rows: 1, childWidth: 300, childHeight: 200 };
     const vegaSpec = compileVegaLite(vlSpec, 'light', { facetLayout });
-    injectGuideMark(vegaSpec, { facetFields: ['tag_valence'] });
+    injectGuideMark(vegaSpec as unknown as Record<string, unknown>, { facetFields: ['tag_valence'] });
     const view = createVegaView(vegaSpec, rows, {
       renderer: 'none', width: 640, height: 260, facetLayout,
     });

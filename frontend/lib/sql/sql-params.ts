@@ -189,5 +189,14 @@ export function syncParametersWithSQL(
     }
   }
 
+  // Preserve referential identity when only the SQL text changed. Notebook SQL
+  // editors use this array in callback dependencies; returning a fresh-but-equal
+  // array on every keystroke forced Monaco listeners and sibling cells to churn.
+  if (
+    newParams.length === safeCurrentParams.length &&
+    newParams.every((parameter, index) => parameter === safeCurrentParams[index])
+  ) {
+    return safeCurrentParams;
+  }
   return newParams;
 }

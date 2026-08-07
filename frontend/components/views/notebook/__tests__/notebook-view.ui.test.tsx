@@ -10,19 +10,24 @@
  * All element queries by aria-label per repo convention.
  */
 import React from 'react';
-import { screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import type { NotebookContent, NotebookSqlCell, NotebookTextCell } from '@/lib/types';
+// @ts-expect-error Monaco does not publish declarations for its internal URI parser.
+import { URI } from 'monaco-editor/esm/vs/base/common/uri.js';
 
 // useQueryResult: return a fixed result whenever a (non-empty) query is run.
+const queryResultCalls = vi.hoisted(() => ({ queries: [] as string[] }));
 vi.mock('@/lib/hooks/file-state-hooks', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/hooks/file-state-hooks')>();
   return {
     ...actual,
-    useQueryResult: (query: string) =>
-      query
+    useQueryResult: (query: string) => {
+      queryResultCalls.queries.push(query);
+      return query
         ? { data: { columns: ['n'], types: ['int'], rows: [{ n: 42 }] }, loading: false, error: null, isStale: false, refetch: vi.fn() }
-        : { data: null, loading: false, error: null, isStale: false, refetch: vi.fn() },
+        : { data: null, loading: false, error: null, isStale: false, refetch: vi.fn() };
+    },
   };
 });
 
@@ -91,7 +96,7 @@ function textCell(over: Partial<NotebookTextCell> = {}): NotebookTextCell {
 }
 
 const onChange = vi.fn();
-beforeEach(() => { onChange.mockClear(); conns.map = {}; });
+beforeEach(() => { onChange.mockClear(); conns.map = {}; queryResultCalls.queries = []; });
 
 describe('NotebookView', () => {
   it('shows the empty state and add-cell controls when there are no cells', () => {
@@ -141,6 +146,51 @@ describe('NotebookView', () => {
       const queryUpdate = onChange.mock.calls.find(c => c[0]?.cells?.[0]?.query === 'SELECT 99');
       expect(queryUpdate).toBeTruthy();
     });
+  });
+
+  it('debounces notebook persistence across a burst of SQL keystrokes', async () => {
+    renderWithProviders(<NotebookView content={{ description: null, cells: [sqlCell({ query: '' })] }} onChange={onChange} />);
+    const editor = await screen.findByLabelText('SQL editor');
+    vi.useFakeTimers();
+    try {
+      fireEvent.change(editor, { target: { value: 'S' } });
+      fireEvent.change(editor, { target: { value: 'SE' } });
+      fireEvent.change(editor, { target: { value: 'SELECT 99' } });
+      expect(onChange).not.toHaveBeenCalled();
+      await act(async () => { await vi.advanceTimersByTimeAsync(249); });
+      expect(onChange).not.toHaveBeenCalled();
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange.mock.calls[0][0].cells[0].query).toBe('SELECT 99');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('runs the current Monaco text even before its debounced persistence fires', async () => {
+    renderWithProviders(<NotebookView content={{ description: null, cells: [sqlCell({ query: 'SELECT 42' })] }} onChange={onChange} />);
+    fireEvent.change(await screen.findByLabelText('SQL editor'), { target: { value: 'SELECT 99' } });
+    fireEvent.click(screen.getByLabelText('Run query'));
+    await waitFor(() => expect(queryResultCalls.queries).toContain('SELECT 99'));
+  });
+
+  it('flushes a pending SQL edit when Monaco loses focus', async () => {
+    renderWithProviders(<NotebookView content={{ description: null, cells: [sqlCell({ query: '' })] }} onChange={onChange} />);
+    const editor = await screen.findByLabelText('SQL editor');
+    fireEvent.change(editor, { target: { value: 'SELECT 7' } });
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.blur(editor);
+    expect(onChange.mock.calls.at(-1)?.[0].cells[0].query).toBe('SELECT 7');
+  });
+
+  it('flushes a pending SQL edit when the editor unmounts', async () => {
+    const view = renderWithProviders(
+      <NotebookView content={{ description: null, cells: [sqlCell({ query: '' })] }} onChange={onChange} />,
+    );
+    fireEvent.change(await screen.findByLabelText('SQL editor'), { target: { value: 'SELECT 8' } });
+    expect(onChange).not.toHaveBeenCalled();
+    view.unmount();
+    expect(onChange.mock.calls.at(-1)?.[0].cells[0].query).toBe('SELECT 8');
   });
 
   it('runs a SQL cell and shows the result', async () => {
@@ -247,6 +297,46 @@ describe('NotebookView', () => {
     fireEvent.click(screen.getAllByLabelText('Move cell up').at(-1)!);
     cells = onChange.mock.calls.at(-1)![0].cells as NotebookContent['cells'];
     expect(cells.map(cell => cell.id)).toEqual(['b', 'c', 'a']);
+  });
+
+  it('reorders cells visually without remounting or physically moving Monaco hosts', async () => {
+    function ControlledNotebook() {
+      const [content, setContent] = React.useState<NotebookContent>({
+        description: null,
+        cells: [sqlCell({ id: 'a', query: 'SELECT 1' }), sqlCell({ id: 'b', query: 'SELECT 2' })],
+      });
+      return <NotebookView content={content} onChange={(patch) => setContent(prev => ({ ...prev, ...patch }))} />;
+    }
+
+    const { container } = renderWithProviders(<ControlledNotebook />);
+    const editorA = (await screen.findAllByLabelText('SQL editor'))[0];
+    const editorB = (await screen.findAllByLabelText('SQL editor'))[1];
+    fireEvent.click(screen.getAllByLabelText('Move cell down')[0]);
+
+    await waitFor(() => {
+      const hosts = [...container.querySelectorAll<HTMLElement>('[data-notebook-cell-id]')];
+      // DOM ownership stays stable for Monaco; CSS order alone changes the visual sequence.
+      expect(hosts.map(host => host.dataset.notebookCellId)).toEqual(['a', 'b']);
+      expect(hosts.map(host => host.style.order)).toEqual(['1', '0']);
+      expect(screen.getAllByLabelText('SQL editor')).toEqual([editorA, editorB]);
+    });
+  });
+
+  it('gives every notebook SQL editor a stable, cell-specific virtual model key', async () => {
+    renderWithProviders(
+      <NotebookView
+        content={{ description: null, cells: [sqlCell({ id: 'a' }), sqlCell({ id: 'b' })] }}
+        onChange={onChange}
+        filePath="/analysis/show-hn.notebook"
+      />
+    );
+    const keys = (await screen.findAllByLabelText('SQL editor')).map(editor => editor.getAttribute('data-virtual-model-key'));
+    expect(keys[0]).toContain('/a.sql');
+    expect(keys[1]).toContain('/b.sql');
+    expect(new Set(keys).size).toBe(2);
+    for (const key of keys) {
+      expect(() => URI.parse(key!)).not.toThrow();
+    }
   });
 
   it('hides cell movement controls in read-only notebooks', () => {

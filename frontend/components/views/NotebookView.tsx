@@ -15,7 +15,7 @@
  * The JSON view is NOT this view's concern: FileView swaps in the shared CodeView
  * when the header's eye/code toggle selects "Code".
  */
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { PageMarkerDevOverlay } from '@/components/views/story/PageMarkerDevOverlay';
 import { Button } from '@/components/kit/button';
@@ -102,8 +102,25 @@ export default function NotebookView({
   // (cells change on every commit; stable callbacks avoid churning cell props
   // and the per-cell debounced query handler).
   const cellsRef = useRef(cells);
-  useEffect(() => { cellsRef.current = cells; }, [cells]);
-  const commit = useCallback((next: NotebookCell[]) => onChange({ cells: next }), [onChange]);
+  useEffect(() => {
+    cellsRef.current = cells;
+  }, [cells]);
+  const commit = useCallback((next: NotebookCell[]) => {
+    // Keep rapid consecutive commands based on the latest local order even before
+    // the controlled Redux value makes its round trip back into this component.
+    cellsRef.current = next;
+    onChange({ cells: next });
+  }, [onChange]);
+
+  // Monaco does not tolerate its host being physically detached/reinserted while
+  // React reorders a keyed list (it can race a disposed editor service). Render
+  // hosts in canonical stable-id order and use flex `order` for logical order.
+  // Adding/removing a key never changes the relative DOM order of existing hosts.
+  const domOrderedCells = useMemo(
+    () => [...cells].sort((a, b) => a.id.localeCompare(b.id)),
+    [cells],
+  );
+  const logicalIndexById = new Map(cells.map((cell, index) => [cell.id, index]));
 
   const updateCell = useCallback((id: string, partial: Partial<NotebookCell>) => {
     commit(cellsRef.current.map(c => (c.id === id ? ({ ...c, ...partial } as NotebookCell) : c)));
@@ -210,7 +227,7 @@ export default function NotebookView({
                   vizV2Enabled={vizV2Enabled}
                   filePath={filePath}
                   executed={executedById[cell.id] ?? null}
-                  onExecutedChange={(e) => setCellExecuted(cell.id, e)}
+                  onExecutedChange={setCellExecuted}
                   onCellChange={updateCell}
                   onRemove={removeCell}
                 />
@@ -265,11 +282,14 @@ export default function NotebookView({
           />
         ) : (
           <>
-            <CellInsertZone onInsert={(t) => insertAt(0, t)} readOnly={readOnly} />
-            {cells.map((cell, i) => {
+            <div style={{ order: -1 }}>
+              <CellInsertZone onInsert={(t) => insertAt(0, t)} readOnly={readOnly} />
+            </div>
+            {domOrderedCells.map((cell) => {
+              const i = logicalIndexById.get(cell.id) ?? 0;
               const active = cell.id === activeCellId;
               return (
-                <Fragment key={cell.id}>
+                <div key={cell.id} data-notebook-cell-id={cell.id} style={{ order: i }}>
                   <div className="relative">
                     {/* Jupyter-style cell number in the left gutter */}
                     <span
@@ -311,13 +331,13 @@ export default function NotebookView({
                         active={active}
                         onActivate={onActivateCell}
                         collapsed={collapsedIds.has(cell.id)}
-                        onToggleCollapse={() => toggleCollapse(cell.id)}
+                        onToggleCollapse={toggleCollapse}
                         runNonce={runNonce}
                         readOnly={readOnly}
                         vizV2Enabled={vizV2Enabled}
                         filePath={filePath}
                         executed={executedById[cell.id] ?? null}
-                        onExecutedChange={(e) => setCellExecuted(cell.id, e)}
+                        onExecutedChange={setCellExecuted}
                         onCellChange={updateCell}
                         onRemove={removeCell}
                       />
@@ -327,7 +347,7 @@ export default function NotebookView({
                         active={active}
                         onActivate={onActivateCell}
                         collapsed={collapsedIds.has(cell.id)}
-                        onToggleCollapse={() => toggleCollapse(cell.id)}
+                        onToggleCollapse={toggleCollapse}
                         readOnly={readOnly}
                         filePath={filePath}
                         onCellChange={updateCell}
@@ -336,7 +356,7 @@ export default function NotebookView({
                     )}
                   </div>
                   <CellInsertZone onInsert={(t) => insertAt(i + 1, t)} readOnly={readOnly} />
-                </Fragment>
+                </div>
               );
             })}
           </>

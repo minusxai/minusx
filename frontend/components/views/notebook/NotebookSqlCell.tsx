@@ -15,7 +15,7 @@
  * the query persists the cell but leaves `executed` untouched, so results stay
  * visible while typing.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/components/kit/cn';
 import NotebookCellHeader from './NotebookCellHeader';
 import SqlEditor from '@/components/query-builder/SqlEditor';
@@ -48,7 +48,7 @@ interface NotebookSqlCellProps {
   active?: boolean;
   onActivate?: (cellId: string) => void;
   collapsed?: boolean;
-  onToggleCollapse?: () => void;
+  onToggleCollapse?: (cellId: string) => void;
   /** Bumped by the header "Run all" command — re-running this cell on change. */
   runNonce?: number;
   readOnly?: boolean;
@@ -60,7 +60,7 @@ interface NotebookSqlCellProps {
   /** What this cell last ran — lifted to NotebookView so results survive the
       edit↔present remount (the present view is a separate subtree). */
   executed?: Executed | null;
-  onExecutedChange?: (executed: Executed) => void;
+  onExecutedChange?: (cellId: string, executed: Executed) => void;
   onCellChange: (id: string, partial: Partial<SqlCell>) => void;
   onRemove: (id: string) => void;
 }
@@ -68,7 +68,7 @@ interface NotebookSqlCellProps {
 // Stable empty params so execution doesn't refetch every render.
 const EMPTY_PARAMS: Record<string, unknown> = {};
 
-export default function NotebookSqlCell({
+function NotebookSqlCell({
   cell, active = false, onActivate, collapsed = false, onToggleCollapse, runNonce = 0,
   readOnly = false, vizV2Enabled = true, presentMode = false, filePath, executed = null, onExecutedChange, onCellChange, onRemove,
 }: NotebookSqlCellProps) {
@@ -112,13 +112,13 @@ export default function NotebookSqlCell({
   const [chartSeriesCount, setChartSeriesCount] = useState<number | undefined>(undefined);
 
 
-  const run = useCallback(() => {
-    onExecutedChange?.({
-      query: cell.query,
+  const run = useCallback((currentQuery?: string) => {
+    onExecutedChange?.(cell.id, {
+      query: currentQuery ?? cell.query,
       params: cell.parameterValues ?? {},
       database: cell.connection_name,
     });
-  }, [cell.query, cell.parameterValues, cell.connection_name, onExecutedChange]);
+  }, [cell.id, cell.query, cell.parameterValues, cell.connection_name, onExecutedChange]);
 
   // Header "Run all" command: re-run this cell when the nonce changes.
   const lastRunNonce = useRef(runNonce);
@@ -190,7 +190,7 @@ export default function NotebookSqlCell({
       <NotebookCellHeader
         cellType="sql"
         collapsed={collapsed}
-        onToggleCollapse={() => onToggleCollapse?.()}
+        onToggleCollapse={() => onToggleCollapse?.(cell.id)}
         name={cell.name ?? ''}
         onNameChange={(name) => handleChange({ name })}
         onRemove={() => onRemove(cell.id)}
@@ -228,6 +228,7 @@ export default function NotebookSqlCell({
             schemaData={schemaData}
             databaseName={cell.connection_name}
             connectionType={connectionType}
+            virtualModelKey={`notebook-model/${encodeURIComponent(filePath ?? 'draft')}/${encodeURIComponent(cell.id)}.sql`}
           />
         </div>
       )}
@@ -288,7 +289,7 @@ export default function NotebookSqlCell({
           lastSubmittedValues={executed?.params}
           onValueChange={(name, value) =>
             handleChange({ parameterValues: { ...(cell.parameterValues ?? {}), [name]: value } })}
-          onSubmit={(values) => onExecutedChange?.({
+          onSubmit={(values) => onExecutedChange?.(cell.id, {
             query: cell.query, params: values, database: cell.connection_name,
           })}
           onParametersChange={(parameters) => handleChange({ parameters })}
@@ -332,3 +333,5 @@ export default function NotebookSqlCell({
     </div>
   );
 }
+
+export default memo(NotebookSqlCell);
