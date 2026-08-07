@@ -109,7 +109,9 @@ of it. Everything below the fold is a caller.
 **`components/viz/VegaChart.tsx`** is the only browser renderer. Pure view (envelope + rows +
 colorMode in, no Redux). It hard-forces Vega's **SVG** renderer because captures serialize live
 DOM and `<canvas>` serializes empty. It rebuilds the view on envelope/colorMode change, pushes
-data-only updates through `view.data()`, and drives width/height signals from a `ResizeObserver`.
+data-only updates through `view.data()`, and drives root width/height signals from a
+`ResizeObserver`; top-level facets instead receive container-planned `child_width`/`child_height`
+signals because Vega-Lite compiles each panel to those dimensions.
 Several render-time decisions are *compile-time constants* baked before `parse` — the legend
 column count (`computeLegendPlan`) and the x-axis label angle (`computeXLabelAngle`) — so a
 resize that flips either decision bumps an epoch and rebuilds the whole view. It also owns the

@@ -110,10 +110,113 @@ export interface VegaViewOptions {
   container?: HTMLElement;
   width?: number;
   height?: number;
+  /** Container-bounded child sizing for a top-level Vega-Lite facet. */
+  facetLayout?: FacetLayoutPlan | null;
   /** Install the styled HTML tooltip handler (browser only; styled in globals.css). */
   tooltipTheme?: 'light' | 'dark';
   /** Vega parser config — used by the native-vega engine (VL bakes theme at compile). */
   parserConfig?: Record<string, unknown>;
+}
+
+/**
+ * Render-time dimensions for a top-level Vega-Lite facet. Facets compile their
+ * plot dimensions to `child_width` / `child_height`, not the root `width` /
+ * `height` signals unit charts use, so the view sizing path needs this separate
+ * contract. Missing child dimensions mean the author supplied that dimension
+ * explicitly and the renderer must leave it alone.
+ */
+export interface FacetLayoutPlan {
+  childWidth?: number;
+  childHeight?: number;
+  columns: number;
+  rows: number;
+}
+
+const FACET_DEFAULT_SPACING = 20;
+// A facet child dimension is the DATA rectangle only. Per-column axes/header
+// labels and the view's export padding sit outside it; reserve those before
+// dividing the container so the complete SVG, not just its plots, stays bounded.
+const FACET_OUTER_PADDING_PX = 10;
+const FACET_COLUMN_CHROME_PX = 24;
+// Theme legend + facet title/header consume ~90px before per-row x-axis chrome.
+const FACET_SHARED_VERTICAL_CHROME_PX = 90;
+const FACET_ROW_CHROME_PX = 40;
+const FACET_MIN_CHILD_PX = 40;
+
+const record = (value: unknown): Record<string, unknown> | null =>
+  value != null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+
+const distinctFacetValues = (
+  def: Record<string, unknown> | null,
+  rows: Record<string, unknown>[],
+): number => {
+  const field = def?.field;
+  if (typeof field !== 'string') return 1;
+  const values = new Set<unknown>();
+  for (const row of rows) {
+    const value = row[field];
+    if (value != null) values.add(value);
+  }
+  if (values.size > 0) return values.size;
+  // A transformed facet field may not exist in the raw rows. An authored sort
+  // array still gives us the intended cardinality; otherwise retain one safe cell.
+  return Array.isArray(def.sort) && def.sort.length > 0 ? def.sort.length : 1;
+};
+
+const facetSpacing = (spec: Record<string, unknown>, axis: 'row' | 'column'): number => {
+  const spacing = spec.spacing;
+  if (typeof spacing === 'number' && Number.isFinite(spacing)) return Math.max(0, spacing);
+  const perAxis = record(spacing)?.[axis];
+  return typeof perAxis === 'number' && Number.isFinite(perAxis)
+    ? Math.max(0, perAxis)
+    : FACET_DEFAULT_SPACING;
+};
+
+/** Plan a top-level facet inside the given outer container. */
+export function computeFacetLayoutPlan(
+  spec: Record<string, unknown>,
+  rows: Record<string, unknown>[],
+  containerWidth: number,
+  containerHeight: number,
+): FacetLayoutPlan | null {
+  const facet = record(spec.facet);
+  const child = record(spec.spec);
+  if (!facet || !child) return null;
+
+  let columns: number;
+  let rowCount: number;
+  if (typeof facet.field === 'string') {
+    const count = distinctFacetValues(facet, rows);
+    const authoredColumns = typeof spec.columns === 'number' && Number.isFinite(spec.columns)
+      ? Math.max(1, Math.floor(spec.columns))
+      : count;
+    columns = Math.min(authoredColumns, count);
+    rowCount = Math.ceil(count / columns);
+  } else {
+    columns = distinctFacetValues(record(facet.column), rows);
+    rowCount = distinctFacetValues(record(facet.row), rows);
+  }
+
+  const plan: FacetLayoutPlan = { columns, rows: rowCount };
+  if (!Object.prototype.hasOwnProperty.call(child, 'width')) {
+    const gap = facetSpacing(spec, 'column') * Math.max(0, columns - 1);
+    plan.childWidth = Math.max(
+      FACET_MIN_CHILD_PX,
+      Math.floor((Math.max(containerWidth, 80) - FACET_OUTER_PADDING_PX - gap) / columns
+        - FACET_COLUMN_CHROME_PX),
+    );
+  }
+  if (!Object.prototype.hasOwnProperty.call(child, 'height')) {
+    const gap = facetSpacing(spec, 'row') * Math.max(0, rowCount - 1);
+    plan.childHeight = Math.max(
+      FACET_MIN_CHILD_PX,
+      Math.floor((Math.max(containerHeight, 60) - FACET_OUTER_PADDING_PX - gap
+        - FACET_SHARED_VERTICAL_CHROME_PX) / rowCount - FACET_ROW_CHROME_PX),
+    );
+  }
+  return plan;
 }
 
 /**
@@ -517,6 +620,38 @@ export function setMainData(view: View, rows: Record<string, unknown>[]): void {
   view.data(VIZ_DATASET_MAIN, rows.map(r => ({ ...r })));
 }
 
+const setSignalIfPresent = (view: View, name: string, value: number): void => {
+  try {
+    view.signal(name, value);
+  } catch {
+    // The plan is derived from the authored VL spec, but a future compiler may
+    // rename or omit the child signal. Leave that dimension at its compiled value.
+  }
+};
+
+/**
+ * Apply the correct responsive signals for the compiled view shape. Unit/layer
+ * charts use Vega's root dimensions; top-level facets use child dimensions and
+ * must not also receive a root size (that root becomes extra overflowing area).
+ */
+export function resizeVegaView(
+  view: View,
+  size: Pick<VegaViewOptions, 'width' | 'height' | 'facetLayout'>,
+): View {
+  if (size.facetLayout) {
+    if (size.facetLayout.childWidth != null) {
+      setSignalIfPresent(view, 'child_width', size.facetLayout.childWidth);
+    }
+    if (size.facetLayout.childHeight != null) {
+      setSignalIfPresent(view, 'child_height', size.facetLayout.childHeight);
+    }
+    return view;
+  }
+  if (size.width != null) view.width(size.width);
+  if (size.height != null) view.height(size.height);
+  return view;
+}
+
 /** Parse a compiled Vega spec and build a View with the query result bound as 'main'. */
 export function createVegaView(
   vegaSpec: VegaSpec,
@@ -534,9 +669,7 @@ export function createVegaView(
       : {}),
   });
   setMainData(view, rows);
-  if (opts.width != null) view.width(opts.width);
-  if (opts.height != null) view.height(opts.height);
-  return view;
+  return resizeVegaView(view, opts);
 }
 
 /** Headless render: the server/preview/export/image-attachment path. */
@@ -546,7 +679,14 @@ export async function renderVegaLiteToSvg(
   mode: 'light' | 'dark',
   size?: { width?: number; height?: number },
 ): Promise<string> {
-  const view = createVegaView(compileVegaLite(spec, mode), rows, { renderer: 'none', ...size });
+  const width = size?.width ?? 640;
+  const height = size?.height ?? 400;
+  const facetLayout = computeFacetLayoutPlan(spec, rows, width, height);
+  const view = createVegaView(compileVegaLite(spec, mode), rows, {
+    renderer: 'none',
+    ...size,
+    facetLayout,
+  });
   try {
     await view.runAsync();
     return await view.toSVG();
@@ -573,8 +713,11 @@ export async function renderEnvelopeToCanvas(
     ? computeXLabelAngle(resolved.spec, rows, opts.width ?? 640)
     : null;
   const { vegaSpec, parserConfig } = toVegaSpec(resolved, mode, { xLabelAngle });
+  const facetLayout = resolved.engine === 'vega-lite'
+    ? computeFacetLayoutPlan(resolved.spec, rows, opts.width ?? 640, opts.height ?? 400)
+    : null;
   const view = createVegaView(vegaSpec, rows, {
-    renderer: 'none', parserConfig, width: opts.width, height: opts.height,
+    renderer: 'none', parserConfig, width: opts.width, height: opts.height, facetLayout,
   });
   try {
     await injectNamedAssets(view, resolved.assets);
@@ -598,7 +741,12 @@ export async function renderEnvelopeToSvg(
     ? computeXLabelAngle(resolved.spec, rows, size?.width ?? 640)
     : null;
   const { vegaSpec, parserConfig } = toVegaSpec(resolved, mode, { xLabelAngle });
-  const view = createVegaView(vegaSpec, rows, { renderer: 'none', parserConfig, ...size });
+  const facetLayout = resolved.engine === 'vega-lite'
+    ? computeFacetLayoutPlan(resolved.spec, rows, size?.width ?? 640, size?.height ?? 400)
+    : null;
+  const view = createVegaView(vegaSpec, rows, {
+    renderer: 'none', parserConfig, ...size, facetLayout,
+  });
   try {
     await injectNamedAssets(view, resolved.assets);
     await view.runAsync();

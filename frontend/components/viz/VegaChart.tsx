@@ -4,15 +4,16 @@
  * <VegaChart> — the single browser renderer for Viz V2 envelopes.
  * Pure view: envelope + rows + colorMode in, chart out. No Redux.
  *
- * Lifecycle: compile+parse+mount on spec/mode change (theme change = recompile,
- * ); data-only updates flow through view.datawithout a rebuild; container
- * resizes update the width/height signals; every view is finalized on unmount.
+ * Lifecycle: compile+parse+mount on spec/mode change (theme change = recompile);
+ * data-only updates flow through view.data without a rebuild; container resizes
+ * update root width/height signals (or a facet's child signals); every view is
+ * finalized on unmount.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChartError } from '@/components/plotx/ChartError';
 import type { View } from 'vega';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
-import { createVegaView, setMainData, resolveEnvelopeSpec, toVegaSpec, computeLegendPlan, computeXLabelAngle, injectNamedAssets } from '@/lib/viz/render-vega';
+import { createVegaView, setMainData, resolveEnvelopeSpec, toVegaSpec, computeLegendPlan, computeXLabelAngle, computeFacetLayoutPlan, resizeVegaView, injectNamedAssets } from '@/lib/viz/render-vega';
 import { inferVizColumnsFromRows } from '@/lib/viz/query-data';
 import { chartTokenRangeFromElement } from '@/lib/viz/chart-tokens';
 import { POINT_MAP_DEFAULT_TILE_URL, POINT_MAP_DARK_TILE_URL } from '@/lib/viz/viz-templates';
@@ -63,9 +64,10 @@ export interface VegaChartProps {
   onViewChange?: (params: Record<string, unknown>) => void;
 }
 
-// Vega's width/height signals size the data rectangle; axes/legends draw in the
-// padding. autosize fit+contains:padding (applied at compile) keeps the total within
-// the container, but the initial signal still needs a sane starting size.
+// Vega's root width/height signals size a unit chart's data rectangle; facet charts
+// use child_width/child_height instead (planned in render-vega). Axes/legends draw in
+// the padding. autosize fit+contains:padding keeps unit charts within the container,
+// and every view still needs a sane outer size for its initial plan.
 const sizeOf = (el: HTMLElement) => ({
   width: Math.max(el.clientWidth, 80),
   height: Math.max(el.clientHeight, 60),
@@ -175,6 +177,15 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
         const hasGuide = tooltipPlan ? injectGuideMark(vegaSpec as Record<string, unknown>) : false;
         if (cancelled) return;
         el.replaceChildren(); // drop any stale chart DOM from a failed predecessor
+        const initialSize = sizeOf(el);
+        const facetLayout = vlSpecRef.current
+          ? computeFacetLayoutPlan(
+              vlSpecRef.current,
+              rowsRef.current,
+              initialSize.width,
+              initialSize.height,
+            )
+          : null;
         view = createVegaView(vegaSpec, rowsRef.current, {
           // Always vega's SVG renderer: captures serialize the live DOM (
           // <canvas> content serializes empty, so charts must be SVG in every captured surface).
@@ -182,7 +193,8 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
           container: el,
           tooltipTheme: colorMode,
           parserConfig,
-          ...sizeOf(el),
+          ...initialSize,
+          facetLayout,
         });
         viewRef.current = view;
         // Vega LOGS dataflow errors (an invalid axis format, a broken expression…)
@@ -366,6 +378,16 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
     const view = viewRef.current;
     if (!view) return;
     setMainData(view, rows);
+    const el = containerRef.current;
+    if (el) {
+      const size = sizeOf(el);
+      resizeVegaView(view, {
+        ...size,
+        facetLayout: vlSpecRef.current
+          ? computeFacetLayoutPlan(vlSpecRef.current, rows, size.width, size.height)
+          : null,
+      });
+    }
     // Keep the shared-tooltip index in sync with the live rows (no view rebuild).
     if (tooltipRef.current) tooltipRef.current.holder.data = buildTooltipData(rows, tooltipRef.current.plan);
     view.runAsync().catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
@@ -382,7 +404,7 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
     return () => mo.disconnect();
   }, []);
 
-  // Container resizes drive the size signals.
+  // Container resizes drive the shape-appropriate root or facet-child signals.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -394,7 +416,13 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
       const view = viewRef.current;
       if (!view) return;
       const { width, height } = sizeOf(el);
-      view.width(width).height(height).runAsync().catch(() => { /* resize race on unmount */ });
+      resizeVegaView(view, {
+        width,
+        height,
+        facetLayout: vlSpecRef.current
+          ? computeFacetLayoutPlan(vlSpecRef.current, rowsRef.current, width, height)
+          : null,
+      }).runAsync().catch(() => { /* resize race on unmount */ });
     });
     ro.observe(el);
     return () => ro.disconnect();
