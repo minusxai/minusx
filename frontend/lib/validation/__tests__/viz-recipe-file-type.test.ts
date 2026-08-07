@@ -166,6 +166,12 @@ describe('FilesAPI create/save for viz', () => {
     expect(data[0].content).toEqual(VALID_RECIPE);
   });
 
+  it('serves a valid new-file template (the /new/viz flow)', async () => {
+    const template = await FilesAPI.getTemplate('viz', {}, user);
+    expect(template.content).toBeDefined();
+    expect(validateFileState({ type: 'viz', content: template.content })).toBeNull();
+  });
+
   it('rejects creating a viz file with a broken template', async () => {
     await expect(
       FilesAPI.createFile(

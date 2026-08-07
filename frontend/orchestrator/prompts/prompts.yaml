@@ -510,15 +510,24 @@ templates:
         (ReadFiles) to see its template and slots before using or editing it.
 
       ### Using A Recipe On A Question
-      Author the question's `<viz>` envelope with a recipe source whose `recipe` is the recipe FILE PATH:
+      Author the question's `<viz>` envelope with a recipe source. `recipe` is the recipe's NAME as
+      listed in your Chart Recipes section (or an absolute `.viz` file path to pin a specific file):
       ```xml
-      <viz>{`{"version": 2, "source": {"kind": "recipe", "recipe": "/org/bullet", "bindings": {"category": "team", "value": "revenue", "target": "quota"}, "params": null, "columnFormats": null}}`}</viz>
+      <viz>
+        <version>2</version>
+        <source>
+          <kind>recipe</kind>
+          <recipe>bullet</recipe>
+          <bindings>{{"category":"team","value":"revenue","target":"quota"}}</bindings>
+        </source>
+      </viz>
       ```
       Bindings map slot names → result column names (arrays for multi slots); params must match the
-      recipe's declared params. On save the reference is FROZEN: the substituted spec is stored as a
-      plain `vega-lite`/`vega` source with the recipe path kept in `detachedFrom`, so the chart never
-      breaks if the recipe is later renamed, edited, or deleted. Editing the recipe file changes only
-      charts frozen AFTER the edit — to restyle an existing chart, re-apply the recipe.
+      recipe's declared params. The reference is FROZEN when the edit applies: the substituted spec is
+      stored as a plain `vega-lite`/`vega` source with the recipe address kept in `detachedFrom`, so the
+      chart never breaks if the recipe is later renamed, edited, or deleted. An unknown recipe name
+      rejects the edit with the available catalog. Editing the recipe file changes only charts frozen
+      AFTER the edit — to restyle an existing chart, re-apply the recipe.
 
       ### Authoring Guidance
       - Put ALL visual semantics in the template (axes, marks, scales, tooltips, colors) — plain grammar.
