@@ -18,13 +18,21 @@ const ajv = new Ajv({ allErrors: true, verbose: true });
 ajv.addFormat('jsx', () => true);
 ajv.addSchema(atlasSchema, 'atlas');
 
+// Recipe templates are open records of arbitrary depth (a whole Vega spec), so
+// they validate on a FIRST-error instance: `allErrors: true` over deep untrusted
+// input is a resource-exhaustion pattern (error accumulation scales with input
+// size), and one precise error is enough for the agent to self-correct here.
+const ajvFirstError = new Ajv({ allErrors: false, verbose: true });
+ajvFirstError.addFormat('jsx', () => true);
+ajvFirstError.addSchema(atlasSchema, 'atlas');
+
 // Validators compiled once at module load — not per-call
 const validators: Record<string, Ajv.ValidateFunction> = {
   QuestionContent: ajv.compile({ $ref: 'atlas#/$defs/QuestionContent' }),
   DashboardContent: ajv.compile({ $ref: 'atlas#/$defs/DashboardContent' }),
   StoryContent: ajv.compile({ $ref: 'atlas#/$defs/StoryContent' }),
   NotebookContent: ajv.compile({ $ref: 'atlas#/$defs/NotebookContent' }),
-  VizRecipeContent: ajv.compile({ $ref: 'atlas#/$defs/VizRecipeContent' }),
+  VizRecipeContent: ajvFirstError.compile({ $ref: 'atlas#/$defs/VizRecipeContent' }),
 };
 
 /** Short, human/LLM-readable description of a received value (type + a snippet). */
