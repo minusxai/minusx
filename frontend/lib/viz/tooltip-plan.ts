@@ -43,6 +43,13 @@ export type TooltipSeries =
   | { kind: 'stats'; valueField: string; label: string }
   | { kind: 'waterfall'; categoryField: string; valueField: string; valueLabel: string };
 
+export interface TooltipFacetRef {
+  /** Query-result column that partitions rows into facet panels. */
+  field: string;
+  /** Display label for the facet dimension. */
+  title: string;
+}
+
 export interface TooltipPlan {
   xField: string;
   xTitle: string;
@@ -50,6 +57,8 @@ export interface TooltipPlan {
   xTemporal: boolean;
   valueFormat?: string;
   series: TooltipSeries;
+  /** Present for composed charts whose child panels share an x scale. */
+  facets?: TooltipFacetRef[];
 }
 
 const asRecord = (v: unknown): Record<string, unknown> | null =>
@@ -64,6 +73,29 @@ const markType = (spec: Record<string, unknown>): string | null => {
 
 const channel = (spec: Record<string, unknown>, ch: string): Record<string, unknown> | null =>
   asRecord((spec.encoding as Record<string, unknown> | undefined)?.[ch]);
+
+const facetRef = (definition: Record<string, unknown>): TooltipFacetRef | null => {
+  if (typeof definition.field !== 'string') return null;
+  const header = asRecord(definition.header);
+  const title = typeof header?.title === 'string'
+    ? header.title
+    : typeof definition.title === 'string'
+      ? definition.title
+      : definition.field;
+  return { field: definition.field, title };
+};
+
+/** Read both VL facet syntaxes: facet:{field} and facet:{row:{...},column:{...}}. */
+const facetRefs = (spec: Record<string, unknown>): TooltipFacetRef[] => {
+  const facet = asRecord(spec.facet);
+  if (!facet) return [];
+  const direct = facetRef(facet);
+  if (direct) return [direct];
+  return ['row', 'column']
+    .map(channel => asRecord(facet[channel]))
+    .map(definition => definition && facetRef(definition))
+    .filter((ref): ref is TooltipFacetRef => ref != null);
+};
 
 /** The fold transform whose folded value feeds y (mirrors encoding-edit's findYFold). */
 const foldFields = (spec: Record<string, unknown>, yField: string): string[] | null => {
@@ -154,6 +186,18 @@ export function buildTooltipPlan(spec: Record<string, unknown>): TooltipPlan | n
   if (combo) return combo;
   const waterfall = waterfallPlan(spec);
   if (waterfall) return waterfall;
+  const facets = facetRefs(spec);
+  const child = asRecord(spec.spec);
+  if (facets.length > 0 && child) {
+    // A single scale function can snap every panel only while x is shared (VL's
+    // default). Independent x scales need per-cell scale lookup and stay on the
+    // native per-mark tooltip for now.
+    const xResolution = (spec.resolve as { scale?: { x?: unknown } } | undefined)?.scale?.x;
+    if (xResolution === 'independent') return null;
+    const childPlan = buildTooltipPlan(child);
+    if (!childPlan || (childPlan.series.kind !== 'wide' && childPlan.series.kind !== 'long')) return null;
+    return { ...childPlan, facets: [...facets, ...(childPlan.facets ?? [])] };
+  }
   // Annotated-unit specs (base chart + reference-line layers) plan against the base —
   // the shared tooltip/guide keeps working with annotations present.
   const unit = unitOf(spec);
@@ -236,6 +280,10 @@ export interface TooltipEntry {
   /** Value to run through the x SCALE for guide positioning, when it differs from
    *  xRaw (bin midpoints — xRaw is the range label, xPlot the numeric center). */
   xPlot?: number;
+  /** Facet values that own this x bucket (absent for unit charts). */
+  facetValues?: Record<string, unknown>;
+  /** Human-readable facet value(s), shown in the tooltip header. */
+  facetLabel?: string;
   /** Series rows at this x. */
   rows: TooltipRow[];
 }
@@ -257,9 +305,31 @@ const xKey = (raw: unknown, plan: TooltipPlan): string => {
   return String(raw);
 };
 
+const facetValuesOf = (
+  datum: Record<string, unknown> | null | undefined,
+  plan: TooltipPlan,
+): Record<string, unknown> | undefined => {
+  if (!plan.facets?.length) return undefined;
+  return Object.fromEntries(plan.facets.map(facet => [facet.field, datum?.[facet.field]]));
+};
+
+const facetKey = (datum: Record<string, unknown> | null | undefined, plan: TooltipPlan): string =>
+  plan.facets?.length ? `${JSON.stringify(plan.facets.map(facet => datum?.[facet.field]))}\u0000` : '';
+
 /** The x key for a hovered datum (matches `buildTooltipData`'s keys). */
 export function tooltipXKey(datum: Record<string, unknown> | null | undefined, plan: TooltipPlan): string {
-  return xKey(datum?.[plan.xField], plan);
+  return `${facetKey(datum, plan)}${xKey(datum?.[plan.xField], plan)}`;
+}
+
+/** Whether an indexed tooltip bucket belongs to the hovered facet panel. */
+export function tooltipEntryMatchesFacet(
+  entry: TooltipEntry,
+  facetDatum: Record<string, unknown> | null | undefined,
+  plan: TooltipPlan,
+): boolean {
+  if (!plan.facets?.length) return true;
+  if (!entry.facetValues || !facetDatum) return false;
+  return plan.facets.every(facet => String(entry.facetValues?.[facet.field]) === String(facetDatum[facet.field]));
 }
 
 /** Trim float dust off nice bin edges (steps are 1/2/2.5/5 ×10^k, so 6 digits suffice). */
@@ -355,8 +425,17 @@ export function buildTooltipData(rows: Array<Record<string, unknown>>, plan: Too
 
   for (const row of rows) {
     const xRaw = row[plan.xField];
-    const key = xKey(xRaw, plan);
-    if (!index.has(key)) { index.set(key, { xRaw, rows: [] }); acc.set(key, new Map()); }
+    const key = tooltipXKey(row, plan);
+    if (!index.has(key)) {
+      const facetValues = facetValuesOf(row, plan);
+      const facetLabel = plan.facets?.map(facet => String(row[facet.field])).join(' · ');
+      index.set(key, {
+        xRaw,
+        ...(facetValues ? { facetValues, facetLabel } : {}),
+        rows: [],
+      });
+      acc.set(key, new Map());
+    }
     const bucket = acc.get(key)!;
 
     if (plan.series.kind === 'wide') {
@@ -398,8 +477,9 @@ export interface RenderTooltipOptions {
  */
 export function renderSharedTooltipHtml(entry: TooltipEntry, opts: RenderTooltipOptions): string {
   const rows = opts.sortByValue === false ? entry.rows : [...entry.rows].sort((a, b) => b.value - a.value);
+  const facetPrefix = entry.facetLabel ? `${escapeHtml(entry.facetLabel)} · ` : '';
   const header =
-    `<div class="mx-tt-head">${escapeHtml(opts.xTitle)} · ${escapeHtml(opts.formatX(entry.xRaw))}</div>`;
+    `<div class="mx-tt-head">${facetPrefix}${escapeHtml(opts.xTitle)} · ${escapeHtml(opts.formatX(entry.xRaw))}</div>`;
   const body = rows.map(r => {
     const swatch = `<span class="mx-tt-dot" style="background:${escapeHtml(r.color ?? opts.colorFor(r.colorKey))}"></span>`;
     return `<div class="mx-tt-row">${swatch}<span class="mx-tt-name">${escapeHtml(r.label)}</span>` +

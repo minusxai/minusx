@@ -4,8 +4,9 @@
  * The ECharts-style axis tooltip draws a vertical guide line at the hovered x. It's a
  * native Vega `rule` mark injected BEHIND the data marks (so bars occlude it) and driven
  * by signals — NOT a DOM overlay — so it lands exactly on the data-rect pixel and clips
- * to the plot. Injected into the COMPILED vega spec (after vega-lite compile, before
- * parse) by <VegaChart>; the pointer handler there toggles the signals.
+ * to the plot. Unit-chart rules live at root; facet rules repeat inside the compiled
+ * `cell` group and only the cell matching `mxGuideFacet` becomes visible. Injection happens
+ * after vega-lite compile and before parse; <VegaChart> toggles the signals.
  *
  * Signals:
  *   mxGuidePx      — data-rect pixel x of the guide (same space as the marks). -1 = off-canvas.
@@ -17,6 +18,7 @@
  *                    Line/area/scatter keep the thin default (their x scale has no bandwidth).
  *   mxGuideOpacity — the guide's fill opacity. Rests at the thin-line default; softened for the
  *                    wide band so a full-slot fill doesn't overpower the bars.
+ *   mxGuideFacet   — facet datum for the hovered repeated cell (facet charts only).
  *
  * Why mxGuideH instead of `y2: {signal: 'height'}`: bounds hygiene under the render-time
  * `autosize: {type: 'fit', contains: 'padding'}`. The fit solve accounts every mark's
@@ -33,13 +35,38 @@ export const GUIDE_OPACITY = 0.28;
 // Wide (band) guide for bar charts: a full-slot fill needs a softer opacity than the thin line.
 export const GUIDE_BAND_OPACITY = 0.16;
 
+export interface GuideMarkOptions {
+  /** Facet columns identifying the one repeated cell whose guide should show. */
+  facetFields?: string[];
+}
+
 /**
- * Prepend the guide rule + its signals to a compiled vega spec. Returns false (a no-op)
- * for composed/empty specs whose top-level `marks` isn't a plain array to unshift into.
+ * Prepend the guide rule + its signals to a compiled vega spec. For a facet plan, the rule
+ * is prepended to the compiled `cell.marks`; otherwise it is prepended at root. Returns false
+ * when the required target mark list is absent.
  */
-export function injectGuideMark(vegaSpec: Record<string, unknown>): boolean {
+export function injectGuideMark(
+  vegaSpec: Record<string, unknown>,
+  options: GuideMarkOptions = {},
+): boolean {
   const marks = vegaSpec.marks;
-  if (!Array.isArray(marks) || marks.length === 0) return false; // composed/empty → no guide
+  if (!Array.isArray(marks) || marks.length === 0) return false;
+  const facetFields = options.facetFields?.filter(Boolean) ?? [];
+  let targetMarks = marks;
+  let opacitySignal = 'mxGuideOn * mxGuideOpacity';
+  if (facetFields.length > 0) {
+    const cell = marks.find(mark => {
+      const record = mark && typeof mark === 'object' ? mark as Record<string, unknown> : null;
+      return record?.name === 'cell' && record.type === 'group' && Array.isArray(record.marks);
+    }) as Record<string, unknown> | undefined;
+    if (!cell) return false;
+    targetMarks = cell.marks as unknown[];
+    const matches = facetFields.map(field => {
+      const key = JSON.stringify(field);
+      return `parent[${key}] === mxGuideFacet[${key}]`;
+    }).join(' && ');
+    opacitySignal = `mxGuideOn * mxGuideOpacity * (mxGuideFacet != null && parent != null && ${matches})`;
+  }
   const signals = (Array.isArray(vegaSpec.signals) ? vegaSpec.signals : []) as Array<Record<string, unknown>>;
   signals.push(
     { name: 'mxGuidePx', value: -1 },
@@ -48,9 +75,10 @@ export function injectGuideMark(vegaSpec: Record<string, unknown>): boolean {
     { name: 'mxGuideW', value: GUIDE_WIDTH },
     { name: 'mxGuideOpacity', value: GUIDE_OPACITY },
   );
+  if (facetFields.length > 0) signals.push({ name: 'mxGuideFacet', value: null });
   vegaSpec.signals = signals;
-  marks.unshift({
-    type: 'rule', interactive: false, clip: true,
+  targetMarks.unshift({
+    name: 'mx_guide', type: 'rule', interactive: false, clip: true,
     encode: { update: {
       // y2 reads mxGuideH (rest 0), not the `height` signal — the hidden guide must
       // contribute zero bounds to the autosize:fit solve (see the module doc).
@@ -59,7 +87,7 @@ export function injectGuideMark(vegaSpec: Record<string, unknown>): boolean {
       // width/opacity are signal-driven so VegaChart can grow the guide to the full band
       // width (bars) on hover while line/area keep the thin resting default.
       strokeWidth: { signal: 'mxGuideW' },
-      opacity: { signal: 'mxGuideOn * mxGuideOpacity' },
+      opacity: { signal: opacitySignal },
     } },
   });
   return true;
