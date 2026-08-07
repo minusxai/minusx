@@ -120,7 +120,11 @@ resize that flips either decision bumps an epoch and rebuilds the whole view. Th
 into nested facet specs, so a long faceted-series legend wraps within the outer container instead
 of widening and shifting the facet grid. The component also owns the
 shared multi-series tooltip (`lib/viz/tooltip-plan.ts` builds the plan and HTML,
-`lib/viz/shared-tooltip.ts` positions the card, `lib/viz/guide-mark.ts` injects the guide rule)
+`lib/viz/shared-tooltip.ts` positions the card, `lib/viz/facet-tooltip.ts` resolves a hovered
+facet cell, `lib/viz/guide-mark.ts` injects the guide rule). Shared-scale top-level facets use
+the same axis tooltip as unit charts: their index is partitioned by facet value and the pointer
+snaps in child-local coordinates. Their guide rule is repeated inside the compiled `cell` group,
+clipped to each child plot, and gated by the hovered facet datum so only that panel's line appears.
 and the interactive-map zoom buttons.
 
 **Theme.** `lib/viz/theme.ts` generates the light/dark Vega-Lite `config` and the native-Vega
@@ -336,6 +340,10 @@ ESLint (`frontend/eslint.config.mjs`) bans Chakra imports under `components/plot
 - **`view.tooltip()` must be called before the first `runAsync()`.** It re-initializes the
   renderer, which synchronously clears the SVG. Calling it after the first render wipes the chart
   with no error and nothing repaints until the next interaction.
+- **Facet shared tooltips must hit-test the compiled `cell` scopes.** A facet view reports a
+  root width of zero and its shared x scale returns child-local pixels. `facet-tooltip.ts` finds
+  the hovered scope from scenegraph bounds; `VegaChart` subtracts that cell origin and filters the
+  tooltip index by its facet datum. Treating a facet like a unit chart mixes panels and never snaps.
 - **Vega logs dataflow errors instead of rejecting `runAsync`.** `VegaChart` installs a custom
   logger and promotes the first logged error to a throw, otherwise a broken spec renders as a
   silent blank card.

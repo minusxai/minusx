@@ -86,6 +86,7 @@ vi.mock('@monaco-editor/react', () => {
       'data-fixed-overflow-widgets': String(props.options?.fixedOverflowWidgets ?? false),
       'data-hover-sticky': String(props.options?.hover?.sticky ?? true),
       'data-hover-hiding-delay': String(props.options?.hover?.hidingDelay ?? ''),
+      'data-model-path': props.path ?? '',
     });
   };
   // __esModule: true is required so that `import Editor from '@monaco-editor/react'`
