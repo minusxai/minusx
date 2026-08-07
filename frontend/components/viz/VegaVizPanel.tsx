@@ -37,6 +37,7 @@ import { TableConditionalFormatPanel } from '@/components/plotx/TableConditional
 import { PivotAxisBuilder } from '@/components/plotx/PivotAxisBuilder';
 import { VegaEncodingPanel } from './VegaEncodingPanel';
 import { useVizRecipes } from '@/lib/hooks/use-viz-recipes';
+import { toaster } from '@/components/ui/toaster';
 import { getFileRecipeRef, applyFileRecipeSelection } from '@/lib/viz/recipe-rebind';
 import type { FileRecipeEditContext } from '@/lib/viz/encoding-edit';
 import { VizSpecInspector } from './VizSpecInspector';
@@ -271,10 +272,27 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange, file
         workspaceRecipes={workspaceRecipes}
         activeRecipeAddress={fileRecipeRef?.recipe ?? null}
         onRecipeSelect={(address) => {
+          const name = address.split('/').pop() ?? address;
           const content = contentFor(address);
-          if (!content) return;
+          if (!content) {
+            toaster.create({ title: `Recipe "${name}" isn't loaded yet — try again in a moment`, type: 'error' });
+            return;
+          }
           const applied = applyFileRecipeSelection(content, address, vizResultColumns);
-          if (applied.ok) { setCustomPreview(false); onVizChange(applied.envelope); }
+          if (!applied.ok) {
+            // A clicked tile that silently does nothing reads as broken — say
+            // exactly why the recipe's slots can't bind to this result.
+            toaster.create({
+              title: `Can't apply "${name}" to this result`,
+              description: vizResultColumns.length === 0
+                ? 'Run the query first — recipes bind to the result columns.'
+                : applied.error,
+              type: 'error',
+            });
+            return;
+          }
+          setCustomPreview(false);
+          onVizChange(applied.envelope);
         }}
       />
       <div className="flex items-center gap-1 pb-2">
