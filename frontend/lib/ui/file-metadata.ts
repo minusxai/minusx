@@ -63,7 +63,7 @@ export const FILE_TYPE_METADATA = {
     icon: LuNotebook,
     color: 'accent.warning',      // Orange (#f39c12)
     category: 'analytics',
-    supported: false,
+    supported: true,
     h: 'none',
     markers: true,
   },

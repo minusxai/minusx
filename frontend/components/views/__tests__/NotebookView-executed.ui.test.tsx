@@ -88,12 +88,12 @@ afterEach(() => {
 });
 
 describe('NotebookView via NotebookContainerV2 (reduxExecuted)', () => {
-  it('shows no cell results when Redux has no cached executed snapshot for the cell', () => {
+  it('initializes existing cells for cached execution on mount', async () => {
     const store = setup();
 
     renderWithProviders(<NotebookContainerV2 fileId={NOTEBOOK_ID} />, { store });
 
-    expect(screen.queryByLabelText('Cell results')).not.toBeInTheDocument();
+    expect(await screen.findByLabelText('Cell results')).toBeInTheDocument();
   });
 
   it('shows the cell results when Redux already has a cached executed snapshot for the cell', () => {

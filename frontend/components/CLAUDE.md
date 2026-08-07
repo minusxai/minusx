@@ -222,8 +222,9 @@ observer is bound to the top realm and goes deaf inside the surface iframe. Widt
 **Outbound — what this tree calls**
 
 - **File & query state**: `lib/hooks/file-state-hooks.ts` (`useFile`, `useFolder`, `useQueryResult`)
-  and `lib/file-state/file-state.ts` (`editFile`, `getQueryResult`, `applyStoryHtmlEdit`,
-  `captureNotebookCellResult`). Containers use these; views never fetch.
+  and `lib/file-state/file-state.ts` (`editFile`, `getQueryResult`, `applyStoryHtmlEdit`).
+  Notebook cells mirror questions: results live in the query cache and per-cell execution
+  identities live in Redux ephemerals; neither is persisted in notebook content.
 - **Redux**: `store/filesSlice` (`selectMergedContent` = content + persistableChanges +
   ephemeralChanges), `store/uiSlice` (edit mode, view mode, view stack, chat flags),
   `store/chatSlice`, `store/authSlice` (`selectEffectiveUser`, `selectView`).

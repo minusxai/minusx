@@ -6,7 +6,7 @@
  *
  * It composes the leaf parts of the question page rather than reusing the
  * file-coupled QuestionViewV2: the SQL/Viz mode tabs (QueryModeSelector +
- * SqlEditor / VizTypeSelector + VizConfigPanel) and the results
+ * SqlEditor / VegaVizPanel) and the results
  * (QuestionVisualization), with execution via the file-decoupled useQueryResult
  * (keyed on query/params/db).
  *
@@ -24,12 +24,15 @@ import DatabaseSelector from '@/components/selectors/DatabaseSelector';
 import { QuestionVisualization } from '@/components/question/QuestionVisualization';
 import { VizTypeSelector, isClassicVizType } from '@/components/question/VizTypeSelector';
 import { VizConfigPanel } from '@/components/plotx/VizConfigPanel';
+import { VegaVizPanel } from '@/components/viz/VegaVizPanel';
 import { QueryModeSelector, type QueryTab } from '@/components/query-builder';
 import { useQueryResult } from '@/lib/hooks/file-state-hooks';
 import { syncParametersWithSQL } from '@/lib/sql/sql-params';
 import { useConnections } from '@/lib/hooks/useConnections';
 import { useContext as useSchemaContext } from '@/lib/hooks/useContext';
 import { connectionTypeToDialect } from '@/lib/types';
+import { vizSettingsToEnvelope } from '@/lib/viz/from-vizsettings';
+import { toVizColumns } from '@/lib/viz/query-data';
 import type {
   NotebookSqlCell as SqlCell, QuestionContent, VizSettings, FullQuery,
 } from '@/lib/types';
@@ -49,6 +52,8 @@ interface NotebookSqlCellProps {
   /** Bumped by the header "Run all" command — re-running this cell on change. */
   runNonce?: number;
   readOnly?: boolean;
+  /** Same workspace format flag as QuestionViewV2. */
+  vizV2Enabled?: boolean;
   /** Present mode: hide all chrome/editor — show just the chart. */
   presentMode?: boolean;
   filePath?: string;
@@ -56,8 +61,6 @@ interface NotebookSqlCellProps {
       edit↔present remount (the present view is a separate subtree). */
   executed?: Executed | null;
   onExecutedChange?: (executed: Executed) => void;
-  /** Persist a freshly-run result up to the notebook (cached into content.cellResults). */
-  onPersistResult?: (cellId: string, executed: Executed, data: unknown) => void;
   onCellChange: (id: string, partial: Partial<SqlCell>) => void;
   onRemove: (id: string) => void;
 }
@@ -67,7 +70,7 @@ const EMPTY_PARAMS: Record<string, unknown> = {};
 
 export default function NotebookSqlCell({
   cell, active = false, onActivate, collapsed = false, onToggleCollapse, runNonce = 0,
-  readOnly = false, presentMode = false, filePath, executed = null, onExecutedChange, onPersistResult, onCellChange, onRemove,
+  readOnly = false, vizV2Enabled = true, presentMode = false, filePath, executed = null, onExecutedChange, onCellChange, onRemove,
 }: NotebookSqlCellProps) {
   const handleChange = useCallback(
     (partial: Partial<SqlCell>) => onCellChange(cell.id, partial),
@@ -115,17 +118,7 @@ export default function NotebookSqlCell({
       params: cell.parameterValues ?? {},
       database: cell.connection_name,
     });
-    // If the same query was already executed, force a fresh fetch.
-    refetch();
-  }, [cell.query, cell.parameterValues, cell.connection_name, refetch, onExecutedChange]);
-
-  // Persist a freshly-run result up to the notebook so it survives reload. The
-  // capture itself no-ops when the identical data is already stored, so this
-  // doesn't churn dirty state on rehydrate or re-render.
-  useEffect(() => {
-    if (readOnly || !executed || !data || !onPersistResult) return;
-    onPersistResult(cell.id, executed, data);
-  }, [data, executed, readOnly, onPersistResult, cell.id]);
+  }, [cell.query, cell.parameterValues, cell.connection_name, onExecutedChange]);
 
   // Header "Run all" command: re-run this cell when the nonce changes.
   const lastRunNonce = useRef(runNonce);
@@ -150,6 +143,14 @@ export default function NotebookSqlCell({
   }), [readOnly]);
 
   const vizType = cell.vizSettings?.type || 'table';
+  // Match QuestionViewV2: a saved envelope is edited directly. Legacy notebook
+  // cells are converted in memory and upgraded on the first panel edit.
+  const effectiveViz = useMemo(() => {
+    if (!vizV2Enabled) return null;
+    if (cell.viz != null) return cell.viz;
+    if (!data || !cell.vizSettings) return null;
+    return vizSettingsToEnvelope(cell.vizSettings, toVizColumns(data.columns, data.types));
+  }, [cell.viz, cell.vizSettings, data, vizV2Enabled]);
 
   // Present mode: render just the visualization (no header, editor, or tabs).
   // It shows results already run in this session; cells never run are skipped
@@ -232,38 +233,51 @@ export default function NotebookSqlCell({
       )}
 
       {queryMode === 'viz' && (
-        <div className="flex max-h-[420px] flex-col gap-2 overflow-auto p-3">
-          <VizTypeSelector value={vizType} onChange={(type) => { if (isClassicVizType(type)) setViz({ type }) }} orientation="grouped" />
-          {vizType !== 'table' && data && (
-            <VizConfigPanel
-              columns={data.columns}
-              types={data.types}
-              chartType={vizType}
-              initialXCols={cell.vizSettings?.xCols ?? undefined}
-              initialYCols={cell.vizSettings?.yCols ?? undefined}
-              initialYRightCols={cell.vizSettings?.yRightCols ?? undefined}
-              onAxisChange={(xCols, yCols) => setViz({ xCols, yCols })}
-              onYRightColsChange={(yRightCols) => setViz({ yRightCols })}
-              initialTooltipCols={cell.vizSettings?.tooltipCols ?? undefined}
-              onTooltipColsChange={(tooltipCols) => setViz({ tooltipCols })}
-              initialPivotConfig={cell.vizSettings?.pivotConfig ?? undefined}
-              onPivotConfigChange={(pivotConfig) => setViz({ pivotConfig })}
-              initialGeoConfig={cell.vizSettings?.geoConfig ?? undefined}
-              onGeoConfigChange={(geoConfig) => setViz({ geoConfig })}
-              initialColumnFormats={cell.vizSettings?.columnFormats ?? undefined}
-              onColumnFormatsChange={(columnFormats) => setViz({ columnFormats })}
-              styleConfig={cell.vizSettings?.styleConfig ?? undefined}
-              onStyleConfigChange={(styleConfig) => setViz({ styleConfig })}
-              axisConfig={cell.vizSettings?.axisConfig ?? undefined}
-              onAxisConfigChange={(axisConfig) => setViz({ axisConfig })}
-              annotations={cell.vizSettings?.annotations ?? undefined}
-              onAnnotationsChange={(annotations) => setViz({ annotations })}
-              trendConfig={cell.vizSettings?.trendConfig ?? undefined}
-              onTrendConfigChange={(trendConfig) => setViz({ trendConfig })}
-              seriesCount={chartSeriesCount}
+        effectiveViz != null ? (
+          <div className="flex max-h-[420px] flex-col overflow-auto p-3">
+            <VegaVizPanel
+              envelope={effectiveViz}
+              columns={data?.columns ?? []}
+              types={data?.types ?? []}
+              rows={data?.rows}
+              onVizChange={(viz) => handleChange({ viz })}
             />
-          )}
-        </div>
+          </div>
+        ) : (
+          // Workspace rollback path: keep the classic editor when Viz V2 is off.
+          <div className="flex max-h-[420px] flex-col gap-2 overflow-auto p-3">
+            <VizTypeSelector value={vizType} onChange={(type) => { if (isClassicVizType(type)) setViz({ type }) }} orientation="grouped" />
+            {vizType !== 'table' && data && (
+              <VizConfigPanel
+                columns={data.columns}
+                types={data.types}
+                chartType={vizType}
+                initialXCols={cell.vizSettings?.xCols ?? undefined}
+                initialYCols={cell.vizSettings?.yCols ?? undefined}
+                initialYRightCols={cell.vizSettings?.yRightCols ?? undefined}
+                onAxisChange={(xCols, yCols) => setViz({ xCols, yCols })}
+                onYRightColsChange={(yRightCols) => setViz({ yRightCols })}
+                initialTooltipCols={cell.vizSettings?.tooltipCols ?? undefined}
+                onTooltipColsChange={(tooltipCols) => setViz({ tooltipCols })}
+                initialPivotConfig={cell.vizSettings?.pivotConfig ?? undefined}
+                onPivotConfigChange={(pivotConfig) => setViz({ pivotConfig })}
+                initialGeoConfig={cell.vizSettings?.geoConfig ?? undefined}
+                onGeoConfigChange={(geoConfig) => setViz({ geoConfig })}
+                initialColumnFormats={cell.vizSettings?.columnFormats ?? undefined}
+                onColumnFormatsChange={(columnFormats) => setViz({ columnFormats })}
+                styleConfig={cell.vizSettings?.styleConfig ?? undefined}
+                onStyleConfigChange={(styleConfig) => setViz({ styleConfig })}
+                axisConfig={cell.vizSettings?.axisConfig ?? undefined}
+                onAxisConfigChange={(axisConfig) => setViz({ axisConfig })}
+                annotations={cell.vizSettings?.annotations ?? undefined}
+                onAnnotationsChange={(annotations) => setViz({ annotations })}
+                trendConfig={cell.vizSettings?.trendConfig ?? undefined}
+                onTrendConfigChange={(trendConfig) => setViz({ trendConfig })}
+                seriesCount={chartSeriesCount}
+              />
+            )}
+          </div>
+        )
       )}
 
       {/* Parameters declared by this cell's query */}
@@ -306,6 +320,7 @@ export default function NotebookSqlCell({
             onAnnotationsChange={(annotations) => setViz({ annotations })}
             onTrendConfigChange={(trendConfig) => setViz({ trendConfig })}
             onSeriesCountChange={setChartSeriesCount}
+            onVizChange={(viz) => handleChange({ viz })}
             onOpenVizTab={() => setQueryMode('viz')}
             onHideVizTab={() => setQueryMode('sql')}
             vizTabOpen={queryMode === 'viz'}

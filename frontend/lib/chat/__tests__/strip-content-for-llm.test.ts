@@ -5,7 +5,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { omitFileStateContent, stripAugmentedContentForLlm } from '@/lib/chat/compress-augmented';
-import { appStateForLlm, takeAppStateMarkup } from '@/lib/appState';
+import { appStateForChatTransport, appStateForLlm, takeAppStateMarkup } from '@/lib/appState';
 import type { CompressedAugmentedFile, CompressedFileState } from '@/lib/types';
 
 function fs(id: number): CompressedFileState {
@@ -61,6 +61,34 @@ describe('strip content for LLM', () => {
     expect(folder.type).toBe('folder');
     const explore = appStateForLlm({ type: 'explore', state: null });
     expect(explore.type).toBe('explore');
+  });
+});
+
+describe('appStateForChatTransport', () => {
+  it('strips row markdown before a question app state crosses the network', () => {
+    const state = augmented();
+    state.queryResults = [{
+      id: 'qr1', columns: ['n'], types: ['int'], data: '| n |\n| --- |\n| 42 |',
+      totalRows: 1, shownRows: 1, truncated: false,
+    }];
+    const out = appStateForChatTransport({ type: 'file', state });
+    if (out?.type !== 'file') throw new Error('expected file app state');
+    expect(out.state.queryResults[0]).toMatchObject({ id: 'qr1', columns: ['n'], totalRows: 1, data: '', shownRows: 0 });
+  });
+
+  it('omits notebook cell query results from app state entirely', () => {
+    const state = augmented();
+    state.fileState = { ...state.fileState, type: 'notebook' };
+    state.queryResults = [{
+      id: 'cell-query', columns: ['n'], types: ['int'], data: '| n |\n| --- |\n| 42 |',
+      totalRows: 1, shownRows: 1, truncated: false,
+    }];
+    const out = appStateForChatTransport({
+      type: 'file', state, ui: { notebookActiveCellId: 'cell-1' },
+    });
+    if (out?.type !== 'file') throw new Error('expected file app state');
+    expect(out.state.queryResults).toEqual([]);
+    expect(out.ui?.notebookActiveCellId).toBe('cell-1');
   });
 });
 

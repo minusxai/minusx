@@ -30,6 +30,7 @@ import type {
   DbFile,
   AugmentedFile,
   CompressedAugmentedFile,
+  NotebookContent,
   QuestionContent,
   QueryResult,
 } from '@/lib/types';
@@ -152,6 +153,17 @@ async function executeQueriesForFile(
     await runOne(content.query, content.connection_name, content.parameters, content.parameterValues ?? {});
   };
 
+  // Notebook SQL cells are inline questions. ReadFiles is their on-demand data
+  // path now that notebook AppState deliberately carries no cell results.
+  const execNotebookCells = async (notebook: DbFile): Promise<void> => {
+    if (notebook.type !== 'notebook') return;
+    const content = notebook.content as NotebookContent;
+    for (const cell of content.cells ?? []) {
+      if (cell.type !== 'sql') continue;
+      await runOne(cell.query, cell.connection_name, cell.parameters, cell.parameterValues ?? {});
+    }
+  };
+
   // A story's INLINE <Question> + <Number> embeds (no saved file) are live queries the agent must
   // see the result — and crucially the parser ERROR — of. storyEmbedRuns is the SAME extraction
   // the client augmentation uses, so params (and therefore query hashes) line up exactly. Saved
@@ -165,6 +177,7 @@ async function executeQueriesForFile(
   };
 
   await execQuestion(file);
+  await execNotebookCells(file);
   await execStoryEmbeds(file);
   await Promise.all(references.map(ref => execQuestion(ref)));
 

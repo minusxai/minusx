@@ -34,7 +34,7 @@ import queryResultsReducer from '../queryResultsSlice';
 import authReducer from '../authSlice';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from './test-utils';
 import { DocumentDB } from '@/lib/database/documents-db';
-import type { QuestionContent, DocumentContent, UserRole, ContextContent, ConnectionContent } from '@/lib/types';
+import type { QuestionContent, DocumentContent, NotebookContent, UserRole, ContextContent, ConnectionContent } from '@/lib/types';
 import type { CompressedAugmentedFile } from '@/lib/types';
 import type { Mode } from '@/lib/mode/mode-types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
@@ -105,6 +105,7 @@ describe('Client-Server File State Parity', () => {
   // File IDs created in beforeAll
   let questionId: number;       // plain question, no params
   let dashboardId: number;      // dashboard referencing questionId
+  let notebookId: number;       // notebook with two inline SQL questions
   let paramQuestionId: number;  // question with :limit param (own default: limit=5)
   let paramDashboardId: number; // dashboard overriding limit=10
   let unsetNumParamQuestionId: number; // question with a :min_mrr number param and NO value set
@@ -192,6 +193,24 @@ describe('Client-Server File State Parity', () => {
     } as DocumentContent;
     dashboardId = await DocumentDB.create('Sales Dashboard', '/org/sales-dashboard', 'dashboard', dashboardContent, [questionId]);
     await DocumentDB.update(dashboardId, 'Sales Dashboard', '/org/sales-dashboard', dashboardContent, [questionId], 'init-dashboard');
+
+    const notebookContent: NotebookContent = {
+      description: 'Inline questions',
+      cells: [
+        {
+          type: 'sql', id: 'cell-a', name: 'A', query: 'SELECT 1 AS n',
+          connection_name: 'test_db', parameters: [], parameterValues: {},
+          viz: { version: 2, source: { kind: 'table', columnFormats: null, conditionalFormats: null, css: null } },
+        },
+        {
+          type: 'sql', id: 'cell-b', name: 'B', query: 'SELECT 2 AS n',
+          connection_name: 'test_db', parameters: [], parameterValues: {},
+          viz: { version: 2, source: { kind: 'table', columnFormats: null, conditionalFormats: null, css: null } },
+        },
+      ],
+    };
+    notebookId = await DocumentDB.create('SQL Notebook', '/org/sql-notebook', 'notebook', notebookContent, []);
+    await DocumentDB.update(notebookId, 'SQL Notebook', '/org/sql-notebook', notebookContent, [], 'init-notebook');
 
     // Question with :limit param — own default limit=5
     const paramQuestionContent = {
@@ -291,6 +310,17 @@ describe('Client-Server File State Parity', () => {
     expect(server).toHaveLength(1);
     expect(server[0].references).toHaveLength(1);
     expect(server[0]).toEqual(client);
+  });
+
+  it('ReadFiles executes every notebook SQL cell on demand', async () => {
+    mockRunQueryBounded.mockClear();
+    const [notebook] = await readFilesServer([notebookId], testUser, { executeQueries: true });
+
+    expect(notebook.queryResults.map(result => result.id)).toEqual([
+      getQueryHash('SELECT 1 AS n', {}, 'test_db'),
+      getQueryHash('SELECT 2 AS n', {}, 'test_db'),
+    ]);
+    expect(mockRunQueryBounded).toHaveBeenCalledTimes(2);
   });
 
   // ============================================================================

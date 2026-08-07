@@ -73,8 +73,8 @@ const VIZ_ENVELOPE_NOTE = {
 };
 
 /**
- * Recursively collapse every `vizSettings` and `viz` schema to a prose stub and
- * drop every `cellResults` schema. `vizSettings` is legacy (deliberately
+ * Recursively collapse every `vizSettings` and `viz` schema to a prose stub.
+ * `vizSettings` is legacy (deliberately
  * undocumented); `viz` is the V2 envelope, whose grammar (standard Vega-Lite v6
  * + shipped recipes + table/pivot config) is taught in prose by the questions
  * skill — inlining it would burn ~14k tokens per skill for zero information.
@@ -93,9 +93,6 @@ function stripVizDeep(node: unknown): void {
   if (props) {
     if ('vizSettings' in props) props.vizSettings = { ...VIZ_NOTE };
     if ('viz' in props) props.viz = { ...VIZ_ENVELOPE_NOTE };
-    // cellResults are system-managed cached results — never authored by the
-    // agent, so drop them from the EditFile/CreateFile schema description.
-    if ('cellResults' in props) delete props.cellResults;
   }
   for (const value of Object.values(obj)) stripVizDeep(value);
 }
@@ -123,7 +120,7 @@ export function contentSchemaText(fileType: AtlasSchemaFileType): string {
   const def = defs[CONTENT_DEF_BY_TYPE[fileType]];
   if (!def) throw new Error(`No Atlas content schema for file type '${fileType}'`);
   const clone = toJson(def);
-  stripVizDeep(clone); // collapse vizSettings → pointer, drop system-managed cellResults
+  stripVizDeep(clone); // collapse vizSettings → pointer
   return JSON.stringify(clone, null, 2);
 }
 

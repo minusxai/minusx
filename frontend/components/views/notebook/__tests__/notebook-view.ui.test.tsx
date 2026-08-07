@@ -56,6 +56,15 @@ vi.mock('@/lib/hooks/useConnections', () => ({
 
 vi.mock('@/components/question/VizTypeSelector', () => ({
   VizTypeSelector: () => React.createElement('div', { 'aria-label': 'Viz type selector' }),
+  isClassicVizType: () => true,
+}));
+
+vi.mock('@/components/viz/VegaVizPanel', () => ({
+  VegaVizPanel: ({ envelope, onVizChange }: any) => React.createElement(
+    'button',
+    { 'aria-label': 'Direct viz editor', onClick: () => onVizChange(envelope) },
+    envelope?.source?.kind,
+  ),
 }));
 
 vi.mock('@/components/lexical/LexicalTextEditor', () => ({
@@ -101,6 +110,8 @@ describe('NotebookView', () => {
     expect(cells[0].type).toBe('sql');
     expect(cells[0].id).toBeTruthy();
     expect((cells[0] as NotebookSqlCell).connection_name).toBe('');
+    expect((cells[0] as NotebookSqlCell).viz?.source.kind).toBe('table');
+    expect((cells[0] as NotebookSqlCell).vizSettings).toBeUndefined();
   });
 
   it('defaults the first SQL cell to the only available connection', () => {
@@ -140,6 +151,15 @@ describe('NotebookView', () => {
     await waitFor(() => {
       expect(screen.getByLabelText('Cell results')).toHaveTextContent('42');
     });
+  });
+
+  it('edits a cell viz through the direct Viz V2 panel', async () => {
+    renderWithProviders(<NotebookView content={{ description: null, cells: [sqlCell()] }} onChange={onChange} />);
+    fireEvent.click(await screen.findByLabelText('Run query'));
+    await screen.findByLabelText('Cell results');
+    fireEvent.click(screen.getByLabelText('Viz'));
+    expect(await screen.findByLabelText('Direct viz editor')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Viz type selector')).not.toBeInTheDocument();
   });
 
   it('adds a text cell and edits its markdown', () => {
