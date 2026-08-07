@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { formatChecklist, passedChecks, LLM_CHECKS } from '../checks';
+import { activeLlmChecks, formatChecklist, hasLlmChecks, passedChecks, DETERMINISTIC_CHECKS, LLM_CHECKS } from '../checks';
 import { scoreFileDeterministic } from '../registry';
-import { makeQuestion } from './fixtures';
+import { makeQuestion, makeStory } from './fixtures';
 
 describe('passedChecks', () => {
   it('lists checks that did not fire and excludes the ones that did', () => {
@@ -17,25 +17,58 @@ describe('passedChecks', () => {
     expect(cats.has('aesthetics')).toBe(false);
   });
 
-  it('includes LLM checks as passed only when the LLM ran', () => {
-    const base = scoreFileDeterministic('question', makeQuestion());
-    expect(passedChecks('question', base, false).some((c) => c.ruleId.startsWith('llm.'))).toBe(false);
+  it('never includes paused LLM checks as passed', () => {
+    const base = scoreFileDeterministic('story', makeStory());
+    expect(passedChecks('story', base, false).some((c) => c.ruleId.startsWith('llm.'))).toBe(false);
 
-    // simulate the LLM having run (all categories assessed)
+    // Even a stale report claiming an LLM run cannot surface paused checks as passes.
     const combined = { ...base, categories: base.categories.map((c) => ({ ...c, assessed: true, score: c.score ?? 5 })) };
-    const ids = passedChecks('question', combined, true).map((c) => c.ruleId);
-    expect(ids).toContain('llm.chart-type-fit'); // an LLM check that didn't fire → shown as passed
+    const ids = passedChecks('story', combined, true).map((c) => c.ruleId);
+    expect(ids.some((id) => id.startsWith('llm.'))).toBe(false);
+  });
+
+  it('keeps every visual-file LLM catalog paused and out of runtime checklists', () => {
+    expect(LLM_CHECKS.question).toHaveLength(7);
+    expect(LLM_CHECKS.question.every((check) => check.status === 'paused')).toBe(true);
+    expect(LLM_CHECKS.dashboard).toHaveLength(7);
+    expect(LLM_CHECKS.dashboard.every((check) => check.status === 'paused')).toBe(true);
+    expect(LLM_CHECKS.story).toHaveLength(13);
+    expect(LLM_CHECKS.story.every((check) => check.status === 'paused')).toBe(true);
+    expect(activeLlmChecks('question')).toEqual([]);
+    expect(activeLlmChecks('dashboard')).toEqual([]);
+    expect(activeLlmChecks('story')).toEqual([]);
+    expect(hasLlmChecks('question')).toBe(false);
+    expect(hasLlmChecks('dashboard')).toBe(false);
+    expect(hasLlmChecks('story')).toBe(false);
+    expect(formatChecklist('question')).toBe('');
+    expect(formatChecklist('dashboard')).toBe('');
+    expect(formatChecklist('story')).toBe('');
+  });
+
+  it('does not show an inactive threshold sibling as passed when its group has a finding', () => {
+    const report = scoreFileDeterministic('question', makeQuestion({ query: 'x'.repeat(3300) }));
+    const ids = passedChecks('question', report, false).map((check) => check.ruleId);
+    expect(ids).not.toContain('question.query-extreme'); // fired
+    expect(ids).not.toContain('question.query-too-long'); // same threshold group, not a pass
   });
 });
 
-// Error-severity LLM checks gate the overall score to 0, so the judge must be able to decide
-// them OBJECTIVELY — the checklist tells it each check's severity, and every error check's
-// pass-condition demands a pointable defect, never a taste call.
+describe('deterministic check catalog', () => {
+  it('gives every threshold level its own check with one severity', () => {
+    expect(DETERMINISTIC_CHECKS.question.find((c) => c.ruleId === 'question.undeclared-param')?.severity).toBe('error');
+    expect(DETERMINISTIC_CHECKS.question.find((c) => c.ruleId === 'question.query-too-long')?.severity).toBe('warn');
+    expect(DETERMINISTIC_CHECKS.question.find((c) => c.ruleId === 'question.query-extreme')?.severity).toBe('error');
+    for (const checks of Object.values(DETERMINISTIC_CHECKS)) {
+      for (const check of checks) expect(typeof check.severity).toBe('string');
+    }
+  });
+});
+
+// Preserve discipline in the paused catalog so reactivating a check later is safe.
 describe('LLM checklist severity discipline', () => {
-  it('formatChecklist tags every check with its severity', () => {
-    const out = formatChecklist('story');
-    expect(out).toContain('[aesthetics, error]');
-    expect(out).toContain('[aesthetics, warn]');
+  it('has no active runtime checklist', () => {
+    expect((['question', 'dashboard', 'story', 'context'] as const).every((type) =>
+      formatChecklist(type) === '')).toBe(true);
   });
 
   it('harmonious-chart-body is taste-level — warn, not a gate', () => {

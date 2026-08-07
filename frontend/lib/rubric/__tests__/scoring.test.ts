@@ -1,20 +1,19 @@
 import { describe, it, expect } from 'vitest';
-import { buildReport, gradeFor, scoreCategory, CATEGORY_WEIGHTS, DEFAULT_WARN_DEDUCTION, MAX_SCORE, MIN_SCORE } from '../scoring';
+import { buildReport, gradeFor, scoreCategory, CATEGORY_WEIGHTS, SEVERITY_SCORING, MAX_SCORE, MIN_SCORE } from '../scoring';
 import { scoreFileDeterministic } from '../registry';
 import { makeQuestion } from './fixtures';
 import type { RubricCategory, RubricFileType, RubricFinding } from '../types';
 
-const f = (severity: RubricFinding['severity'], deduction?: number): RubricFinding => ({
+const f = (severity: RubricFinding['severity']): RubricFinding => ({
   ruleId: 'x', category: 'correctness', severity, title: 't', detail: 'd', fix: 'f', source: 'rule',
-  ...(deduction !== undefined ? { deduction } : {}),
 });
 
 const half = (x: number) => Math.max(MIN_SCORE, Math.min(MAX_SCORE, Math.round(x * 2) / 2));
 
 // Expected values derived from the LIVE constants, so these formula tests survive tuning of the
-// deductions/weights (which are actively being calibrated).
+// fixed warning deduction and category weights.
 const catScore = (findings: RubricFinding[]) =>
-  half(MAX_SCORE - findings.reduce((s, x) => s + (x.deduction ?? DEFAULT_WARN_DEDUCTION), 0));
+  half(MAX_SCORE - findings.reduce((sum, finding) => sum + SEVERITY_SCORING[finding.severity].categoryDeduction, 0));
 
 function expectedOverall(type: RubricFileType, scores: Partial<Record<RubricCategory, number>>): number {
   const w = CATEGORY_WEIGHTS[type];
@@ -37,18 +36,16 @@ describe('scoring (0–5 scale, error = gate)', () => {
     expect(report.categories.find((c) => c.category === 'clarity')?.score).toBe(5);
   });
 
-  it('warn findings deduct their per-finding weight (default 1)', () => {
-    expect(scoreCategory('correctness', 0.45, [f('warn')]).score).toBe(MAX_SCORE - DEFAULT_WARN_DEDUCTION);
-    expect(scoreCategory('correctness', 0.45, [f('warn', 0.25)]).score).toBe(catScore([f('warn', 0.25)]));
-    expect(scoreCategory('correctness', 0.45, [f('warn', 0.25), f('warn', 0.5), f('warn')]).score)
-      .toBe(catScore([f('warn', 0.25), f('warn', 0.5), f('warn')]));
+  it('every warn finding deducts the same fixed amount', () => {
+    expect(scoreCategory('correctness', 0.45, [f('warn')]).score)
+      .toBe(MAX_SCORE - SEVERITY_SCORING.warn.categoryDeduction);
+    expect(scoreCategory('correctness', 0.45, [f('warn'), f('warn')]).score)
+      .toBe(catScore([f('warn'), f('warn')]));
   });
 
-  it('rounds to the nearest half', () => {
-    // 5 − 0.25 = 4.75 → rounds to 5 (a single lightest warning barely moves the needle)
-    expect(scoreCategory('clarity', 0.25, [f('warn', 0.25)]).score).toBe(5);
-    // 5 − 3×0.25 = 4.25 → 4.5
-    expect(scoreCategory('clarity', 0.25, [f('warn', 0.25), f('warn', 0.25), f('warn', 0.25)]).score).toBe(4.5);
+  it('subtracts one fixed deduction per warning', () => {
+    expect(scoreCategory('clarity', 0.25, [f('warn')]).score).toBe(4);
+    expect(scoreCategory('clarity', 0.25, [f('warn'), f('warn'), f('warn')]).score).toBe(2);
   });
 
   it('floors a category at MIN_SCORE under many warns', () => {
@@ -56,8 +53,8 @@ describe('scoring (0–5 scale, error = gate)', () => {
   });
 
   it('weights category warn scores into the overall (no errors present)', () => {
-    const cScore = catScore([f('warn'), f('warn', 0.5)]);
-    const report = buildReport('question', [f('warn'), f('warn', 0.5)]);
+    const cScore = catScore([f('warn'), f('warn')]);
+    const report = buildReport('question', [f('warn'), f('warn')]);
     expect(report.categories.find((c) => c.category === 'correctness')?.score).toBe(cScore);
     const expected = expectedOverall('question', { correctness: cScore, clarity: 5, aesthetics: 5 });
     expect(report.overall).toBe(expected);

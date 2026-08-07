@@ -239,7 +239,7 @@ Skills is editor/admin-only. Editor/admin changes save back through the context 
         └───────────────► combineReports() ◄──────────┘
                                 │
                           buildReport(fileType, findings, assessed)   ← scoring.ts
-                          · category = 5 − Σ deduction, rounded to 0.5
+                          · category = 5 − Σ severity deduction, rounded to 0.5
                           · ANY error ⇒ that category AND overall = 0
                           · overall = weighted mean over ASSESSED categories only
                                 │
@@ -357,21 +357,24 @@ The constants live beside the rules (`scoring.ts`: weights `0.3/0.3/0.4` for vis
   `poor` regardless of the other categories, and each category's own score also drops to 0. A
   category the source did not evaluate is `score: null, assessed: false` and is excluded from
   the weighted mean rather than counted as 5.
-- **Every check in `LLM_CHECKS` is categorized `aesthetics`.** So in practice the judge fills the
-  aesthetics gap the deterministic scorers leave for question/dashboard, and the deterministic
-  half owns correctness/clarity. `context` has an empty LLM list, so `scoreFileLLM` returns
-  without any LLM call at all.
-- **Judge voting is configured off.** `JUDGE_VOTES = 1` in `score-llm.server.ts` despite the
-  surrounding comment describing an N-run worst-of aggregation; a check a
-  run omits from its JSON is treated as neither pass nor fail.
+- **Every check in `LLM_CHECKS` is categorized `aesthetics`, but cataloged does not mean active.**
+  Question's seven, dashboard's seven, and story's thirteen checks have `status: 'paused'`; context
+  has no entries. `activeLlmChecks` is the runtime boundary, so `scoreFileLLM` currently makes no
+  model call for any file type. Question visual structure is checked deterministically from its
+  authoritative V2 `viz` envelope (with legacy `vizSettings` used only when V2 is absent).
+- **Judge voting is dormant and configured to one vote.** Every LLM check is paused. If one is
+  reactivated, `JUDGE_VOTES = 1` in `score-llm.server.ts`; a check the run omits from its JSON is
+  treated as neither pass nor fail.
 - **`CheckFileHealth` scores the last SAVED content**, while the rubric route's POST scores the
   caller-supplied merged content so the score matches the screenshot. A fresh unsaved draft
   therefore scores 0/5 through the tool.
 - **The live thresholds, stated plainly** because they are easy to misremember: `visual-count`
-  warns above `MAX_VISUALS = 15`; `JUDGE_VOTES = 1`; `too-much-text` warns above 400 tokens and
-  errors above 800; `typed-number` fires on any of four shapes in prose (`findFactualNumbers`,
-  `deterministic/shared.ts`) — a `$`-prefixed figure, a `%`-suffixed one, a comma-grouped
-  thousands value, *or* a bare run of 5+ digits, so `$12` and `7%` trip it too; and the judge's
+  warns above `MAX_VISUALS = 15`, while `no-visuals` errors at zero; `JUDGE_VOTES = 1`;
+  `too-much-text` warns above 400 tokens, while `extreme-text` errors above 800; `typed-number`
+  fires only on clearly formatted metric shapes in prose (`findFactualNumbers`,
+  `deterministic/shared.ts`) — a `$`-prefixed figure, a `%`-suffixed one, or a comma-grouped
+  thousands value. Bare digit runs are ignored as possible ids/years/references; `$12` and `7%`
+  still trip it. The dormant judge's
   model comes from the code-owned grade override `rubric_llm: task('rubric_llm', 'core')` in
   `agents/micro/micro-tasks.ts`.
 
@@ -395,14 +398,14 @@ The constants live beside the rules (`scoring.ts`: weights `0.3/0.3/0.4` for vis
 | MCP bearer tokens / PKCE codes | `lib/oauth/db.ts`, `lib/mcp/auth.ts` |
 | Add or retune a deterministic health rule | `lib/rubric/deterministic/*.ts` + `lib/rubric/checks.ts` |
 | Add or retune an LLM judge check | `lib/rubric/checks.ts` (`LLM_CHECKS`) + `micro.rubric_llm` prompt |
-| Change scoring weights, deductions, grade bands | `lib/rubric/scoring.ts` |
+| Change severity scoring behavior, category weights, or grade bands | `lib/rubric/scoring.ts` |
 | Score a new file type | `lib/rubric/registry.ts` (`SCORERS` + `DETERMINISTIC_COVERAGE`) |
 
 **Why the rubric is analytic rather than one number, and how a new rule finds its home.** Quality is decomposed into atomic, independently-scored criteria because a single holistic score suffers halo effects, is not individually actionable, and calibrates poorly against human judgment — and because a judging LLM forced into structured per-criterion output is markedly less verbose and less position-biased. The three categories are a priority waterfall, so every rule has exactly one home: `correctness` ("if ignored, is it wrong, broken, or dishonest?"), then `clarity` ("it is correct, but is it hard to understand at a glance?"), then `aesthetics` ("it works and reads fine, but does it look unpolished?"). A rule belongs to the *first* category whose question it fails. The scale is deliberately coarse (0–5, rounded to 0.5) to avoid false precision, and **each category's baseline is 5 no matter how many rules it contains** — a category is penalized only for actual findings. That property is what makes the rubric extensible: adding a more granular check can never harshen the score of a clean file.
 
 **The viz thresholds are grounded, not invented.** The dashboard visual-count band (roughly 5–9 visuals before a board stops being readable), F-pattern reading hierarchy, chart-fits-the-task, and the ≤7-categories-on-color ceiling come from published BI guidance (AHRQ dashboard design, Tableau and Sigma layout guidance); the chart-type-fit rules come from data-ink-ratio and graphical-perception work. The scoring model itself follows the analytic-rubric and LLM-judge-calibration literature. The story rules trace to our own `skill_stories` prompt — *a story is an argument with live numbers, not decoration*. Retune a constant when evidence says so, but do not treat these numbers as arbitrary defaults picked to make files pass.
 
-**A review without a screenshot is weaker, not equivalent.** `scoreFileLLM` still runs when no `screenshotUrl` is available, but the prompt then tells the judge to work from markup alone and to mark visual-only checks `applicable: false` — and an inapplicable check can never become a finding. Since every entry in `LLM_CHECKS` is an aesthetics check, a screenshot-less run silently narrows the judge to the subset it can assess from text. Treat "reviewed" without a settled capture as a partial review.
+**The LLM review path is currently dormant.** Every cataloged LLM check is paused, so `scoreFileLLM` returns an unassessed report without a model call for question, dashboard, story, or context. If a checklist is reactivated later, screenshot-less reviews remain weaker: the prompt marks visual-only checks `applicable: false`, and an inapplicable check can never become a finding.
 
 **The rubric is never ambient.** It is deliberately not injected into app state or `ReadFiles` results — that was the first version's design and it read as background noise the agent learned to skip. Feedback is delivered only where the agent is already acting: `EditFile` returns the full post-edit review (and degrades to the deterministic half when nothing is mounted to screenshot), `CreateFile` returns the deterministic report because a fresh draft renders nowhere, and `ReviewFile` is the explicit no-edit review. Adding the report to a passive read path re-creates the failure it was moved away from.
 

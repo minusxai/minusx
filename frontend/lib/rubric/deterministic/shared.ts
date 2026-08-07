@@ -2,7 +2,8 @@
  * Pure helpers shared by the deterministic scorers. No I/O, no query results — everything
  * here is a function of file content only.
  */
-import type { RubricCategory, RubricFinding, RubricSeverity } from '../types';
+import type { RubricFinding } from '../types';
+import { deterministicCheck } from '../checks';
 
 /** Rough token estimate (~4 chars/token) — used for query-size rules. */
 export function estimateTokens(text: string): number {
@@ -39,25 +40,31 @@ export function hasFontFamily(css: string): boolean {
 }
 
 /**
- * Factual figures that should be live (`<Number>` / `single_value`) rather than typed into
- * prose: currency, percentages, thousands-grouped numbers, and 5+ digit runs. Deliberately
- * ignores bare 1–4 digit numbers (years like 2019, small counts) to avoid false positives.
+ * Clearly formatted metrics that should usually be live (`<Number>` / `single_value`) rather
+ * than typed into prose: currency, percentages, and thousands-grouped values. Bare digit runs
+ * are deliberately ignored because they are often years, ids, ranks, versions, or citations.
  */
 export function findFactualNumbers(text: string): string[] {
-  const re = /\$\s?\d[\d,]*(?:\.\d+)?|\b\d[\d,]*(?:\.\d+)?\s?%|\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b|\b\d{5,}(?:\.\d+)?\b/g;
+  const re = /\$\s?\d[\d,]*(?:\.\d+)?|\b\d[\d,]*(?:\.\d+)?\s?%|\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b/g;
   return (text.match(re) ?? []).map((s) => s.trim());
 }
 
-/** Small constructor so scorers stay declarative. `deduction` sets a warn's weight
- *  (default 1, lightest 0.25); errors ignore it — they gate the score to 0. */
+/** Small constructor so scorers stay declarative. Category and severity come from the
+ *  centralized check catalog. */
 export function finding(
   ruleId: string,
-  category: RubricCategory,
-  severity: RubricSeverity,
   title: string,
   detail: string,
   fix: string,
-  deduction?: number,
 ): RubricFinding {
-  return { ruleId, category, severity, title, detail, fix, source: 'rule', ...(deduction !== undefined ? { deduction } : {}) };
+  const check = deterministicCheck(ruleId);
+  return {
+    ruleId,
+    category: check.category,
+    severity: check.severity,
+    title,
+    detail,
+    fix,
+    source: 'rule',
+  };
 }

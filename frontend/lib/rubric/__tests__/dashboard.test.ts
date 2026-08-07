@@ -53,7 +53,8 @@ describe('scoreDashboard', () => {
     expect(tooMany.find((x) => x.ruleId === 'dashboard.visual-count')?.severity).toBe('warn');
 
     const empty = scoreDashboard(makeDashboard({ assets: [], layout: { items: [] } }));
-    expect(empty.find((x) => x.ruleId === 'dashboard.visual-count')?.severity).toBe('error');
+    expect(empty.find((x) => x.ruleId === 'dashboard.no-visuals')?.severity).toBe('error');
+    expect(ids(empty)).not.toContain('dashboard.visual-count');
   });
 
   it('flags a duplicated question reference', () => {
@@ -63,7 +64,6 @@ describe('scoreDashboard', () => {
     }));
     const dupe = findings.find((x) => x.ruleId === 'dashboard.duplicate-question');
     expect(dupe?.severity).toBe('warn');
-    expect(dupe?.deduction).toBe(0.5);
   });
 
   it('flags a dashboard with too much inline text', () => {
@@ -75,14 +75,14 @@ describe('scoreDashboard', () => {
   it('escalates to error when inline text is very large', () => {
     const hugeText: AssetReference = { type: 'text', id: 'inline-0', content: 'x'.repeat((MAX_TEXT_TOKENS_ERROR + 50) * 4) };
     const findings = scoreDashboard(makeDashboard({ assets: [q(1), hugeText], layout: { items: [{ id: 1, x: 0, y: 0, w: 6, h: 4 }] } }));
-    expect(findings.find((x) => x.ruleId === 'dashboard.too-much-text')?.severity).toBe('error');
+    expect(findings.find((x) => x.ruleId === 'dashboard.extreme-text')?.severity).toBe('error');
+    expect(ids(findings)).not.toContain('dashboard.too-much-text');
   });
 
-  it('flags a dashboard with no parameters (lightest warn)', () => {
+  it('flags a dashboard with no parameters', () => {
     const findings = scoreDashboard(makeDashboard({ parameterValues: null }));
     const noParams = findings.find((x) => x.ruleId === 'dashboard.no-parameters');
     expect(noParams?.severity).toBe('warn');
-    expect(noParams?.deduction).toBe(0.25);
   });
 
   it('flags a cartesian plot smaller than 3x3 (needs referenced viz types)', () => {

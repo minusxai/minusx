@@ -16,11 +16,10 @@ import { AGENT_IMAGE_MAX_PX, AGENT_IMAGE_MAX_H_PX, AGENT_IMAGE_MIN_W_PX } from '
 import { uploadBlobOrEmbed } from '@/lib/object-store/client';
 import { FilesAPI } from '@/lib/data/files';
 import { isRubricFileType, scoreFileDeterministic } from '@/lib/rubric/registry';
-import { buildVizTypeCtx } from '@/lib/rubric/refs';
+import { buildVizTypeCtx, questionVizType } from '@/lib/rubric/refs';
 import { toAgentRubric } from '@/lib/rubric/scoring';
 import type { AgentRubric, DeterministicContext, RubricCategory, RubricGrade, RubricSeverity } from '@/lib/rubric/types';
 import { inlineQuestionFromEl } from '@/lib/data/story/story-question';
-import { envelopeVizType } from '@/lib/viz/viz-templates';
 import type { QuestionContent } from '@/lib/types';
 
 export interface FileReview {
@@ -63,7 +62,8 @@ export function deterministicAgentRubric(fileId: number): AgentRubric | undefine
   const type = selectFile(state, fileId)?.type;
   const content = selectMergedContent(state, fileId);
   if (!type || !isRubricFileType(type) || !content) return undefined;
-  const ctx = buildVizTypeCtx(type, content, (id) => (selectFile(state, id)?.content as QuestionContent | undefined)?.vizSettings?.type);
+  const ctx = buildVizTypeCtx(type, content, (id) =>
+    questionVizType(selectFile(state, id)?.content as QuestionContent | undefined));
   try {
     return toAgentRubric(scoreFileDeterministic(type, content, ctx));
   } catch {
@@ -95,8 +95,8 @@ export function measureStoryEmbeds(fileId: number): DeterministicContext['measur
         ? (selectFile(state, savedId)?.content as QuestionContent | undefined)
         : undefined;
       const vizType = Number.isFinite(savedId)
-        ? (envelopeVizType(savedContent?.viz) ?? savedContent?.vizSettings?.type)
-        : envelopeVizType(inlineQuestionFromEl(el)?.viz);
+        ? questionVizType(savedContent)
+        : questionVizType(inlineQuestionFromEl(el));
       out.push({ ...(vizType ? { vizType } : {}), widthPx, columnPx });
     });
     return out.length ? out : undefined;
@@ -206,7 +206,7 @@ const JUDGE_UNAVAILABLE_NOTE =
  * The rubric as echoed in a TOOL STATUS: every EditFile appends one permanently to the
  * conversation, so it carries only what the skill loop acts on — `overall`/`grade` to know when to
  * stop, and per finding the id, severity, short title, and the imperative `fix`. The prose fields
- * (`detail`, `source`, `deduction`) are dropped, and a `warn`'s `fix` is clipped; `error` findings
+ * (`source`) is dropped, and a `warn`'s `fix` is clipped; `error` findings
  * (which gate the score to 0 and MUST be fixed) keep their full instruction.
  */
 export interface CompactRubricFinding {
