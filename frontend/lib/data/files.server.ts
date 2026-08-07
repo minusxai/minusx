@@ -26,6 +26,8 @@ import { canAccessFile, canViewFileInUI } from './helpers/permissions';
 import { extractReferenceIds } from './helpers/references';
 import { UserFacingError, AccessPermissionError, FileNotFoundError } from '@/lib/errors';
 import { validateFileState } from '@/lib/validation/content-validators';
+import { freezeVizRecipesInContent, type VizRecipeLoaders } from '@/lib/data/helpers/viz-recipe-freeze.server';
+import type { VizRecipeContent } from '@/lib/validation/atlas-schemas';
 import { getTemplateDefaults } from '@/lib/data/story/template-defaults';
 import { withCompiledStoryCss } from '@/lib/data/story/story-css.server';
 import { validateFileStateServer } from '@/lib/validation/content-validators.server';
@@ -384,6 +386,34 @@ class FilesDataLayerServer implements IFilesDataLayer {
     };
   }
 
+  /** The two viz-recipe lookups the freeze helper needs, scoped to the acting user. */
+  private vizRecipeLoaders(user: EffectiveUser): VizRecipeLoaders {
+    return {
+      listVizFiles: async () => {
+        const { data } = await this.getFiles({ paths: ['/'], type: 'viz', depth: -1 }, user);
+        return data.map((f) => ({ id: f.id, name: f.name, path: f.path }));
+      },
+      loadVizContent: async (fileId: number) => {
+        const { data } = await this.loadFiles([fileId], user);
+        return (data[0]?.content as VizRecipeContent | undefined) ?? null;
+      },
+    };
+  }
+
+  /**
+   * Freeze workspace viz-recipe references (file paths / bare names) into
+   * self-contained specs before a question/notebook is written. Shipped
+   * `minusx/` recipes stay live references. Throws the same UserFacingError
+   * shape as content validation, so a bad reference rejects the save atomically.
+   */
+  private async applyVizRecipeFreeze(type: FileType, content: BaseFileContent, path: string, user: EffectiveUser): Promise<BaseFileContent> {
+    if (type !== 'question' && type !== 'notebook') return content;
+    const folder = path.substring(0, path.lastIndexOf('/')) || '/';
+    const result = await freezeVizRecipesInContent(type, content, folder, this.vizRecipeLoaders(user));
+    if (!result.ok) throw new UserFacingError(`Invalid file content: ${result.error}`);
+    return result.content as BaseFileContent;
+  }
+
   async createFile(input: CreateFileInput, user: EffectiveUser): Promise<CreateFileResult> {
     const { name, path, type, content, references = [], options, editId } = input;
     // Guard the single write path: references must be an array (a non-array
@@ -531,6 +561,9 @@ class FilesDataLayerServer implements IFilesDataLayer {
     if (type === 'story') {
       contentToCreate = await withCompiledStoryCss(contentToCreate as { story?: string | null }) as BaseFileContent;
     }
+
+    // Workspace viz-recipe references freeze into self-contained specs before write.
+    contentToCreate = await this.applyVizRecipeFreeze(type, contentToCreate, finalPath, user);
 
     // Validate content schema before writing to DB
     const createValidationError = validateFileState({ type, content: contentToCreate, name, path: finalPath });
@@ -686,6 +719,9 @@ class FilesDataLayerServer implements IFilesDataLayer {
     if (existingFile.type === 'story') {
       contentToSave = await withCompiledStoryCss(contentToSave as { story?: string | null }) as BaseFileContent;
     }
+
+    // Workspace viz-recipe references freeze into self-contained specs before write.
+    contentToSave = await this.applyVizRecipeFreeze(existingFile.type, contentToSave, path, user);
 
     // Validate content schema before writing to DB
     const saveValidationError = await validateFileStateServer({ type: existingFile.type, content: contentToSave, name, path });
