@@ -10,6 +10,7 @@ import {
   materializeFileRecipe,
   freezeFileRecipe,
   synthesizeDummyBindings,
+  sampleDataForRecipe,
   type VizRecipeContent,
 } from '@/lib/viz/recipe-file';
 import { validateVizEnvelope } from '@/lib/viz/validate';
@@ -277,6 +278,42 @@ describe('freezeFileRecipe', () => {
   it('propagates materialization failures', () => {
     const res = freezeFileRecipe(bullet, { path: '/org/bullet', bindings: {} }, COLUMNS);
     expect(res.ok).toBe(false);
+  });
+});
+
+describe('sampleDataForRecipe', () => {
+  it('produces slot-named columns, plausible rows, and a materializable binding set', () => {
+    const { bindings, columns, rows } = sampleDataForRecipe(bullet);
+    expect(bindings).toEqual({ category: 'category', value: 'value', target: 'target' });
+    expect(rows.length).toBeGreaterThanOrEqual(5);
+    for (const row of rows) {
+      expect(typeof row.category).toBe('string');
+      expect(typeof row.value).toBe('number');
+      expect(typeof row.target).toBe('number');
+    }
+    const res = materializeFileRecipe(bullet, bindings, null, columns);
+    expect(res.ok).toBe(true);
+  });
+
+  it('gives multi slots one series column per sample series', () => {
+    const { bindings, rows } = sampleDataForRecipe(folded);
+    expect(Array.isArray(bindings.values)).toBe(true);
+    const series = bindings.values as string[];
+    expect(series.length).toBeGreaterThan(1);
+    for (const s of series) expect(typeof rows[0][s]).toBe('number');
+  });
+
+  it('temporal slots get ISO date strings', () => {
+    const temporalOnly: VizRecipeContent = {
+      ...bullet,
+      bindings: [
+        { name: 'when', label: 'When', accepts: ['temporal'] },
+        { name: 'value', label: 'Value', accepts: ['quantitative'] },
+      ],
+      template: { mark: 'line', encoding: { x: { field: '{{when}}', type: 'temporal' }, y: { field: '{{value}}', type: 'quantitative' } } },
+    };
+    const { rows } = sampleDataForRecipe(temporalOnly);
+    expect(String(rows[0].when)).toMatch(/^\d{4}-\d{2}-\d{2}/);
   });
 });
 

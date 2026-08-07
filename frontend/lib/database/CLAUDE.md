@@ -199,7 +199,12 @@ canAccessFile → canCreateFileByRole → PROTECTED_FILE_PATHS
   ├ context:    strip fullSchema/parentSchema/fullDocs/fullSkills/fullAgents, normalise version whitelists
   │             (see the strip-asymmetry gotcha — the loader injects more than this)
   ├ config:     restoreRedactedConfigSecrets → extractConfigSecrets
-  └ story:      withCompiledStoryCss (client copy always discarded)
+  ├ story:      withCompiledStoryCss (client copy always discarded)
+  └ question/notebook: applyVizRecipeFreeze — a viz envelope referencing a workspace
+                recipe (a `.viz` file path or a name resolved against the file's folder,
+                lib/data/helpers/viz-recipe-freeze.server.ts) is substituted and stored
+                as a self-contained spec with the reference in `detachedFrom`; shipped
+                `minusx/` recipes pass through as live references
 validateFileStateServer            (Ajv against lib/validation/atlas-json-schemas)
 context only: stampAndValidateViews + validateSemanticModelsGate  ← THE save gates
 reject negative (virtual) reference ids; verify parent folder exists if path changed
