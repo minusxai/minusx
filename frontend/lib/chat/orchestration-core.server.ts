@@ -592,6 +592,7 @@ export async function setupOrchestration(
       resolvedContextDocs: serverArgs.context_docs,
       annotations: serverArgs.annotations,
       allowedVizTypes: clientAllowedVizTypes,
+      vizRecipes: serverArgs.viz_recipes,
       schema: serverArgs.schema,
       homeFolder: resolveHomeFolderSync(user.mode, user.home_folder || ''),
       anchorPath: turnAnchorPath,
