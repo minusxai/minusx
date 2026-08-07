@@ -16,7 +16,6 @@ import {
   LuTrendingUp,
   LuChartNoAxesColumn,
   LuChartNoAxesCombined,
-  LuRadar,
   LuMapPinned,
   LuMap,
   LuHash,
@@ -29,32 +28,6 @@ import {
 import type { VizSettings } from '@/lib/types';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { immutableSet } from '@/lib/utils/immutable-collections';
-
-// lucide `brick-wall-fire` — not in react-icons 5.5.0 yet, so the official path
-// data is inlined with the same conventions the Lu* icons use (currentColor
-// stroke, 24 viewBox). Swap for LuBrickWallFire when react-icons catches up.
-const BrickWallFireIcon = ({ size = 16 }: { size?: number }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
-    <path d="M16 3v2.107" />
-    <path d="M17 9c1 3 2.5 3.5 3.5 4.5A5 5 0 0 1 22 17a5 5 0 0 1-10 0c0-.3 0-.6.1-.9a2 2 0 1 0 3.3-2C13 11.5 16 9 17 9" />
-    <path d="M21 8.274V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.938" />
-    <path d="M3 15h5.253" />
-    <path d="M3 9h8.228" />
-    <path d="M8 15v6" />
-    <path d="M8 3v6" />
-  </svg>
-);
 
 /**
  * Everything the selector can offer: the classic vizSettings types plus V2-only
@@ -102,8 +75,10 @@ const ALL_VIZ_GROUPS: VizTypeGroup[] = [
       { type: 'combo', icon: <LuChartNoAxesCombined size={16} />, label: 'Combo' },
       { type: 'funnel', icon: <LuFilter size={16} />, label: 'Funnel' },
       { type: 'waterfall', icon: <LuChartNoAxesColumn size={16} />, label: 'Waterfall' },
-      { type: 'radar', icon: <LuRadar size={16} />, label: 'Radar' },
-      { type: 'heatmap', icon: <BrickWallFireIcon size={16} />, label: 'Heatmap', v2Only: true },
+      // Radar and heatmap are NOT offered here: they ship as workspace recipe
+      // FILES (seeded at the mode roots by the workspace template) and surface
+      // as Workspace tiles instead. Saved charts keep rendering — the shipped
+      // minusx/radar@1 registry entry and the rect→heatmap classification stay.
       // Candlestick is Lucide's closest glyph to a box-and-whisker plot.
       { type: 'boxplot', icon: <LuChartCandlestick size={16} />, label: 'Boxplot', v2Only: true },
       { type: 'histogram', icon: <LuChartColumnBig size={16} />, label: 'Histogram', v2Only: true },

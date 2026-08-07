@@ -145,7 +145,9 @@ For example, if your pivot has "Revenue" and "Cost" as row dimensions, you can a
 A **chart recipe** is a reusable chart template stored as a workspace file (the *Chart Recipe* file
 type). A recipe declares named binding slots — e.g. `category`, `value`, `target` — and anyone can
 apply it to a question by dropping result columns onto those slots, with no spec editing. MinusX
-ships built-in recipes (bullet, lollipop, range bar), and you (or the agent) can author new ones.
+ships built-in recipes (bullet, lollipop, range bar) and seeds **radar** and **heatmap** as recipe
+files in your workspace roots — open, edit, or override them like any other file — and you (or the
+agent) can author new ones.
 
 - **Where recipes live** — anywhere in the file tree. A recipe in the root folder is available
   everywhere; a recipe in a subfolder is available only in that subtree. A same-named recipe in a
