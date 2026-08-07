@@ -15,7 +15,7 @@
  *  - `"{{slot}}"` as a WHOLE string value → replaced with the bound value verbatim
  *    (string, or array for multi slots — how a fold's field list is expressed).
  *  - `{{slot}}` EMBEDDED in a longer string → string-replaced (arrays are an error).
- *  - `"{{slot.kind}}"` → the bound column's resolved viz kind
+ *  - `"{{slot:kind}}"` → the bound column's resolved viz kind
  *    (`quantitative|temporal|nominal`) so a multi-kind slot gets the right encoding
  *    `"type"`; falls back to the slot's first `accepts` kind when columns are unknown.
  *  - Params substitute by the same rules; a declared `default` fills an omitted param.
@@ -25,39 +25,17 @@ import {
   VIZ_GRAMMAR_VEGA,
   VIZ_GRAMMAR_VEGA_LITE,
   type ColumnFormatConfig,
+  type VizRecipeBinding,
+  type VizRecipeContent,
   type VizSourceVega,
   type VizSourceVegaLite,
 } from '@/lib/validation/atlas-schemas';
 import type { VizResultColumn } from './types';
 
 /** Column kinds a slot may accept (drives drop-zone hints and dummy synthesis). */
-export type VizRecipeAccepts = 'nominal' | 'quantitative' | 'temporal';
+export type VizRecipeAccepts = VizRecipeBinding['accepts'][number];
 
-/** A declared binding slot. Every slot is required; `multi` slots take arrays. */
-export interface VizRecipeBinding {
-  name: string;
-  label: string;
-  accepts: ReadonlyArray<VizRecipeAccepts>;
-  multi?: boolean;
-}
-
-/** A declared value-substituted knob. `default` fills an omitted param. */
-export interface VizRecipeParam {
-  name: string;
-  label: string;
-  default?: unknown;
-}
-
-/** The content of a `.viz` file. Identity is the FILE NAME — no name field here. */
-export interface VizRecipeContent {
-  /** One-liner advertised to the agent. */
-  description: string;
-  engine: 'vega-lite' | 'vega';
-  bindings: VizRecipeBinding[];
-  params?: VizRecipeParam[] | null;
-  /** The spec with `{{slot}}` tokens. Everything visual lives here, in the grammar. */
-  template: Record<string, unknown>;
-}
+export type { VizRecipeBinding, VizRecipeContent };
 
 export type FileRecipeMaterializeResult =
   | { ok: true; spec: Record<string, unknown>; engine: 'vega-lite' | 'vega' }
@@ -86,8 +64,8 @@ export function isFileRecipePath(recipe: string): boolean {
 
 type Json = string | number | boolean | null | Json[] | { [k: string]: Json };
 
-const TOKEN_RE = /\{\{(\w+)(\.kind)?\}\}/g;
-const WHOLE_TOKEN_RE = /^\{\{(\w+)(\.kind)?\}\}$/;
+const TOKEN_RE = /\{\{(\w+)(:kind)?\}\}/g;
+const WHOLE_TOKEN_RE = /^\{\{(\w+)(:kind)?\}\}$/;
 
 /** What a token may substitute to: `whole` is used verbatim, `embedded` inside strings. */
 interface TokenValue {
@@ -119,7 +97,7 @@ function substituteNode(node: Json, values: Map<string, TokenValue>): Json {
   return node;
 }
 
-/** Resolve a bound column's viz kind for `{{slot.kind}}` — encoding-type vocabulary only. */
+/** Resolve a bound column's viz kind for `{{slot:kind}}` — encoding-type vocabulary only. */
 function kindOf(
   binding: VizRecipeBinding,
   bound: string | string[],
@@ -179,7 +157,7 @@ export function materializeFileRecipe(
     } else {
       values.set(b.name, { whole: bound, embedded: String(bound) });
     }
-    values.set(`${b.name}.kind`, { whole: kindOf(b, bound, columns), embedded: kindOf(b, bound, columns) });
+    values.set(`${b.name}:kind`, { whole: kindOf(b, bound, columns), embedded: kindOf(b, bound, columns) });
   }
   for (const p of declaredParams) {
     const v = params && p.name in params ? params[p.name] : p.default;

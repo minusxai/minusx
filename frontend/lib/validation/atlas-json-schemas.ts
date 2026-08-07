@@ -17,11 +17,13 @@ import {
   DashboardContent,
   StoryContent,
   NotebookContent,
+  VizRecipeContent,
   ContextAgentContent,
   AtlasQuestionFile,
   AtlasDashboardFile,
   AtlasStoryFile,
   AtlasNotebookFile,
+  AtlasVizFile,
 } from './atlas-schemas';
 
 /** Deep-clone to plain JSON, dropping TypeBox's Symbol-keyed metadata. */
@@ -36,6 +38,7 @@ const topLevel = (defs: Record<string, unknown>): Record<string, unknown> => ({
     { $ref: '#/$defs/AtlasDashboardFile' },
     { $ref: '#/$defs/AtlasStoryFile' },
     { $ref: '#/$defs/AtlasNotebookFile' },
+    { $ref: '#/$defs/AtlasVizFile' },
   ],
 });
 
@@ -45,6 +48,7 @@ export const atlasSchema: Record<string, unknown> = topLevel({
   DashboardContent: toJson(DashboardContent),
   StoryContent: toJson(StoryContent),
   NotebookContent: toJson(NotebookContent),
+  VizRecipeContent: toJson(VizRecipeContent),
   // Agent's flattened context view — used for the schema_context skill var + context markup
   // ($ref resolution in file-markup). NOT a member of the validation `oneOf`: contexts persist
   // version-based and aren't validated against this flat view (see content-validators.ts).
@@ -53,6 +57,7 @@ export const atlasSchema: Record<string, unknown> = topLevel({
   AtlasDashboardFile: toJson(AtlasDashboardFile),
   AtlasStoryFile: toJson(AtlasStoryFile),
   AtlasNotebookFile: toJson(AtlasNotebookFile),
+  AtlasVizFile: toJson(AtlasVizFile),
 });
 
 // ── viz stripping (used for per-file-type SKILL prompt schemas) ──────────────
@@ -109,6 +114,7 @@ const CONTENT_DEF_BY_TYPE = {
   story: 'StoryContent',
   notebook: 'NotebookContent',
   context: 'ContextContent',
+  viz: 'VizRecipeContent',
 } as const;
 
 export type AtlasSchemaFileType = keyof typeof CONTENT_DEF_BY_TYPE;

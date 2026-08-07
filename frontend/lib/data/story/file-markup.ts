@@ -114,6 +114,7 @@ function schemaFor(type: FileType): JsonSchema {
     // Context markup is schema-driven over the agent's flattened view (lib/context/context-agent-view.ts
     // shapes content into this shape before fileToMarkup; the fold reverses it on edit).
     context: 'ContextContent',
+    viz: 'VizRecipeContent',
   };
   const name = def[type];
   return name ? CTX.defs[name] : undefined;

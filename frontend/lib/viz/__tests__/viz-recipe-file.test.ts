@@ -40,16 +40,16 @@ const bullet: VizRecipeContent = {
         mark: { type: 'bar', height: 18 },
         encoding: {
           x: { field: '{{value}}', type: 'quantitative', title: null },
-          y: { field: '{{category}}', type: '{{category.kind}}', title: null },
+          y: { field: '{{category}}', type: '{{category:kind}}', title: null },
         },
       },
       {
         mark: { type: 'tick', color: '{{tickColor}}', thickness: 2, size: 28 },
         encoding: {
           x: { field: '{{target}}', type: 'quantitative' },
-          y: { field: '{{category}}', type: '{{category.kind}}' },
+          y: { field: '{{category}}', type: '{{category:kind}}' },
           tooltip: [
-            { field: '{{category}}', type: '{{category.kind}}' },
+            { field: '{{category}}', type: '{{category:kind}}' },
             { field: '{{value}}', type: 'quantitative' },
             { field: '{{target}}', type: 'quantitative' },
           ],
@@ -71,7 +71,7 @@ const folded: VizRecipeContent = {
     transform: [{ fold: '{{values}}', as: ['series', 'value'] }],
     mark: 'bar',
     encoding: {
-      x: { field: '{{x}}', type: '{{x.kind}}' },
+      x: { field: '{{x}}', type: '{{x:kind}}' },
       y: { field: 'value', type: 'quantitative' },
       color: { field: 'series', type: 'nominal' },
     },
@@ -88,7 +88,7 @@ describe('isFileRecipePath', () => {
 });
 
 describe('materializeFileRecipe: substitution', () => {
-  it('substitutes bindings, params, and {{slot.kind}} from real columns', () => {
+  it('substitutes bindings, params, and {{slot:kind}} from real columns', () => {
     const res = materializeFileRecipe(
       bullet,
       { category: 'month', value: 'revenue', target: 'quota' },
@@ -100,7 +100,7 @@ describe('materializeFileRecipe: substitution', () => {
     const layers = res.spec.layer as Array<Record<string, any>>;
     expect(layers[0].encoding.x.field).toBe('revenue');
     expect(layers[0].encoding.y.field).toBe('month');
-    expect(layers[0].encoding.y.type).toBe('temporal'); // {{category.kind}} resolved
+    expect(layers[0].encoding.y.type).toBe('temporal'); // {{category:kind}} resolved
     expect(layers[1].mark.color).toBe('#000000');
   });
 
@@ -111,7 +111,7 @@ describe('materializeFileRecipe: substitution', () => {
     expect((res.spec.layer as any)[1].mark.color).toBe('#e11d48');
   });
 
-  it('falls back to the first accepts kind for {{slot.kind}} without columns', () => {
+  it('falls back to the first accepts kind for {{slot:kind}} without columns', () => {
     const res = materializeFileRecipe(bullet, { category: 'team', value: 'revenue', target: 'quota' });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
