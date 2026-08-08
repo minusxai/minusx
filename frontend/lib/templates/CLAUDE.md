@@ -44,8 +44,8 @@ lookalike: the Ajv schema plus the dry-run materialization it already performs. 
 
 Codified rules, all tested: `.viz` and `.json` only, in that precedence order for a same-name
 collision — but precedence decides which file **wins**, not which is the only one tried, so a
-broken `bullet.viz` falls through to a valid `bullet.json` instead of taking the name down with
-it. Dotfiles and unrelated extensions are ignored **silently** — a README is not a broken
+broken .viz file falls through to a valid .json file of the same name instead of taking the
+name down with it. Dotfiles and unrelated extensions are ignored **silently** — a README is not a broken
 template. Non-recursive; symlinks refused; names must match `TEMPLATE_NAME_PATTERN`, so a
 template is always something a workspace file could be named to override; a directory listed
 twice is read once; a missing or non-directory `TEMPLATE_DIR` warns and is skipped. An
