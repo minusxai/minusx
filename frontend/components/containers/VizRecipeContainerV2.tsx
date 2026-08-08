@@ -8,19 +8,16 @@
  * so an invalid template is rejected with the reason, and Save/publish stays
  * with the shared file header.
  *
- * A file from the read-only catalog (lib/viz/recipe-catalog.ts — the built-in
- * and shipped recipes, projected as virtual files) renders the same way, plus
- * the notice explaining why it cannot be edited and the copy action, which
- * writes an editable draft into the user's own folder and navigates to it.
+ * This is the WORKSPACE file surface only. The app's own templates are not
+ * files and never reach here — they are browsed on `/templates`, which renders
+ * the same `VizRecipeView` with its catalog props (see lib/templates).
  */
 import { useCallback, useMemo } from 'react';
 import { useAppSelector } from '@/store/hooks';
 import { type FileId } from '@/store/filesSlice';
 import { selectFileEditMode } from '@/store/uiSlice';
-import { selectEffectiveUser } from '@/store/authSlice';
 import { useFile } from '@/lib/hooks/file-state-hooks';
-import { applyJsonContentEdit, createDraftFile } from '@/lib/file-state/file-state';
-import { useRouter } from '@/lib/navigation/use-navigation';
+import { applyJsonContentEdit } from '@/lib/file-state/file-state';
 import VizRecipeView from '@/components/views/VizRecipeView';
 import type { VizRecipeContent } from '@/lib/validation/atlas-schemas';
 import { type FileViewMode } from '@/lib/ui/fileComponents';
@@ -31,26 +28,10 @@ interface VizRecipeContainerV2Props {
   defaultFolder?: string;
 }
 
-/** The catalog markers a virtual recipe file carries on `meta`. */
-interface CatalogMeta {
-  readOnly?: boolean;
-  catalogTier?: 'builtin' | 'shipped';
-  catalogCopyable?: boolean;
-  previewAssets?: Record<string, string>;
-  previewSample?: {
-    bindings: Record<string, string | string[]>;
-    columns: Array<{ name: string; kind: 'nominal' | 'quantitative' | 'temporal' }>;
-    rows: Array<Record<string, unknown>>;
-  };
-  recipeId?: string;
-}
-
 export default function VizRecipeContainerV2({ fileId }: VizRecipeContainerV2Props) {
   const { fileState: file } = useFile(fileId) ?? {};
   const colorMode = useAppSelector((state) => state.ui.colorMode);
   const editable = useAppSelector((state) => selectFileEditMode(state, fileId as number));
-  const homeFolder = useAppSelector((state) => selectEffectiveUser(state)?.home_folder);
-  const router = useRouter();
 
   // A file first seen through a FOLDER LISTING is metadata-only (`getFiles`
   // skips content), and spreading a null content yields `{}` — truthy, but with
@@ -63,27 +44,10 @@ export default function VizRecipeContainerV2({ fileId }: VizRecipeContainerV2Pro
     return Array.isArray(merged?.bindings) && merged.template ? merged : null;
   }, [file]);
 
-  const meta = (file as { meta?: CatalogMeta | null } | undefined)?.meta;
-  const catalog = useMemo(
-    () => (meta?.catalogTier
-      ? { tier: meta.catalogTier, recipeId: meta.recipeId, copyable: meta.catalogCopyable !== false }
-      : undefined),
-    [meta],
-  );
-
   const handleCommit = useCallback(
     (jsonString: string) => applyJsonContentEdit({ fileId: fileId as number, jsonString }),
     [fileId],
   );
-
-  // The copy lands as a DRAFT the user then Saves — same lifecycle as any new
-  // file, so the name/path stay editable before anything is published.
-  const handleCopy = useCallback(async () => {
-    if (!content || !file) return;
-    const newId = await createDraftFile('viz', { folder: homeFolder || undefined, name: `${file.name}-copy` });
-    applyJsonContentEdit({ fileId: newId, jsonString: JSON.stringify(content) });
-    router.push(`/f/${newId}`);
-  }, [content, file, homeFolder, router]);
 
   if (!file || file.loading || !content) {
     return <div className="p-4 text-sm text-muted-foreground">Loading recipe…</div>;
@@ -93,12 +57,8 @@ export default function VizRecipeContainerV2({ fileId }: VizRecipeContainerV2Pro
     <VizRecipeView
       content={content}
       colorMode={colorMode}
-      editable={editable && !catalog}
+      editable={editable}
       onCommitContent={handleCommit}
-      catalog={catalog}
-      previewAssets={meta?.previewAssets ?? null}
-      previewSample={meta?.previewSample ?? null}
-      onCopyToWorkspace={catalog ? handleCopy : undefined}
     />
   );
 }
