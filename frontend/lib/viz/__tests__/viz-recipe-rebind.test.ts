@@ -9,6 +9,7 @@ import {
   getFileRecipeRef,
   rebindFileRecipe,
   applyFileRecipeSelection,
+  explainRecipeFit,
 } from '@/lib/viz/recipe-rebind';
 import { freezeFileRecipe, type VizRecipeContent } from '@/lib/viz/recipe-file';
 import {
@@ -154,11 +155,12 @@ describe('applyFileRecipeSelection', () => {
     expect(ref.bindings.values).toEqual(['revenue', 'quota']);
   });
 
-  it('fails with the slot named when no column fits', () => {
+  it('fails with the slot LABEL named when no column fits', () => {
     const res = applyFileRecipeSelection(RECIPE, '/org/r', [{ name: 'team', kind: 'nominal' }]);
     expect(res.ok).toBe(false);
     if (res.ok) return;
-    expect(res.error).toContain('value');
+    expect(res.error).toContain('Value');
+    expect(res.error).toMatch(/number column/i);
   });
 });
 
@@ -199,5 +201,53 @@ describe('encoding-edit zone helpers with an injected file recipe', () => {
     expect(((added.source as { spec: any }).spec.transform)[0].fold).toEqual(['revenue', 'quota']);
     const removed = removeZoneField(added, 'values', 'revenue', mCtx);
     expect(getZoneFields(removed, 'values', mCtx)).toEqual(['quota']);
+  });
+});
+
+describe('explainRecipeFit — human-readable applicability', () => {
+  it('returns null when the recipe fits', () => {
+    expect(explainRecipeFit(RECIPE, COLUMNS)).toBeNull();
+  });
+
+  it('says to run the query first when there is no result yet', () => {
+    expect(explainRecipeFit(RECIPE, [])).toMatch(/run the query/i);
+  });
+
+  it('names the slot in plain words when the result has no matching column', () => {
+    // Only numbers — nothing text-like for Category.
+    const reason = explainRecipeFit(RECIPE, [
+      { name: 'revenue', kind: 'quantitative' },
+      { name: 'quota', kind: 'quantitative' },
+    ]);
+    expect(reason).toMatch(/text or date column/i);
+    expect(reason).toContain('Category');
+    expect(reason).toMatch(/has none/i);
+  });
+
+  it('distinguishes "all matching columns already assigned" from "has none"', () => {
+    // month fits Category, revenue fits Value — nothing LEFT for a second
+    // quantitative slot (the range-bar confusion from the field).
+    const rangeBarish: VizRecipeContent = {
+      ...RECIPE,
+      bindings: [
+        { name: 'category', label: 'Category', accepts: ['nominal', 'temporal'] },
+        { name: 'start', label: 'Start', accepts: ['quantitative', 'temporal'] },
+        { name: 'end', label: 'End', accepts: ['quantitative', 'temporal'] },
+      ],
+    };
+    const reason = explainRecipeFit(rangeBarish, [
+      { name: 'month', kind: 'temporal' },
+      { name: 'orders', kind: 'quantitative' },
+    ]);
+    expect(reason).toContain('End');
+    expect(reason).toMatch(/already assigned|already used/i);
+    expect(reason).not.toMatch(/has none/i);
+  });
+
+  it('applyFileRecipeSelection uses the same human phrasing on failure', () => {
+    const res = applyFileRecipeSelection(RECIPE, '/org/r', [{ name: 'revenue', kind: 'quantitative' }]);
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.error).toMatch(/text or date column/i);
   });
 });

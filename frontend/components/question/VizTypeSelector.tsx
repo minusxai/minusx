@@ -137,9 +137,11 @@ interface VizTypeSelectorProps {
   /**
    * Workspace/built-in recipe entries (resolved for the current folder) shown
    * as an extra "Workspace" group — grouped orientation only. Selection fires
-   * `onRecipeSelect` with the entry's address, never `onChange`.
+   * `onRecipeSelect` with the entry's address, never `onChange`. An entry with
+   * a `disabledReason` renders greyed out with the reason as its hover title —
+   * the recipe's slots cannot bind to the current result columns.
    */
-  workspaceRecipes?: ReadonlyArray<{ name: string; description?: string; address: string }>;
+  workspaceRecipes?: ReadonlyArray<{ name: string; description?: string; address: string; disabledReason?: string | null }>;
   onRecipeSelect?: (address: string) => void;
   /** The active frozen recipe's address (highlights its Workspace tile). */
   activeRecipeAddress?: string | null;
@@ -176,19 +178,27 @@ export function VizTypeSelector({
         {/* Workspace/built-in recipes: file-defined chart templates for this
             folder. A tile applies the recipe (auto-bound, frozen on save) via
             onRecipeSelect — the SelectableVizType union stays untouched. */}
-        {workspaceRecipes?.map(({ name, description, address }) => {
+        {workspaceRecipes?.map(({ name, description, address, disabledReason }) => {
           const isActive = activeRecipeAddress === address;
+          // The active recipe stays clickable regardless of fit (re-applying it
+          // is always meaningful); everything else greys out with the reason.
+          const isDisabled = !isActive && disabledReason != null;
           return (
             <button
               key={`recipe:${address}`}
               type="button"
               className={`flex flex-col items-center justify-center gap-0.5 rounded-md py-1.5 transition-all duration-[120ms] ease-in-out ${
                 isActive ? 'bg-[#16a085]/15 text-[#16a085]' : 'bg-transparent text-muted-foreground'
-              } cursor-pointer hover:opacity-100 ${isActive ? 'hover:bg-[#16a085]/20' : 'hover:bg-muted hover:text-foreground'}`}
-              onClick={() => onRecipeSelect?.(address)}
+              } ${
+                isDisabled
+                  ? 'cursor-not-allowed opacity-30'
+                  : `cursor-pointer hover:opacity-100 ${isActive ? 'hover:bg-[#16a085]/20' : 'hover:bg-muted hover:text-foreground'}`
+              }`}
+              onClick={() => { if (!isDisabled) onRecipeSelect?.(address); }}
               aria-label={`Recipe ${name}`}
               aria-pressed={isActive}
-              title={description || name}
+              aria-disabled={isDisabled}
+              title={isDisabled ? disabledReason! : (description || name)}
             >
               <LuBookMarked size={16} />
               <span className={`max-w-full truncate font-mono text-[10px] leading-none ${isActive ? 'font-bold' : 'font-medium'}`}>

@@ -38,7 +38,7 @@ import { PivotAxisBuilder } from '@/components/plotx/PivotAxisBuilder';
 import { VegaEncodingPanel } from './VegaEncodingPanel';
 import { useVizRecipes } from '@/lib/hooks/use-viz-recipes';
 import { toaster } from '@/components/ui/toaster';
-import { getFileRecipeRef, applyFileRecipeSelection } from '@/lib/viz/recipe-rebind';
+import { getFileRecipeRef, applyFileRecipeSelection, explainRecipeFit } from '@/lib/viz/recipe-rebind';
 import type { FileRecipeEditContext } from '@/lib/viz/encoding-edit';
 import { VizSpecInspector } from './VizSpecInspector';
 import {
@@ -101,10 +101,19 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange, file
   // the current chart is a FROZEN file recipe, the definition that keeps its
   // zones bindable (lib/viz/recipe-rebind.ts).
   const folderPath = filePath ? (filePath.substring(0, filePath.lastIndexOf('/')) || '/') : null;
-  const { available: workspaceRecipes, contentFor } = useVizRecipes(folderPath);
+  const { available, contentFor } = useVizRecipes(folderPath);
   const vizResultColumns = useMemo(
     () => columns.map((name, i) => ({ name, kind: sqlTypeToVizKind(types[i] ?? '') })),
     [columns, types],
+  );
+  // Applicability is precomputed so a recipe that cannot bind to this result
+  // greys out with the reason on hover, instead of a click that goes nowhere.
+  const workspaceRecipes = useMemo(
+    () => available.map((r) => {
+      const content = contentFor(r.address);
+      return { ...r, disabledReason: content ? explainRecipeFit(content, vizResultColumns) : 'Recipe not loaded yet' };
+    }),
+    [available, contentFor, vizResultColumns],
   );
   const fileRecipeRef = getFileRecipeRef(envelope);
   const fileRecipeContent = fileRecipeRef ? contentFor(fileRecipeRef.recipe) : undefined;

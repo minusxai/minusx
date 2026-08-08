@@ -63,24 +63,33 @@ export type ApplyFileRecipeResult =
 
 const KIND_OK = immutableSet(['nominal', 'quantitative', 'temporal']);
 
+/** Plain words for the accept kinds — user-facing, never the grammar vocabulary. */
+const KIND_WORDS: Record<string, string> = {
+  nominal: 'text',
+  quantitative: 'number',
+  temporal: 'date',
+};
+
+type AutoBindResult =
+  | { ok: true; bindings: Record<string, string | string[]> }
+  | { ok: false; slot: VizRecipeContent['bindings'][number]; exhausted: boolean };
+
 /**
- * Selector flow: auto-bind the declared slots from the result columns (first
- * unused column whose kind a slot accepts; multi slots take every remaining
- * match) and freeze. `address` is what provenance records — the file path, or
- * a built-in's bare name.
+ * The one greedy auto-bind walk (first unused column whose kind a slot accepts;
+ * multi slots take every remaining match). Selection, applicability greying,
+ * and failure toasts all read THIS, so they can never disagree about fit.
  */
-export function applyFileRecipeSelection(
-  content: VizRecipeContent,
-  address: string,
-  columns: VizResultColumn[],
-): ApplyFileRecipeResult {
+function autoBindRecipe(content: VizRecipeContent, columns: VizResultColumn[]): AutoBindResult {
   const used = new Set<string>();
   const kindOf = (c: VizResultColumn) => (KIND_OK.has(c.kind) ? c.kind : 'nominal');
   const bindings: Record<string, string | string[]> = {};
   for (const slot of content.bindings) {
-    const matches = columns.filter((c) => !used.has(c.name) && (slot.accepts as readonly string[]).includes(kindOf(c)));
+    const accepted = (c: VizResultColumn) => (slot.accepts as readonly string[]).includes(kindOf(c));
+    const matches = columns.filter((c) => !used.has(c.name) && accepted(c));
     if (matches.length === 0) {
-      return { ok: false, error: `no result column fits slot "${slot.name}" (accepts ${slot.accepts.join('|')})` };
+      // "Nothing left" (columns of the right kind exist but earlier slots took
+      // them) reads very differently from "this result has none" — say which.
+      return { ok: false, slot, exhausted: columns.some(accepted) };
     }
     if (slot.multi) {
       bindings[slot.name] = matches.map((c) => c.name);
@@ -90,7 +99,40 @@ export function applyFileRecipeSelection(
       used.add(matches[0].name);
     }
   }
-  const frozenSource = freezeFileRecipe(content, { path: address, bindings }, columns);
+  return { ok: true, bindings };
+}
+
+/**
+ * Why this recipe cannot apply to this result, in words a chart user
+ * understands — or null when it fits. Drives the greyed-out Workspace tiles
+ * (hover title) and the failure toast.
+ */
+export function explainRecipeFit(content: VizRecipeContent, columns: VizResultColumn[]): string | null {
+  if (columns.length === 0) return 'Run the query first — recipes bind to the result columns.';
+  const bound = autoBindRecipe(content, columns);
+  if (bound.ok) return null;
+  const words = bound.slot.accepts.map((k) => KIND_WORDS[k] ?? k).join(' or ');
+  const tail = bound.exhausted
+    ? 'every matching column is already assigned to another slot'
+    : 'this result has none';
+  return `Needs a ${words} column for “${bound.slot.label}” — ${tail}.`;
+}
+
+/**
+ * Selector flow: auto-bind the declared slots from the result columns and
+ * freeze. `address` is what provenance records — the file path, or a built-in's
+ * bare name. Failures carry the same human phrasing as `explainRecipeFit`.
+ */
+export function applyFileRecipeSelection(
+  content: VizRecipeContent,
+  address: string,
+  columns: VizResultColumn[],
+): ApplyFileRecipeResult {
+  const unfit = explainRecipeFit(content, columns);
+  if (unfit) return { ok: false, error: unfit };
+  const bound = autoBindRecipe(content, columns);
+  if (!bound.ok) return { ok: false, error: explainRecipeFit(content, columns) ?? 'recipe does not fit this result' };
+  const frozenSource = freezeFileRecipe(content, { path: address, bindings: bound.bindings }, columns);
   if (!frozenSource.ok) return frozenSource;
   return {
     ok: true,

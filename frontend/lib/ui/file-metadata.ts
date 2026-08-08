@@ -76,7 +76,9 @@ export const FILE_TYPE_METADATA = {
     color: 'accent.success',
     category: 'analytics',
     supported: true,
-    h: '100vh',
+    // Full page flow: the viewer is a scrolling document (preview + slots +
+    // template editor), not an internally-scrolled workbench.
+    h: 'none',
   },
   connection: {
     label: 'Databases',
