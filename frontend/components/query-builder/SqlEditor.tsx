@@ -114,6 +114,8 @@ interface SqlEditorProps {
   showFormatButton?: boolean;
   showRunButton?: boolean;
   isRunning?: boolean;
+  /** Cancel the running query — makes the Run control a Stop while executing. */
+  onStop?: () => void;
   proposedValue?: string;  // When set, shows diff editor (current vs proposed)
   schemaData?: DatabaseWithSchema[];  // Database schema for table/column autocomplete
   databaseName?: string;  // Database name for API autocomplete
@@ -132,6 +134,7 @@ export default function SqlEditor({
   showFormatButton = true,
   showRunButton = false,
   isRunning = false,
+  onStop,
   proposedValue,
   schemaData = [],
   databaseName,
@@ -778,6 +781,7 @@ export default function SqlEditor({
           onFormat={handleFormat}
           onRun={onRun ? runCurrent : undefined}
           isRunning={isRunning}
+          onStop={onStop}
         />
       </div>
 

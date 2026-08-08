@@ -119,7 +119,8 @@ export function isClassicVizType(type: SelectableVizType): type is VizSettings['
 }
 
 interface VizTypeSelectorProps {
-  value: SelectableVizType;
+  /** The active type — null highlights nothing (e.g. a workspace recipe is active). */
+  value: SelectableVizType | null;
   onChange: (type: SelectableVizType) => void;
   orientation?: 'vertical' | 'horizontal' | 'grouped';
   /**
@@ -177,36 +178,48 @@ export function VizTypeSelector({
       <div className="mb-2 grid w-full grid-cols-5 gap-1 rounded-md bg-muted/50 p-2">
         {/* Workspace/built-in recipes: file-defined chart templates for this
             folder. A tile applies the recipe (auto-bound, frozen on save) via
-            onRecipeSelect — the SelectableVizType union stays untouched. */}
-        {workspaceRecipes?.map(({ name, description, address, disabledReason }) => {
-          const isActive = activeRecipeAddress === address;
-          // The active recipe stays clickable regardless of fit (re-applying it
-          // is always meaningful); everything else greys out with the reason.
-          const isDisabled = !isActive && disabledReason != null;
-          return (
-            <button
-              key={`recipe:${address}`}
-              type="button"
-              className={`flex flex-col items-center justify-center gap-0.5 rounded-md py-1.5 transition-all duration-[120ms] ease-in-out ${
-                isActive ? 'bg-[#16a085]/15 text-[#16a085]' : 'bg-transparent text-muted-foreground'
-              } ${
-                isDisabled
-                  ? 'cursor-not-allowed opacity-30'
-                  : `cursor-pointer hover:opacity-100 ${isActive ? 'hover:bg-[#16a085]/20' : 'hover:bg-muted hover:text-foreground'}`
-              }`}
-              onClick={() => { if (!isDisabled) onRecipeSelect?.(address); }}
-              aria-label={`Recipe ${name}`}
-              aria-pressed={isActive}
-              aria-disabled={isDisabled}
-              title={isDisabled ? disabledReason! : (description || name)}
-            >
-              <LuBookMarked size={16} />
-              <span className={`max-w-full truncate font-mono text-[10px] leading-none ${isActive ? 'font-bold' : 'font-medium'}`}>
-                {name}
-              </span>
-            </button>
-          );
-        })}
+            onRecipeSelect — the SelectableVizType union stays untouched. A REAL
+            tooltip (not the native title, whose hover delay makes it invisible
+            in practice) carries the recipe description — or, when greyed out,
+            exactly why the recipe cannot bind to this result. */}
+        {workspaceRecipes && workspaceRecipes.length > 0 && (
+          <TooltipProvider delayDuration={150}>
+            {workspaceRecipes.map(({ name, description, address, disabledReason }) => {
+              const isActive = activeRecipeAddress === address;
+              // The active recipe stays clickable regardless of fit (re-applying it
+              // is always meaningful); everything else greys out with the reason.
+              const isDisabled = !isActive && disabledReason != null;
+              return (
+                <Tooltip key={`recipe:${address}`}>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className={`flex flex-col items-center justify-center gap-0.5 rounded-md py-1.5 transition-all duration-[120ms] ease-in-out ${
+                        isActive ? 'bg-[#16a085]/15 text-[#16a085]' : 'bg-transparent text-muted-foreground'
+                      } ${
+                        isDisabled
+                          ? 'cursor-not-allowed opacity-30'
+                          : `cursor-pointer hover:opacity-100 ${isActive ? 'hover:bg-[#16a085]/20' : 'hover:bg-muted hover:text-foreground'}`
+                      }`}
+                      onClick={() => { if (!isDisabled) onRecipeSelect?.(address); }}
+                      aria-label={`Recipe ${name}`}
+                      aria-pressed={isActive}
+                      aria-disabled={isDisabled}
+                    >
+                      <LuBookMarked size={16} />
+                      <span className={`max-w-full truncate font-mono text-[10px] leading-none ${isActive ? 'font-bold' : 'font-medium'}`}>
+                        {name}
+                      </span>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[260px]">
+                    {isDisabled ? disabledReason : (description || name)}
+                  </TooltipContent>
+                </Tooltip>
+              );
+            })}
+          </TooltipProvider>
+        )}
         {allTypes.map(({ type, icon, label, informational, informationalReason }) => {
           const isActive = value === type;
           const isRecommended = recommended?.includes(type) ?? false;

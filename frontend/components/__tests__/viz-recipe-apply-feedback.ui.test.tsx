@@ -60,22 +60,27 @@ describe('workspace recipe applicability', () => {
     )
     const tile = screen.getByLabelText('Recipe radar')
     expect(tile.getAttribute('aria-disabled')).toBe('true')
-    expect(tile.getAttribute('title')).toMatch(/text column/i)
-    expect(tile.getAttribute('title')).toContain('Metrics')
-    expect(tile.getAttribute('title')).toMatch(/has none/i)
+    // A REAL tooltip (kit Tooltip, not the native title) carries the reason.
+    await user.hover(tile)
+    const tip = (await screen.findAllByText(/text column/i))[0]
+    expect(tip.textContent).toContain('Metrics')
+    expect(tip.textContent).toMatch(/has none/i)
+    await user.unhover(tile)
 
     await user.click(tile)
     expect(onVizChange).not.toHaveBeenCalled()
     expect(toastSpy).not.toHaveBeenCalled() // disabled — nothing to report
   })
 
-  it('with NO result yet the tile is greyed out with a run-the-query hint', () => {
+  it('with NO result yet the tile is greyed out with a run-the-query hint', async () => {
+    const user = userEvent.setup()
     renderWithProviders(
       <VegaVizPanel envelope={tableViz} columns={[]} types={[]} onVizChange={vi.fn()} />,
     )
     const tile = screen.getByLabelText('Recipe radar')
     expect(tile.getAttribute('aria-disabled')).toBe('true')
-    expect(tile.getAttribute('title')).toMatch(/run the query/i)
+    await user.hover(tile)
+    expect((await screen.findAllByText(/run the query/i)).length).toBeGreaterThan(0)
   })
 
   it('a recipe that fits is enabled and applies without any toast', async () => {
@@ -94,5 +99,30 @@ describe('workspace recipe applicability', () => {
     await user.click(tile)
     expect(onVizChange).toHaveBeenCalledTimes(1)
     expect(toastSpy).not.toHaveBeenCalled()
+  })
+})
+
+describe('active recipe highlight', () => {
+  it('a frozen file recipe highlights its Workspace tile and NOT Custom', async () => {
+    const { freezeFileRecipe } = await import('@/lib/viz/recipe-file')
+    const res = freezeFileRecipe(RADARISH, {
+      path: '/tutorial/radar',
+      bindings: { metric: 'platform', values: ['revenue'] },
+    }, [
+      { name: 'platform', kind: 'nominal' },
+      { name: 'revenue', kind: 'quantitative' },
+    ])
+    if (!res.ok) throw new Error(res.error)
+    const frozenEnv = { version: 2, source: res.source } as unknown as VizEnvelope
+    renderWithProviders(
+      <VegaVizPanel
+        envelope={frozenEnv}
+        columns={['platform', 'revenue']}
+        types={['VARCHAR', 'DOUBLE']}
+        onVizChange={vi.fn()}
+      />,
+    )
+    expect(screen.getByLabelText('Recipe radar').getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByLabelText('Custom').getAttribute('aria-pressed')).toBe('false')
   })
 })
