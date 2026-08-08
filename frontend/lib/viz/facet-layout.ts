@@ -67,6 +67,53 @@ const facetSpacing = (spec: Record<string, unknown>, axis: 'row' | 'column'): nu
     : FACET_DEFAULT_SPACING;
 };
 
+// Safe-side advance width per label character: the house mono runs 6.6px at the
+// 11px label size (the legend planner's basis in render-vega.ts), but headless
+// renders measure with fallback fonts that run wider. Over-reserving narrows a
+// panel slightly; under-reserving clips the rightmost panel entirely.
+const AXIS_LABEL_CHAR_PX = 7.2;
+const AXIS_LABEL_LIMIT_PX = 180; // Vega-Lite's default labelLimit — labels truncate past this
+// Tick + label padding + rotated axis title, plus slack for value-label text
+// marks protruding past the last panel's max bar.
+const Y_AXIS_TICK_TITLE_PX = 40;
+
+/** The y channel def of the child (unit encoding, or the first among layers). */
+const findYDef = (spec: Record<string, unknown>): Record<string, unknown> | null => {
+  const y = record(record(spec.encoding)?.y);
+  if (y) return y;
+  const layers = spec.layer;
+  if (Array.isArray(layers)) {
+    for (const layer of layers) {
+      const l = record(layer);
+      const found = l ? findYDef(l) : null;
+      if (found) return found;
+    }
+  }
+  return null;
+};
+
+/**
+ * Width of a panel's y-axis label gutter, which Vega-Lite draws OUTSIDE
+ * child_width. Only nominal/ordinal y axes are estimated (horizontal-bar
+ * category labels come from the data and can be arbitrarily long); the short
+ * numeric/temporal labels stay covered by FACET_COLUMN_CHROME_PX.
+ */
+const yLabelGutterPx = (
+  child: Record<string, unknown>,
+  rows: Record<string, unknown>[],
+): number => {
+  const y = findYDef(child);
+  if (!y || typeof y.field !== 'string') return 0;
+  if (y.type !== 'nominal' && y.type !== 'ordinal') return 0;
+  let maxLen = 0;
+  for (const row of rows) {
+    const value = row[y.field];
+    if (value != null) maxLen = Math.max(maxLen, String(value).length);
+  }
+  if (maxLen === 0) return 0;
+  return Math.min(Math.ceil(maxLen * AXIS_LABEL_CHAR_PX), AXIS_LABEL_LIMIT_PX) + Y_AXIS_TICK_TITLE_PX;
+};
+
 /** Grid shape (panel columns × rows) of a top-level facet against real rows. */
 const facetGridShape = (
   facet: Record<string, unknown>,
@@ -104,10 +151,15 @@ export function computeFacetLayoutPlan(
   const plan: FacetLayoutPlan = { columns, rows: rowCount };
   if (!Object.prototype.hasOwnProperty.call(child, 'width')) {
     const gap = facetSpacing(spec, 'column') * Math.max(0, columns - 1);
+    // Independent y scales repeat the label gutter in EVERY column; a shared
+    // scale draws it once at the left of the grid.
+    const yGutter = yLabelGutterPx(child, rows);
+    const yIndependent = record(record(spec.resolve)?.scale)?.y === 'independent';
     plan.childWidth = Math.max(
       FACET_MIN_CHILD_PX,
-      Math.floor((Math.max(containerWidth, 80) - FACET_OUTER_HORIZONTAL_PADDING_PX - gap) / columns
-        - FACET_COLUMN_CHROME_PX),
+      Math.floor((Math.max(containerWidth, 80) - FACET_OUTER_HORIZONTAL_PADDING_PX - gap
+        - (yIndependent ? 0 : yGutter)) / columns
+        - FACET_COLUMN_CHROME_PX - (yIndependent ? yGutter : 0)),
     );
   }
   if (!Object.prototype.hasOwnProperty.call(child, 'height')) {

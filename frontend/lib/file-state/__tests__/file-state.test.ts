@@ -10,7 +10,7 @@ import type { MockedFunction } from 'vitest';
  */
 
 import { configureStore } from '@reduxjs/toolkit';
-import filesReducer, { setFile, setEdit } from '@/store/filesSlice';
+import filesReducer, { setFile, setEdit, setNotebookCellExecuted } from '@/store/filesSlice';
 import queryResultsReducer, { setQueryResult } from '@/store/queryResultsSlice';
 import authReducer from '@/store/authSlice';
 import {
@@ -757,6 +757,47 @@ describe('readFiles - File State Manager', () => {
 
       const state = mockStore.getState() as RootState;
       expect(state.files.files[1].persistableChanges).toEqual({});
+    });
+
+    it('should preserve notebook cell execution snapshots when the saved version advances', async () => {
+      const cell = {
+        type: 'sql' as const,
+        id: 'new-cell',
+        name: null,
+        query: 'SELECT 42',
+        vizSettings: { type: 'table' as const },
+        parameters: [],
+        parameterValues: {},
+        connection_name: 'test',
+      };
+      const mockFile = {
+        ...createMockFile(1, 'notebook'),
+        content: { description: null, cells: [cell] },
+      };
+      mockStore.dispatch(setFile({ file: mockFile, references: [] }));
+      mockStore.dispatch(setEdit({ fileId: 1, edits: { description: 'Saved notebook' } }));
+      mockStore.dispatch(setNotebookCellExecuted({
+        fileId: 1,
+        cellId: cell.id,
+        executed: { query: cell.query, params: {}, database: cell.connection_name },
+      }));
+
+      mockSaveFile.mockResolvedValueOnce({
+        data: {
+          ...mockFile,
+          version: 2,
+          content: { ...mockFile.content, description: 'Saved notebook' },
+        },
+      });
+
+      await publishFile({ fileId: 1 });
+
+      const state = mockStore.getState() as RootState;
+      expect(state.files.files[1].ephemeralChanges.cellExecuted?.[cell.id]).toEqual({
+        query: cell.query,
+        params: {},
+        database: cell.connection_name,
+      });
     });
 
     it('should handle save errors', async () => {

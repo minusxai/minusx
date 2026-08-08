@@ -40,6 +40,42 @@ const DISCRETE_X_FACET_SPEC = {
   },
 } as Record<string, unknown>;
 
+// Horizontal-bar facet (the notebook "row plot" shape): long nominal labels on
+// each panel's y axis, independent y scales, so every column carries its own
+// label gutter OUTSIDE child_width.
+const HBAR_FACET_SPEC = {
+  facet: { field: 'sentiment_group', type: 'nominal', sort: ['Positive', 'Negative'], header: { title: null } },
+  resolve: { scale: { y: 'independent' } },
+  spec: {
+    layer: [
+      {
+        mark: { type: 'bar' },
+        encoding: {
+          x: { field: 'overall_tag_pct', type: 'quantitative', title: 'Share (%)' },
+          y: { field: 'metric', type: 'nominal', title: 'Comment tag' },
+        },
+      },
+      {
+        mark: { type: 'text', align: 'left', dx: 4, baseline: 'middle' },
+        encoding: {
+          x: { field: 'overall_tag_pct', type: 'quantitative' },
+          y: { field: 'metric', type: 'nominal' },
+          text: { field: 'overall_tag_pct', type: 'quantitative' },
+        },
+      },
+    ],
+  },
+} as Record<string, unknown>;
+
+const TAGS = ['generic_praise', 'cool_or_fun', 'useful_or_needed', 'well_executed', 'effort_or_story', 'technically_impressive'];
+const HBAR_ROWS = ['Positive', 'Negative'].flatMap((sentiment_group, groupIndex) =>
+  TAGS.map((metric, tagIndex) => ({
+    sentiment_group,
+    metric,
+    overall_tag_pct: 36.4 - groupIndex * 10 - tagIndex * 5,
+  })),
+);
+
 const CONTEXTS = ['established_company', 'side_project', 'startup', 'unclear'];
 const ARTIFACTS = ['app_or_service', 'content_or_writing', 'dev_tool', 'hardware', 'other', 'project_demo'];
 const ROWS = CONTEXTS.flatMap((project_context, contextIndex) =>
@@ -145,6 +181,47 @@ describe('facet view sizing', () => {
       const size = svgSize(await view.toSVG());
       expect(size.width).toBeLessThanOrEqual(width);
       expect(size.height).toBeLessThanOrEqual(height);
+    } finally {
+      view.finalize();
+    }
+  });
+
+  it('keeps a horizontal-bar facet with long y labels within the outer width', async () => {
+    const width = 900;
+    const height = 380;
+    const facetLayout = computeFacetLayoutPlan(HBAR_FACET_SPEC, HBAR_ROWS, width, height);
+    const vegaSpec = compileVegaLite(HBAR_FACET_SPEC, 'light', { facetLayout });
+    const view = createVegaView(vegaSpec, HBAR_ROWS, {
+      renderer: 'none', width, height, facetLayout,
+    });
+    try {
+      await view.runAsync();
+      const size = svgSize(await view.toSVG());
+      // Every panel repeats its ~150px y-label gutter (independent y scales);
+      // planning only child_width without that gutter overflows the container
+      // and the browser clips the rightmost panel entirely.
+      expect(size.width).toBeLessThanOrEqual(width);
+    } finally {
+      view.finalize();
+    }
+  });
+
+  it('reserves the shared y-label gutter once when y scales resolve shared', async () => {
+    const width = 900;
+    const height = 380;
+    const spec = { ...HBAR_FACET_SPEC, resolve: {} } as Record<string, unknown>;
+    const facetLayout = computeFacetLayoutPlan(spec, HBAR_ROWS, width, height);
+    const sharedWidth = facetLayout!.childWidth!;
+    const independentWidth = computeFacetLayoutPlan(HBAR_FACET_SPEC, HBAR_ROWS, width, height)!.childWidth!;
+    // A shared y axis draws its labels once, so its panels keep more width.
+    expect(sharedWidth).toBeGreaterThan(independentWidth);
+    const vegaSpec = compileVegaLite(spec, 'light', { facetLayout });
+    const view = createVegaView(vegaSpec, HBAR_ROWS, {
+      renderer: 'none', width, height, facetLayout,
+    });
+    try {
+      await view.runAsync();
+      expect(svgSize(await view.toSVG()).width).toBeLessThanOrEqual(width);
     } finally {
       view.finalize();
     }
