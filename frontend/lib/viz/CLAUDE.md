@@ -102,9 +102,17 @@ converter); the panel re-freezes with real columns on any rebind.
 
 Edit surfaces keep a frozen file recipe BINDABLE by injecting its definition:
 `lib/viz/recipe-rebind.ts` (`getFileRecipeRef`, `rebindFileRecipe`, `applyFileRecipeSelection` —
-the selector's auto-bind) plus the optional `FileRecipeEditContext` last argument on
-`encoding-edit`'s zone helpers. `lib/hooks/use-viz-recipes.ts` resolves the catalog browser-side
-(Redux-loaded `viz` files + built-ins) for `VegaVizPanel`'s Workspace selector tiles and rebinding.
+the selector's auto-bind, and `explainRecipeFit`, the plain-words applicability check) plus the
+optional `FileRecipeEditContext` last argument on `encoding-edit`'s zone helpers.
+`lib/hooks/use-viz-recipes.ts` resolves the catalog browser-side (Redux-loaded `viz` files +
+built-ins) for `VegaVizPanel`'s Workspace selector tiles and rebinding. A recipe whose slots
+cannot bind to the current result columns renders GREYED OUT with the reason as its hover title
+(`explainRecipeFit` distinguishes "this result has none" from "every matching column is already
+assigned"); selection, greying and the failure toast all read the same auto-bind walk, so they
+cannot disagree. The recipe file viewer (`components/views/VizRecipeView.tsx`) is a full-flow
+scrolling page whose EDIT mode makes the description and template JSON directly editable,
+committed on blur through `applyJsonContentEdit` — the validated full-replace path the File tab
+uses, so a bad template rejects with the reason inline.
 
 Agent surface: the resolved catalog is advertised per turn as the prompt's Chart Recipes section
 (`lib/viz/recipe-prompt.ts`, built in `lib/chat/agent-args.server.ts` — recipes are advertised
