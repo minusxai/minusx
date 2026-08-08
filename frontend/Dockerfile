@@ -86,6 +86,9 @@ COPY --from=builder /app/public ./public
 # Copy database scripts and lib for initialization.
 COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/lib ./lib
+# Template files are DATA read at boot (lib/templates), not imports, so Next's
+# output tracing never sees them — they must be copied explicitly, like scripts/.
+COPY --from=builder /app/templates ./templates
 COPY --from=builder /app/tsconfig.json ./tsconfig.json
 # The precompiled setup-cli (plain JS, no runtime transpile) — install.sh runs
 # these with `docker run … node setup-cli/<entry>.js`.

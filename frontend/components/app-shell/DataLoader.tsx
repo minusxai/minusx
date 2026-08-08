@@ -7,6 +7,8 @@ import { useConnections } from '@/lib/hooks/useConnections';
 import { useContexts } from '@/lib/hooks/useContexts';
 import { setBulkUiFlags } from '@/store/uiSlice';
 import { selectConnectionsContentLoaded, selectContextsContentLoaded } from '@/store/filesSlice';
+import { selectVizTemplates } from '@/store/configsSlice';
+import { setBuiltinVizTemplates } from '@/lib/viz/builtin-recipes';
 
 function readStoredBoolean(key: string): boolean | undefined {
   const value = localStorage.getItem(key);
@@ -31,6 +33,16 @@ function readStoredBoolean(key: string): boolean | undefined {
 export function DataLoader() {
   const dispatch = useAppDispatch();
   const user = useAppSelector(state => state.auth.user);
+  const vizTemplates = useAppSelector(selectVizTemplates);
+
+  // Mirror the SSR-hydrated built-in recipes into the module registry every
+  // non-React consumer reads (recipe resolution, the EditFile apply gate, the
+  // catalog). Redux is the delivery channel; the registry is the interface, so
+  // resolution does not have to thread templates through a dozen signatures.
+  // Runs in an effect, not during render, so SSR and hydration agree.
+  useEffect(() => {
+    setBuiltinVizTemplates(vizTemplates);
+  }, [vizTemplates]);
 
   // Restore persisted UI flags after hydration — one dispatch instead of a re-render cycle per flag
   useEffect(() => {

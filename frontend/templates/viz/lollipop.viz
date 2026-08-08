@@ -1,0 +1,78 @@
+{
+  "description": "Lollipop chart: thin stems with end dots — a lighter bar chart for rankings",
+  "engine": "vega-lite",
+  "bindings": [
+    {
+      "name": "category",
+      "label": "Category",
+      "accepts": [
+        "nominal",
+        "temporal"
+      ]
+    },
+    {
+      "name": "value",
+      "label": "Value",
+      "accepts": [
+        "quantitative"
+      ]
+    }
+  ],
+  "params": [
+    {
+      "name": "dotSize",
+      "label": "Dot size",
+      "default": 100
+    }
+  ],
+  "template": {
+    "layer": [
+      {
+        "mark": {
+          "type": "rule"
+        },
+        "encoding": {
+          "y": {
+            "field": "{{category}}",
+            "type": "{{category:kind}}",
+            "title": null,
+            "sort": "-x"
+          },
+          "x": {
+            "field": "{{value}}",
+            "type": "quantitative",
+            "title": null
+          }
+        }
+      },
+      {
+        "mark": {
+          "type": "circle",
+          "size": "{{dotSize}}",
+          "opacity": 1
+        },
+        "encoding": {
+          "y": {
+            "field": "{{category}}",
+            "type": "{{category:kind}}",
+            "sort": "-x"
+          },
+          "x": {
+            "field": "{{value}}",
+            "type": "quantitative"
+          },
+          "tooltip": [
+            {
+              "field": "{{category}}",
+              "type": "{{category:kind}}"
+            },
+            {
+              "field": "{{value}}",
+              "type": "quantitative"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

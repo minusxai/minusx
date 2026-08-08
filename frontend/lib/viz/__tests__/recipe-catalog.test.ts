@@ -7,15 +7,8 @@
  * here, not in someone's workspace.
  */
 import { describe, it, expect } from 'vitest';
-import {
-  CATALOG_VIZ_ID_BASE,
-  catalogEntries,
-  catalogVizFileById,
-  catalogVizFiles,
-  isCatalogVizId,
-  shippedRecipeAsContent,
-} from '@/lib/viz/recipe-catalog';
-import { BUILTIN_VIZ_RECIPES } from '@/lib/viz/builtin-recipes';
+import { catalogEntries, shippedRecipeAsContent } from '@/lib/viz/recipe-catalog';
+import { getBuiltinVizRecipes, setBuiltinVizTemplates } from '@/lib/viz/builtin-recipes';
 import { VIZ_TEMPLATES } from '@/lib/viz/viz-templates';
 import { materializeFileRecipe, sampleDataForRecipe } from '@/lib/viz/recipe-file';
 import type { VizResultColumn } from '@/lib/viz/types';
@@ -42,13 +35,13 @@ describe('recipe catalog', () => {
     const entries = catalogEntries();
     const builtins = entries.filter((e) => e.tier === 'builtin').map((e) => e.name);
     const shipped = entries.filter((e) => e.tier === 'shipped').map((e) => e.recipeId);
-    expect(builtins).toEqual(Object.keys(BUILTIN_VIZ_RECIPES));
+    expect(builtins).toEqual(Object.keys(getBuiltinVizRecipes()));
     expect(shipped).toEqual(Object.keys(VIZ_TEMPLATES));
   });
 
   it('projects a built-in verbatim', () => {
     const bullet = catalogEntries().find((e) => e.name === 'bullet')!;
-    expect(bullet.content).toBe(BUILTIN_VIZ_RECIPES.bullet);
+    expect(bullet.content).toBe(getBuiltinVizRecipes().bullet);
   });
 
   it.each(Object.keys(VIZ_TEMPLATES))('%s projects to viewable recipe content', (id) => {
@@ -124,30 +117,34 @@ describe('recipe catalog', () => {
     }
   });
 
-  it('gives every entry a stable id inside the reserved block', () => {
-    const ids = catalogEntries().map((e) => e.id);
-    expect(new Set(ids).size).toBe(ids.length);
-    expect(ids.every(isCatalogVizId)).toBe(true);
-    expect(ids.every((id) => id >= CATALOG_VIZ_ID_BASE)).toBe(true);
-    // A real workspace id must never be mistaken for a catalog one.
-    expect(isCatalogVizId(1)).toBe(false);
-    expect(isCatalogVizId(1_031)).toBe(false);
+  it('reports where a file-tier recipe came from, so an operator can see their own', () => {
+    // A deployment mounting TEMPLATE_DIR must be able to tell its templates from
+    // the app's — otherwise a mount that silently failed looks identical to one
+    // that worked.
+    const original = getBuiltinVizRecipes();
+    try {
+      setBuiltinVizTemplates({
+        bullet: { content: original.bullet, origin: 'builtin' },
+        'acme-donut': { content: original.bullet, origin: 'deployment' },
+      });
+      const byName = Object.fromEntries(catalogEntries().map((e) => [e.name, e]));
+      expect(byName.bullet.origin).toBe('builtin');
+      expect(byName['acme-donut'].origin).toBe('deployment');
+      // Shipped code recipes have no template origin — they cannot be overridden.
+      expect(byName.funnel.origin).toBeUndefined();
+    } finally {
+      setBuiltinVizTemplates(Object.fromEntries(
+        Object.entries(original).map(([name, content]) => [name, { content, origin: 'builtin' as const }]),
+      ));
+    }
   });
 
-  it('projects virtual viz files into the mode-scoped visualizations folder, marked read-only', () => {
-    const files = catalogVizFiles('tutorial');
-    expect(files.every((f) => f.type === 'viz')).toBe(true);
-    expect(files.every((f) => f.path.startsWith('/tutorial/visualizations/'))).toBe(true);
-    expect(files.every((f) => (f.meta as { readOnly?: boolean }).readOnly === true)).toBe(true);
-    // Same catalog, other mode → same ids, mode-scoped paths (never cross-mode).
-    const org = catalogVizFiles('org');
-    expect(org.map((f) => f.id)).toEqual(files.map((f) => f.id));
-    expect(org.every((f) => f.path.startsWith('/org/visualizations/'))).toBe(true);
-  });
-
-  it('resolves a catalog file by id and declines a real id', () => {
-    const first = catalogVizFiles('org')[0];
-    expect(catalogVizFileById(first.id, 'org')).toMatchObject({ id: first.id, name: first.name });
-    expect(catalogVizFileById(42, 'org')).toBeNull();
+  it('names entries uniquely, by the name a workspace recipe would shadow', () => {
+    const names = catalogEntries().map((e) => e.name);
+    expect(new Set(names).size).toBe(names.length);
+    // A shipped id is addressed by its bare name here — `minusx/` and the
+    // version suffix are the REGISTRY's vocabulary, not the file system's.
+    expect(names).toContain('funnel');
+    expect(names.every((n) => !n.includes('/') && !n.includes('@'))).toBe(true);
   });
 });

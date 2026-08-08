@@ -76,12 +76,7 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
   const canPresent = presentation?.supported && PRESENTABLE_TYPES.includes(fileType as typeof PRESENTABLE_TYPES[number]);
 
   const effectiveUser = useAppSelector(selectEffectiveUser);
-  // `meta.readOnly` marks a file the SERVER refuses to write whoever asks — today
-  // the built-in visualization catalog (lib/viz/recipe-catalog.ts), which is code
-  // projected as files. Offering Edit on one would only surface a save error.
-  const isReadOnlyFile = (fileMeta as { readOnly?: boolean } | null | undefined)?.readOnly === true;
-  const canEdit = !isReadOnlyFile
-    && (!effectiveUser?.role || canCreateFileByRole(effectiveUser.role, fileType as FileType));
+  const canEdit = !effectiveUser?.role || canCreateFileByRole(effectiveUser.role, fileType as FileType);
 
   const dispatchSetEditMode = useCallback((val: boolean) => {
     dispatch(setFileEditMode({ fileId, editMode: val }));

@@ -57,6 +57,12 @@ interface EnvironmentConfig {
   HEADLESS_CAPTURE: boolean;
   SHARE_GUEST_CHAT_ENABLED: boolean;
   LOCAL_UPLOAD_PATH: string;
+  /**
+   * Directory of deployment-supplied templates (`<dir>/viz/*.viz`), overlaid by
+   * NAME on the app's own templates — an operator adding one template keeps the
+   * rest. Unset means built-ins only. Read once at boot (lib/templates).
+   */
+  TEMPLATE_DIR: string | undefined;
   /** Base URL published datasets are read from: ${base}/${dataset}/${table}.parquet. */
   STATIC_DATASETS_BASE_URL: string;
   MD_HOME: string;
@@ -170,6 +176,7 @@ const config: EnvironmentConfig = {
   LOCAL_UPLOAD_PATH: process.env.LOCAL_UPLOAD_PATH
     ? resolve(process.env.LOCAL_UPLOAD_PATH)
     : resolve(join(baseDuckdbDataPath, 'data/uploads')),
+  TEMPLATE_DIR: process.env.TEMPLATE_DIR ? resolve(process.env.TEMPLATE_DIR) : undefined,
   STATIC_DATASETS_BASE_URL: getOptional(
     process.env.MX_STATIC_DATASETS_BASE_URL,
     'https://github.com/minusxai/minusx_datasets/releases/download',
@@ -344,6 +351,7 @@ export const DAB_AUTOCTX_ONLY = config.DAB_AUTOCTX_ONLY;
 export const MAX_LLM_CONCURRENCY = config.MAX_LLM_CONCURRENCY;
 export const MAX_AGENTS_CONCURRENCY = config.MAX_AGENTS_CONCURRENCY;
 export const MX_GATEWAY_SHARED_SECRET = config.MX_GATEWAY_SHARED_SECRET;
+export const TEMPLATE_DIR = config.TEMPLATE_DIR;
 
 /**
  * Origin of the managed MinusX gateway. ONE service, two planes: inference at

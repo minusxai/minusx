@@ -1,0 +1,67 @@
+{
+  "description": "Range bar: a bar spanning start to end per category (durations, min–max ranges)",
+  "engine": "vega-lite",
+  "bindings": [
+    {
+      "name": "category",
+      "label": "Category",
+      "accepts": [
+        "nominal",
+        "temporal"
+      ]
+    },
+    {
+      "name": "start",
+      "label": "Start",
+      "accepts": [
+        "quantitative",
+        "temporal"
+      ]
+    },
+    {
+      "name": "end",
+      "label": "End",
+      "accepts": [
+        "quantitative",
+        "temporal"
+      ]
+    }
+  ],
+  "template": {
+    "mark": {
+      "type": "bar",
+      "height": {
+        "band": 0.6
+      }
+    },
+    "encoding": {
+      "y": {
+        "field": "{{category}}",
+        "type": "{{category:kind}}",
+        "title": null
+      },
+      "x": {
+        "field": "{{start}}",
+        "type": "{{start:kind}}",
+        "title": null
+      },
+      "x2": {
+        "field": "{{end}}"
+      },
+      "tooltip": [
+        {
+          "field": "{{category}}",
+          "type": "{{category:kind}}"
+        },
+        {
+          "field": "{{start}}",
+          "type": "{{start:kind}}"
+        },
+        {
+          "field": "{{end}}",
+          "type": "{{end:kind}}"
+        }
+      ]
+    }
+  }
+}

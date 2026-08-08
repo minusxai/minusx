@@ -1,5 +1,6 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { OrgConfig, DEFAULT_CONFIG } from '@/lib/branding/whitelabel';
+import type { BuiltinVizTemplate } from '@/lib/viz/builtin-recipes';
 import { RootState } from './store';
 
 export interface ConfigsState {
@@ -22,6 +23,10 @@ export interface ConfigsState {
   // Source IPs a customer allows through their DB firewall. Empty on self-hosted,
   // where the egress address is the operator's own and no hint is shown.
   egressIps: string[];
+  // Built-in viz recipes, loaded from disk at boot (lib/templates) and hydrated
+  // from SSR preloadedState. The browser cannot read TEMPLATE_DIR, so this is
+  // how the selector tiles and recipe resolution see the same set the server does.
+  vizTemplates: Record<string, BuiltinVizTemplate>;
 }
 
 const initialState: ConfigsState = {
@@ -32,6 +37,7 @@ const initialState: ConfigsState = {
   queryTimeoutMs: 120_000,
   creditsEnabled: false,
   egressIps: [],
+  vizTemplates: {},
 };
 
 const configsSlice = createSlice({
@@ -53,6 +59,7 @@ export const selectConfig = (state: RootState) => state.configs.config;
 export const selectBranding = (state: RootState) => state.configs.config.branding;
 export const selectConfigsLoaded = (state: RootState) => state.configs.loadedAt !== null;
 export const selectDisableAppStateImages = (state: RootState) => state.configs.disableAppStateImages;
+export const selectVizTemplates = (state: RootState) => state.configs.vizTemplates;
 export const selectMaxConcurrentQueries = (state: RootState) => state.configs.maxConcurrentQueries;
 export const selectQueryTimeoutMs = (state: RootState) => state.configs.queryTimeoutMs;
 export const selectCreditsEnabled = (state: RootState) => state.configs.creditsEnabled;

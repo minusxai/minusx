@@ -13,6 +13,7 @@ import { NavigationGuardProvider } from '@/lib/navigation/NavigationGuardProvide
 import { AnalyticsProvider } from './AnalyticsProvider';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { OrgConfig } from '@/lib/branding/whitelabel';
+import type { ConfigsState } from '@/store/configsSlice';
 import { DEFAULT_CONFIG } from '@/lib/branding/whitelabel';
 import type { AnalyticsConfig } from '@/lib/analytics/types';
 
@@ -30,6 +31,7 @@ interface ProvidersProps {
     queryTimeoutMs?: number;          // Server runtime env (QUERY_TIMEOUT_MS)
     creditsEnabled?: boolean;         // Org config (config.credits.enabled), not an env var
     egressIps?: string[];             // Server runtime env (MX_EGRESS_IPS) — DB-firewall hint
+    vizTemplates?: Record<string, unknown>;  // Built-in viz recipes loaded from disk at boot
     e2eEnabled?: boolean;             // QA runtime E2E opt-in (?e2e=<secret>)
   };
 }
@@ -48,6 +50,7 @@ export function Providers({ children, initialData }: ProvidersProps) {
       queryTimeoutMs: initialData?.queryTimeoutMs ?? 120_000,
       creditsEnabled: initialData?.creditsEnabled ?? false,
       egressIps: initialData?.egressIps ?? [],
+      vizTemplates: (initialData?.vizTemplates ?? {}) as ConfigsState['vizTemplates'],
     },
 
     // Auth (if user present)

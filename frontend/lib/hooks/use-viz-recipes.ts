@@ -12,7 +12,7 @@ import { useAppSelector } from '@/store/hooks';
 import { selectFilesByCriteria } from '@/lib/store/file-selectors';
 import { readFilesByCriteria } from '@/lib/file-state/file-state';
 import { resolveVizRecipes } from '@/lib/viz/recipe-resolve';
-import { BUILTIN_VIZ_RECIPES } from '@/lib/viz/builtin-recipes';
+import { getBuiltinVizRecipes } from '@/lib/viz/builtin-recipes';
 import { isFileRecipePath, materializeFileRecipe } from '@/lib/viz/recipe-file';
 import type { VizEnvelope, VizRecipeContent, VizSourceRecipe } from '@/lib/validation/atlas-schemas';
 
@@ -54,7 +54,7 @@ export function useVizRecipes(
       : null;
     const resolved = resolvedMap
       ? [...resolvedMap.values()]
-      : Object.entries(BUILTIN_VIZ_RECIPES).map(([name, content]) => ({ name, source: 'builtin' as const, content }));
+      : Object.entries(getBuiltinVizRecipes()).map(([name, content]) => ({ name, source: 'builtin' as const, content }));
     const available = resolved
       .map((r) => r.source === 'builtin'
         ? { name: r.name, description: r.content.description, address: r.name }
@@ -66,7 +66,7 @@ export function useVizRecipes(
       if (isFileRecipePath(address)) return byPath.get(address)?.content as VizRecipeContent | undefined;
       const r = resolvedMap?.get(address);
       if (r) return r.source === 'builtin' ? r.content : (byPath.get(r.path)?.content as VizRecipeContent | undefined);
-      return BUILTIN_VIZ_RECIPES[address];
+      return getBuiltinVizRecipes()[address];
     };
     return { available, contentFor };
   }, [vizFiles, folderPath]);
