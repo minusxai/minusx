@@ -1,9 +1,14 @@
 /**
  * The READ-ONLY recipe catalog: the two tiers of chart recipes that ship with
- * the app, projected as virtual `viz` files so the file browser and the recipe
- * viewer can show them with no surface of their own.
+ * the app, projected as recipe CONTENT so the Templates page can show them.
  *
- *  - **Built-in file recipes** (`BUILTIN_VIZ_RECIPES`) are already
+ * These are app vocabulary, not documents. They are deliberately NOT files: a
+ * folder in the tree implies a context, an owner, edit/move/delete and a place
+ * in recipe resolution, and none of that is true of code. The file system is
+ * where a workspace OVERRIDES or EXTENDS this vocabulary — create a `.viz` file
+ * of the same name in a folder and the normal shadowing rules apply.
+ *
+ *  - **Built-in file recipes** (the `TEMPLATE_DIR` registry) are already
  *    `VizRecipeContent`; they project verbatim.
  *  - **Shipped code recipes** (`VIZ_TEMPLATES`, `minusx/…@1`) are functions, not
  *    templates. They are projected by calling `build()` with each slot bound to
@@ -24,33 +29,11 @@
  * the code registry, so projecting them here adds a viewing surface and nothing
  * else.
  */
-import { BUILTIN_VIZ_RECIPES } from './builtin-recipes';
+import { getBuiltinVizOrigin, getBuiltinVizRecipes } from './builtin-recipes';
 import { materializeFileRecipe, sampleDataForRecipe } from './recipe-file';
 import { VIZ_TEMPLATES } from './viz-templates';
-import { resolvePath, SYSTEM_FOLDERS } from '@/lib/mode/path-resolver';
-import type { Mode } from '@/lib/mode/mode-types';
-import type { DbFile } from '@/lib/types';
 import type { VizRecipeContent } from '@/lib/validation/atlas-schemas';
-
-/**
- * Reserved id block for catalog files. Far above any real `files.id` sequence,
- * and POSITIVE because the client drops negative ids before they reach the
- * server (`loadFiles` filters `id > 0`) — a virtual file still has to survive a
- * round trip through Redux and the load path.
- */
-export const CATALOG_VIZ_ID_BASE = 900_000_000;
-
-/** The browsable system folder these appear in, per mode. */
-export const VISUALIZATIONS_FOLDER = SYSTEM_FOLDERS.visualizations;
-
-export function isCatalogVizId(id: number): boolean {
-  return id >= CATALOG_VIZ_ID_BASE && id < CATALOG_VIZ_ID_BASE + 10_000;
-}
-
-/** Stable per-name id: the catalog is code, so its order is the code's order. */
-function catalogId(index: number): number {
-  return CATALOG_VIZ_ID_BASE + index;
-}
+import type { TemplateOrigin } from '@/lib/templates/types';
 
 /**
  * A shipped recipe's REQUIRED slots. An optional slot (radar's `series`) is
@@ -233,12 +216,13 @@ const PREVIEW_SAMPLES: Record<string, PreviewSample> = {
 export type CatalogTier = 'builtin' | 'shipped';
 
 export interface CatalogEntry {
-  id: number;
-  /** File basename: the built-in's name, or the shipped id with `minusx/`+`@1` stripped. */
+  /** The name a workspace recipe would use to shadow this one. */
   name: string;
   tier: CatalogTier;
   /** The shipped registry id, for a `shipped` entry — what a chart would reference. */
   recipeId?: string;
+  /** For a file-tier entry: the app's own templates, or this deployment's. */
+  origin?: TemplateOrigin;
   /** Whether this entry's template can be copied into an editable workspace recipe. */
   copyable: boolean;
   /** Named boundary datasets the PREVIEW needs (geo recipes only). */
@@ -254,79 +238,18 @@ export interface CatalogEntry {
  */
 export function catalogEntries(): CatalogEntry[] {
   const entries: CatalogEntry[] = [];
-  for (const [name, content] of Object.entries(BUILTIN_VIZ_RECIPES)) {
-    entries.push({ id: catalogId(entries.length), name, tier: 'builtin', copyable: true, content });
+  for (const [name, content] of Object.entries(getBuiltinVizRecipes())) {
+    entries.push({ name, tier: 'builtin', origin: getBuiltinVizOrigin(name), copyable: true, content });
   }
   for (const id of Object.keys(VIZ_TEMPLATES)) {
     const projected = shippedRecipeAsContent(id);
     if (!projected) continue;
     const name = id.replace(/^minusx\//, '').replace(/@\d+$/, '');
     entries.push({
-      id: catalogId(entries.length), name, tier: 'shipped', recipeId: id,
+      name, tier: 'shipped', recipeId: id,
       copyable: projected.copyable, assets: projected.assets,
       previewSample: PREVIEW_SAMPLES[id], content: projected.content,
     });
   }
   return entries;
-}
-
-/**
- * A FIXED timestamp for every synthesized row. Catalog content changes only when
- * the app is rebuilt, and a per-request `new Date()` would make every OG/cache
- * key that embeds `updated_at` miss on every load.
- */
-const CATALOG_TIMESTAMP = '2020-01-01T00:00:00.000Z';
-
-/** A catalog entry as the virtual `viz` DbFile the file surfaces render. */
-function toDbFile(entry: CatalogEntry, mode: Mode): DbFile {
-  return {
-    created_at: CATALOG_TIMESTAMP,
-    updated_at: CATALOG_TIMESTAMP,
-    id: entry.id,
-    name: entry.name,
-    path: `${resolvePath(mode, VISUALIZATIONS_FOLDER)}/${entry.name}`,
-    type: 'viz',
-    references: [],
-    version: 1,
-    last_edit_id: null,
-    content: entry.content as unknown as DbFile['content'],
-    // `readOnly` is what the file header reads to drop Edit/Save/Delete; `tier`
-    // and `recipeId` let the viewer explain where an entry came from.
-    meta: {
-      readOnly: true,
-      catalogTier: entry.tier,
-      catalogCopyable: entry.copyable,
-      ...(entry.assets ? { previewAssets: entry.assets } : {}),
-      ...(entry.previewSample ? { previewSample: entry.previewSample } : {}),
-      ...(entry.recipeId ? { recipeId: entry.recipeId } : {}),
-    },
-  } as DbFile;
-}
-
-/** The virtual folder row itself, so the browser can render a real-looking folder. */
-export function catalogFolderFile(mode: Mode): DbFile {
-  return {
-    created_at: CATALOG_TIMESTAMP,
-    updated_at: CATALOG_TIMESTAMP,
-    id: CATALOG_VIZ_ID_BASE + 9_999,
-    name: 'visualizations',
-    path: resolvePath(mode, VISUALIZATIONS_FOLDER),
-    type: 'folder',
-    references: [],
-    version: 1,
-    last_edit_id: null,
-    content: null,
-    meta: { readOnly: true },
-  } as DbFile;
-}
-
-export function catalogVizFiles(mode: Mode): DbFile[] {
-  return catalogEntries().map((e) => toDbFile(e, mode));
-}
-
-export function catalogVizFileById(id: number, mode: Mode): DbFile | null {
-  if (!isCatalogVizId(id)) return null;
-  if (id === CATALOG_VIZ_ID_BASE + 9_999) return catalogFolderFile(mode);
-  const entry = catalogEntries().find((e) => e.id === id);
-  return entry ? toDbFile(entry, mode) : null;
 }

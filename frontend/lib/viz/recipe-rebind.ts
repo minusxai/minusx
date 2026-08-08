@@ -6,7 +6,7 @@
  * the substituted spec as computed fields (`spec`/`grammar` — the file loader
  * server-side, the panel client-side) which the save gate strips. With the
  * recipe definition in hand — the panel injects it, resolved via Redux file
- * state or `BUILTIN_VIZ_RECIPES` — the chart stays BINDABLE: zones from the
+ * state or the built-in template registry — the chart stays BINDABLE: zones from the
  * declared slots, and every rebind rewrites `bindings` and re-materializes the
  * computed preview. A frozen source that recorded its file-recipe provenance in
  * `detachedFrom` (the inspector's detach flow) rebinds the same way, staying a

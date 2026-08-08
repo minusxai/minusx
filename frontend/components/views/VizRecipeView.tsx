@@ -33,7 +33,7 @@ export interface VizRecipeViewProps {
    * `copyable` is false for a recipe whose template is a rendering of code
    * rather than a real template (see lib/viz/recipe-catalog.ts).
    */
-  catalog?: { tier: 'builtin' | 'shipped'; recipeId?: string; copyable: boolean };
+  catalog?: { tier: 'builtin' | 'shipped'; recipeId?: string; copyable: boolean; origin?: 'builtin' | 'deployment' };
   /**
    * Named boundary/lookup datasets for the preview only (`{localName: assetId}`).
    * A geo recipe's spec references features that are NOT query columns, so the
@@ -110,7 +110,9 @@ export default function VizRecipeView({ content, colorMode, editable = false, on
         <div aria-label="Built-in recipe notice" className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-muted/40 px-3 py-2">
           <p className="text-xs text-muted-foreground">
             {catalog.tier === 'builtin'
-              ? 'Built-in recipe — available everywhere. Copy it to edit, or create a recipe of the same name in a folder to override it there.'
+              ? catalog.origin === 'deployment'
+                ? 'From your deployment\u2019s template directory — available everywhere. Copy it to edit, or create a recipe of the same name in a folder to override it there.'
+                : 'Built-in recipe — available everywhere. Copy it to edit, or create a recipe of the same name in a folder to override it there.'
               : catalog.copyable
                 ? `Shipped recipe ${catalog.recipeId} — generated from code. Copy it to get an editable version.`
                 : `Shipped recipe ${catalog.recipeId} — generated from code, and its spec depends on the bound columns, so it cannot be copied as a template.`}

@@ -2,8 +2,8 @@
  * Recipe resolution: which viz recipes are available in a folder, and which file
  * wins when names collide. Pure path math over a file listing — no I/O.
  *
- * Resolution order (weakest to strongest): built-in defaults (`BUILTIN_VIZ_RECIPES`,
- * app data, present everywhere) < root-folder files < … < the folder itself. A file
+ * Resolution order (weakest to strongest): built-in defaults (the `TEMPLATE_DIR`
+ * registry, present everywhere) < root-folder files < … < the folder itself. A file
  * shadows anything weaker with the same NAME (the file's basename — identity has no
  * other source). Sibling folders never see each other's recipes, and a parent never
  * sees a child's: only ancestors-or-self contribute.
@@ -13,7 +13,7 @@
  * saved charts render.
  */
 import type { VizRecipeContent } from '@/lib/validation/atlas-schemas';
-import { BUILTIN_VIZ_RECIPES } from './builtin-recipes';
+import { getBuiltinVizRecipes } from './builtin-recipes';
 
 /** The slice of file metadata resolution needs (FilesAPI getFiles rows carry more). */
 export interface VizRecipeFileMeta {
@@ -37,7 +37,7 @@ export function resolveVizRecipes(
 ): Map<string, ResolvedVizRecipe> {
   const target = folder.length > 1 && folder.endsWith('/') ? folder.slice(0, -1) : folder;
   const resolved = new Map<string, ResolvedVizRecipe>();
-  for (const [name, content] of Object.entries(BUILTIN_VIZ_RECIPES)) {
+  for (const [name, content] of Object.entries(getBuiltinVizRecipes())) {
     resolved.set(name, { name, source: 'builtin', content });
   }
   // Specificity = the owning folder's depth; a nearer (deeper) ancestor wins.

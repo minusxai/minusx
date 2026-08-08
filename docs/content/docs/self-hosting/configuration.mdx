@@ -50,6 +50,7 @@ Model providers, keys, and assignments are configured **in the app** (setup wiza
 | `BASE_DUCKDB_DATA_PATH` | `.` (image: `/app`) | Base directory for resolving relative DuckDB file paths. |
 | `ANALYTICS_DB_DIR` | derived | Directory for the internal usage-analytics DuckDB store. |
 | `LOCAL_UPLOAD_PATH` | `<base>/data/uploads` | Filesystem directory for uploaded files. |
+| `TEMPLATE_DIR` | unset | Directory of your own templates, e.g. `<dir>/viz/*.viz` chart recipes. Overlaid **by name** on the ones shipped with the app, so adding one keeps the rest, and a same-named file replaces just that one. Read at boot — restart to pick up changes. A file that fails validation is skipped with a reason in the log and never displaces the template it would have replaced. |
 | `MX_STATIC_DATASETS_BASE_URL` | GitHub release URL | Base URL the tutorial sample dataset is read from, as `{base}/{dataset}/{table}.parquet` (point at a mirror for airgapped installs). |
 
 ## Object storage (optional)

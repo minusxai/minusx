@@ -6,7 +6,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { resolveVizRecipes, resolveVizRecipe, type VizRecipeFileMeta } from '@/lib/viz/recipe-resolve';
-import { BUILTIN_VIZ_RECIPES } from '@/lib/viz/builtin-recipes';
+import { getBuiltinVizRecipes } from '@/lib/viz/builtin-recipes';
 import { materializeFileRecipe, synthesizeDummyBindings } from '@/lib/viz/recipe-file';
 import { validateVizEnvelope } from '@/lib/viz/validate';
 import { VIZ_GRAMMAR_VEGA, VIZ_GRAMMAR_VEGA_LITE } from '@/lib/validation/atlas-schemas';
@@ -65,7 +65,7 @@ describe('resolveVizRecipes: the shadowing matrix', () => {
   });
 
   it('built-in defaults are present everywhere', () => {
-    for (const name of Object.keys(BUILTIN_VIZ_RECIPES)) {
+    for (const name of Object.keys(getBuiltinVizRecipes())) {
       const r = resolveVizRecipes(FILES, '/org/finance/deep/nested').get(name);
       expect(r).toBeDefined();
     }
@@ -102,7 +102,7 @@ describe('resolveVizRecipes: the shadowing matrix', () => {
 });
 
 describe('built-in recipes are valid', () => {
-  for (const [name, recipe] of Object.entries(BUILTIN_VIZ_RECIPES)) {
+  for (const [name, recipe] of Object.entries(getBuiltinVizRecipes())) {
     it(`'${name}' materializes with dummy bindings and passes envelope validation`, () => {
       const dummy = synthesizeDummyBindings(recipe);
       const materialized = materializeFileRecipe(recipe, dummy.bindings, null, dummy.columns);
