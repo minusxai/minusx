@@ -162,6 +162,12 @@ three separate grants — miss one and a whole class of file silently disappears
 6. **`isAncestorContext`** — a `context` file whose directory is an ancestor of the user's home
    folder, so hierarchical schema filtering can read `/org/context` from `/org/sales`.
 
+`/{mode}/visualizations` looks like a seventh case and is not one: it holds no rows. The
+read-only recipe catalog (`lib/viz/recipe-catalog.ts`) is code — the built-in and shipped chart
+recipes — synthesized per request by `FilesAPI` and scoped to the CALLER's mode, so there is
+nothing to grant and no cross-mode path to leak. It is deliberately absent from
+`HIDDEN_SYSTEM_FOLDERS` (browsing it is the point) and every write path refuses its ids.
+
 `checkFileAccess` in the same file is a *legacy* export with no production callers (only
 `lib/__tests__/lib-unit.test.ts`). It runs mode first and has no type check — do not copy its
 order.

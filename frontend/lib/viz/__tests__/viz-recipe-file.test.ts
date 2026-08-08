@@ -303,6 +303,30 @@ describe('sampleDataForRecipe', () => {
     for (const s of series) expect(typeof rows[0][s]).toBe('number');
   });
 
+  it('gives each nominal slot a DISTINCT vocabulary, and rows covering every pair', () => {
+    // Handing two nominal slots the same six labels degenerates every recipe
+    // that groups: a radar collapses to one point per spoke, a combo shows one
+    // bar per colour, a heatmap fills only its diagonal.
+    const twoNominal: VizRecipeContent = {
+      ...bullet,
+      bindings: [
+        { name: 'metric', label: 'Metric', accepts: ['nominal'] },
+        { name: 'series', label: 'Series', accepts: ['nominal'] },
+        { name: 'value', label: 'Value', accepts: ['quantitative'] },
+      ],
+      template: { mark: 'bar', encoding: { x: { field: '{{metric}}', type: 'nominal' }, y: { field: '{{value}}', type: 'quantitative' }, color: { field: '{{series}}', type: 'nominal' } } },
+    };
+    const { rows } = sampleDataForRecipe(twoNominal);
+    const metrics = new Set(rows.map((r) => r.metric));
+    const series = new Set(rows.map((r) => r.series));
+    expect(metrics.size).toBeGreaterThan(1);
+    expect(series.size).toBeGreaterThan(1);
+    // Different vocabularies, not the same list twice…
+    expect([...series].some((s) => metrics.has(s))).toBe(false);
+    // …and every (metric, series) pair present, so grouping is visible.
+    expect(rows.length).toBe(metrics.size * series.size);
+  });
+
   it('temporal slots get ISO date strings', () => {
     const temporalOnly: VizRecipeContent = {
       ...bullet,

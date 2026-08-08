@@ -210,7 +210,17 @@ export function freezeFileRecipe(
  * save-time validation can materialize a recipe with no real query in hand.
  */
 /** Deterministic sample values per kind — previews must render identically everywhere. */
-const SAMPLE_LABELS = ['North', 'South', 'East', 'West', 'Central', 'Coastal'];
+/**
+ * One vocabulary PER nominal slot, never the same list twice: a recipe that
+ * groups (radar's spokes × series, a combo's x × colour, a heatmap's two axes)
+ * degenerates into one row per cell when both slots draw from the same labels.
+ * Later vocabularies are deliberately shorter so the grouping reads at a glance.
+ */
+const SAMPLE_LABEL_SETS = [
+  ['North', 'South', 'East', 'West', 'Central', 'Coastal'],
+  ['Retail', 'Wholesale'],
+  ['2024', '2025'],
+];
 const SAMPLE_NUMBERS = [820, 640, 560, 470, 390, 310];
 
 /**
@@ -227,15 +237,23 @@ export function sampleDataForRecipe(content: VizRecipeContent): {
   const columns: VizResultColumn[] = [];
   const generators: Array<(i: number) => [string, unknown]> = [];
   let numberSeries = 0;
+  // Each nominal column gets its own vocabulary and its own place in the row
+  // grid: the first varies fastest, the next repeats each of its values across a
+  // full pass of the first, so the rows are the CROSS PRODUCT of every nominal
+  // slot rather than one diagonal through it.
+  const nominalVocabs: string[][] = [];
   const addColumn = (name: string, kind: VizRecipeAccepts) => {
     columns.push({ name, kind });
     if (kind === 'temporal') {
-      generators.push((i) => [name, `2025-${String(i + 1).padStart(2, '0')}-01`]);
+      generators.push((i) => [name, `2025-${String((i % 12) + 1).padStart(2, '0')}-01`]);
     } else if (kind === 'quantitative') {
       const offset = numberSeries++ * 90;
       generators.push((i) => [name, Math.max(40, SAMPLE_NUMBERS[i % SAMPLE_NUMBERS.length] - offset)]);
     } else {
-      generators.push((i) => [name, SAMPLE_LABELS[i % SAMPLE_LABELS.length]]);
+      const vocab = SAMPLE_LABEL_SETS[nominalVocabs.length % SAMPLE_LABEL_SETS.length];
+      const stride = nominalVocabs.reduce((acc, v) => acc * v.length, 1);
+      nominalVocabs.push(vocab);
+      generators.push((i) => [name, vocab[Math.floor(i / stride) % vocab.length]]);
     }
   };
   for (const b of content.bindings) {
@@ -249,7 +267,8 @@ export function sampleDataForRecipe(content: VizRecipeContent): {
       bindings[b.name] = b.name;
     }
   }
-  const rows = Array.from({ length: 6 }, (_, i) => Object.fromEntries(generators.map((g) => g(i))));
+  const rowCount = nominalVocabs.reduce((acc, v) => acc * v.length, 1) || 6;
+  const rows = Array.from({ length: Math.max(rowCount, 6) }, (_, i) => Object.fromEntries(generators.map((g) => g(i))));
   return { bindings, columns, rows };
 }
 

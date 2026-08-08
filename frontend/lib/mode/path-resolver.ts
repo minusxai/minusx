@@ -61,6 +61,13 @@ export function extractLogicalPath(physicalPath: string): string {
  */
 export const SYSTEM_FOLDERS = {
   database: '/database',
+  /**
+   * The read-only chart-recipe catalog (built-in + shipped recipes, projected as
+   * virtual files by lib/viz/recipe-catalog.ts). Deliberately NOT in
+   * HIDDEN_SYSTEM_FOLDERS: unlike /database or /logs it has no dedicated page,
+   * and browsing it in the file tree IS the feature.
+   */
+  visualizations: '/visualizations',
   configs: '/configs',
   logs: '/logs',
   logsConversations: '/logs/conversations',

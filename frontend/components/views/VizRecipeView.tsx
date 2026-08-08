@@ -27,23 +27,48 @@ export interface VizRecipeViewProps {
   editable?: boolean;
   /** Validated full-replace commit of the whole content JSON (File-tab path). */
   onCommitContent?: (jsonString: string) => { success: boolean; error?: string };
+  /**
+   * A built-in / shipped recipe from the read-only catalog: the banner explains
+   * why it cannot be edited and offers the copy action.
+   * `copyable` is false for a recipe whose template is a rendering of code
+   * rather than a real template (see lib/viz/recipe-catalog.ts).
+   */
+  catalog?: { tier: 'builtin' | 'shipped'; recipeId?: string; copyable: boolean };
+  /**
+   * Named boundary/lookup datasets for the preview only (`{localName: assetId}`).
+   * A geo recipe's spec references features that are NOT query columns, so the
+   * preview card renders empty without them.
+   */
+  previewAssets?: Record<string, string> | null;
+  /**
+   * Preview data supplied by the caller, overriding the synthesized sample. Used
+   * where slot values carry real-world meaning the generic sample cannot invent
+   * (map coordinates, region names).
+   */
+  previewSample?: {
+    bindings: Record<string, string | string[]>;
+    columns: Array<{ name: string; kind: 'nominal' | 'quantitative' | 'temporal' }>;
+    rows: Array<Record<string, unknown>>;
+  } | null;
+  /** Write an editable copy into the user's workspace. */
+  onCopyToWorkspace?: () => void | Promise<void>;
 }
 
-export default function VizRecipeView({ content, colorMode, editable = false, onCommitContent }: VizRecipeViewProps) {
+export default function VizRecipeView({ content, colorMode, editable = false, onCommitContent, catalog, onCopyToWorkspace, previewAssets, previewSample }: VizRecipeViewProps) {
   // Drafts live only while the field is focused; null = mirror the stored value.
   const [templateDraft, setTemplateDraft] = useState<string | null>(null);
   const [descriptionDraft, setDescriptionDraft] = useState<string | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
 
   const preview = useMemo(() => {
-    const sample = sampleDataForRecipe(content);
+    const sample = previewSample ?? sampleDataForRecipe(content);
     const materialized = materializeFileRecipe(content, sample.bindings, null, sample.columns);
     if (!materialized.ok) return { error: materialized.error, envelope: null, rows: [] as Record<string, unknown>[] };
     const source = materialized.engine === 'vega'
-      ? { kind: 'vega', grammar: VIZ_GRAMMAR_VEGA, spec: materialized.spec, assets: null, detachedFrom: null }
+      ? { kind: 'vega', grammar: VIZ_GRAMMAR_VEGA, spec: materialized.spec, assets: previewAssets ?? null, detachedFrom: null }
       : { kind: 'vega-lite', grammar: VIZ_GRAMMAR_VEGA_LITE, spec: materialized.spec, detachedFrom: null };
     return { error: null, envelope: { version: 2, source } as unknown as VizEnvelope, rows: sample.rows };
-  }, [content]);
+  }, [content, previewAssets, previewSample]);
 
   const commit = (next: Partial<VizRecipeContent>) => {
     if (!onCommitContent) return;
@@ -79,6 +104,28 @@ export default function VizRecipeView({ content, colorMode, editable = false, on
         <p aria-label="Recipe editor error" className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-sm text-destructive">
           {editError}
         </p>
+      )}
+
+      {catalog && (
+        <div aria-label="Built-in recipe notice" className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-muted/40 px-3 py-2">
+          <p className="text-xs text-muted-foreground">
+            {catalog.tier === 'builtin'
+              ? 'Built-in recipe — available everywhere. Copy it to edit, or create a recipe of the same name in a folder to override it there.'
+              : catalog.copyable
+                ? `Shipped recipe ${catalog.recipeId} — generated from code. Copy it to get an editable version.`
+                : `Shipped recipe ${catalog.recipeId} — generated from code, and its spec depends on the bound columns, so it cannot be copied as a template.`}
+          </p>
+          {onCopyToWorkspace && catalog.copyable && (
+            <button
+              type="button"
+              aria-label="Copy recipe to my workspace"
+              onClick={() => { void onCopyToWorkspace(); }}
+              className="shrink-0 rounded-md border border-primary px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10"
+            >
+              Copy to my workspace
+            </button>
+          )}
+        </div>
       )}
 
       <div aria-label="Recipe preview" className="rounded-md border border-border bg-card p-3">
@@ -132,7 +179,10 @@ export default function VizRecipeView({ content, colorMode, editable = false, on
 
       <div aria-label="Recipe template" className="rounded-md border border-border bg-card p-3">
         <div className="pb-2 text-[10px] font-bold uppercase tracking-[0.05em] text-muted-foreground">
-          Template ({content.engine}){editable ? ' — edits commit when you click away' : ''}
+          {catalog && !catalog.copyable
+            ? `Generated spec (${content.engine}) — built from the sample bindings, not a template`
+            : `Template (${content.engine})`}
+          {editable ? ' — edits commit when you click away' : ''}
         </div>
         {editable ? (
           <textarea

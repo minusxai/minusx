@@ -131,6 +131,30 @@ scrolling page whose EDIT mode makes the description and template JSON directly 
 committed on blur through `applyJsonContentEdit` — the validated full-replace path the File tab
 uses, so a bad template rejects with the reason inline.
 
+**The two shipped tiers are BROWSABLE, as read-only virtual files.**
+`lib/viz/recipe-catalog.ts` projects the built-ins and the shipped `minusx/…@1`
+registry into the mode-scoped `/visualizations` folder (`SYSTEM_FOLDERS.visualizations`;
+deliberately NOT in `HIDDEN_SYSTEM_FOLDERS` — browsing it IS the feature), so the recipe
+viewer shows every default with no surface of its own. The rows exist in no table:
+`FilesAPI.getFiles`/`loadFile`/`loadFiles` synthesize them from a reserved id block
+(`CATALOG_VIZ_ID_BASE`), and `saveFile`/`deleteFile`/`moveFile` refuse those ids. They are
+merged only for an EXACT path request, so the deep `paths: ['/']` sweep that lists `.viz`
+files for RESOLUTION never sees them — the catalog is a viewing surface, and resolution
+stays over real files plus the built-in registry.
+
+A shipped recipe is a `build()` function, not a template, so it is projected by calling
+`build()` with each required slot bound to its own `{{slot}}` TOKEN — the spec that comes
+back is then a real recipe, which is what makes "copy to my workspace" produce a working
+`.viz` file. Three builders manipulate the bound name as a string (a multi slot embedded in
+a Vega expression, an upper-cased label) and cannot survive that; they fall back to a spec
+generated from the SAMPLE bindings, are labelled "generated spec … not a template", and
+offer no copy. Which recipes land in which group is DERIVED by materializing the
+projection, never hardcoded. Optional slots are dropped from the projection entirely:
+materialization has no optional path, and binding one changes some recipes' shape (radar
+collapses to a point). Geo recipes additionally carry their boundary `assets` and a
+hand-written `previewSample` on the virtual file's `meta`, because a latitude of 820 is not
+a place and the generic sample cannot invent one.
+
 Agent surface: the resolved catalog is advertised per turn as the prompt's Chart Recipes section
 (`lib/viz/recipe-prompt.ts`, built in `lib/chat/agent-args.server.ts` — recipes are advertised
 dynamically, never hard-coded in `prompts.yaml`; the `viz_recipes` skill teaches the mechanism
@@ -534,6 +558,7 @@ different lifecycles.
 | Add a viz type | `lib/validation/atlas-schemas.ts` (`VIZ_TYPES`) → `lib/viz/from-vizsettings.ts` switch → `components/question/VizTypeSelector.tsx` |
 | Add/change a SHIPPED recipe | `lib/viz/viz-templates.ts` (`VIZ_TEMPLATES`; bump `@2`, never mutate `@1`) |
 | Add/change a BUILT-IN file recipe | `lib/viz/builtin-recipes.ts` (data, shadowable by workspace files) |
+| Change how the built-in/shipped recipes are browsed | `lib/viz/recipe-catalog.ts` (+ the three merge points in `lib/data/files.server.ts`) |
 | Change the recipe-file token language / detach freeze | `lib/viz/recipe-file.ts` |
 | Change recipe resolution/shadowing | `lib/viz/recipe-resolve.ts` |
 | Change recipe panel binding / selector auto-bind | `lib/viz/recipe-rebind.ts`, `lib/hooks/use-viz-recipes.ts` |

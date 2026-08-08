@@ -52,6 +52,7 @@ import { getFileAnalyticsSummary, getFilesAnalyticsSummary, getConversationAnaly
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { hashContent } from '@/lib/utils/query-hash';
 import { SharesAPI } from '@/lib/data/shares/shares.server';
+import { catalogFolderFile, catalogVizFileById, catalogVizFiles, isCatalogVizId, VISUALIZATIONS_FOLDER } from '@/lib/viz/recipe-catalog';
 
 /**
  * Resolves direct child IDs for a folder path.
@@ -99,6 +100,32 @@ function findBlockedDescendants(rootPath: string, descendants: DbFile[]): DbFile
   });
 }
 
+/** A synthesized (catalog) DbFile as the FileInfo shape `getFiles` returns. */
+function toFileInfo(file: DbFile): FileInfo {
+  return {
+    id: file.id,
+    name: file.name,
+    path: file.path,
+    type: file.type,
+    references: [],
+    created_at: file.created_at,
+    updated_at: file.updated_at,
+    version: file.version,
+    last_edit_id: file.last_edit_id,
+    draft: file.draft,
+    meta: file.meta,
+  };
+}
+
+/** Catalog files are code, not documents — every mutation refuses them by id. */
+function assertNotCatalogFile(id: number): void {
+  if (isCatalogVizId(id)) {
+    throw new UserFacingError(
+      'This is a built-in visualization and is read-only. Copy it to your workspace to make an editable version.',
+    );
+  }
+}
+
 class FilesDataLayerServer implements IFilesDataLayer {
   /**
    * Load access rules overrides from the org config. NOT cached — `getConfigs`
@@ -116,6 +143,12 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
   async loadFile(id: number, user: EffectiveUser, options?: LoaderOptions): Promise<LoadFileResult> {
     const dbStart = Date.now();
+    // Catalog ids address the read-only built-in/shipped recipes, which live in
+    // no table — synthesize the row and skip the DB entirely.
+    const catalogFile = catalogVizFileById(id, user.mode);
+    if (catalogFile) {
+      return { data: catalogFile, metadata: { references: [], analytics: null } };
+    }
     const file = await DocumentDB.getById(id);
 
     if (!file) {
@@ -191,7 +224,10 @@ class FilesDataLayerServer implements IFilesDataLayer {
   }
 
   async loadFiles(ids: number[], user: EffectiveUser, options?: LoaderOptions): Promise<LoadFilesResult> {
-    const files = await DocumentDB.getByIds(ids);
+    // Catalog rows are synthesized, never stored — resolve them alongside the
+    // real ids so a mixed batch (the usual case from Redux) works unchanged.
+    const catalogFiles = ids.map((id) => catalogVizFileById(id, user.mode)).filter((f): f is DbFile => f !== null);
+    const files = await DocumentDB.getByIds(ids.filter((id) => !isCatalogVizId(id)));
     const overrides = await this._getOverrides(user);
 
     // Filter by unified permission check (Phase 4)
@@ -242,7 +278,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
     );
 
     return {
-      data: transformedFiles,
+      data: [...transformedFiles, ...catalogFiles],
       metadata: { references: transformedReferences, analytics }
     };
   }
@@ -380,8 +416,21 @@ class FilesDataLayerServer implements IFilesDataLayer {
       meta: file.meta,
     }));
 
+    // The read-only recipe catalog is browsable, not stored. It is merged ONLY
+    // for an exact path request — the recipes when the visualizations folder
+    // itself is listed, the folder row when its parent is — so a deep sweep
+    // (`paths: ['/']`, which is how recipe RESOLUTION lists `.viz` files) never
+    // picks them up. The catalog is a viewing surface; resolution stays over
+    // real files plus the built-in registry.
+    const modeRoot = resolvePath(user.mode, '/');
+    const catalogPath = resolvePath(user.mode, VISUALIZATIONS_FOLDER);
+    const wantsCatalog = paths.includes(catalogPath) && (!type || type === 'viz');
+    const wantsCatalogFolder = paths.includes(modeRoot) && (!type || type === 'folder');
+    const catalogInfos: FileInfo[] = wantsCatalog ? catalogVizFiles(user.mode).map(toFileInfo) : [];
+    if (wantsCatalogFolder) catalogInfos.push(toFileInfo(catalogFolderFile(user.mode)));
+
     return {
-      data: fileInfos,
+      data: [...fileInfos, ...catalogInfos],
       metadata: { folders: folderInfos }
     };
   }
@@ -629,6 +678,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
   }
 
   async saveFile(id: number, name: string, path: string, content: BaseFileContent, references: number[], user: EffectiveUser, editId?: string, expectedVersion?: number): Promise<SaveFileResult> {
+    assertNotCatalogFile(id);
     // Guard the single write path: references must be an array (a non-array
     // JSONB value can never reach the DB through FilesAPI).
     references = Array.isArray(references) ? references : [];
@@ -1006,6 +1056,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
   }
 
   async deleteFile(id: number, user: EffectiveUser): Promise<DeleteFileResult> {
+    assertNotCatalogFile(id);
     const file = await DocumentDB.getById(id);
     if (!file) {
       throw new FileNotFoundError(id);
@@ -1075,6 +1126,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
   async moveFile(input: MoveFileInput, user: EffectiveUser): Promise<MoveFileResult> {
     const { id, name, newPath } = input;
+    assertNotCatalogFile(id);
 
     const file = await DocumentDB.getById(id);
     if (!file) {
