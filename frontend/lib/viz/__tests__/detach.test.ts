@@ -155,4 +155,40 @@ describe('detached kind:"vega" resolves + renders', () => {
     view.finalize();
     expect((svg.match(/<path/g) ?? []).length).toBeGreaterThanOrEqual(50); // ~50 backdrop states
   });
+
+  it('detaching a LIVE workspace reference freezes its computed spec and reattaches to a bare reference', () => {
+    // The shipped registry cannot resolve a workspace recipe, so detach freezes
+    // the COMPUTED spec materialization attached — and provenance keeps only the
+    // reference, so reattach hands rendering a plain live reference again (which
+    // the loader / client materializer resolve).
+    const live = {
+      version: 2,
+      source: {
+        kind: 'recipe', recipe: '/org/kpi-bar', bindings: { x: 'a' }, params: null, columnFormats: null,
+        spec: { mark: 'bar', encoding: { x: { field: 'a' } } }, grammar: 'vega-lite@6',
+      },
+    } as unknown as VizEnvelope;
+
+    const detached = detachRecipe(live);
+    const dSource = detached.source as unknown as { kind: string; spec: Record<string, unknown>; detachedFrom: Record<string, unknown> };
+    expect(dSource.kind).toBe('vega-lite');
+    expect(dSource.spec.mark).toBe('bar');
+    expect(dSource.detachedFrom.recipe).toBe('/org/kpi-bar');
+    expect(dSource.detachedFrom.spec).toBeUndefined();   // provenance is the REFERENCE, not a copy
+    expect(dSource.detachedFrom.grammar).toBeUndefined();
+
+    const reattached = reattachRecipe(detached);
+    const rSource = reattached.source as unknown as { kind: string; recipe: string; spec?: unknown };
+    expect(rSource.kind).toBe('recipe');
+    expect(rSource.recipe).toBe('/org/kpi-bar');
+    expect(rSource.spec).toBeUndefined();                 // re-materialized at render, never stored
+  });
+
+  it('detaching an UNRESOLVED workspace reference throws instead of freezing nothing', () => {
+    const unresolved = {
+      version: 2,
+      source: { kind: 'recipe', recipe: 'gone', bindings: {}, params: null, columnFormats: null, unresolved: 'not-found' },
+    } as unknown as VizEnvelope;
+    expect(() => detachRecipe(unresolved)).toThrow(/not resolved/);
+  });
 });
