@@ -1,36 +1,65 @@
 /**
- * Interactive editing of FROZEN file-recipe charts (client-safe, pure).
+ * Interactive editing of LIVE file-recipe charts (client-safe, pure).
  *
- * A chart made from a workspace recipe stores a substituted spec plus the full
- * reference in `detachedFrom` (recipe = file path, or a built-in's bare name).
- * With the recipe definition in hand — the panel injects it, resolved via
- * Redux file state or `BUILTIN_VIZ_RECIPES` — the chart stays BINDABLE: zones
- * from the declared slots, and every rebind re-substitutes and re-freezes.
- * Rendering never resolves anything; these helpers only run in edit surfaces.
+ * A chart made from a workspace recipe stores a REFERENCE
+ * ({kind:'recipe', recipe: name-or-path, bindings}); materialization attaches
+ * the substituted spec as computed fields (`spec`/`grammar` — the file loader
+ * server-side, the panel client-side) which the save gate strips. With the
+ * recipe definition in hand — the panel injects it, resolved via Redux file
+ * state or `BUILTIN_VIZ_RECIPES` — the chart stays BINDABLE: zones from the
+ * declared slots, and every rebind rewrites `bindings` and re-materializes the
+ * computed preview. A frozen source that recorded its file-recipe provenance in
+ * `detachedFrom` (the inspector's detach flow) rebinds the same way, staying a
+ * frozen spec.
  */
 import type { VizEnvelope, VizSourceRecipe } from '@/lib/validation/atlas-schemas';
-import { freezeFileRecipe, isFileRecipePath, type VizRecipeContent } from './recipe-file';
+import { freezeFileRecipe, isFileRecipePath, materializeFileRecipe, type VizRecipeContent } from './recipe-file';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import type { VizResultColumn } from './types';
 
 /**
- * The reference a frozen file-recipe source carries, or null. Shipped-recipe
- * detachments (`minusx/…`) are NOT file recipes — their editing story is
- * reattachRecipe, not rebinding.
+ * The file-recipe reference an envelope carries, or null: either a LIVE
+ * `kind:'recipe'` source outside the shipped `minusx/` namespace, or a frozen
+ * spec whose `detachedFrom` records a file recipe. Shipped-recipe detachments
+ * (`minusx/…`) are NOT file recipes — their editing story is reattachRecipe.
  */
 export function getFileRecipeRef(envelope: VizEnvelope): VizSourceRecipe | null {
-  const source = envelope?.source as { kind?: string; detachedFrom?: VizSourceRecipe | null } | undefined;
-  if (!source || (source.kind !== 'vega-lite' && source.kind !== 'vega')) return null;
+  const source = envelope?.source as
+    | { kind?: string; recipe?: unknown; detachedFrom?: VizSourceRecipe | null }
+    | undefined;
+  if (!source) return null;
+  if (source.kind === 'recipe') {
+    if (typeof source.recipe !== 'string' || source.recipe.startsWith('minusx/')) return null;
+    return source as unknown as VizSourceRecipe;
+  }
+  if (source.kind !== 'vega-lite' && source.kind !== 'vega') return null;
   const ref = source.detachedFrom;
   if (!ref || typeof ref.recipe !== 'string' || ref.recipe.startsWith('minusx/')) return null;
   return ref;
 }
 
+/** Attach the computed materialization to a reference source (render-ready preview). */
+function withComputedSpec(
+  source: VizSourceRecipe,
+  content: VizRecipeContent,
+  columns?: VizResultColumn[],
+): VizSourceRecipe {
+  const materialized = materializeFileRecipe(content, source.bindings, source.params ?? null, columns);
+  const next = { ...source } as VizSourceRecipe & { spec?: unknown; grammar?: string; unresolved?: string };
+  delete next.unresolved;
+  if (materialized.ok) {
+    next.spec = materialized.spec;
+    next.grammar = materialized.engine === 'vega' ? 'vega@6' : 'vega-lite@6';
+  }
+  return next;
+}
+
 /**
- * Re-substitute with new bindings and re-freeze, preserving the envelope's other
- * fields. An incomplete binding set (a just-emptied slot) keeps the PREVIOUS
- * spec — visibly stale until the slots are complete again — because a frozen
- * source has no way to render an unbound state.
+ * Rewrite the bindings, preserving the envelope's other fields. A LIVE
+ * reference keeps its `kind:'recipe'` shape and re-materializes the computed
+ * preview; a frozen `detachedFrom` source re-freezes. An incomplete binding set
+ * (a just-emptied slot) keeps the PREVIOUS spec — visibly stale until the
+ * slots are complete again — because neither shape can render an unbound state.
  */
 export function rebindFileRecipe(
   envelope: VizEnvelope,
@@ -40,6 +69,21 @@ export function rebindFileRecipe(
 ): VizEnvelope {
   const ref = getFileRecipeRef(envelope);
   if (!ref) return envelope;
+
+  const sourceKind = (envelope.source as { kind?: string }).kind;
+  if (sourceKind === 'recipe') {
+    const materialized = materializeFileRecipe(content, bindings, ref.params ?? null, columns);
+    const prev = envelope.source as unknown as VizSourceRecipe & { spec?: unknown; grammar?: string };
+    const next: Record<string, unknown> = { ...prev, bindings };
+    if (materialized.ok) {
+      next.spec = materialized.spec;
+      next.grammar = materialized.engine === 'vega' ? 'vega@6' : 'vega-lite@6';
+      delete next.unresolved;
+    }
+    // else: keep the previous computed spec (stale) — bindings record progress.
+    return { ...envelope, source: next } as unknown as VizEnvelope;
+  }
+
   const next = freezeFileRecipe(content, {
     path: ref.recipe,
     bindings,
@@ -105,7 +149,7 @@ function autoBindRecipe(content: VizRecipeContent, columns: VizResultColumn[]): 
 /**
  * Why this recipe cannot apply to this result, in words a chart user
  * understands — or null when it fits. Drives the greyed-out Workspace tiles
- * (hover title) and the failure toast.
+ * (hover tooltip) and the failure toast.
  */
 export function explainRecipeFit(content: VizRecipeContent, columns: VizResultColumn[]): string | null {
   if (columns.length === 0) return 'Run the query first — recipes bind to the result columns.';
@@ -120,8 +164,10 @@ export function explainRecipeFit(content: VizRecipeContent, columns: VizResultCo
 
 /**
  * Selector flow: auto-bind the declared slots from the result columns and
- * freeze. `address` is what provenance records — the file path, or a built-in's
- * bare name. Failures carry the same human phrasing as `explainRecipeFit`.
+ * build a LIVE reference envelope. `address` is what the reference records —
+ * the file path, or a built-in's bare name — so recipe edits keep propagating
+ * to this chart. The computed spec rides along for immediate render (stripped
+ * at save). Failures carry the same human phrasing as `explainRecipeFit`.
  */
 export function applyFileRecipeSelection(
   content: VizRecipeContent,
@@ -132,11 +178,20 @@ export function applyFileRecipeSelection(
   if (unfit) return { ok: false, error: unfit };
   const bound = autoBindRecipe(content, columns);
   if (!bound.ok) return { ok: false, error: explainRecipeFit(content, columns) ?? 'recipe does not fit this result' };
-  const frozenSource = freezeFileRecipe(content, { path: address, bindings: bound.bindings }, columns);
-  if (!frozenSource.ok) return frozenSource;
+  const reference: VizSourceRecipe = {
+    kind: 'recipe',
+    recipe: address,
+    bindings: bound.bindings,
+    params: null,
+    columnFormats: null,
+  } as unknown as VizSourceRecipe;
+  const source = withComputedSpec(reference, content, columns);
+  if (!(source as { spec?: unknown }).spec) {
+    return { ok: false, error: explainRecipeFit(content, columns) ?? 'recipe does not fit this result' };
+  }
   return {
     ok: true,
-    envelope: { version: 2, source: frozenSource.source } as unknown as VizEnvelope,
+    envelope: { version: 2, source } as unknown as VizEnvelope,
   };
 }
 

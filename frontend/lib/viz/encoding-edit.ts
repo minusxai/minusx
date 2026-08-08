@@ -596,14 +596,15 @@ export function isEnvelopeImageViz(envelope: VizEnvelope): boolean {
  * A FROZEN file-recipe source stays bindable when the edit surface injects the
  * recipe's definition (resolved from Redux file state or the built-in set —
  * lib/viz/recipe-rebind.ts). Every zone helper below takes this as an optional
- * last argument; without it a frozen source edits as the plain spec it is.
+ * last argument; without it a detached source edits as the plain spec it is
+ * (live `kind:'recipe'` references need it to expose zones at all).
  */
 export interface FileRecipeEditContext {
   content: VizRecipeContent;
   columns?: VizResultColumn[];
 }
 
-/** The injected recipe applies only when the envelope really is a frozen file recipe. */
+/** The injected recipe applies only when the envelope carries a file-recipe reference. */
 function fileRecipeFor(envelope: VizEnvelope, ctx?: FileRecipeEditContext | null): FileRecipeEditContext | null {
   return ctx && getFileRecipeRef(envelope) ? ctx : null;
 }
@@ -631,7 +632,7 @@ export function getEnvelopeZones(envelope: VizEnvelope, fileRecipe?: FileRecipeE
   return zonesForVizType(getVizType((source as { spec: Record<string, unknown> }).spec));
 }
 
-/** A frozen file recipe's binding for one slot, as a list. */
+/** A file recipe's binding for one slot, as a list. */
 function fileRecipeBound(envelope: VizEnvelope, channel: string): string[] {
   const bound = (getFileRecipeRef(envelope)?.bindings ?? {})[channel];
   if (bound == null || bound === '') return [];
@@ -679,7 +680,7 @@ export function isMultiZone(envelope: VizEnvelope, channel: string, fileRecipe?:
   return channel === 'y' && unitOf((source as { spec: Record<string, unknown> }).spec) != null;
 }
 
-/** Frozen file recipe: apply a binding update and re-freeze through the recipe. */
+/** File recipe: apply a binding update through the recipe (rebind, preview recomputed). */
 function rebindZone(
   envelope: VizEnvelope,
   ctx: FileRecipeEditContext,

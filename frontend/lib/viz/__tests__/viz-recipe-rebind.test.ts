@@ -1,8 +1,10 @@
 /**
- * Panel-side editing of FROZEN file-recipe charts. A frozen source carries the
- * full reference in `detachedFrom`, so with the recipe definition injected the
- * zone helpers stay bindable: zones come from the declared slots, a zone drop
- * re-substitutes and re-freezes, and selection auto-binds from result columns.
+ * Panel-side editing of file-recipe charts, in BOTH shapes: the LIVE
+ * `kind:'recipe'` reference (what selection now produces and what files store)
+ * and a frozen source carrying the reference in `detachedFrom` (the detach
+ * flow). With the recipe definition injected the zone helpers stay bindable:
+ * zones come from the declared slots, a zone drop rewrites `bindings` (and the
+ * computed preview), and selection auto-binds from result columns.
  */
 import { describe, it, expect } from 'vitest';
 import {
@@ -66,6 +68,13 @@ function frozen(content: VizRecipeContent, bindings: Record<string, string | str
   const res = freezeFileRecipe(content, { path: '/org/r', bindings }, COLUMNS);
   if (!res.ok) throw new Error(res.error);
   return { version: 2, source: res.source } as unknown as VizEnvelope;
+}
+
+function reference(recipe: string, bindings: Record<string, string | string[]>): VizEnvelope {
+  return {
+    version: 2,
+    source: { kind: 'recipe', recipe, bindings, params: null, columnFormats: null },
+  } as unknown as VizEnvelope;
 }
 
 describe('getFileRecipeRef', () => {
@@ -138,11 +147,15 @@ describe('rebindFileRecipe', () => {
 });
 
 describe('applyFileRecipeSelection', () => {
-  it('auto-binds by accepts kinds and freezes', () => {
+  it('auto-binds by accepts kinds and stores a LIVE reference with a computed preview', () => {
     const res = applyFileRecipeSelection(RECIPE, '/org/r', COLUMNS);
     expect(res.ok).toBe(true);
     if (!res.ok) return;
-    const spec = (res.envelope.source as { spec: Record<string, any> }).spec;
+    const source = res.envelope.source as unknown as { kind: string; recipe: string; bindings: Record<string, unknown>; spec: Record<string, any> };
+    expect(source.kind).toBe('recipe');              // the reference, never a frozen kind
+    expect(source.recipe).toBe('/org/r');
+    expect(source.bindings).toEqual({ category: 'team', value: 'revenue' });
+    const spec = source.spec;                        // computed preview for immediate render
     expect(spec.layer[0].encoding.y.field).toBe('team');    // first nominal/temporal
     expect(spec.layer[0].encoding.x.field).toBe('revenue'); // first quantitative
   });
@@ -201,6 +214,47 @@ describe('encoding-edit zone helpers with an injected file recipe', () => {
     expect(((added.source as { spec: any }).spec.transform)[0].fold).toEqual(['revenue', 'quota']);
     const removed = removeZoneField(added, 'values', 'revenue', mCtx);
     expect(getZoneFields(removed, 'values', mCtx)).toEqual(['quota']);
+  });
+});
+
+describe('LIVE reference envelopes', () => {
+  it('getFileRecipeRef returns the recipe source itself', () => {
+    const env = reference('bullet', { category: 'team', value: 'revenue' });
+    expect(getFileRecipeRef(env)).toMatchObject({ recipe: 'bullet', bindings: { category: 'team' } });
+  });
+
+  it('getFileRecipeRef ignores shipped minusx/ recipe sources', () => {
+    expect(getFileRecipeRef(reference('minusx/funnel@1', {}))).toBeNull();
+  });
+
+  it('rebindFileRecipe keeps the reference shape and recomputes the preview', () => {
+    const env = reference('/org/r', { category: 'team', value: 'revenue' });
+    const next = rebindFileRecipe(env, RECIPE, { category: 'month', value: 'quota' }, COLUMNS);
+    const source = next.source as unknown as { kind: string; bindings: Record<string, unknown>; spec: Record<string, any>; grammar: string };
+    expect(source.kind).toBe('recipe');
+    expect(source.bindings).toEqual({ category: 'month', value: 'quota' });
+    expect(source.spec.layer[0].encoding.y.field).toBe('month');
+    expect(source.grammar).toBe('vega-lite@6');
+  });
+
+  it('an incomplete rebind keeps the previous computed spec but records the bindings', () => {
+    const env = rebindFileRecipe(reference('/org/r', { category: 'team', value: 'revenue' }), RECIPE,
+      { category: 'team', value: 'revenue' }, COLUMNS); // attach a computed spec first
+    const next = rebindFileRecipe(env, RECIPE, { category: '', value: 'revenue' }, COLUMNS);
+    const source = next.source as unknown as { bindings: Record<string, unknown>; spec?: Record<string, any> };
+    expect(source.bindings).toEqual({ category: '', value: 'revenue' });
+    expect(source.spec?.layer[0].encoding.y.field).toBe('team'); // stale, visibly, until complete
+  });
+
+  it('zone helpers edit a live reference through the injected recipe', () => {
+    const ctx = { content: RECIPE, columns: COLUMNS };
+    const env = reference('/org/r', { category: 'team', value: 'revenue' });
+    expect(isEnvelopeEditable(env, ctx)).toBe(true);
+    expect(getZoneField(env, 'category', ctx)).toBe('team');
+    const next = setZoneField(env, 'category', { name: 'month', kind: 'temporal' }, ctx);
+    const source = next.source as unknown as { kind: string; bindings: Record<string, unknown> };
+    expect(source.kind).toBe('recipe');
+    expect(source.bindings).toEqual({ category: 'month', value: 'revenue' });
   });
 });
 

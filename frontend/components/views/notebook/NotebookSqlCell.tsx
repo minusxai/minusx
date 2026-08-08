@@ -184,6 +184,7 @@ function NotebookSqlCell({
         >
           <QuestionVisualization
             currentState={cell as unknown as QuestionContent}
+            filePath={filePath}
             config={{ showHeader: false, showJsonToggle: false, editable: false, viz: { showTypeButtons: false, showChartBuilder: false, typesButtonsOrientation: 'horizontal', showTitle: false }, fixError: true }}
             data={data}
             loading={loading && !data}
@@ -331,6 +332,7 @@ function NotebookSqlCell({
         >
           <QuestionVisualization
             currentState={cell as unknown as QuestionContent}
+            filePath={filePath}
             config={config}
             data={data}
             loading={loading && !data}

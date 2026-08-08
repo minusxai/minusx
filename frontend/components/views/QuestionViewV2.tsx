@@ -997,6 +997,7 @@ export default function QuestionViewV2({
             ) : (
               <QuestionVisualization
                 currentState={content}
+                filePath={filePath}
                 config={{
                   showHeader: fullMode,
                   showJsonToggle: false,

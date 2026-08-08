@@ -8,7 +8,7 @@
  * other source). Sibling folders never see each other's recipes, and a parent never
  * sees a child's: only ancestors-or-self contribute.
  *
- * Charts freeze at use, so resolution is an AUTHORING-TIME concern only — moving,
+ * Charts store LIVE references, so resolution runs at every materialization — moving,
  * renaming or deleting a recipe file changes what future charts resolve, never what
  * saved charts render.
  */

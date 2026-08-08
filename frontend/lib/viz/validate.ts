@@ -304,9 +304,9 @@ export function validateVizEnvelope(
     }
     // A recipe id outside the shipped `minusx/` namespace is a WORKSPACE recipe
     // reference (a `.viz` file path, or a file/built-in name resolved against the
-    // saved file's folder). The registry can't see those here — they are resolved
-    // and FROZEN at save (lib/data/helpers/viz-recipe-freeze.server.ts), where the
-    // substituted spec is fully validated. Only the bindings are checkable now.
+    // saved file's folder). The registry can't see those here — the reference
+    // gate (lib/data/helpers/viz-recipe-refs.server.ts) resolves it at save and
+    // grammar-checks the materialized spec. Only the bindings are checkable now.
     if (!getTemplate(recipeSource.recipe) && !recipeSource.recipe.startsWith('minusx/')) {
       return { ok: !issues.some(i => i.severity === 'error'), issues };
     }

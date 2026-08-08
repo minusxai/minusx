@@ -3,6 +3,7 @@
  * Grouped chart type selector with category labels
  */
 
+import React from 'react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/kit/tooltip';
 import {
   LuTable2,
@@ -144,7 +145,7 @@ interface VizTypeSelectorProps {
    */
   workspaceRecipes?: ReadonlyArray<{ name: string; description?: string; address: string; disabledReason?: string | null }>;
   onRecipeSelect?: (address: string) => void;
-  /** The active frozen recipe's address (highlights its Workspace tile). */
+  /** The active recipe reference's address (highlights its Workspace tile). */
   activeRecipeAddress?: string | null;
 }
 
@@ -177,44 +178,47 @@ export function VizTypeSelector({
     return (
       <div className="mb-2 grid w-full grid-cols-5 gap-1 rounded-md bg-muted/50 p-2">
         {/* Workspace/built-in recipes: file-defined chart templates for this
-            folder. A tile applies the recipe (auto-bound, frozen on save) via
+            folder. A tile applies the recipe (auto-bound, stored as a live reference) via
             onRecipeSelect — the SelectableVizType union stays untouched. A REAL
             tooltip (not the native title, whose hover delay makes it invisible
             in practice) carries the recipe description — or, when greyed out,
             exactly why the recipe cannot bind to this result. */}
         {workspaceRecipes && workspaceRecipes.length > 0 && (
           <TooltipProvider delayDuration={150}>
-            {workspaceRecipes.map(({ name, description, address, disabledReason }) => {
+            {workspaceRecipes.map(({ name, address, disabledReason }) => {
               const isActive = activeRecipeAddress === address;
               // The active recipe stays clickable regardless of fit (re-applying it
               // is always meaningful); everything else greys out with the reason.
               const isDisabled = !isActive && disabledReason != null;
+              const tile = (
+                <button
+                  type="button"
+                  className={`flex flex-col items-center justify-center gap-0.5 rounded-md py-1.5 transition-all duration-[120ms] ease-in-out ${
+                    isActive ? 'bg-[#16a085]/15 text-[#16a085]' : 'bg-transparent text-muted-foreground'
+                  } ${
+                    isDisabled
+                      ? 'cursor-not-allowed opacity-30'
+                      : `cursor-pointer hover:opacity-100 ${isActive ? 'hover:bg-[#16a085]/20' : 'hover:bg-muted hover:text-foreground'}`
+                  }`}
+                  onClick={() => { if (!isDisabled) onRecipeSelect?.(address); }}
+                  aria-label={`Recipe ${name}`}
+                  aria-pressed={isActive}
+                  aria-disabled={isDisabled}
+                >
+                  <LuBookMarked size={16} />
+                  <span className={`max-w-full truncate font-mono text-[10px] leading-none ${isActive ? 'font-bold' : 'font-medium'}`}>
+                    {name}
+                  </span>
+                </button>
+              );
+              // Tooltip ONLY when disabled (the reason the tile is unusable) —
+              // a usable tile explains itself by clicking, and a hover card over
+              // every tile hides its neighbors.
+              if (!isDisabled) return <React.Fragment key={`recipe:${address}`}>{tile}</React.Fragment>;
               return (
                 <Tooltip key={`recipe:${address}`}>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      className={`flex flex-col items-center justify-center gap-0.5 rounded-md py-1.5 transition-all duration-[120ms] ease-in-out ${
-                        isActive ? 'bg-[#16a085]/15 text-[#16a085]' : 'bg-transparent text-muted-foreground'
-                      } ${
-                        isDisabled
-                          ? 'cursor-not-allowed opacity-30'
-                          : `cursor-pointer hover:opacity-100 ${isActive ? 'hover:bg-[#16a085]/20' : 'hover:bg-muted hover:text-foreground'}`
-                      }`}
-                      onClick={() => { if (!isDisabled) onRecipeSelect?.(address); }}
-                      aria-label={`Recipe ${name}`}
-                      aria-pressed={isActive}
-                      aria-disabled={isDisabled}
-                    >
-                      <LuBookMarked size={16} />
-                      <span className={`max-w-full truncate font-mono text-[10px] leading-none ${isActive ? 'font-bold' : 'font-medium'}`}>
-                        {name}
-                      </span>
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-[260px]">
-                    {isDisabled ? disabledReason : (description || name)}
-                  </TooltipContent>
+                  <TooltipTrigger asChild>{tile}</TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[260px]">{disabledReason}</TooltipContent>
                 </Tooltip>
               );
             })}

@@ -522,11 +522,12 @@ templates:
       </viz>
       ```
       Bindings map slot names → result column names (arrays for multi slots); params must match the
-      recipe's declared params. The reference is FROZEN when the edit applies: the substituted spec is
-      stored as a plain `vega-lite`/`vega` source with the recipe address kept in `detachedFrom`, so the
-      chart never breaks if the recipe is later renamed, edited, or deleted. An unknown recipe name
-      rejects the edit with the available catalog. Editing the recipe file changes only charts frozen
-      AFTER the edit — to restyle an existing chart, re-apply the recipe.
+      recipe's declared params. The reference stays LIVE: the file stores only `{kind: recipe, recipe,
+      bindings}` and rendering substitutes the template at read time, so editing a recipe file restyles
+      EVERY chart that references it on its next load. An unknown recipe name rejects the edit with the
+      available catalog; deleting or renaming a recipe later degrades its referencing charts to a table
+      (restore the recipe and they come back). Use DetachViz to freeze a chart's current spec if it must
+      stop following the recipe.
 
       ### Authoring Guidance
       - Put ALL visual semantics in the template (axes, marks, scales, tooltips, colors) — plain grammar.
