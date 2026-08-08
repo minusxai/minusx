@@ -376,6 +376,45 @@ export const VizEnvelope = Type.Object({
 export type VizEnvelope = Static<typeof VizEnvelope>;
 
 // ============================================================================
+// Viz recipe file content (the `viz` file type)
+// ============================================================================
+// A workspace `.viz` document: an INERT spec template with declared binding
+// slots — data, never code. Identity is the FILE NAME (no name field, no
+// version suffix); a same-named file in a nearer folder shadows an ancestor's.
+// Charts always freeze the substituted spec at use with the file path recorded
+// in `detachedFrom.recipe` (see lib/viz/recipe-file.ts for the token rules).
+
+export const VizRecipeBinding = Type.Object({
+  name: Type.String({ description: 'slot name referenced by {{name}} tokens in the template' }),
+  label: Type.String({ description: 'human label shown on the drop zone' }),
+  accepts: Type.Array(StringEnum(['nominal', 'quantitative', 'temporal']), { description:
+    'column kinds this slot accepts (drives drop-zone hints and the {{name:kind}} fallback)' }),
+  multi: Type.Optional(Type.Boolean({ description:
+    'slot takes an ARRAY of columns (e.g. a fold field list); {{name}} must then be a whole-value token' })),
+}, { title: 'VizRecipeBinding' });
+export type VizRecipeBinding = Static<typeof VizRecipeBinding>;
+
+export const VizRecipeParam = Type.Object({
+  name: Type.String({ description: 'param name referenced by {{name}} tokens in the template' }),
+  label: Type.String(),
+  default: Type.Optional(Type.Unknown({ description: 'value used when the param is omitted at use' })),
+}, { title: 'VizRecipeParam' });
+export type VizRecipeParam = Static<typeof VizRecipeParam>;
+
+export const VizRecipeContent = Type.Object({
+  description: Type.String({ description: 'one-liner advertised to the agent — say what the chart shows' }),
+  engine: StringEnum(['vega-lite', 'vega'], 'grammar of the template'),
+  bindings: Type.Array(VizRecipeBinding, { description: 'declared slots; every slot is required at use' }),
+  params: Type.Optional(Nullable(Type.Array(VizRecipeParam))),
+  template: Type.Record(Type.String(), Type.Unknown(), { description:
+    'the spec with {{slot}} tokens. Whole-string "{{slot}}" substitutes the bound value verbatim ' +
+    '(arrays for multi slots); embedded {{slot}} string-replaces; "{{slot:kind}}" resolves the bound ' +
+    "column's kind (quantitative|temporal|nominal) for encoding types. Omit `data` — the query result " +
+    'is injected as the named dataset "main"; external data URLs are rejected.' }),
+}, { title: 'VizRecipeContent' });
+export type VizRecipeContent = Static<typeof VizRecipeContent>;
+
+// ============================================================================
 // Question Content
 // ============================================================================
 
@@ -920,5 +959,15 @@ export const AtlasNotebookFile = Type.Object({
 }, { title: 'AtlasNotebookFile' });
 export type AtlasNotebookFile = Static<typeof AtlasNotebookFile>;
 
-export const AtlasFile = Type.Union([AtlasQuestionFile, AtlasDashboardFile, AtlasStoryFile, AtlasNotebookFile]);
+export const AtlasVizFile = Type.Object({
+  id: Nullable(Type.Integer()),
+  name: Type.String(),
+  path: Type.String(),
+  type: Type.Literal('viz'),
+  content: VizRecipeContent,
+  references: Nullable(Type.Array(Type.Integer())),
+}, { title: 'AtlasVizFile' });
+export type AtlasVizFile = Static<typeof AtlasVizFile>;
+
+export const AtlasFile = Type.Union([AtlasQuestionFile, AtlasDashboardFile, AtlasStoryFile, AtlasNotebookFile, AtlasVizFile]);
 export type AtlasFile = Static<typeof AtlasFile>;

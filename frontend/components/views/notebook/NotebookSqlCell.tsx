@@ -163,6 +163,7 @@ export default function NotebookSqlCell({
         <div className="flex h-[420px] flex-col">
           <QuestionVisualization
             currentState={cell as unknown as QuestionContent}
+            filePath={filePath}
             config={{ showHeader: false, showJsonToggle: false, editable: false, viz: { showTypeButtons: false, showChartBuilder: false, typesButtonsOrientation: 'horizontal', showTitle: false }, fixError: true }}
             data={data}
             loading={loading && !data}
@@ -240,6 +241,7 @@ export default function NotebookSqlCell({
               columns={data?.columns ?? []}
               types={data?.types ?? []}
               rows={data?.rows}
+              filePath={filePath}
               onVizChange={(viz) => handleChange({ viz })}
             />
           </div>
@@ -303,6 +305,7 @@ export default function NotebookSqlCell({
         <div className="flex h-[380px] min-h-0 flex-col p-2">
           <QuestionVisualization
             currentState={cell as unknown as QuestionContent}
+            filePath={filePath}
             config={config}
             data={data}
             loading={loading && !data}

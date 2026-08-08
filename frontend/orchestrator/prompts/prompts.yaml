@@ -33,7 +33,7 @@ templates:
     - CurrentTime: the current time (hour granularity) is given in each user turn as a `<CurrentTime>` block right after the AppState. Use it for any "today"/"recent"/relative-date reasoning.
     - Viewport: the app-state screenshot has faint numbered markers down its LEFT margin (1 at the top, counting down the page). A `<Viewport>` block in each user turn names which of those numbered sections the user is currently looking at (e.g. "viewing sections 2–4 of 5"). Use it to ground "this", "here", "the chart above", or "what I'm looking at" — the user is most likely referring to content in the sections named there. The markers are the SAME on every turn (they map to page position, not content), so only the `<Viewport>` block changes as the user scrolls.
     - Attachments: Files the user has uploaded in this conversation, as additional context (text or CSV content)
-    - Allowed Visualization Types: {allowed_viz_types} — only use these visualization types when creating or editing questions. Do not set vizSettings.type to any type not in this list, and do not author the V2 recipe equivalent of an excluded type (e.g. `funnel` excluded → no `minusx/funnel@1`; `geo` excluded → no `minusx/choropleth@1`/`minusx/point-map@1`; likewise waterfall/radar/trend/single_value/combo ↔ their `minusx/*@1` recipes).
+    - Allowed Visualization Types: {allowed_viz_types} — only use these visualization types when creating or editing questions. Do not set vizSettings.type to any type not in this list, and do not author the V2 recipe equivalent of an excluded type (e.g. `funnel` excluded → no `minusx/funnel@1`; `geo` excluded → no `minusx/choropleth@1`/`minusx/point-map@1`; likewise waterfall/trend/single_value/combo ↔ their `minusx/*@1` recipes).
     - User Role: {role} (admin, editor, or viewer). Relevant for the filetypes they can create, and for the `app_guide` skill.
     - User request / question / goal: Always the last content block in the user message
   schema_section: |
@@ -253,7 +253,7 @@ templates:
       Author EVERY new chart as a `<viz>` envelope — a Vega-Lite v6 spec, a shipped recipe, or a table/pivot source. When present it is AUTHORITATIVE and `vizSettings` is ignored. This also applies to chart edits on legacy files that only have `<vizSettings>`: add a `<viz>` envelope rather than editing `<vizSettings>`.
       **Vega-always (HARD RULE):** anything that visualizes data — bars, lines, sparklines, gauges, maps, proportional anything — is a `<viz>` envelope. NEVER approximate a chart with HTML/CSS markup (divs-as-bars, width-percentage encodings, CSS gauges) in any surface (stories, reports, dashboards); asked to reproduce a reference image of a chart, reproduce it as a Vega-Lite spec.
       **Pick the source kind in this order:**
-      1. Special ask → `table` / `pivot`. Specialized chart with a shipped recipe (funnel, waterfall, radar, trend, single-value, combo, choropleth, point-map) → `recipe`.
+      1. Special ask → `table` / `pivot`. Specialized chart with a shipped recipe (funnel, waterfall, trend, single-value, combo, choropleth, point-map) → `recipe`. Radar and heatmap are WORKSPACE recipes (see your Chart Recipes section) → `recipe` with the workspace name.
       2. Everything else → `vega-lite` (the default grammar — bars/lines/areas/scatter/pie/heatmap, layers, facets, transforms, dual axis all fit here).
       3. Native `vega` ONLY when Vega-Lite cannot express the ask (marks/signals-level control, custom projections): `<kind>vega</kind>` + `<grammar>vega@6</grammar>` + the full native spec — same data policy (query result = dataset `"main"`), validated and themed like VL, but field refs are NOT statically checked, so double-check column names. 
       Note: For a recipe chart, never hand-write native vega. If customization is not possible, use DetachViz. It materializes the recipe's spec for you (see Detach below).
@@ -297,7 +297,6 @@ templates:
       Bindings map recipe slots → EXACT result column names; multi-capable slots accept an ARRAY of columns. Optional `<params>{{…}}</params>` (element like `<bindings>`) and `<columnFormats>{{"col": {"alias": "…", "format": "$,.0f"}}}</columnFormats>` — `alias` renames column-name-derived displays (incl. the single-value label), `format` is a d3 string (same vocabulary as `axis.format`).
       - `minusx/funnel@1` — stage, value. Rows render in QUERY ORDER (ORDER BY the funnel sequence). Params: `orientation` 'vertical' (default, top→bottom) | 'horizontal'.
       - `minusx/waterfall@1` — category, value. QUERY ORDER; negative values render as decreases; a Total bar is added automatically.
-      - `minusx/radar@1` — metric, value, series (optional). Long-format rows (one per metric×series); `value` may be an ARRAY of columns for wide data (series then ignored). One shared radial scale — pre-normalize in SQL when metrics use different units.
       - `minusx/trend@1` — date, value (ARRAY → one KPI card per measure). ORDER BY date ascending. Params: `compareMode` 'last' (default) | 'previous' (skips the partial current period), `sparkline` bool (default true), `valueFontSize`/`deltaFontSize`/`labelFontSize`/`dateFontSize`.
       - `minusx/single-value@1` — value. Displays the FIRST query row as one cardless KPI. Params: `showLabel`, `label`, `caption`, `align` left|center|right, `valueFontSize`/`labelFontSize`/`captionFontSize`, `valueColor`.
       - `minusx/combo@1` — x, bar, line, series (optional — colors/groups both layers). Quiet bars on the left scale, emphasized line on an independent right scale; x is ordered categorically. Params: `linePoints` bool (default true), `lineWidth` 1–8, `barOpacity` 0.1–1.
@@ -478,6 +477,64 @@ templates:
 
       ### Semantic Models
       A context version also carries `semanticModels` — authored semantic models (primary + references + dimensions/measures/metrics). Use `LoadSkill("semantic_models")` for the full authoring format and validation rules before adding or editing one.
+  skill_viz_recipes:
+    description: Workspace chart recipes (`viz` files) — authoring reusable spec templates and using them on questions
+    content: |
+      ## Chart Recipes (viz files)
+
+      A `viz` file is a REUSABLE chart recipe: an inert Vega-Lite (or native Vega) spec TEMPLATE with
+      declared binding slots. Anyone can apply it to a question by binding query-result columns to the
+      slots — no spec editing. Recipes are workspace files, so you can author new ones and every chart
+      vocabulary extension is a document, never code.
+
+      ### File Structure
+      The content is read and edited as markup (see the EditFile tool for the markup format). The content schema is:
+      ```json
+      {schema_viz}
+      ```
+
+      ### Template Tokens (the whole substitution language)
+      - A whole-string `"{{slot}}"` value is replaced with the bound column name verbatim. Multi slots substitute the bound ARRAY (e.g. a `fold` field list).
+      - Embedded tokens inside longer strings (e.g. `"title": "Total {{value}}"`) are string-replaced (multi slots cannot embed).
+      - `"{{slot:kind}}"` resolves to the bound column's kind — `quantitative`, `temporal`, or `nominal` — so one recipe adapts its encoding types to what gets bound (e.g. `"type": "{{x:kind}}"`).
+      - Params substitute the same way; a param's `default` fills in when the user omits it.
+      - Any token with no matching binding or param slot is a save-time error. There is NO branching or logic — a recipe is data. If a chart needs computed structure, express it in the grammar (fold/window/stack/bin transforms).
+
+      ### Identity, Shadowing & Scope
+      - A recipe's NAME is its FILE NAME. There is no name field and no version suffix.
+      - Recipes resolve by folder: a file in `/org` is available everywhere; a same-named file in a
+        nearer subfolder SHADOWS the ancestor's for that subtree; built-in default recipes sit below
+        the root and any workspace file of the same name shadows them.
+      - The recipes available in the current folder are listed in your context. Read a recipe file
+        (ReadFiles) to see its template and slots before using or editing it.
+
+      ### Using A Recipe On A Question
+      Author the question's `<viz>` envelope with a recipe source. `recipe` is the recipe's NAME as
+      listed in your Chart Recipes section (or an absolute `.viz` file path to pin a specific file):
+      ```xml
+      <viz>
+        <version>2</version>
+        <source>
+          <kind>recipe</kind>
+          <recipe>bullet</recipe>
+          <bindings>{{"category":"team","value":"revenue","target":"quota"}}</bindings>
+        </source>
+      </viz>
+      ```
+      Bindings map slot names → result column names (arrays for multi slots); params must match the
+      recipe's declared params. The reference stays LIVE: the file stores only `{kind: recipe, recipe,
+      bindings}` and rendering substitutes the template at read time, so editing a recipe file restyles
+      EVERY chart that references it on its next load. An unknown recipe name rejects the edit with the
+      available catalog; deleting or renaming a recipe later degrades its referencing charts to a table
+      (restore the recipe and they come back). Use DetachViz to freeze a chart's current spec if it must
+      stop following the recipe.
+
+      ### Authoring Guidance
+      - Put ALL visual semantics in the template (axes, marks, scales, tooltips, colors) — plain grammar.
+      - Omit `data` — the query result is injected as the named dataset "main". External data URLs are rejected.
+      - Declare `accepts` kinds per slot honestly; they drive the editor's drop-zone hints and the `:kind` fallback.
+      - Write a sharp one-line `description` — it is how the recipe is advertised and discovered.
+      - Presentation reshaping (fold/window/stack/rank/bin) belongs in the template; business logic (joins, governed metrics) belongs in SQL, never in a recipe.
   skill_semantic_models:
     description: Authoring semantic models on a context (SemanticModelV2 JSON — primary/references, dimensions, metrics, save-time validation feedback)
     content: |
@@ -1156,6 +1213,8 @@ prompts:
 
       {schema_section}
 
+      {viz_recipes}
+
       {context_section}
 
       {tools}
@@ -1192,6 +1251,8 @@ prompts:
       {agent_persona}
 
       {schema_section}
+
+      {viz_recipes}
 
       {context_section}
 

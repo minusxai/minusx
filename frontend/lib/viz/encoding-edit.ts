@@ -8,8 +8,10 @@
  * editable here (isUnitVegaLiteSpec gates the panel); they're edited via chat.
  */
 import type { VizEnvelope, ColumnFormatConfig, ConditionalFormatRule, PivotConfig } from '@/lib/validation/atlas-schemas';
-import type { VizColumnKind } from './types';
+import type { VizColumnKind, VizResultColumn } from './types';
 import { getTemplate, VIZ_TEMPLATES } from './viz-templates';
+import { getFileRecipeRef, rebindFileRecipe } from './recipe-rebind';
+import type { VizRecipeContent } from './recipe-file';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import { COLOR_PALETTE } from '@/lib/chart/chart-theme';
 
@@ -590,7 +592,25 @@ export function isEnvelopeImageViz(envelope: VizEnvelope): boolean {
   return kind !== 'table' && kind !== 'pivot';
 }
 
-export function isEnvelopeEditable(envelope: VizEnvelope): boolean {
+/**
+ * A FROZEN file-recipe source stays bindable when the edit surface injects the
+ * recipe's definition (resolved from Redux file state or the built-in set —
+ * lib/viz/recipe-rebind.ts). Every zone helper below takes this as an optional
+ * last argument; without it a detached source edits as the plain spec it is
+ * (live `kind:'recipe'` references need it to expose zones at all).
+ */
+export interface FileRecipeEditContext {
+  content: VizRecipeContent;
+  columns?: VizResultColumn[];
+}
+
+/** The injected recipe applies only when the envelope carries a file-recipe reference. */
+function fileRecipeFor(envelope: VizEnvelope, ctx?: FileRecipeEditContext | null): FileRecipeEditContext | null {
+  return ctx && getFileRecipeRef(envelope) ? ctx : null;
+}
+
+export function isEnvelopeEditable(envelope: VizEnvelope, fileRecipe?: FileRecipeEditContext | null): boolean {
+  if (fileRecipeFor(envelope, fileRecipe)) return true;
   const source = sourceOf(envelope);
   if (source.kind === 'table' || source.kind === 'pivot') return true;
   if (source.kind === 'recipe') return getTemplate(source.recipe as string) != null;
@@ -598,7 +618,9 @@ export function isEnvelopeEditable(envelope: VizEnvelope): boolean {
 }
 
 /** Zone descriptors for the Fields tab: recipe bindings, or VL channels by type. */
-export function getEnvelopeZones(envelope: VizEnvelope): Array<{ channel: string; label: string }> {
+export function getEnvelopeZones(envelope: VizEnvelope, fileRecipe?: FileRecipeEditContext | null): Array<{ channel: string; label: string }> {
+  const injected = fileRecipeFor(envelope, fileRecipe);
+  if (injected) return injected.content.bindings.map(b => ({ channel: b.name, label: b.label }));
   const source = sourceOf(envelope);
   // Tables have no encodings — columns are managed on the table itself (headers/toolbar).
   // Pivot zones (Rows/Columns/Values) are owned by the PivotAxisBuilder, not this lens.
@@ -610,8 +632,16 @@ export function getEnvelopeZones(envelope: VizEnvelope): Array<{ channel: string
   return zonesForVizType(getVizType((source as { spec: Record<string, unknown> }).spec));
 }
 
+/** A file recipe's binding for one slot, as a list. */
+function fileRecipeBound(envelope: VizEnvelope, channel: string): string[] {
+  const bound = (getFileRecipeRef(envelope)?.bindings ?? {})[channel];
+  if (bound == null || bound === '') return [];
+  return Array.isArray(bound) ? bound : [bound];
+}
+
 /** The column a zone currently holds (binding value or channel field). */
-export function getZoneField(envelope: VizEnvelope, channel: string): string | null {
+export function getZoneField(envelope: VizEnvelope, channel: string, fileRecipe?: FileRecipeEditContext | null): string | null {
+  if (fileRecipeFor(envelope, fileRecipe)) return fileRecipeBound(envelope, channel)[0] ?? null;
   const source = sourceOf(envelope);
   if (source.kind === 'recipe') {
     const bound = ((source.bindings ?? {}) as Record<string, string | string[]>)[channel];
@@ -625,7 +655,8 @@ export function getZoneField(envelope: VizEnvelope, channel: string): string | n
  * All columns a zone holds. Multi-capable zones (native cartesian Y via fold, or a
  * recipe slot with `multi`) return the full list; single zones return 0–1 items.
  */
-export function getZoneFields(envelope: VizEnvelope, channel: string): string[] {
+export function getZoneFields(envelope: VizEnvelope, channel: string, fileRecipe?: FileRecipeEditContext | null): string[] {
+  if (fileRecipeFor(envelope, fileRecipe)) return fileRecipeBound(envelope, channel);
   const source = sourceOf(envelope);
   if (source.kind === 'recipe') {
     const bound = ((source.bindings ?? {}) as Record<string, string | string[]>)[channel];
@@ -639,7 +670,9 @@ export function getZoneFields(envelope: VizEnvelope, channel: string): string[] 
 }
 
 /** Whether a zone accepts multiple columns. */
-export function isMultiZone(envelope: VizEnvelope, channel: string): boolean {
+export function isMultiZone(envelope: VizEnvelope, channel: string, fileRecipe?: FileRecipeEditContext | null): boolean {
+  const injected = fileRecipeFor(envelope, fileRecipe);
+  if (injected) return injected.content.bindings.find(b => b.name === channel)?.multi ?? false;
   const source = sourceOf(envelope);
   if (source.kind === 'recipe') {
     return getTemplate(source.recipe as string)?.bindings.find(b => b.name === channel)?.multi ?? false;
@@ -647,8 +680,29 @@ export function isMultiZone(envelope: VizEnvelope, channel: string): boolean {
   return channel === 'y' && unitOf((source as { spec: Record<string, unknown> }).spec) != null;
 }
 
+/** File recipe: apply a binding update through the recipe (rebind, preview recomputed). */
+function rebindZone(
+  envelope: VizEnvelope,
+  ctx: FileRecipeEditContext,
+  channel: string,
+  value: string | string[] | undefined,
+): VizEnvelope {
+  const ref = getFileRecipeRef(envelope)!;
+  const bindings = { ...ref.bindings } as Record<string, string | string[]>;
+  if (value === undefined) delete bindings[channel];
+  else bindings[channel] = value;
+  return rebindFileRecipe(envelope, ctx.content, bindings, ctx.columns);
+}
+
 /** Add a column to a multi zone (append) or assign a single zone. */
-export function addZoneField(envelope: VizEnvelope, channel: string, column: { name: string; kind: VizColumnKind }): VizEnvelope {
+export function addZoneField(envelope: VizEnvelope, channel: string, column: { name: string; kind: VizColumnKind }, fileRecipe?: FileRecipeEditContext | null): VizEnvelope {
+  const injected = fileRecipeFor(envelope, fileRecipe);
+  if (injected) {
+    if (!isMultiZone(envelope, channel, injected)) return setZoneField(envelope, channel, column, injected);
+    const list = fileRecipeBound(envelope, channel);
+    if (list.includes(column.name)) return envelope;
+    return rebindZone(envelope, injected, channel, [...list, column.name]);
+  }
   const source = sourceOf(envelope);
   if (source.kind === 'recipe') {
     if (!isMultiZone(envelope, channel)) return setZoneField(envelope, channel, column);
@@ -665,7 +719,16 @@ export function addZoneField(envelope: VizEnvelope, channel: string, column: { n
 }
 
 /** Remove one column from a zone (multi-aware). */
-export function removeZoneField(envelope: VizEnvelope, channel: string, name: string): VizEnvelope {
+export function removeZoneField(envelope: VizEnvelope, channel: string, name: string, fileRecipe?: FileRecipeEditContext | null): VizEnvelope {
+  const injected = fileRecipeFor(envelope, fileRecipe);
+  if (injected) {
+    // Every file-recipe slot is required: a single zone keeps its column (re-bind
+    // instead), a multi zone keeps its last one.
+    if (!isMultiZone(envelope, channel, injected)) return envelope;
+    const list = fileRecipeBound(envelope, channel).filter((f) => f !== name);
+    if (list.length === 0) return envelope;
+    return rebindZone(envelope, injected, channel, list.length === 1 ? list[0] : list);
+  }
   const source = sourceOf(envelope);
   if (source.kind === 'recipe') {
     if (!isMultiZone(envelope, channel)) return setZoneField(envelope, channel, null);
@@ -692,7 +755,14 @@ export function setZoneField(
   envelope: VizEnvelope,
   channel: string,
   column: { name: string; kind: VizColumnKind } | null,
+  fileRecipe?: FileRecipeEditContext | null,
 ): VizEnvelope {
+  const injected = fileRecipeFor(envelope, fileRecipe);
+  if (injected) {
+    if (column == null) return envelope; // every file-recipe slot is required
+    const value = isMultiZone(envelope, channel, injected) ? [column.name] : column.name;
+    return rebindZone(envelope, injected, channel, value);
+  }
   const source = sourceOf(envelope);
   if (source.kind === 'recipe') {
     const template = getTemplate(source.recipe as string);

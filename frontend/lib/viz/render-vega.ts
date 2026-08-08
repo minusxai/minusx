@@ -45,6 +45,20 @@ export type ResolvedEnvelopeSpec =
 export function resolveEnvelopeSpec(envelope: VizEnvelope, columns?: VizResultColumn[]): ResolvedEnvelopeSpec {
   const source = envelope.source as unknown as Record<string, unknown>;
   if (source.kind === 'recipe') {
+    // A LIVE workspace-recipe reference carries a computed `spec` + `grammar`,
+    // attached by materialization (the file loader on the server, the client
+    // catalog for staged edits). An unresolved reference has neither — the
+    // caller (QuestionVisualization) degrades to a table before reaching here.
+    if (typeof source.recipe === 'string' && !source.recipe.startsWith('minusx/')) {
+      if (source.spec && typeof source.spec === 'object') {
+        return {
+          ok: true,
+          spec: source.spec as Record<string, unknown>,
+          engine: source.grammar === 'vega@6' ? 'vega' : 'vega-lite',
+        };
+      }
+      return { ok: false, error: `viz recipe "${source.recipe}" is not resolved${source.unresolved ? ` (${source.unresolved})` : ''}` };
+    }
     return materializeRecipe(source as unknown as { recipe: string; bindings: Record<string, string> }, columns);
   }
   // Detached native-Vega spec: render as-is on the vega engine, carrying

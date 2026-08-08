@@ -6,7 +6,9 @@
 import Ajv from 'ajv';
 import { atlasSchema } from './atlas-json-schemas';
 import type { FileType, QuestionContent, DashboardContent, StoryContent, NotebookContent } from '@/lib/types';
+import type { VizRecipeContent } from './atlas-schemas';
 import { validateOrgConfig } from '@/lib/validation/config-validators';
+import { materializeFileRecipe, synthesizeDummyBindings } from '@/lib/viz/recipe-file';
 
 // `verbose` so each error carries the received `data` — needed to report
 // expected-vs-got in formatErrors() below.
@@ -16,12 +18,21 @@ const ajv = new Ajv({ allErrors: true, verbose: true });
 ajv.addFormat('jsx', () => true);
 ajv.addSchema(atlasSchema, 'atlas');
 
+// Recipe templates are open records of arbitrary depth (a whole Vega spec), so
+// they validate on a FIRST-error instance: `allErrors: true` over deep untrusted
+// input is a resource-exhaustion pattern (error accumulation scales with input
+// size), and one precise error is enough for the agent to self-correct here.
+const ajvFirstError = new Ajv({ allErrors: false, verbose: true });
+ajvFirstError.addFormat('jsx', () => true);
+ajvFirstError.addSchema(atlasSchema, 'atlas');
+
 // Validators compiled once at module load — not per-call
 const validators: Record<string, Ajv.ValidateFunction> = {
   QuestionContent: ajv.compile({ $ref: 'atlas#/$defs/QuestionContent' }),
   DashboardContent: ajv.compile({ $ref: 'atlas#/$defs/DashboardContent' }),
   StoryContent: ajv.compile({ $ref: 'atlas#/$defs/StoryContent' }),
   NotebookContent: ajv.compile({ $ref: 'atlas#/$defs/NotebookContent' }),
+  VizRecipeContent: ajvFirstError.compile({ $ref: 'atlas#/$defs/VizRecipeContent' }),
 };
 
 /** Short, human/LLM-readable description of a received value (type + a snippet). */
@@ -121,6 +132,20 @@ export function validateFileState(file: {
     return validateContent({ type: 'NotebookContent', data: file.content as NotebookContent });
   if (file.type === 'config')
     return validateOrgConfig(file.content) ? null : 'Invalid config structure';
+  if (file.type === 'viz') {
+    const validate = validators.VizRecipeContent;
+    if (!validate(file.content)) return formatErrors(validate.errors);
+    // Prove the template actually materializes: substitute dummy bindings synthesized
+    // from the declared slots. Catches undeclared tokens, duplicate slot names and
+    // multi-slot misuse at save. The deep grammar check (Vega-Lite package schema) is
+    // server-only — see content-validators.server.ts — because that schema must not
+    // enter the client bundle.
+    const recipe = file.content as VizRecipeContent;
+    const dummy = synthesizeDummyBindings(recipe);
+    const materialized = materializeFileRecipe(recipe, dummy.bindings, null, dummy.columns);
+    if (!materialized.ok) return `template does not materialize: ${materialized.error}`;
+    return null;
+  }
   if (file.type === 'connection') {
     const conn = file.content as any;
     if (!conn?.type || !conn?.config) return 'Connection must have type and config';

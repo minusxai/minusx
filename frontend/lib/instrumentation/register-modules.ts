@@ -1,4 +1,5 @@
 import { registerModules, getModules } from '@/lib/modules/registry';
+import { getTemplateRegistry } from '@/lib/templates/registry.server';
 import { getDbType, PGLITE_DATA_DIR } from '@/lib/database/db-config';
 import { DBModule } from '@/lib/modules/db';
 import { AdapterBackedDBModule } from '@/lib/modules/db/adapter-backed';
@@ -74,6 +75,17 @@ async function runBootTasks(): Promise<void> {
   process.on('unhandledRejection', (reason) => {
     void logTaggedRejection(reason);
   });
+
+  // Load the template registry (app templates + TEMPLATE_DIR) and install the
+  // built-in recipe set. Synchronous and cheap — a directory of small JSON files —
+  // and it must happen before the first request, because recipe resolution reads
+  // that registry on every save, advertisement and render.
+  try {
+    const registry = getTemplateRegistry();
+    console.log(`[boot] ${Object.keys(registry.viz).length} viz template(s) loaded, ${registry.skipped.length} skipped`);
+  } catch (e) {
+    console.warn('[boot] template registry load skipped (non-fatal):', e);
+  }
 
   // Warm the heavy chat runtime so the first chat request does not pay the module-load
   // and JIT cost on a cold process. Non-blocking — the server serves immediately.

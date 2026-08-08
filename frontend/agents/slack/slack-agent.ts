@@ -5,6 +5,7 @@ import { renderPrompt } from '@/orchestrator/prompts';
 import { RemoteAnalystAgent } from '@/agents/analyst/analyst-agent';
 import { getAgentModelOrTestFallback } from '@/agents/analyst/model-config';
 import { formatContextDocsSection } from '@/lib/sql/context-docs';
+import { formatVizRecipesSection } from '@/lib/viz/recipe-prompt';
 import { renderSchemaForPrompt } from '@/lib/chat/render-schema-prompt';
 import { PAGE_SKILL_MAP, buildPreloadedSkillsContent } from '@/agents/analyst/skills';
 import { PROMPTS } from '@/orchestrator/prompts';
@@ -45,6 +46,7 @@ export class SlackAgent extends RemoteAnalystAgent {
       allowed_viz_types: ctx.allowedVizTypes?.length ? ctx.allowedVizTypes.join(', ') : 'all',
       role: ctx.role ?? '',
       schema: renderSchemaForPrompt(ctx.schema),
+      viz_recipes: formatVizRecipesSection(ctx.vizRecipes ?? []),
       // Same shared formatter as the web prompt + docs sidebar, so Slack sees the
       // user's Default Context Docs + on-demand Context Library identically.
       context: formatContextDocsSection(ctx.resolvedContextDocs ?? { docs: [] }),

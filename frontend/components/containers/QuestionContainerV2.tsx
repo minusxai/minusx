@@ -18,7 +18,7 @@ import { selectMergedContent, setEphemeral, setFile, type FileId } from '@/store
 import { clearQueryResult } from '@/store/queryResultsSlice';
 import { selectProposedQuery, selectFileEditMode, selectQuestionCollapsedPanel, setQuestionCollapsedPanel, selectVizV2Active } from '@/store/uiSlice';
 import { useFile, useQueryResult } from '@/lib/hooks/file-state-hooks';
-import { editFile, getQueryResult } from '@/lib/file-state/file-state';
+import { editFile, getQueryResult, cancelQueryExecution } from '@/lib/file-state/file-state';
 import { buildQueryParamValues } from '@/lib/sql/sql-params';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
 import { QuestionContent, type DbFile } from '@/lib/types';
@@ -234,6 +234,19 @@ export default function QuestionContainerV2({ fileId, mode: containerMode, readO
     }
   }, [mergedContent, fileId, dispatch, urlParamOverrides, file?.path]);
 
+  // Stop button: abort the IN-FLIGHT execution (whatever path started it — the
+  // controller registry in query-results keys on the same canonical execution).
+  const handleStopExecution = useCallback(() => {
+    if (!queryToExecute.query || !queryToExecute.database) return;
+    cancelQueryExecution({
+      query: queryToExecute.query,
+      params: queryToExecute.params ?? {},
+      database: queryToExecute.database,
+    });
+  // queryToExecute is rebuilt per render from ephemeral state; its fields are the dependency.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryToExecute.query, queryToExecute.params, queryToExecute.database]);
+
   // Auto-execute once per mount with current mergedContent (includes persistableChanges).
   // Using a ref (not lastExecuted) as the guard so every fresh mount runs the current query —
   // even if lastExecuted is stale from a prior edit session on this file.
@@ -329,6 +342,7 @@ export default function QuestionContainerV2({ fileId, mode: containerMode, readO
       onChange={handleChange}
       onParameterValueChange={handleParameterValueChange}
       onExecute={handleExecuteForced}
+      onStopExecution={handleStopExecution}
     />
   );
 }

@@ -3,6 +3,7 @@
  * Grouped chart type selector with category labels
  */
 
+import React from 'react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/kit/tooltip';
 import {
   LuTable2,
@@ -16,7 +17,6 @@ import {
   LuTrendingUp,
   LuChartNoAxesColumn,
   LuChartNoAxesCombined,
-  LuRadar,
   LuMapPinned,
   LuMap,
   LuHash,
@@ -24,36 +24,11 @@ import {
   LuChartCandlestick,
   LuChartColumnBig,
   LuBraces,
+  LuBookMarked,
 } from 'react-icons/lu';
 import type { VizSettings } from '@/lib/types';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { immutableSet } from '@/lib/utils/immutable-collections';
-
-// lucide `brick-wall-fire` — not in react-icons 5.5.0 yet, so the official path
-// data is inlined with the same conventions the Lu* icons use (currentColor
-// stroke, 24 viewBox). Swap for LuBrickWallFire when react-icons catches up.
-const BrickWallFireIcon = ({ size = 16 }: { size?: number }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
-    <path d="M16 3v2.107" />
-    <path d="M17 9c1 3 2.5 3.5 3.5 4.5A5 5 0 0 1 22 17a5 5 0 0 1-10 0c0-.3 0-.6.1-.9a2 2 0 1 0 3.3-2C13 11.5 16 9 17 9" />
-    <path d="M21 8.274V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.938" />
-    <path d="M3 15h5.253" />
-    <path d="M3 9h8.228" />
-    <path d="M8 15v6" />
-    <path d="M8 3v6" />
-  </svg>
-);
 
 /**
  * Everything the selector can offer: the classic vizSettings types plus V2-only
@@ -101,8 +76,10 @@ const ALL_VIZ_GROUPS: VizTypeGroup[] = [
       { type: 'combo', icon: <LuChartNoAxesCombined size={16} />, label: 'Combo' },
       { type: 'funnel', icon: <LuFilter size={16} />, label: 'Funnel' },
       { type: 'waterfall', icon: <LuChartNoAxesColumn size={16} />, label: 'Waterfall' },
-      { type: 'radar', icon: <LuRadar size={16} />, label: 'Radar' },
-      { type: 'heatmap', icon: <BrickWallFireIcon size={16} />, label: 'Heatmap', v2Only: true },
+      // Radar and heatmap are NOT offered here: they ship as workspace recipe
+      // FILES (seeded at the mode roots by the workspace template) and surface
+      // as Workspace tiles instead. Saved charts keep rendering — the shipped
+      // minusx/radar@1 registry entry and the rect→heatmap classification stay.
       // Candlestick is Lucide's closest glyph to a box-and-whisker plot.
       { type: 'boxplot', icon: <LuChartCandlestick size={16} />, label: 'Boxplot', v2Only: true },
       { type: 'histogram', icon: <LuChartColumnBig size={16} />, label: 'Histogram', v2Only: true },
@@ -143,7 +120,8 @@ export function isClassicVizType(type: SelectableVizType): type is VizSettings['
 }
 
 interface VizTypeSelectorProps {
-  value: SelectableVizType;
+  /** The active type — null highlights nothing (e.g. a workspace recipe is active). */
+  value: SelectableVizType | null;
   onChange: (type: SelectableVizType) => void;
   orientation?: 'vertical' | 'horizontal' | 'grouped';
   /**
@@ -158,6 +136,17 @@ interface VizTypeSelectorProps {
   disabledReason?: string;
   /** Offer V2-only entries (heatmap, …) — set by the Vega panel only. */
   includeV2Only?: boolean;
+  /**
+   * Workspace/built-in recipe entries (resolved for the current folder) shown
+   * as an extra "Workspace" group — grouped orientation only. Selection fires
+   * `onRecipeSelect` with the entry's address, never `onChange`. An entry with
+   * a `disabledReason` renders greyed out with the reason as its hover title —
+   * the recipe's slots cannot bind to the current result columns.
+   */
+  workspaceRecipes?: ReadonlyArray<{ name: string; description?: string; address: string; disabledReason?: string | null }>;
+  onRecipeSelect?: (address: string) => void;
+  /** The active recipe reference's address (highlights its Workspace tile). */
+  activeRecipeAddress?: string | null;
 }
 
 export function VizTypeSelector({
@@ -168,6 +157,9 @@ export function VizTypeSelector({
   disabledTypes,
   disabledReason,
   includeV2Only = false,
+  workspaceRecipes,
+  onRecipeSelect,
+  activeRecipeAddress,
 }: VizTypeSelectorProps) {
   const { config } = useConfigs();
   const allowedVizTypes = config.allowedVizTypes;
@@ -185,6 +177,53 @@ export function VizTypeSelector({
 
     return (
       <div className="mb-2 grid w-full grid-cols-5 gap-1 rounded-md bg-muted/50 p-2">
+        {/* Workspace/built-in recipes: file-defined chart templates for this
+            folder. A tile applies the recipe (auto-bound, stored as a live reference) via
+            onRecipeSelect — the SelectableVizType union stays untouched. A REAL
+            tooltip (not the native title, whose hover delay makes it invisible
+            in practice) carries the recipe description — or, when greyed out,
+            exactly why the recipe cannot bind to this result. */}
+        {workspaceRecipes && workspaceRecipes.length > 0 && (
+          <TooltipProvider delayDuration={150}>
+            {workspaceRecipes.map(({ name, address, disabledReason }) => {
+              const isActive = activeRecipeAddress === address;
+              // The active recipe stays clickable regardless of fit (re-applying it
+              // is always meaningful); everything else greys out with the reason.
+              const isDisabled = !isActive && disabledReason != null;
+              const tile = (
+                <button
+                  type="button"
+                  className={`flex flex-col items-center justify-center gap-0.5 rounded-md py-1.5 transition-all duration-[120ms] ease-in-out ${
+                    isActive ? 'bg-[#16a085]/15 text-[#16a085]' : 'bg-transparent text-muted-foreground'
+                  } ${
+                    isDisabled
+                      ? 'cursor-not-allowed opacity-30'
+                      : `cursor-pointer hover:opacity-100 ${isActive ? 'hover:bg-[#16a085]/20' : 'hover:bg-muted hover:text-foreground'}`
+                  }`}
+                  onClick={() => { if (!isDisabled) onRecipeSelect?.(address); }}
+                  aria-label={`Recipe ${name}`}
+                  aria-pressed={isActive}
+                  aria-disabled={isDisabled}
+                >
+                  <LuBookMarked size={16} />
+                  <span className={`max-w-full truncate font-mono text-[10px] leading-none ${isActive ? 'font-bold' : 'font-medium'}`}>
+                    {name}
+                  </span>
+                </button>
+              );
+              // Tooltip ONLY when disabled (the reason the tile is unusable) —
+              // a usable tile explains itself by clicking, and a hover card over
+              // every tile hides its neighbors.
+              if (!isDisabled) return <React.Fragment key={`recipe:${address}`}>{tile}</React.Fragment>;
+              return (
+                <Tooltip key={`recipe:${address}`}>
+                  <TooltipTrigger asChild>{tile}</TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[260px]">{disabledReason}</TooltipContent>
+                </Tooltip>
+              );
+            })}
+          </TooltipProvider>
+        )}
         {allTypes.map(({ type, icon, label, informational, informationalReason }) => {
           const isActive = value === type;
           const isRecommended = recommended?.includes(type) ?? false;

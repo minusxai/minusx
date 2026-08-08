@@ -1,4 +1,7 @@
 import type { Metadata } from "next";
+import { getTemplateRegistry } from '@/lib/templates/registry.server';
+import { vizTemplateEntries } from '@/lib/templates/types';
+import type { VizRecipeContent } from '@/lib/validation/atlas-schemas';
 import { cache } from "react";
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
@@ -78,6 +81,7 @@ async function loadInitialState(): Promise<{
   queryTimeoutMs: number;
   creditsEnabled: boolean;
   egressIps: string[];
+  vizTemplates: Record<string, { content: VizRecipeContent; origin: 'builtin' | 'deployment' }>;
   e2eEnabled: boolean;
 }> {
   const user = await getEffectiveUserCached();
@@ -111,6 +115,11 @@ async function loadInitialState(): Promise<{
     creditsEnabled: config.credits?.enabled ?? false,
     // Deployment egress IPs for the DB-firewall hint; empty (unset) on self-hosted.
     egressIps: MX_EGRESS_IPS,
+    // Built-in viz recipes are DATA loaded from disk at boot (lib/templates), so
+    // the browser cannot import them the way it once imported a TS module. They
+    // ride the same SSR channel as the other runtime config and are installed
+    // into the client-side registry by DataLoader.
+    vizTemplates: vizTemplateEntries(getTemplateRegistry()),
     // QA runtime E2E opt-in: middleware stamps this header when `?e2e=<secret>`
     // (or its persisted cookie) matches. Exposes the store on the client.
     e2eEnabled: (await headers()).get(E2E_HEADER) === '1',

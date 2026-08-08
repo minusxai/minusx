@@ -140,6 +140,34 @@ For example, if your pivot has "Revenue" and "Cost" as row dimensions, you can a
 
 ---
 
+## Chart recipes
+
+A **chart recipe** is a reusable chart template stored as a workspace file (the *Chart Recipe* file
+type). A recipe declares named binding slots — e.g. `category`, `value`, `target` — and anyone can
+apply it to a question by dropping result columns onto those slots, with no spec editing. MinusX
+ships built-in recipes (bullet, lollipop, range bar) and seeds **radar** and **heatmap** as recipe
+files in your workspace roots — open, edit, or override them like any other file — and you (or the
+agent) can author new ones.
+
+- **Seeing what ships** — the **Visualizations** folder in your workspace lists every
+  built-in and shipped chart recipe. Open one to see a live preview, its binding slots and
+  its template. They are read-only, and each copyable one has a **Copy to my workspace**
+  button that gives you an editable version to change or override.
+- **Where recipes live** — anywhere in the file tree. A recipe in the root folder is available
+  everywhere; a recipe in a subfolder is available only in that subtree. A same-named recipe in a
+  nearer folder overrides an ancestor's (and a workspace recipe overrides a built-in of the same
+  name), so teams can keep their own variants.
+- **Applying one** — recipes resolved for the current folder appear as tiles in the question
+  visualization panel's type selector, and columns auto-bind to matching slots. The agent sees the
+  same catalog and can apply recipes by name.
+- **Charts follow the recipe** — applying a recipe stores a live reference in the question, so
+  editing the recipe file restyles every chart that uses it. If a recipe is renamed or deleted,
+  its charts fall back to a plain table (the data is never lost) and come back when the recipe is
+  restored.
+- **Authoring** — a recipe is a Vega-Lite (or Vega) spec with `{{slot}}` placeholder tokens plus
+  declared slots and optional params. Create one from the Create menu, or ask the agent — invalid
+  templates are rejected at save with the exact problem named.
+
 ## AI-powered visualization
 
 The agent can configure charts for you:

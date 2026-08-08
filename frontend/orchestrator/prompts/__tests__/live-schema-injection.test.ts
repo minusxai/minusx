@@ -14,6 +14,7 @@ const SKILL_BY_TYPE: Record<string, string> = {
   story: 'stories',
   notebook: 'notebooks',
   context: 'contexts',
+  viz: 'viz_recipes',
 };
 
 describe('skills embed the LIVE per-file-type content schema', () => {

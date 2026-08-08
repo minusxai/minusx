@@ -65,6 +65,105 @@ builders in `lib/viz/viz-templates.ts` (`VIZ_TEMPLATES`), each declaring its own
 The `engine` is load-bearing beyond render — it decides which validation path a recipe takes (see
 Validation) and which source kind `lib/viz/detach.ts` freezes to.
 
+## Workspace recipes — `.viz` files and built-ins
+
+Beside the shipped code registry there is a second, DATA-only recipe tier: workspace `viz` files
+plus the built-in defaults in `lib/viz/builtin-recipes.ts`. A recipe file's content
+(`VizRecipeContent` in `lib/validation/atlas-schemas.ts`) is an INERT spec template — a static
+Vega/Vega-Lite spec carrying `{{slot}}` tokens — with declared `bindings` (reusing the
+`VizTemplateBinding` shape) and value-substituted `params`. `lib/viz/recipe-file.ts` owns the whole
+substitution language (whole-value tokens, embedded string tokens, `{{slot:kind}}` — colon, never a
+dot: a dotted token inside braces throws in the prompt template engine when schema text is injected
+into skills), `materializeFileRecipe`, `freezeFileRecipe`, dummy-binding synthesis for save-time
+validation, and `sampleDataForRecipe` for the file viewer's preview.
+
+Identity is the FILE NAME — no name field, no version suffix. `lib/viz/recipe-resolve.ts` resolves
+a folder's visible set: built-ins < root < … < nearest folder, same-name shadowing, sibling
+isolation (pure path math over a file listing; mirrors `findNearestAncestorContext`).
+
+**Radar and heatmap are file-tier, not selector tiles.** The workspace template seeds `radar` and
+`heatmap` recipe files at both mode roots (`/tutorial`, `/org` — pinned by
+`lib/viz/__tests__/viz-seed-recipes.test.ts`), and `VizTypeSelector` deliberately offers no static
+tile for either — they surface as Workspace tiles from the files. Saved charts are unaffected: the
+shipped `minusx/radar@1` registry entry stays (live references must keep rendering and detaching),
+and `getVizType()` still classifies a `rect` spec as `heatmap` for settings behavior. The radar
+FILE recipe is fold-only (`metric` + multi `values`; a single bound column folds fine) and drops
+the shipped builder's per-column alias/format tooltip adaptivity for fixed `.3~s` formatting.
+
+**File recipes are LIVE references.** A chart stores only `{kind:'recipe', recipe:'<name-or-path>',
+bindings}` (any recipe id outside the reserved `minusx/` namespace); materialization attaches the
+substituted spec to the source as COMPUTED fields (`spec`, `grammar`, or `unresolved` when the
+recipe is gone) that storage never keeps. The walk lives in `lib/viz/recipe-reference-core.ts`,
+and it runs at three sites: the question/notebook file loader
+(`lib/data/loaders/viz-recipe-loader.server.ts` — system-scoped through DocumentDB so share guests
+see rendered charts; drafts never resolve) materializes on every load, which is what makes a recipe
+edit restyle every referencing chart; the save gate
+(`lib/data/helpers/viz-recipe-refs.server.ts`, called from `FilesAPI.createFile`/`saveFile` with
+loaders injected so the helper never imports `files.server`) STRIPS the computed fields and
+dry-run-validates the reference — an unknown name rejects with the resolvable catalog, and the
+materialized spec is grammar-checked; and the EditFile handler validates the same way at apply
+time (`lib/tools/handlers/viz-recipe-refs-client.ts`, over the Redux file listing) so the agent
+gets in-loop feedback without the reference being rewritten. That third module also exports the
+browser MATERIALIZER, and `lib/tools/handlers/chart-images.ts` needs it: the markup round-trip
+drops computed fields, so staged content is always bare and the agent would otherwise get no
+image of the chart it just authored. A recipe deleted AFTER save degrades
+its charts to a plain TABLE fallback (`useLiveVizEnvelope` in `lib/hooks/use-viz-recipes.ts`
+reports `unresolved`; `QuestionVisualization` renders `TableV2`) — the reference survives, so
+restoring the recipe brings the chart back. Column kinds are unknown at read, so `{{slot:kind}}`
+falls back to the slot's first `accepts` kind (the same deliberate under-typing as the static
+V1→V2 converter); the panel re-materializes with real columns on any rebind.
+
+Edit surfaces keep a recipe reference BINDABLE by injecting its definition:
+`lib/viz/recipe-rebind.ts` (`getFileRecipeRef` — detecting both the live `kind:'recipe'` source
+and a detached spec whose `detachedFrom` records a file recipe; `rebindFileRecipe`, which rewrites
+`bindings` and recomputes the preview; `applyFileRecipeSelection` — the selector's auto-bind,
+producing a reference envelope; and `explainRecipeFit`, the plain-words applicability check) plus
+the optional `FileRecipeEditContext` last argument on `encoding-edit`'s zone helpers.
+`lib/hooks/use-viz-recipes.ts` resolves the catalog browser-side (Redux-loaded `viz` files +
+built-ins) for `VegaVizPanel`'s Workspace selector tiles, rebinding, and the render-side
+`useLiveVizEnvelope` (which materializes a STAGED reference an agent edit left in Redux — saved
+content arrives already materialized by the loader). A recipe whose slots cannot bind to the
+current result columns renders GREYED OUT with the reason as its hover tooltip
+(`explainRecipeFit` distinguishes "this result has none" from "every matching column is already
+assigned"); selection, greying and the failure toast all read the same auto-bind walk, so they
+cannot disagree. The recipe file viewer (`components/views/VizRecipeView.tsx`) is a full-flow
+scrolling page whose EDIT mode makes the description and template JSON directly editable,
+committed on blur through `applyJsonContentEdit` — the validated full-replace path the File tab
+uses, so a bad template rejects with the reason inline.
+
+**The two shipped tiers are BROWSABLE, as read-only virtual files.**
+`lib/viz/recipe-catalog.ts` projects the built-ins and the shipped `minusx/…@1`
+registry into the mode-scoped `/visualizations` folder (`SYSTEM_FOLDERS.visualizations`;
+deliberately NOT in `HIDDEN_SYSTEM_FOLDERS` — browsing it IS the feature), so the recipe
+viewer shows every default with no surface of its own. The rows exist in no table:
+`FilesAPI.getFiles`/`loadFile`/`loadFiles` synthesize them from a reserved id block
+(`CATALOG_VIZ_ID_BASE`), and `saveFile`/`deleteFile`/`moveFile` refuse those ids. They are
+merged only for an EXACT path request, so the deep `paths: ['/']` sweep that lists `.viz`
+files for RESOLUTION never sees them — the catalog is a viewing surface, and resolution
+stays over real files plus the built-in registry.
+
+A shipped recipe is a `build()` function, not a template, so it is projected by calling
+`build()` with each required slot bound to its own `{{slot}}` TOKEN — the spec that comes
+back is then a real recipe, which is what makes "copy to my workspace" produce a working
+`.viz` file. Three builders manipulate the bound name as a string (a multi slot embedded in
+a Vega expression, an upper-cased label) and cannot survive that; they fall back to a spec
+generated from the SAMPLE bindings, are labelled "generated spec … not a template", and
+offer no copy. Which recipes land in which group is DERIVED by materializing the
+projection, never hardcoded. Optional slots are dropped from the projection entirely:
+materialization has no optional path, and binding one changes some recipes' shape (radar
+collapses to a point). Geo recipes additionally carry their boundary `assets` and a
+hand-written `previewSample` on the virtual file's `meta`, because a latitude of 820 is not
+a place and the generic sample cannot invent one.
+
+Agent surface: the resolved catalog is advertised per turn as the prompt's Chart Recipes section
+(`lib/viz/recipe-prompt.ts`, built in `lib/chat/agent-args.server.ts` — recipes are advertised
+dynamically, never hard-coded in `prompts.yaml`; the `viz_recipes` skill teaches the mechanism
+only). The agent references a recipe in a viz envelope as `{kind:'recipe', recipe:'<name-or-path>',
+bindings}`; the validator defers any non-`minusx/` recipe id to the reference gates (bindings are
+still column-checked), which reject unknown names listing what is available. `detachRecipe`
+(`lib/viz/detach.ts`) freezes a live reference's COMPUTED spec when a chart must stop following
+its recipe, keeping the bare reference in `detachedFrom` so reattach restores it.
+
 The panel's own selector vocabulary is a third list — `V2_SUPPORTED_VIZ_TYPES` in
 `lib/viz/encoding-edit.ts`. The two lists are not nested: V2 adds `heatmap`, `boxplot` and
 `histogram`, which exist only as spec shapes (a `rect` mark, a `boxplot` mark, a binned `bar`),
@@ -81,7 +180,8 @@ reverse map (recipes → their `vizType`, DOM kinds pass through, raw specs → 
 
 ```
 VizEnvelope ──resolveEnvelopeSpec──▶ {spec, engine, assets?}     lib/viz/render-vega.ts
-   recipe    → materializeRecipe (lib/viz/viz-templates.ts)  → vega-lite | vega
+   recipe (minusx/…)  → materializeRecipe (lib/viz/viz-templates.ts)  → vega-lite | vega
+   recipe (workspace) → the source's COMPUTED spec/grammar (attached by materialization)
    vega-lite → spec as-is                            → vega-lite
    vega      → spec + assets as-is                   → vega
                           │
@@ -456,7 +556,17 @@ different lifecycles.
 | Task | File |
 |---|---|
 | Add a viz type | `lib/validation/atlas-schemas.ts` (`VIZ_TYPES`) → `lib/viz/from-vizsettings.ts` switch → `components/question/VizTypeSelector.tsx` |
-| Add/change a recipe | `lib/viz/viz-templates.ts` (`VIZ_TEMPLATES`; bump `@2`, never mutate `@1`) |
+| Add/change a SHIPPED recipe | `lib/viz/viz-templates.ts` (`VIZ_TEMPLATES`; bump `@2`, never mutate `@1`) |
+| Add/change a BUILT-IN file recipe | `lib/viz/builtin-recipes.ts` (data, shadowable by workspace files) |
+| Change how the built-in/shipped recipes are browsed | `lib/viz/recipe-catalog.ts` (+ the three merge points in `lib/data/files.server.ts`) |
+| Change the recipe-file token language / detach freeze | `lib/viz/recipe-file.ts` |
+| Change recipe resolution/shadowing | `lib/viz/recipe-resolve.ts` |
+| Change recipe panel binding / selector auto-bind | `lib/viz/recipe-rebind.ts`, `lib/hooks/use-viz-recipes.ts` |
+| Change the reference materialization walk | `lib/viz/recipe-reference-core.ts` |
+| Change read-time materialization | `lib/data/loaders/viz-recipe-loader.server.ts` |
+| Change the save-time reference gate | `lib/data/helpers/viz-recipe-refs.server.ts` |
+| Change the agent's Chart Recipes advertisement | `lib/viz/recipe-prompt.ts` (+ `lib/chat/agent-args.server.ts`) |
+| Change the recipe file viewer | `components/views/VizRecipeView.tsx`, `components/containers/VizRecipeContainerV2.tsx` |
 | Change how any chart is compiled or themed | `lib/viz/render-vega.ts`, `lib/viz/theme.ts` |
 | Change a panel control / add a spec edit | `lib/viz/encoding-edit.ts` + `components/viz/VegaVizPanel.tsx` |
 | Change agent-facing validation | `lib/viz/validate.ts`, `lib/viz/types.ts`, `lib/viz/validate-remote.ts` |

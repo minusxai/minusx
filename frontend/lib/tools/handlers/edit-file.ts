@@ -16,6 +16,7 @@ import isEqual from 'lodash/isEqual';
 import { clearQueryResult, selectQueryResult } from '@/store/queryResultsSlice';
 import { markupToContent } from '@/lib/data/story/file-markup';
 import { validateVizRemote } from '@/lib/viz/validate-remote';
+import { validateVizRecipeRefsClient } from './viz-recipe-refs-client';
 import { formatVizIssues } from '@/lib/viz/types';
 import { toVizColumns } from '@/lib/viz/query-data';
 import { getStore } from '@/store/store';
@@ -254,6 +255,24 @@ export const editFileHandler: FrontendToolHandler = async (args, context) => {
         workingStr = workingStr.replaceAll(effectiveOld, effectiveNew);
         // Multi-site replaces must be visible in the result status.
         if (occurrences > 1) replaceNotes.push(`Change ${i + 1}: replaced ${occurrences} occurrences of "${oldMatch}"`);
+      }
+    }
+
+    // Workspace viz-recipe references are LIVE: the reference is validated at
+    // APPLY time (an unresolvable one rejects atomically with the available
+    // catalog so the agent self-corrects in-loop) but never rewritten — the
+    // stored envelope stays `{kind:'recipe', …}` and rendering materializes it,
+    // so recipe edits propagate to every referencing chart. The save-path gate
+    // stays the backstop for headless writers.
+    if (fileState?.type === 'question' || fileState?.type === 'notebook') {
+      const parsedNext = markupToContent(fileState.type, workingStr);
+      if (parsedNext.ok) {
+        const folder = (fileState.path ?? '').substring(0, (fileState.path ?? '').lastIndexOf('/')) || '/';
+        const check = await validateVizRecipeRefsClient(fileState.type, parsedNext.content, folder);
+        if (!check.ok) {
+          const err = `Viz recipe error — NO changes were applied. ${check.error}`;
+          return { content: { success: false, error: err }, details: { success: false, error: err } };
+        }
       }
     }
 

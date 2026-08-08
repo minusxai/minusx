@@ -20,6 +20,7 @@ import ReportContainerV2 from '@/components/containers/ReportContainerV2';
 import ReportRunContainerV2 from '@/components/containers/ReportRunContainerV2';
 import AlertContainerV2 from '@/components/containers/AlertContainerV2';
 import AlertRunContainerV2 from '@/components/containers/AlertRunContainerV2';
+import VizRecipeContainerV2 from '@/components/containers/VizRecipeContainerV2';
 
 /**
  * Props interface for all file component containers
@@ -48,6 +49,7 @@ const FILE_COMPONENTS: Partial<Record<FileType, ComponentType<FileComponentProps
   session: SessionContainerV2,
   config: ConfigContainerV2,
   styles: StylesContainerV2,
+  viz: VizRecipeContainerV2,
   report: ReportContainerV2,
   report_run: ReportRunContainerV2,
   alert: AlertContainerV2,

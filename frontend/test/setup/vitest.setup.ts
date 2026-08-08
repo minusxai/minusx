@@ -4,8 +4,20 @@
  * Registers the global module mocks and default test modules used everywhere.
  */
 import { vi } from 'vitest';
+import { join } from 'node:path';
 import { registerModules } from '@/lib/modules/registry';
 import { DBModule } from '@/lib/modules/db';
+import { loadTemplateRegistry } from '@/lib/templates/template-loader.server';
+import { setBuiltinVizTemplates } from '@/lib/viz/builtin-recipes';
+import { vizTemplateEntries } from '@/lib/templates/types';
+
+// Built-in viz recipes are DATA on disk, installed by the server's boot tasks
+// (lib/instrumentation/register-modules.ts). Tests never run those, so boot the
+// registry the same way here — otherwise every recipe test sees an empty set and
+// fails for a reason that has nothing to do with what it is testing.
+setBuiltinVizTemplates(vizTemplateEntries(
+  loadTemplateRegistry([{ dir: join(process.cwd(), 'templates'), origin: 'builtin' }]),
+));
 
 // Stub provider API keys with a sentinel that satisfies orchestrator's "key
 // exists" check but is guaranteed to fail authentication on any real

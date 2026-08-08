@@ -3,6 +3,7 @@ import type { TSchema } from 'typebox';
 import type { ImageContent, Message, TextContent, Tool } from '@/orchestrator/llm';
 import { registerFauxProvider } from '@/orchestrator/llm/testing';
 import { renderPrompt, PROMPTS } from '@/orchestrator/prompts';
+import { formatVizRecipesSection } from '@/lib/viz/recipe-prompt';
 import {
   getPreloadedSkillNames,
   buildSkillsCatalog,
@@ -101,6 +102,9 @@ export class RemoteAnalystAgent extends BenchmarkAnalystAgent<RemoteAnalystConte
       // Whitelisted table list (client-resolved), capped to a char budget so a
       // huge/rogue DB can't blow the context — overflow points at SearchDBSchema.
       schema: renderSchemaForPrompt(this.context.schema),
+      // Chart Recipes catalog (server-resolved for the turn anchor's folder);
+      // '' when nothing resolved so the section disappears cleanly.
+      viz_recipes: formatVizRecipesSection(this.context.vizRecipes ?? []),
       // Fully-formatted "## Context" body: alwaysInclude docs + Schema Notes under
       // "Default Context Docs", then the lazy-loadable catalog (title + description,
       // fetched on demand via LoadContext) under "Context Library". Built by the
