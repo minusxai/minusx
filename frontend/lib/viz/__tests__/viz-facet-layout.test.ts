@@ -120,6 +120,20 @@ describe('computeFacetLayoutPlan', () => {
   it('is not applied to ordinary unit charts', () => {
     expect(computeFacetLayoutPlan({ mark: 'bar', encoding: {} }, ROWS, 900, 330)).toBeNull();
   });
+
+  it('reserves legend chrome only when the child actually carries a legend', () => {
+    // HBAR_FACET_SPEC has no legend (its opacity legend is disabled); FACET_SPEC
+    // has a color legend. A legendless facet must hand the reclaimed chrome to
+    // its panels instead of leaving a dead band under the chart.
+    const withoutLegend = computeFacetLayoutPlan(HBAR_FACET_SPEC, HBAR_ROWS, 900, 380)!;
+    const withLegend = computeFacetLayoutPlan(
+      { ...HBAR_FACET_SPEC, spec: FACET_SPEC.spec } as Record<string, unknown>,
+      ROWS.map(r => ({ ...r, sentiment_group: r.project_context })),
+      900,
+      380,
+    )!;
+    expect(withoutLegend.childHeight! - withLegend.childHeight!).toBeGreaterThanOrEqual(30);
+  });
 });
 
 describe('facetPreferredHeight', () => {
@@ -152,6 +166,15 @@ describe('facetPreferredHeight', () => {
     expect(plan).toMatchObject({ columns: 6, rows: 4 });
     expect(plan!.childHeight).toBeGreaterThanOrEqual(110);
     expect(plan!.childHeight).toBeLessThanOrEqual(130);
+  });
+
+  it('asks for less height when the child has no legend', () => {
+    const withoutLegend = facetPreferredHeight(HBAR_FACET_SPEC, HBAR_ROWS)!;
+    const withLegend = facetPreferredHeight(
+      { ...HBAR_FACET_SPEC, spec: FACET_SPEC.spec } as Record<string, unknown>,
+      ROWS.map(r => ({ ...r, sentiment_group: r.project_context })),
+    )!;
+    expect(withLegend - withoutLegend).toBeGreaterThanOrEqual(30);
   });
 
   it('honors an authored child height instead of the readable default', () => {

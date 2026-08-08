@@ -27,8 +27,11 @@ const FACET_DEFAULT_SPACING = 20;
 const FACET_OUTER_HORIZONTAL_PADDING_PX = 24;
 const FACET_OUTER_VERTICAL_PADDING_PX = 10;
 const FACET_COLUMN_CHROME_PX = 24;
-// Theme legend + facet title/header consume ~90px before per-row x-axis chrome.
+// Theme legend + facet title/header consume ~90px before per-row x-axis chrome;
+// a legendless child only needs the title/header share. Reserving the legend
+// room anyway leaves that difference as a dead band under the rendered chart.
 const FACET_SHARED_VERTICAL_CHROME_PX = 90;
+const FACET_SHARED_VERTICAL_CHROME_NO_LEGEND_PX = 55;
 const FACET_ROW_CHROME_PX = 40;
 const FACET_MIN_CHILD_PX = 40;
 // Preferred data-rectangle height per panel when the container is free to grow
@@ -114,6 +117,31 @@ const yLabelGutterPx = (
   return Math.min(Math.ceil(maxLen * AXIS_LABEL_CHAR_PX), AXIS_LABEL_LIMIT_PX) + Y_AXIS_TICK_TITLE_PX;
 };
 
+// Channels whose field-bearing defs surface a legend unless explicitly disabled.
+const LEGEND_CHANNELS = ['color', 'fill', 'stroke', 'opacity', 'shape', 'size'] as const;
+
+/** Whether the child (unit encoding or any layer) will draw a legend. */
+const hasLegend = (spec: Record<string, unknown>): boolean => {
+  const encoding = record(spec.encoding);
+  if (encoding) {
+    for (const channel of LEGEND_CHANNELS) {
+      const def = record(encoding[channel]);
+      if (def && typeof def.field === 'string' && def.legend !== null) return true;
+    }
+  }
+  const layers = spec.layer;
+  if (Array.isArray(layers)) {
+    for (const layer of layers) {
+      const l = record(layer);
+      if (l && hasLegend(l)) return true;
+    }
+  }
+  return false;
+};
+
+const sharedVerticalChromePx = (child: Record<string, unknown>): number =>
+  hasLegend(child) ? FACET_SHARED_VERTICAL_CHROME_PX : FACET_SHARED_VERTICAL_CHROME_NO_LEGEND_PX;
+
 /** Grid shape (panel columns × rows) of a top-level facet against real rows. */
 const facetGridShape = (
   facet: Record<string, unknown>,
@@ -167,7 +195,7 @@ export function computeFacetLayoutPlan(
     plan.childHeight = Math.max(
       FACET_MIN_CHILD_PX,
       Math.floor((Math.max(containerHeight, 60) - FACET_OUTER_VERTICAL_PADDING_PX - gap
-        - FACET_SHARED_VERTICAL_CHROME_PX) / rowCount - FACET_ROW_CHROME_PX),
+        - sharedVerticalChromePx(child)) / rowCount - FACET_ROW_CHROME_PX),
     );
   }
   return plan;
@@ -196,6 +224,6 @@ export function facetPreferredHeight(
   const gap = facetSpacing(spec, 'row') * Math.max(0, shape.rows - 1);
   return Math.ceil(
     shape.rows * (childHeight + FACET_ROW_CHROME_PX)
-      + gap + FACET_SHARED_VERTICAL_CHROME_PX + FACET_OUTER_VERTICAL_PADDING_PX,
+      + gap + sharedVerticalChromePx(child) + FACET_OUTER_VERTICAL_PADDING_PX,
   );
 }
