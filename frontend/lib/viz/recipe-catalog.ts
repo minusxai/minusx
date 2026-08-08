@@ -216,6 +216,13 @@ const PREVIEW_SAMPLES: Record<string, PreviewSample> = {
 export type CatalogTier = 'builtin' | 'shipped';
 
 export interface CatalogEntry {
+  /**
+   * Unique across the whole catalog. NAME alone is not: `funnel` is a legal
+   * template name AND a shipped recipe's bare name, and the two are different
+   * things — a shipped recipe is addressed as `minusx/funnel@1` and shadows
+   * nothing. Anything keying a list or a selection uses this.
+   */
+  key: string;
   /** The name a workspace recipe would use to shadow this one. */
   name: string;
   tier: CatalogTier;
@@ -239,14 +246,14 @@ export interface CatalogEntry {
 export function catalogEntries(): CatalogEntry[] {
   const entries: CatalogEntry[] = [];
   for (const [name, content] of Object.entries(getBuiltinVizRecipes())) {
-    entries.push({ name, tier: 'builtin', origin: getBuiltinVizOrigin(name), copyable: true, content });
+    entries.push({ key: `builtin:${name}`, name, tier: 'builtin', origin: getBuiltinVizOrigin(name), copyable: true, content });
   }
   for (const id of Object.keys(VIZ_TEMPLATES)) {
     const projected = shippedRecipeAsContent(id);
     if (!projected) continue;
     const name = id.replace(/^minusx\//, '').replace(/@\d+$/, '');
     entries.push({
-      name, tier: 'shipped', recipeId: id,
+      key: `shipped:${name}`, name, tier: 'shipped', recipeId: id,
       copyable: projected.copyable, assets: projected.assets,
       previewSample: PREVIEW_SAMPLES[id], content: projected.content,
     });

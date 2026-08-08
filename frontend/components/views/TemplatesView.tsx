@@ -37,10 +37,13 @@ const GROUPS = [
 ] as const;
 
 export default function TemplatesView({ entries, colorMode, onCopy }: TemplatesViewProps) {
-  const [selectedName, setSelectedName] = useState<string>(entries[0]?.name ?? '');
+  // Selection keys on `key`, not `name`: a deployment template and a shipped
+  // recipe may share a name, and selecting by name would silently pick whichever
+  // came first.
+  const [selectedKey, setSelectedKey] = useState<string>(entries[0]?.key ?? '');
   const selected = useMemo(
-    () => entries.find((e) => e.name === selectedName) ?? entries[0],
-    [entries, selectedName],
+    () => entries.find((e) => e.key === selectedKey) ?? entries[0],
+    [entries, selectedKey],
   );
 
   const groups = useMemo(
@@ -60,14 +63,14 @@ export default function TemplatesView({ entries, colorMode, onCopy }: TemplatesV
             </div>
             <ul>
               {group.items.map((entry) => (
-                <li key={entry.name}>
+                <li key={entry.key}>
                   <button
                     type="button"
                     aria-label={`Template ${entry.name}`}
-                    aria-pressed={entry.name === selected.name}
-                    onClick={() => setSelectedName(entry.name)}
+                    aria-pressed={entry.key === selected.key}
+                    onClick={() => setSelectedKey(entry.key)}
                     className={`w-full rounded-md px-2 py-1.5 text-left font-mono text-sm transition-colors ${
-                      entry.name === selected.name
+                      entry.key === selected.key
                         ? 'bg-accent text-foreground'
                         : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
                     }`}
@@ -84,7 +87,7 @@ export default function TemplatesView({ entries, colorMode, onCopy }: TemplatesV
       <div aria-label="Template detail" className="min-w-0 flex-1 overflow-y-auto">
         <h2 className="pb-1 font-mono text-xl font-bold text-foreground">{selected.name}</h2>
         <VizRecipeView
-          key={selected.name}
+          key={selected.key}
           content={selected.content}
           colorMode={colorMode}
           catalog={{ tier: selected.tier, recipeId: selected.recipeId, copyable: selected.copyable, origin: selected.origin }}
