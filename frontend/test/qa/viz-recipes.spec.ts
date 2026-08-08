@@ -4,8 +4,8 @@
  * tutorial root; this flow pins the whole user journey: the seeded recipes
  * surface as Workspace tiles on a question (while the retired static Radar /
  * Heatmap tiles stay absent), clicking one applies it (auto-bound, recipe
- * zones shown), and Save persists a self-contained frozen spec whose
- * provenance is the tutorial file path.
+ * zones shown), and Save persists a LIVE reference to the tutorial file —
+ * served back loader-materialized with the computed spec.
  */
 import { expect } from '@playwright/test';
 import {
@@ -16,7 +16,7 @@ import {
   assertTutorialMode,
 } from './flows';
 
-test('seeded recipes surface as Workspace tiles and apply + save frozen', async ({ page, request }) => {
+test('seeded recipes surface as Workspace tiles and apply + save a live reference', async ({ page, request }) => {
   // The tutorial seed carries this question (two categoricals + a measure —
   // exactly the heatmap recipe's slots).
   const question = await findFile(request, 'question', 'Orders by Day of Week and Hour (Last Month)');
@@ -43,8 +43,9 @@ test('seeded recipes surface as Workspace tiles and apply + save frozen', async 
   // An already-saved question saves directly (no name dialog).
   await page.getByLabel('Save', { exact: true }).click();
 
-  // The stored artifact is SELF-CONTAINED: a frozen vega-lite rect spec with
-  // the tutorial recipe file as provenance — never a live reference.
+  // The stored artifact is a LIVE reference to the tutorial recipe file; the
+  // read path serves it materialized (computed spec attached by the loader),
+  // so recipe edits propagate to this chart.
   await expect
     .poll(async () => {
       const res = await request.get(`/api/files/${question!.id}?mode=tutorial`);
@@ -53,10 +54,10 @@ test('seeded recipes surface as Workspace tiles and apply + save frozen', async 
       const file = body?.data?.data ?? body?.data;
       const source = file?.content?.viz?.source;
       return source
-        ? { kind: source.kind, mark: source.spec?.mark, recipe: source.detachedFrom?.recipe }
+        ? { kind: source.kind, recipe: source.recipe, mark: source.spec?.mark }
         : null;
     }, { timeout: 30_000 })
-    .toEqual({ kind: 'vega-lite', mark: 'rect', recipe: '/tutorial/heatmap' });
+    .toEqual({ kind: 'recipe', recipe: '/tutorial/heatmap', mark: 'rect' });
 
   // Hard-check we never left tutorial (QA suite invariant).
   expect(question!.path.startsWith('/tutorial')).toBe(true);

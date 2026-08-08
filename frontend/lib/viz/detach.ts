@@ -22,7 +22,25 @@ export function detachRecipe(envelope: VizEnvelope): VizEnvelope {
   const source = envelope.source as unknown as { kind: string };
   if (source.kind !== 'recipe') return envelope;
 
-  const recipeSource = source as unknown as VizSourceRecipe;
+  const recipeSource = source as unknown as VizSourceRecipe & {
+    spec?: Record<string, unknown>; grammar?: string; unresolved?: string;
+  };
+
+  // A LIVE workspace-recipe reference (non-`minusx/`) freezes its COMPUTED
+  // materialization — the loader/panel-attached spec — since the shipped
+  // registry cannot resolve it. Provenance keeps the bare reference (computed
+  // fields stripped) so reattach restores a live reference.
+  if (!recipeSource.recipe.startsWith('minusx/')) {
+    if (!recipeSource.spec) {
+      throw new Error(`viz recipe "${recipeSource.recipe}" is not resolved${recipeSource.unresolved ? ` (${recipeSource.unresolved})` : ''}`);
+    }
+    const { spec, grammar, unresolved: _u, ...bareRef } = recipeSource;
+    const detachedWorkspace = grammar === 'vega@6'
+      ? { kind: 'vega' as const, grammar: VIZ_GRAMMAR_VEGA, spec, assets: null, detachedFrom: bareRef as VizSourceRecipe }
+      : { kind: 'vega-lite' as const, grammar: VIZ_GRAMMAR_VEGA_LITE, spec, detachedFrom: bareRef as VizSourceRecipe };
+    return { ...envelope, source: detachedWorkspace } as unknown as VizEnvelope;
+  }
+
   const materialized = materializeRecipe(recipeSource);
   if (!materialized.ok) throw new Error(materialized.error);
 

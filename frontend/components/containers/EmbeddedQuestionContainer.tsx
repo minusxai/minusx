@@ -141,6 +141,7 @@ export default function EmbeddedQuestionContainer({
 
   return (
     <QuestionVisualization
+      filePath={filePath}
       currentState={localQuestion}
       config={config}
       loading={activeResult.loading}

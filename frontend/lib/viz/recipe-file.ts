@@ -5,11 +5,13 @@
  * tokens plus declared binding slots and params — data, never code (the shipped
  * registry in `viz-templates.ts` stays code and is unrelated to this module).
  *
- * File recipes are ALWAYS frozen at use ("materialize-always"): a chart stores the
- * fully substituted spec as a plain `vega`/`vega-lite` source with the recipe's file
- * path in `detachedFrom.recipe`. Shadowing (nearest ancestor wins by basename),
- * rename and delete are therefore authoring-time concerns only — the renderer never
- * resolves a file, and a deleted recipe degrades to custom-spec editing.
+ * File recipes are LIVE references: a chart stores `{kind:'recipe', recipe, bindings}`
+ * and materialization substitutes the template at read time (the file loader on the
+ * server, the Redux catalog in the browser), attaching the spec as computed fields the
+ * save gate strips. Editing a recipe therefore restyles every referencing chart on its
+ * next load; deleting one degrades those charts to a table fallback until it is
+ * restored. `freezeFileRecipe` remains for the explicit DETACH flow, which stores the
+ * substituted spec with the recipe's address in `detachedFrom.recipe`.
  *
  * Token rules (the whole substitution language — no structural branching):
  *  - `"{{slot}}"` as a WHOLE string value → replaced with the bound value verbatim
@@ -41,7 +43,7 @@ export type FileRecipeMaterializeResult =
   | { ok: true; spec: Record<string, unknown>; engine: 'vega-lite' | 'vega' }
   | { ok: false; error: string };
 
-/** The reference a chart freezes from: the recipe FILE PATH plus its bindings. */
+/** A recipe address + bindings, as detach provenance records them. */
 export interface FileRecipeRef {
   path: string;
   bindings: Record<string, string | string[]>;
@@ -173,7 +175,7 @@ export function materializeFileRecipe(
 }
 
 /**
- * Materialize and wrap as the frozen source a chart stores: `kind` from the
+ * Materialize and wrap as a frozen source (the DETACH flow): `kind` from the
  * engine, pinned grammar, the substituted spec, and `detachedFrom` carrying the
  * full reference (recipe = file path) for re-materialization and panel binding.
  */

@@ -1,16 +1,21 @@
 /**
- * Freeze-at-use through the real save path: a question (or notebook cell) whose
- * `viz` references a workspace/built-in recipe stores the fully substituted spec
- * with provenance — never a live reference. Shipped `minusx/` recipes pass
- * through untouched. Every save flows through FilesAPI, so this is the single
- * choke point for browser tools, GUI saves, and headless agents alike.
+ * Resolution semantics of LIVE recipe references through the real save+load
+ * path: a question (or notebook cell) whose `viz` references a workspace or
+ * built-in recipe stores the REFERENCE, and the file loader materializes the
+ * computed `spec` at read time against the file's folder — root file at the
+ * root, the folder's override inside its subtree, an absolute path regardless
+ * of folder, a built-in by bare name. Shipped `minusx/` recipes pass through
+ * untouched. Every save flows through FilesAPI, so this is the single choke
+ * point for browser tools, GUI saves, and headless agents alike. The lifecycle
+ * half — edit propagation, delete → unresolved, computed-field stripping — is
+ * lib/data/__tests__/viz-recipe-reference.test.ts.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { FilesAPI } from '@/lib/data/files.server';
 import { initTestDatabase, cleanupTestDatabase, getTestDbPath } from '@/store/__tests__/test-utils';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { QuestionContent, NotebookContent } from '@/lib/types';
-import type { VizRecipeContent, VizSourceVegaLite } from '@/lib/validation/atlas-schemas';
+import type { VizRecipeContent, VizSourceRecipe } from '@/lib/validation/atlas-schemas';
 
 const TEST_DB_PATH = getTestDbPath('viz-recipe-freeze');
 
@@ -54,6 +59,12 @@ const recipeViz = (recipe: string, bindings: Record<string, string | string[]>) 
   dataBindings: null, viewParams: null, interactions: null, assets: null,
 });
 
+type LoadedSource = VizSourceRecipe & {
+  spec?: Record<string, unknown>;
+  grammar?: string;
+  unresolved?: string;
+};
+
 const createQuestion = async (path: string, viz: unknown) => {
   const name = path.slice(path.lastIndexOf('/') + 1);
   const created = await FilesAPI.createFile({ name, path, type: 'question', content: question(viz) }, user);
@@ -61,9 +72,10 @@ const createQuestion = async (path: string, viz: unknown) => {
   return { id: created.data.id, content: data[0].content as QuestionContent };
 };
 
-describe('viz recipe freeze at save', () => {
-  let recipeFileId: number;
+const sourceOf = (content: QuestionContent): LoadedSource =>
+  content.viz!.source as unknown as LoadedSource;
 
+describe('live viz recipe reference resolution', () => {
   /** Create + save (files start as drafts; only a SAVED recipe resolves). */
   const publishRecipe = async (path: string, content: VizRecipeContent): Promise<number> => {
     const name = path.slice(path.lastIndexOf('/') + 1);
@@ -75,7 +87,7 @@ describe('viz recipe freeze at save', () => {
   beforeAll(async () => {
     await initTestDatabase(TEST_DB_PATH);
     await FilesAPI.createFile({ name: 'finance', path: '/org/finance', type: 'folder', content: {} }, user);
-    recipeFileId = await publishRecipe('/org/kpi-bar', KPI_RECIPE);
+    await publishRecipe('/org/kpi-bar', KPI_RECIPE);
     // finance's override renders a POINT instead of a bar — visibly different
     await publishRecipe('/org/finance/kpi-bar',
       { ...KPI_RECIPE, template: { ...KPI_RECIPE.template, mark: 'point' } });
@@ -85,47 +97,45 @@ describe('viz recipe freeze at save', () => {
     await cleanupTestDatabase(TEST_DB_PATH);
   });
 
-  it('freezes a by-name reference against the question folder (root file wins at root)', async () => {
+  it('materializes a by-name reference against the question folder (root file wins at root)', async () => {
     const { content } = await createQuestion('/org/q-root', recipeViz('kpi-bar', { label: 'label', value: 'value' }));
-    const source = content.viz!.source as VizSourceVegaLite;
-    expect(source.kind).toBe('vega-lite');
-    expect((source.spec.encoding as any).x.field).toBe('label');
-    expect(source.spec.mark).toBe('bar');
-    expect(source.detachedFrom).toMatchObject({ kind: 'recipe', recipe: '/org/kpi-bar' });
+    const source = sourceOf(content);
+    expect(source.kind).toBe('recipe');
+    expect(source.recipe).toBe('kpi-bar'); // the stored reference stays the bare name
+    expect((source.spec!.encoding as any).x.field).toBe('label');
+    expect(source.spec!.mark).toBe('bar');
   });
 
-  it("freezes the folder's OVERRIDE for a question saved in that subtree", async () => {
+  it("materializes the folder's OVERRIDE for a question in that subtree", async () => {
     const { content } = await createQuestion('/org/finance/q-fin', recipeViz('kpi-bar', { label: 'label', value: 'value' }));
-    const source = content.viz!.source as VizSourceVegaLite;
-    expect(source.spec.mark).toBe('point'); // finance's shadowing recipe
-    expect(source.detachedFrom).toMatchObject({ recipe: '/org/finance/kpi-bar' });
+    expect(sourceOf(content).spec!.mark).toBe('point'); // finance's shadowing recipe
   });
 
-  it('freezes an absolute-path reference regardless of folder', async () => {
+  it('materializes an absolute-path reference regardless of folder', async () => {
     const { content } = await createQuestion('/org/finance/q-abs', recipeViz('/org/kpi-bar', { label: 'label', value: 'value' }));
-    const source = content.viz!.source as VizSourceVegaLite;
-    expect(source.spec.mark).toBe('bar'); // the root file, not finance's override
-    expect(source.detachedFrom).toMatchObject({ recipe: '/org/kpi-bar' });
+    expect(sourceOf(content).spec!.mark).toBe('bar'); // the root file, not finance's override
   });
 
-  it('freezes a built-in recipe by name with the bare name as provenance', async () => {
+  it('materializes a built-in recipe by bare name', async () => {
     const { content } = await createQuestion(
       '/org/q-builtin',
       recipeViz('lollipop', { category: 'label', value: 'value' }),
     );
-    const source = content.viz!.source as VizSourceVegaLite;
-    expect(source.kind).toBe('vega-lite');
-    expect(Array.isArray(source.spec.layer)).toBe(true);
-    expect(source.detachedFrom).toMatchObject({ kind: 'recipe', recipe: 'lollipop' });
+    const source = sourceOf(content);
+    expect(source.recipe).toBe('lollipop');
+    expect(Array.isArray(source.spec!.layer)).toBe(true);
+    expect(source.grammar).toBe('vega-lite@6');
   });
 
-  it('leaves shipped minusx/ recipe references untouched (live reference)', async () => {
+  it('leaves shipped minusx/ recipe references untouched (no computed fields)', async () => {
     const { content } = await createQuestion(
       '/org/q-shipped',
       recipeViz('minusx/funnel@1', { stage: 'label', value: 'value' }),
     );
-    expect(content.viz!.source.kind).toBe('recipe');
-    expect((content.viz!.source as { recipe?: string }).recipe).toBe('minusx/funnel@1');
+    const source = sourceOf(content);
+    expect(source.kind).toBe('recipe');
+    expect(source.recipe).toBe('minusx/funnel@1');
+    expect(source.spec).toBeUndefined(); // the renderer materializes from the shipped registry
   });
 
   it('rejects an unresolvable recipe name, listing what is available', async () => {
@@ -140,36 +150,6 @@ describe('viz recipe freeze at save', () => {
     ).rejects.toThrow(/value/);
   });
 
-  it('freezes on saveFile edits too, and re-freezing picks up a recipe edit', async () => {
-    const { id, content } = await createQuestion('/org/q-refreeze', recipeViz('kpi-bar', { label: 'label', value: 'value' }));
-    expect((content.viz!.source as VizSourceVegaLite).spec.mark).toBe('bar');
-
-    // the recipe file changes its mark — saved charts must NOT change...
-    await FilesAPI.saveFile(recipeFileId, 'kpi-bar', '/org/kpi-bar',
-      { ...KPI_RECIPE, template: { ...KPI_RECIPE.template, mark: 'tick' } } as never,
-      [], user);
-    const { data: unchanged } = await FilesAPI.loadFiles([id], user);
-    expect(((unchanged[0].content as QuestionContent).viz!.source as VizSourceVegaLite).spec.mark).toBe('bar');
-
-    // ...until the reference is re-applied (re-frozen) on an edit
-    await FilesAPI.saveFile(id, 'q-refreeze', '/org/q-refreeze',
-      question(recipeViz('kpi-bar', { label: 'label', value: 'value' })) as never, [], user);
-    const { data: refrozen } = await FilesAPI.loadFiles([id], user);
-    expect(((refrozen[0].content as QuestionContent).viz!.source as VizSourceVegaLite).spec.mark).toBe('tick');
-  });
-
-  it('a frozen chart survives deleting the recipe file', async () => {
-    const ephemeralId = await publishRecipe('/org/ephemeral', KPI_RECIPE);
-    const { content, id } = await createQuestion('/org/q-survivor', recipeViz('/org/ephemeral', { label: 'label', value: 'value' }));
-    expect((content.viz!.source as VizSourceVegaLite).spec.mark).toBe('bar');
-
-    await FilesAPI.deleteFile(ephemeralId, user);
-    const { data } = await FilesAPI.loadFiles([id], user);
-    const source = (data[0].content as QuestionContent).viz!.source as VizSourceVegaLite;
-    expect(source.kind).toBe('vega-lite');
-    expect(source.spec.mark).toBe('bar'); // fully self-contained
-  });
-
   it('a DRAFT recipe file does not resolve — only saved recipes are usable', async () => {
     // createFile without saveFile leaves draft:true (invisible in listings).
     await FilesAPI.createFile(
@@ -180,7 +160,7 @@ describe('viz recipe freeze at save', () => {
     ).rejects.toThrow(/draft-only/); // unknown — the draft is not in the catalog
   });
 
-  it('freezes recipe references inside notebook SQL cells', async () => {
+  it('materializes references inside notebook SQL cells against the notebook folder', async () => {
     const notebook: NotebookContent = {
       description: null,
       cells: [{
@@ -191,11 +171,11 @@ describe('viz recipe freeze at save', () => {
       }],
     } as unknown as NotebookContent;
     const created = await FilesAPI.createFile(
-      { name: 'nb', path: '/org/nb', type: 'notebook', content: notebook }, user,
+      { name: 'nb', path: '/org/finance/nb', type: 'notebook', content: notebook }, user,
     );
     const { data } = await FilesAPI.loadFiles([created.data.id], user);
-    const cell = (data[0].content as NotebookContent).cells[0] as { viz?: { source: VizSourceVegaLite } };
-    expect(cell.viz!.source.kind).toBe('vega-lite');
-    expect(cell.viz!.source.detachedFrom).toMatchObject({ recipe: '/org/kpi-bar' });
+    const cell = (data[0].content as NotebookContent).cells[0] as { viz?: { source: LoadedSource } };
+    expect(cell.viz!.source.kind).toBe('recipe');
+    expect(cell.viz!.source.spec!.mark).toBe('point'); // finance's override governs the notebook's folder
   });
 });

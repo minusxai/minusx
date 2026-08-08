@@ -26,7 +26,7 @@ import { canAccessFile, canViewFileInUI } from './helpers/permissions';
 import { extractReferenceIds } from './helpers/references';
 import { UserFacingError, AccessPermissionError, FileNotFoundError } from '@/lib/errors';
 import { validateFileState } from '@/lib/validation/content-validators';
-import { freezeVizRecipesInContent, type VizRecipeLoaders } from '@/lib/data/helpers/viz-recipe-freeze.server';
+import { validateAndStripVizRecipeRefs, type VizRecipeLoaders } from '@/lib/data/helpers/viz-recipe-refs.server';
 import type { VizRecipeContent } from '@/lib/validation/atlas-schemas';
 import { getTemplateDefaults } from '@/lib/data/story/template-defaults';
 import { withCompiledStoryCss } from '@/lib/data/story/story-css.server';
@@ -401,15 +401,17 @@ class FilesDataLayerServer implements IFilesDataLayer {
   }
 
   /**
-   * Freeze workspace viz-recipe references (file paths / bare names) into
-   * self-contained specs before a question/notebook is written. Shipped
-   * `minusx/` recipes stay live references. Throws the same UserFacingError
-   * shape as content validation, so a bad reference rejects the save atomically.
+   * Gate LIVE workspace-recipe references before a question/notebook is
+   * written: validate they resolve and materialize (a typo'd name rejects with
+   * the catalog) and STRIP the loader-computed spec so storage stays
+   * reference-only — rendering re-materializes on every load, which is what
+   * makes recipe edits propagate to every referencing chart. Shipped `minusx/`
+   * recipes pass through untouched.
    */
-  private async applyVizRecipeFreeze(type: FileType, content: BaseFileContent, path: string, user: EffectiveUser): Promise<BaseFileContent> {
+  private async gateVizRecipeRefs(type: FileType, content: BaseFileContent, path: string, user: EffectiveUser): Promise<BaseFileContent> {
     if (type !== 'question' && type !== 'notebook') return content;
     const folder = path.substring(0, path.lastIndexOf('/')) || '/';
-    const result = await freezeVizRecipesInContent(type, content, folder, this.vizRecipeLoaders(user));
+    const result = await validateAndStripVizRecipeRefs(type, content, folder, this.vizRecipeLoaders(user));
     if (!result.ok) throw new UserFacingError(`Invalid file content: ${result.error}`);
     return result.content as BaseFileContent;
   }
@@ -563,7 +565,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
     }
 
     // Workspace viz-recipe references freeze into self-contained specs before write.
-    contentToCreate = await this.applyVizRecipeFreeze(type, contentToCreate, finalPath, user);
+    contentToCreate = await this.gateVizRecipeRefs(type, contentToCreate, finalPath, user);
 
     // Validate content schema before writing to DB
     const createValidationError = validateFileState({ type, content: contentToCreate, name, path: finalPath });
@@ -721,7 +723,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
     }
 
     // Workspace viz-recipe references freeze into self-contained specs before write.
-    contentToSave = await this.applyVizRecipeFreeze(existingFile.type, contentToSave, path, user);
+    contentToSave = await this.gateVizRecipeRefs(existingFile.type, contentToSave, path, user);
 
     // Validate content schema before writing to DB
     const saveValidationError = await validateFileStateServer({ type: existingFile.type, content: contentToSave, name, path });

@@ -1,8 +1,9 @@
 /**
- * EditFile freezes workspace viz-recipe references at APPLY time: the staged
- * content carries the substituted spec (so the chart renders before any save),
- * and an unresolvable reference rejects atomically with the available catalog —
- * the in-loop feedback that lets the agent self-correct a bad name.
+ * EditFile validates LIVE workspace viz-recipe references at APPLY time: the
+ * staged content keeps the REFERENCE exactly as the agent wrote it (rendering
+ * materializes it — the loader server-side, the Redux catalog for staged
+ * edits), and an unresolvable reference rejects atomically with the available
+ * catalog — the in-loop feedback that lets the agent self-correct a bad name.
  */
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from './test-utils';
 import { readFiles } from '@/lib/file-state/file-state';
@@ -20,7 +21,7 @@ import { GET as filesGetHandler } from '@/app/api/files/route';
 import { DocumentDB } from '@/lib/database/documents-db';
 import { getModules } from '@/lib/modules/registry';
 import type { QuestionContent } from '@/lib/types';
-import type { VizRecipeContent, VizSourceVegaLite } from '@/lib/validation/atlas-schemas';
+import type { VizRecipeContent, VizSourceRecipe } from '@/lib/validation/atlas-schemas';
 
 let testStore: any;
 vi.mock('@/store/store', () => ({
@@ -90,7 +91,7 @@ const QUESTION: QuestionContent = {
   },
 } as unknown as QuestionContent;
 
-describe('EditFile viz-recipe freeze at apply', () => {
+describe('EditFile viz-recipe reference validation at apply', () => {
   let questionId: number;
 
   beforeEach(async () => {
@@ -125,7 +126,7 @@ describe('EditFile viz-recipe freeze at apply', () => {
     return block;
   };
 
-  it('stages a FROZEN source when the edit references a recipe by name', async () => {
+  it('stages the REFERENCE untouched when the edit resolves', async () => {
     await readFiles([questionId]);
     const result = await executeToolCall(
       { id: 'c1', type: 'function', function: { name: 'EditFile', arguments: {
@@ -138,11 +139,13 @@ describe('EditFile viz-recipe freeze at apply', () => {
       : String(result.content);
     expect(text).not.toContain('"success": false');
 
+    // The staged source is the LIVE reference — no frozen spec, no rewrite.
     const merged = selectMergedContent(testStore.getState(), questionId) as QuestionContent;
-    const source = merged.viz!.source as VizSourceVegaLite;
-    expect(source.kind).toBe('vega-lite');
-    expect((source.spec.encoding as any).x.field).toBe('label');
-    expect(source.detachedFrom).toMatchObject({ kind: 'recipe', recipe: '/org/kpi-bar' });
+    const source = merged.viz!.source as unknown as VizSourceRecipe & { spec?: unknown };
+    expect(source.kind).toBe('recipe');
+    expect(source.recipe).toBe('kpi-bar');
+    expect(source.bindings).toEqual({ label: 'label', value: 'value' });
+    expect(source.spec).toBeUndefined();
   });
 
   it('rejects an unresolvable recipe name atomically, listing the catalog', async () => {

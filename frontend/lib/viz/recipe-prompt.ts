@@ -47,7 +47,7 @@ export function formatVizRecipesSection(recipes: AgentVizRecipeInfo[]): string {
   });
   return [
     '## Chart Recipes',
-    'Reusable workspace chart templates, resolved for the current folder. Apply one to a question by authoring its viz envelope as a recipe source — `"source": {"kind": "recipe", "recipe": "<name>", "bindings": {"<slot>": "<result column>"}}` — and the substituted spec is frozen on save. Load the `viz_recipes` skill before authoring or editing recipe files.',
+    'Reusable workspace chart templates, resolved for the current folder. Apply one to a question by authoring its viz envelope as a recipe source — `"source": {"kind": "recipe", "recipe": "<name>", "bindings": {"<slot>": "<result column>"}}` — and rendering substitutes the recipe live (recipe edits restyle every referencing chart). Load the `viz_recipes` skill before authoring or editing recipe files.',
     ...lines,
   ].join('\n');
 }

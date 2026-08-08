@@ -6,7 +6,7 @@
  * subtab idiom. Every control performs a SURGICAL spec edit (lib/viz/encoding-edit);
  * the long tail of styling stays with the agent. One deliberate Redux read: the
  * panel owns workspace-recipe resolution (useVizRecipes over loaded `.viz` files)
- * so the selector's Workspace tiles and frozen-recipe rebinding need no prop
+ * so the selector's Workspace tiles and recipe-reference rebinding need no prop
  * threading through the Redux-banned view chain above it.
  */
 import { useCallback, useMemo, useState } from 'react';

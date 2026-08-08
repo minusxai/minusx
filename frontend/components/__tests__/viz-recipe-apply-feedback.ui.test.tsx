@@ -96,6 +96,11 @@ describe('workspace recipe applicability', () => {
     )
     const tile = screen.getByLabelText('Recipe radar')
     expect(tile.getAttribute('aria-disabled')).toBe('false')
+    // Usable tiles carry NO tooltip — a hover card over every tile hides its
+    // neighbors; only disabled tiles explain themselves.
+    await user.hover(tile)
+    await new Promise((r) => setTimeout(r, 300))
+    expect(screen.queryAllByText(/Radar-like/i).length).toBe(0)
     await user.click(tile)
     expect(onVizChange).toHaveBeenCalledTimes(1)
     expect(toastSpy).not.toHaveBeenCalled()

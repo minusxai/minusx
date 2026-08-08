@@ -156,9 +156,10 @@ agent) can author new ones.
 - **Applying one** — recipes resolved for the current folder appear as tiles in the question
   visualization panel's type selector, and columns auto-bind to matching slots. The agent sees the
   same catalog and can apply recipes by name.
-- **Saved charts are self-contained** — applying a recipe stores the fully built chart spec in the
-  question. Renaming, editing, or deleting the recipe file never changes or breaks existing charts;
-  re-apply the recipe to pick up an updated design.
+- **Charts follow the recipe** — applying a recipe stores a live reference in the question, so
+  editing the recipe file restyles every chart that uses it. If a recipe is renamed or deleted,
+  its charts fall back to a plain table (the data is never lost) and come back when the recipe is
+  restored.
 - **Authoring** — a recipe is a Vega-Lite (or Vega) spec with `{{slot}}` placeholder tokens plus
   declared slots and optional params. Create one from the Create menu, or ask the agent — invalid
   templates are rejected at save with the exact problem named.

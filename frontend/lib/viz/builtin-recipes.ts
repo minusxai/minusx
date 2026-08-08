@@ -3,7 +3,7 @@
  * order. These are DATA in the same inert-template language as workspace `.viz`
  * files (lib/viz/recipe-file.ts) — not code like the shipped registry in
  * viz-templates.ts — so a workspace file with the same name shadows one, and
- * everything downstream (freeze, panel binding, advertisement) treats them
+ * everything downstream (materialization, panel binding, advertisement) treats them
  * identically to files. Keys are recipe NAMES (the basename a file would have).
  *
  * Every entry must materialize with dummy bindings and pass the envelope
