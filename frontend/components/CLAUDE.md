@@ -224,7 +224,10 @@ observer is bound to the top realm and goes deaf inside the surface iframe. Widt
 - **File & query state**: `lib/hooks/file-state-hooks.ts` (`useFile`, `useFolder`, `useQueryResult`)
   and `lib/file-state/file-state.ts` (`editFile`, `getQueryResult`, `applyStoryHtmlEdit`).
   Notebook cells mirror questions: results live in the query cache and per-cell execution
-  identities live in Redux ephemerals; neither is persisted in notebook content. In edit mode,
+  identities live in Redux ephemerals; neither is persisted in notebook content. A cell's
+  results area is fixed-height (tables scroll internally) except for facet charts, which grow
+  it to the chart's natural height via `facetPreferredHeight` (`lib/viz/facet-layout.ts`) —
+  a fixed box squeezes every facet panel to the layout planner's minimum and clips the SVG. In edit mode,
   `NotebookView` preserves each cell's DOM ownership order and changes only its flex `order` when
   cells move; physically detaching/reinserting a Monaco host can race its disposed instantiation
   service. Every notebook SQL editor also receives a stable, cell-specific virtual model key

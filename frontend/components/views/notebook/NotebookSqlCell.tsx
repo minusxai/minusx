@@ -32,6 +32,7 @@ import { useConnections } from '@/lib/hooks/useConnections';
 import { useContext as useSchemaContext } from '@/lib/hooks/useContext';
 import { connectionTypeToDialect } from '@/lib/types';
 import { vizSettingsToEnvelope } from '@/lib/viz/from-vizsettings';
+import { facetPreferredHeight } from '@/lib/viz/facet-layout';
 import { toVizColumns } from '@/lib/viz/query-data';
 import type {
   NotebookSqlCell as SqlCell, QuestionContent, VizSettings, FullQuery,
@@ -67,6 +68,13 @@ interface NotebookSqlCellProps {
 
 // Stable empty params so execution doesn't refetch every render.
 const EMPTY_PARAMS: Record<string, unknown> = {};
+
+// Results-area heights. Fixed for tables/unit charts (they bound and scroll or
+// fit); facet charts instead get their natural height (see naturalChartHeight),
+// capped so a pathological facet cardinality cannot dwarf the notebook page.
+const RESULTS_HEIGHT_PX = 380;
+const PRESENT_HEIGHT_PX = 420;
+const RESULTS_MAX_HEIGHT_PX = 1600;
 
 function NotebookSqlCell({
   cell, active = false, onActivate, collapsed = false, onToggleCollapse, runNonce = 0,
@@ -152,6 +160,16 @@ function NotebookSqlCell({
     return vizSettingsToEnvelope(cell.vizSettings, toVizColumns(data.columns, data.types));
   }, [cell.viz, cell.vizSettings, data, vizV2Enabled]);
 
+  // A facet chart has an intrinsic height (facet rows × per-panel height); inside
+  // the fixed results box the layout planner squeezes every panel to its 40px
+  // floor and the SVG clips. Grow the results area to the chart's natural height
+  // instead — the notebook page scrolls. Null = not a facet, keep the fixed height.
+  const naturalChartHeight = useMemo(() => {
+    if (effectiveViz?.source.kind !== 'vega-lite') return null;
+    const natural = facetPreferredHeight(effectiveViz.source.spec, data?.rows ?? []);
+    return natural == null ? null : Math.min(RESULTS_MAX_HEIGHT_PX, natural);
+  }, [effectiveViz, data]);
+
   // Present mode: render just the visualization (no header, editor, or tabs).
   // It shows results already run in this session; cells never run are skipped
   // (present does not execute queries — use "Run all" to refresh).
@@ -160,7 +178,10 @@ function NotebookSqlCell({
     return (
       <div>
         {cell.name && <p className="mb-2 text-sm font-semibold text-muted-foreground">{cell.name}</p>}
-        <div className="flex h-[420px] flex-col">
+        <div
+          className={cn('flex flex-col', naturalChartHeight == null && 'h-[420px]')}
+          style={naturalChartHeight != null ? { height: Math.max(PRESENT_HEIGHT_PX, naturalChartHeight) } : undefined}
+        >
           <QuestionVisualization
             currentState={cell as unknown as QuestionContent}
             config={{ showHeader: false, showJsonToggle: false, editable: false, viz: { showTypeButtons: false, showChartBuilder: false, typesButtonsOrientation: 'horizontal', showTitle: false }, fixError: true }}
@@ -299,9 +320,14 @@ function NotebookSqlCell({
 
       {/* Results — only after the cell has been run. Fixed height + minH:0 so
           the inner table/chart bounds to this area and scrolls (TableV2 scrolls
-          internally) instead of the cell growing infinitely with the row count. */}
+          internally) instead of the cell growing infinitely with the row count.
+          Facet charts are the exception: they take their natural height. */}
       {executed && (
-        <div className="flex h-[380px] min-h-0 flex-col p-2">
+        <div
+          aria-label="Cell results area"
+          className={cn('flex min-h-0 flex-col p-2', naturalChartHeight == null && 'h-[380px]')}
+          style={naturalChartHeight != null ? { height: Math.max(RESULTS_HEIGHT_PX, naturalChartHeight) } : undefined}
+        >
           <QuestionVisualization
             currentState={cell as unknown as QuestionContent}
             config={config}

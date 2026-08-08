@@ -9,6 +9,7 @@ import {
   computeFacetLayoutPlan,
   createVegaView,
 } from '@/lib/viz/render-vega';
+import { facetPreferredHeight } from '@/lib/viz/facet-layout';
 
 const FACET_SPEC = {
   facet: {
@@ -82,6 +83,48 @@ describe('computeFacetLayoutPlan', () => {
 
   it('is not applied to ordinary unit charts', () => {
     expect(computeFacetLayoutPlan({ mark: 'bar', encoding: {} }, ROWS, 900, 330)).toBeNull();
+  });
+});
+
+describe('facetPreferredHeight', () => {
+  it('returns null for ordinary unit charts', () => {
+    expect(facetPreferredHeight({ mark: 'bar', encoding: {} }, ROWS)).toBeNull();
+  });
+
+  it('round-trips through the plan at a readable per-panel height', () => {
+    const spec = { ...FACET_SPEC, columns: 2 } as Record<string, unknown>; // 4 values → 2×2 grid
+    const preferred = facetPreferredHeight(spec, ROWS);
+    expect(preferred).not.toBeNull();
+    const plan = computeFacetLayoutPlan(spec, ROWS, 900, preferred!);
+    // A container at the preferred height must NOT squeeze panels toward the
+    // 40px floor — each panel gets the readable target the height was built for.
+    expect(plan!.childHeight).toBeGreaterThanOrEqual(110);
+    expect(plan!.childHeight).toBeLessThanOrEqual(130);
+  });
+
+  it('grows with the facet row count (row×column facet, the notebook clipping shape)', () => {
+    const spec = {
+      facet: {
+        row: { field: 'project_context', type: 'nominal' },
+        column: { field: 'artifact_type', type: 'nominal' },
+      },
+      spec: FACET_SPEC.spec,
+    } as Record<string, unknown>;
+    const preferred = facetPreferredHeight(spec, ROWS)!; // 4 facet rows
+    expect(preferred).toBeGreaterThan(600);
+    const plan = computeFacetLayoutPlan(spec, ROWS, 900, preferred);
+    expect(plan).toMatchObject({ columns: 6, rows: 4 });
+    expect(plan!.childHeight).toBeGreaterThanOrEqual(110);
+    expect(plan!.childHeight).toBeLessThanOrEqual(130);
+  });
+
+  it('honors an authored child height instead of the readable default', () => {
+    const spec = {
+      ...FACET_SPEC,
+      spec: { ...(FACET_SPEC.spec as object), height: 200 },
+    } as Record<string, unknown>;
+    // 4 values, one flex row: 1×(200 child + 40 row chrome) + 90 shared + 10 outer.
+    expect(facetPreferredHeight(spec, ROWS)).toBe(340);
   });
 });
 

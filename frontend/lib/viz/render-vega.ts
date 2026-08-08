@@ -31,7 +31,12 @@ import { inferVizColumnsFromRows } from './query-data';
 import type { VizResultColumn } from './types';
 import { VIZ_DATASET_MAIN } from './types';
 import { loadGeoFeatures } from './geo-assets';
+import { computeFacetLayoutPlan, record, type FacetLayoutPlan } from './facet-layout';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
+
+// Facet layout math lives in ./facet-layout (pure, engine-free); re-exported here
+// because this pipeline is where every view build consumes the plan.
+export { computeFacetLayoutPlan, type FacetLayoutPlan };
 
 export type ResolvedEnvelopeSpec =
   | { ok: true; spec: Record<string, unknown>; engine: 'vega-lite' | 'vega'; assets?: Record<string, string> }
@@ -116,109 +121,6 @@ export interface VegaViewOptions {
   tooltipTheme?: 'light' | 'dark';
   /** Vega parser config — used by the native-vega engine (VL bakes theme at compile). */
   parserConfig?: Record<string, unknown>;
-}
-
-/**
- * Render-time dimensions for a top-level Vega-Lite facet. Facets compile their
- * plot dimensions to `child_width` / `child_height`, not the root `width` /
- * `height` signals unit charts use, so the view sizing path needs this separate
- * contract. Missing child dimensions mean the author supplied that dimension
- * explicitly and the renderer must leave it alone.
- */
-export interface FacetLayoutPlan {
-  childWidth?: number;
-  childHeight?: number;
-  columns: number;
-  rows: number;
-}
-
-const FACET_DEFAULT_SPACING = 20;
-// A facet child dimension is the DATA rectangle only. Per-column axes/header
-// labels and the view's export padding sit outside it; reserve those before
-// dividing the container so the complete SVG, not just its plots, stays bounded.
-const FACET_OUTER_HORIZONTAL_PADDING_PX = 24;
-const FACET_OUTER_VERTICAL_PADDING_PX = 10;
-const FACET_COLUMN_CHROME_PX = 24;
-// Theme legend + facet title/header consume ~90px before per-row x-axis chrome.
-const FACET_SHARED_VERTICAL_CHROME_PX = 90;
-const FACET_ROW_CHROME_PX = 40;
-const FACET_MIN_CHILD_PX = 40;
-
-const record = (value: unknown): Record<string, unknown> | null =>
-  value != null && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null;
-
-const distinctFacetValues = (
-  def: Record<string, unknown> | null,
-  rows: Record<string, unknown>[],
-): number => {
-  const field = def?.field;
-  if (typeof field !== 'string') return 1;
-  const values: unknown[] = [];
-  for (const row of rows) {
-    const value = row[field];
-    if (value != null && !values.includes(value)) values.push(value);
-  }
-  if (values.length > 0) return values.length;
-  // A transformed facet field may not exist in the raw rows. An authored sort
-  // array still gives us the intended cardinality; otherwise retain one safe cell.
-  const sort = def?.sort;
-  return Array.isArray(sort) && sort.length > 0 ? sort.length : 1;
-};
-
-const facetSpacing = (spec: Record<string, unknown>, axis: 'row' | 'column'): number => {
-  const spacing = spec.spacing;
-  if (typeof spacing === 'number' && Number.isFinite(spacing)) return Math.max(0, spacing);
-  const perAxis = record(spacing)?.[axis];
-  return typeof perAxis === 'number' && Number.isFinite(perAxis)
-    ? Math.max(0, perAxis)
-    : FACET_DEFAULT_SPACING;
-};
-
-/** Plan a top-level facet inside the given outer container. */
-export function computeFacetLayoutPlan(
-  spec: Record<string, unknown>,
-  rows: Record<string, unknown>[],
-  containerWidth: number,
-  containerHeight: number,
-): FacetLayoutPlan | null {
-  const facet = record(spec.facet);
-  const child = record(spec.spec);
-  if (!facet || !child) return null;
-
-  let columns: number;
-  let rowCount: number;
-  if (typeof facet.field === 'string') {
-    const count = distinctFacetValues(facet, rows);
-    const authoredColumns = typeof spec.columns === 'number' && Number.isFinite(spec.columns)
-      ? Math.max(1, Math.floor(spec.columns))
-      : count;
-    columns = Math.min(authoredColumns, count);
-    rowCount = Math.ceil(count / columns);
-  } else {
-    columns = distinctFacetValues(record(facet.column), rows);
-    rowCount = distinctFacetValues(record(facet.row), rows);
-  }
-
-  const plan: FacetLayoutPlan = { columns, rows: rowCount };
-  if (!Object.prototype.hasOwnProperty.call(child, 'width')) {
-    const gap = facetSpacing(spec, 'column') * Math.max(0, columns - 1);
-    plan.childWidth = Math.max(
-      FACET_MIN_CHILD_PX,
-      Math.floor((Math.max(containerWidth, 80) - FACET_OUTER_HORIZONTAL_PADDING_PX - gap) / columns
-        - FACET_COLUMN_CHROME_PX),
-    );
-  }
-  if (!Object.prototype.hasOwnProperty.call(child, 'height')) {
-    const gap = facetSpacing(spec, 'row') * Math.max(0, rowCount - 1);
-    plan.childHeight = Math.max(
-      FACET_MIN_CHILD_PX,
-      Math.floor((Math.max(containerHeight, 60) - FACET_OUTER_VERTICAL_PADDING_PX - gap
-        - FACET_SHARED_VERTICAL_CHROME_PX) / rowCount - FACET_ROW_CHROME_PX),
-    );
-  }
-  return plan;
 }
 
 /**

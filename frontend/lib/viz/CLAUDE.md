@@ -111,7 +111,12 @@ colorMode in, no Redux). It hard-forces Vega's **SVG** renderer because captures
 DOM and `<canvas>` serializes empty. It rebuilds the view on envelope/colorMode change, pushes
 data-only updates through `view.data()`, and drives root width/height signals from a
 `ResizeObserver`; top-level facets instead receive container-planned `child_width`/`child_height`
-signals because Vega-Lite compiles each panel to those dimensions. The same plan is seeded into
+signals because Vega-Lite compiles each panel to those dimensions. The facet math lives in
+`lib/viz/facet-layout.ts` — a pure, engine-free module, so a surface that only needs to *size* a
+facet container can import it without pulling vega/vega-lite into its bundle: the notebook cell
+uses its `facetPreferredHeight` to grow the results area to a facet's natural height (fixed-height
+containers squeeze every panel to the planner's 40px floor and clip). `render-vega.ts` re-exports
+`computeFacetLayoutPlan`. The same plan is seeded into
 the nested facet spec before compilation so a discrete axis cannot replace `child_width` with its
 default category-count × band-step signal and silently undo responsive sizing.
 Several render-time decisions are *compile-time constants* baked before `parse` — the legend
@@ -472,6 +477,7 @@ different lifecycles.
 | Add a viz type | `lib/validation/atlas-schemas.ts` (`VIZ_TYPES`) → `lib/viz/from-vizsettings.ts` switch → `components/question/VizTypeSelector.tsx` |
 | Add/change a recipe | `lib/viz/viz-templates.ts` (`VIZ_TEMPLATES`; bump `@2`, never mutate `@1`) |
 | Change how any chart is compiled or themed | `lib/viz/render-vega.ts`, `lib/viz/theme.ts` |
+| Change facet panel sizing / natural height | `lib/viz/facet-layout.ts` (pure; re-exported through `render-vega.ts`) |
 | Change a panel control / add a spec edit | `lib/viz/encoding-edit.ts` + `components/viz/VegaVizPanel.tsx` |
 | Change agent-facing validation | `lib/viz/validate.ts`, `lib/viz/types.ts`, `lib/viz/validate-remote.ts` |
 | Change server chart images | `lib/chart/render-viz-image.ts`, `lib/chart/svg-to-jpeg.ts`, `lib/chart/ChartImageRenderer.server.ts` |

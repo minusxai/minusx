@@ -66,7 +66,7 @@ export interface VegaChartProps {
 }
 
 // Vega's root width/height signals size a unit chart's data rectangle; facet charts
-// use child_width/child_height instead (planned in render-vega). Axes/legends draw in
+// use child_width/child_height instead (planned in lib/viz/facet-layout). Axes/legends draw in
 // the padding. autosize fit+contains:padding keeps unit charts within the container,
 // and every view still needs a sane outer size for its initial plan.
 const sizeOf = (el: HTMLElement) => ({

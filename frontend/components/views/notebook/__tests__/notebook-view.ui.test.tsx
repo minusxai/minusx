@@ -13,11 +13,16 @@ import React from 'react';
 import { screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import type { NotebookContent, NotebookSqlCell, NotebookTextCell } from '@/lib/types';
+import { facetPreferredHeight } from '@/lib/viz/facet-layout';
 // @ts-expect-error Monaco does not publish declarations for its internal URI parser.
 import { URI } from 'monaco-editor/esm/vs/base/common/uri.js';
 
 // useQueryResult: return a fixed result whenever a (non-empty) query is run.
-const queryResultCalls = vi.hoisted(() => ({ queries: [] as string[] }));
+// Tests that need a specific result shape (e.g. facet-height sizing) override `result`.
+const queryResultCalls = vi.hoisted(() => ({
+  queries: [] as string[],
+  result: null as { columns: string[]; types: string[]; rows: Record<string, unknown>[] } | null,
+}));
 vi.mock('@/lib/hooks/file-state-hooks', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/hooks/file-state-hooks')>();
   return {
@@ -25,7 +30,7 @@ vi.mock('@/lib/hooks/file-state-hooks', async (importOriginal) => {
     useQueryResult: (query: string) => {
       queryResultCalls.queries.push(query);
       return query
-        ? { data: { columns: ['n'], types: ['int'], rows: [{ n: 42 }] }, loading: false, error: null, isStale: false, refetch: vi.fn() }
+        ? { data: queryResultCalls.result ?? { columns: ['n'], types: ['int'], rows: [{ n: 42 }] }, loading: false, error: null, isStale: false, refetch: vi.fn() }
         : { data: null, loading: false, error: null, isStale: false, refetch: vi.fn() };
     },
   };
@@ -96,7 +101,7 @@ function textCell(over: Partial<NotebookTextCell> = {}): NotebookTextCell {
 }
 
 const onChange = vi.fn();
-beforeEach(() => { onChange.mockClear(); conns.map = {}; queryResultCalls.queries = []; });
+beforeEach(() => { onChange.mockClear(); conns.map = {}; queryResultCalls.queries = []; queryResultCalls.result = null; });
 
 describe('NotebookView', () => {
   it('shows the empty state and add-cell controls when there are no cells', () => {
@@ -201,6 +206,35 @@ describe('NotebookView', () => {
     await waitFor(() => {
       expect(screen.getByLabelText('Cell results')).toHaveTextContent('42');
     });
+  });
+
+  it('grows the results area to a facet chart natural height', async () => {
+    const facetSpec = {
+      facet: { row: { field: 'ctx', type: 'nominal' } },
+      spec: { mark: 'bar', encoding: { x: { field: 'year', type: 'nominal' }, y: { field: 'n', type: 'quantitative' } } },
+    } as Record<string, unknown>;
+    const rows = ['a', 'b', 'c', 'd', 'e'].flatMap(ctx => [{ ctx, year: '2024', n: 1 }, { ctx, year: '2025', n: 2 }]);
+    queryResultCalls.result = { columns: ['ctx', 'year', 'n'], types: ['text', 'text', 'int'], rows };
+    const viz = {
+      version: 2 as const,
+      source: { kind: 'vega-lite' as const, grammar: 'vega-lite@6' as const, spec: facetSpec, detachedFrom: null },
+    };
+    renderWithProviders(
+      <NotebookView content={{ description: null, cells: [sqlCell({ viz, vizSettings: undefined })] }} onChange={onChange} />
+    );
+    fireEvent.click(await screen.findByLabelText('Run query'));
+    const area = await screen.findByLabelText('Cell results area');
+    // 5 facet rows: the wrapper takes the chart's natural height instead of the
+    // fixed 380px that squeezes every panel to the planner's minimum and clips.
+    expect(area.style.height).toBe(`${facetPreferredHeight(facetSpec, rows)!}px`);
+  });
+
+  it('keeps the fixed results height for non-facet results', async () => {
+    renderWithProviders(<NotebookView content={{ description: null, cells: [sqlCell()] }} onChange={onChange} />);
+    fireEvent.click(await screen.findByLabelText('Run query'));
+    const area = await screen.findByLabelText('Cell results area');
+    expect(area.className).toContain('h-[380px]');
+    expect(area.style.height).toBe('');
   });
 
   it('edits a cell viz through the direct Viz V2 panel', async () => {
