@@ -42,11 +42,15 @@ Validation is the *same* gate an authored `.viz` file passes (`validateFileState
 lookalike: the Ajv schema plus the dry-run materialization it already performs. An undeclared
 `{{token}}` therefore fails at boot with the token named, rather than at render.
 
-Codified rules, all tested: `.viz` and `.json` only (in that precedence order for a same-name
-collision); dotfiles and unrelated extensions ignored **silently** — a README is not a broken
-template; non-recursive; symlinks refused; names must match `TEMPLATE_NAME_PATTERN`, so a
+Codified rules, all tested: `.viz` and `.json` only, in that precedence order for a same-name
+collision — but precedence decides which file **wins**, not which is the only one tried, so a
+broken `bullet.viz` falls through to a valid `bullet.json` instead of taking the name down with
+it. Dotfiles and unrelated extensions are ignored **silently** — a README is not a broken
+template. Non-recursive; symlinks refused; names must match `TEMPLATE_NAME_PATTERN`, so a
 template is always something a workspace file could be named to override; a directory listed
-twice is read once; a missing or non-directory `TEMPLATE_DIR` warns and is skipped.
+twice is read once; a missing or non-directory `TEMPLATE_DIR` warns and is skipped. An
+**absent** `viz/` directory and an **unreadable** one are different answers — "this deployment
+ships none" must never look like "your mount is broken".
 
 **Boot-time, so a deployment restarts to pick up new template files.** That is the trade:
 templates change when a mounted directory changes, which is a deployment event, and paying an
@@ -73,6 +77,10 @@ it tests.
   `lib/` and `scripts/`. A build that drops it boots with zero built-in recipes and no error.
 - **`TEMPLATE_DIR` is resolved to an absolute path in `lib/config.ts`**, like `LOCAL_UPLOAD_PATH`.
   Unset is the off switch, not an empty-string path.
+- **A template name is not unique across the catalog.** `funnel` is a legal template name and
+  also a shipped recipe's bare name, and they are different things — a shipped recipe is
+  addressed as `minusx/funnel@1` and shadows nothing. `CatalogEntry.key` (`<tier>:<name>`) is
+  what list keys and selection use; `name` is for display and for shadowing.
 - **The shipped `minusx/…@1` recipes are NOT templates.** They are `build()` functions with
   real logic (funnel geometry, radar polygons, map projections) in `lib/viz/viz-templates.ts`,
   and cannot move to disk. The Templates page shows both tiers; only this one is overridable

@@ -139,6 +139,26 @@ describe('recipe catalog', () => {
     }
   });
 
+  it('keys entries uniquely even when a template shares a shipped recipe name', () => {
+    // `funnel` is a legal template name — a workspace `.viz` file may be called
+    // that too, and it shadows nothing, because shipped recipes are addressed as
+    // `minusx/funnel@1`. The two tiers must therefore not collide as list keys.
+    const original = Object.fromEntries(
+      Object.entries(getBuiltinVizRecipes()).map(([n, c]) => [n, { content: c, origin: 'builtin' as const }]),
+    );
+    try {
+      setBuiltinVizTemplates({ ...original, funnel: { content: original.bullet.content, origin: 'deployment' } });
+      const entries = catalogEntries();
+      const keys = entries.map((e) => e.key);
+      expect(new Set(keys).size, `duplicate keys: ${keys}`).toBe(keys.length);
+      // Both are present and distinguishable by tier.
+      const funnels = entries.filter((e) => e.name === 'funnel');
+      expect(funnels.map((e) => e.tier).sort()).toEqual(['builtin', 'shipped']);
+    } finally {
+      setBuiltinVizTemplates(original);
+    }
+  });
+
   it('names entries uniquely, by the name a workspace recipe would shadow', () => {
     const names = catalogEntries().map((e) => e.name);
     expect(new Set(names).size).toBe(names.length);

@@ -9,7 +9,7 @@
  * directory), and a mocked `fs` would let every one of them pass.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadTemplateRegistry } from '@/lib/templates/template-loader.server';
@@ -148,6 +148,31 @@ describe('template loader — which files count', () => {
     writeFileSync(join(nested, 'deep.viz'), JSON.stringify(RECIPE('point')));
     const reg = loadTemplateRegistry(dirs(builtin()));
     expect(Object.keys(reg.viz)).toEqual(['bullet']);
+  });
+
+  it('falls through to the next extension when the higher-precedence file is INVALID', () => {
+    // Precedence decides which file WINS, not which file is the only one tried.
+    // Skipping both would delete the template outright over a typo in one of them.
+    writeTemplate(builtinDir, 'bullet', '{ broken', '.viz');
+    writeTemplate(builtinDir, 'bullet', RECIPE('line'), '.json');
+    const reg = loadTemplateRegistry(dirs(builtin()));
+    expect(reg.viz.bullet.content.template.mark).toBe('line');
+    expect(reg.skipped.some((s) => s.path.endsWith('bullet.viz') && /json/i.test(s.reason))).toBe(true);
+  });
+
+  it('reports a viz/ directory it cannot read, rather than treating it as absent', () => {
+    // "You have no templates" and "I could not read your templates" must not look
+    // the same to an operator debugging a mount.
+    const vizDir = join(deploymentDir, 'viz');
+    mkdirSync(vizDir, { recursive: true });
+    writeFileSync(join(vizDir, 'ok.viz'), JSON.stringify(RECIPE('bar')));
+    chmodSync(vizDir, 0o000);
+    try {
+      const reg = loadTemplateRegistry(dirs(deployment()));
+      expect(reg.skipped.some((s) => /could not be read|permission/i.test(s.reason))).toBe(true);
+    } finally {
+      chmodSync(vizDir, 0o755);
+    }
   });
 
   it('breaks a same-name collision deterministically and records the loser', () => {

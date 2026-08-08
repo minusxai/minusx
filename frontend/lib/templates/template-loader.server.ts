@@ -41,23 +41,31 @@ interface Candidate {
 /**
  * The template files directly inside `<dir>/viz`, sorted so a collision resolves
  * the same way on every boot and every filesystem (readdir order is not
- * guaranteed). Returns null when the kind directory is simply absent — an
- * unused template kind is not an error.
+ * guaranteed).
+ *
+ * An ABSENT kind directory and an UNREADABLE one are different answers: the
+ * first is "this deployment ships no templates of that kind", the second is a
+ * broken mount, and an operator debugging one must not be shown the other.
  */
-function candidates(dir: string, kind: string): Candidate[] | null {
+function candidates(dir: string, kind: string): { files: Candidate[] } | { error: string } | null {
   const kindDir = join(dir, kind);
   let entries: string[];
   try {
     if (!statSync(kindDir).isDirectory()) return null;
-    entries = readdirSync(kindDir);
   } catch {
-    return null;
+    return null;                                   // no such kind directory
   }
-  return entries
+  try {
+    entries = readdirSync(kindDir);
+  } catch (e) {
+    return { error: `${kind}/ could not be read: ${(e as Error).message}` };
+  }
+  const files = entries
     .filter((f) => !f.startsWith('.'))                                  // .DS_Store, .gitkeep
     .filter((f) => EXTENSION_RANK.has(extname(f)))
     .map((f) => ({ name: f.slice(0, f.length - extname(f).length), path: join(kindDir, f), ext: extname(f) }))
     .sort((a, b) => a.name.localeCompare(b.name) || EXTENSION_RANK.get(a.ext)! - EXTENSION_RANK.get(b.ext)!);
+  return { files };
 }
 
 /** Parse + validate one file into recipe content, or explain why not. */
@@ -122,18 +130,23 @@ export function loadTemplateRegistry(dirs: TemplateDir[]): TemplateRegistry {
       continue;
     }
 
-    const files = candidates(resolved, 'viz');
-    if (!files) continue;                   // no viz/ subdirectory: nothing to do
+    const listed = candidates(resolved, 'viz');
+    if (!listed) continue;                  // no viz/ subdirectory: nothing to do
+    if ('error' in listed) {
+      skipped.push({ path: resolved, reason: listed.error });
+      continue;
+    }
 
-    let previousName: string | null = null;
-    for (const file of files) {
-      if (previousName === file.name) {
-        // Sorted, so the winner was the previous entry; say so rather than
-        // letting one of two identically-named files vanish silently.
-        skipped.push({ path: file.path, reason: `duplicate name "${file.name}" — collides with a higher-precedence extension` });
+    // Names claimed WITHIN this directory. Extension precedence decides which
+    // file wins a name, but only among files that actually load: a broken
+    // `bullet.viz` must fall through to a valid `bullet.json` rather than
+    // taking the name down with it.
+    const claimed = new Set<string>();
+    for (const file of listed.files) {
+      if (claimed.has(file.name)) {
+        skipped.push({ path: file.path, reason: `duplicate name "${file.name}" — a higher-precedence file already provides it` });
         continue;
       }
-      previousName = file.name;
 
       if (!TEMPLATE_NAME_PATTERN.test(file.name)) {
         skipped.push({ path: file.path, reason: `invalid template name "${file.name}" — a template must be nameable as a workspace file` });
@@ -142,10 +155,12 @@ export function loadTemplateRegistry(dirs: TemplateDir[]): TemplateRegistry {
 
       const read = readVizTemplate(file.path);
       if (!read.ok) {
-        // The built-in this file would have shadowed stays exactly as it is.
+        // The template this file would have shadowed — in this directory or an
+        // earlier one — stays exactly as it is.
         skipped.push({ path: file.path, reason: read.reason });
         continue;
       }
+      claimed.add(file.name);
       viz[file.name] = { name: file.name, origin, sourcePath: file.path, content: read.content };
     }
   }
