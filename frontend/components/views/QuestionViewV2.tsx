@@ -11,7 +11,6 @@
  * - Stale data indication with refetch badge
  */
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { debounce } from 'lodash';
 import {
   LuChevronLeft,
   LuChevronRight,
@@ -123,7 +122,7 @@ interface QuestionViewV2Props {
   // Handlers
   onChange: (updates: Partial<QuestionContent>) => void;
   onParameterValueChange?: (paramName: string, value: string | number | null) => void;  // Ephemeral
-  onExecute: (overrideParamValues?: Record<string, any>) => void;  // Phase 3: Explicit execute
+  onExecute: (overrideParamValues?: Record<string, any>, overrideQuery?: string) => void;  // Phase 3: Explicit execute
 
   /** Viz V2 format flag (uiSlice `vizV2`, passed down — views are Redux-free).
    * Off (V1): classic config panel for every question (saved envelopes ignored).
@@ -364,18 +363,6 @@ export default function QuestionViewV2({
     };
   }, [isResizing, handleResizeMove, handleResizeEnd]);
 
-  // Debounce timer ref for param/ref sync
-  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (syncTimeoutRef.current) {
-        clearTimeout(syncTimeoutRef.current);
-      }
-    };
-  }, []);
-
   // Handle structural parameter changes (type, label, etc.) — persistable
   const handleParametersStructuralChange = (updatedParams: QuestionParameter[]) => {
     onChange({ parameters: updatedParams });
@@ -510,6 +497,12 @@ export default function QuestionViewV2({
     onExecute(content.parameterValues ?? {});
   }, [onExecute, content.parameterValues]);
 
+  // SqlEditor supplies its live Monaco value so Run never waits for the
+  // shared controlled-value persistence delay.
+  const handleSqlExecute = useCallback((currentQuery?: string) => {
+    onExecute(content.parameterValues ?? {}, currentQuery);
+  }, [onExecute, content.parameterValues]);
+
   // Semantic auto-run: every shelf edit compiles fresh SQL into content.query;
   // when enabled, that new query executes automatically (debounced) so the
   // chart tracks the exploration with no Run clicks. Keyed on the compiled
@@ -528,29 +521,15 @@ export default function QuestionViewV2({
     return () => clearTimeout(timer);
   }, [content.query, semanticAutoRun, effectiveQueryMode, isPreview, readOnly, handleExecute]);
 
-  const debouncedQueryUpdate = useMemo(
-    () => debounce((query: string) => onChange({ query }), 150),
-    [onChange]
-  );
-
-  // Handle query change with debounced param/ref sync
+  // SqlEditor already coalesces typing. Persist the query and its derived
+  // parameter declarations together so this surface adds no second debounce.
   const handleQueryChange = useCallback((newQuery: string) => {
     // Typing in the SQL editor IS choosing SQL for this session: detection may
     // still run (tab enablement), but it must never steal the tab mid-edit —
     // auto-promotion to the GUI is only for SQL you OPEN, not SQL you TYPE.
     setUserPickedMode(true);
-    debouncedQueryUpdate(newQuery);
-
-    // Debounce the param/ref sync (300ms)
-    if (syncTimeoutRef.current) {
-      clearTimeout(syncTimeoutRef.current);
-    }
-    syncTimeoutRef.current = setTimeout(() => {
-      // Sync declared parameters with the :params present in the SQL,
-      // preserving user-set config for ones that remain.
-      const updatedParams = syncParametersWithSQL(newQuery, parameters);
-      onChange({ parameters: updatedParams });
-    }, 300);
+    const updatedParams = syncParametersWithSQL(newQuery, parameters);
+    onChange({ query: newQuery, parameters: updatedParams });
   }, [onChange, parameters]);
 
   // The full chart config block — rendered in the right-hand VizPanel column
@@ -817,7 +796,7 @@ export default function QuestionViewV2({
                     readOnly={isPreview || !fullMode || readOnly}
                     value={isPreview ? (originalQuery ?? content.query) : content.query}
                     onChange={handleQueryChange}
-                    onRun={handleExecute}
+                    onRun={handleSqlExecute}
                     showRunButton={!isPreview}
                     showFormatButton={!isPreview}
                     isRunning={queryLoading && !queryData}

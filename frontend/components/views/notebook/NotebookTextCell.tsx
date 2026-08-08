@@ -8,7 +8,7 @@
  * toolbar level. Image upload (type "+") and @ / @@ mentions (tables, questions)
  * are wired like the context docs editor.
  */
-import { useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { cn } from '@/components/kit/cn';
 import NotebookCellHeader from './NotebookCellHeader';
 import LexicalTextEditor, { LexicalTextViewer, type MentionsConfig } from '@/components/lexical/LexicalTextEditor';
@@ -22,7 +22,7 @@ interface NotebookTextCellProps {
   active?: boolean;
   onActivate?: (cellId: string) => void;
   collapsed?: boolean;
-  onToggleCollapse?: () => void;
+  onToggleCollapse?: (cellId: string) => void;
   readOnly?: boolean;
   /** Present mode: show just the rendered markdown, no chrome. */
   presentMode?: boolean;
@@ -31,7 +31,7 @@ interface NotebookTextCellProps {
   onRemove: (id: string) => void;
 }
 
-export default function NotebookTextCell({
+function NotebookTextCell({
   cell, active = false, onActivate, collapsed = false, onToggleCollapse,
   readOnly = false, presentMode = false, filePath, onCellChange, onRemove,
 }: NotebookTextCellProps) {
@@ -87,7 +87,7 @@ export default function NotebookTextCell({
     <NotebookCellHeader
       cellType="text"
       collapsed={collapsed}
-      onToggleCollapse={() => onToggleCollapse?.()}
+      onToggleCollapse={() => onToggleCollapse?.(cell.id)}
       name={cell.name ?? ''}
       onNameChange={(name) => onCellChange(cell.id, { name })}
       onRemove={() => onRemove(cell.id)}
@@ -127,3 +127,5 @@ export default function NotebookTextCell({
     </div>
   );
 }
+
+export default memo(NotebookTextCell);

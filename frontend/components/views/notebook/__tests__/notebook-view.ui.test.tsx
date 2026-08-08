@@ -10,19 +10,29 @@
  * All element queries by aria-label per repo convention.
  */
 import React from 'react';
-import { screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import type { NotebookContent, NotebookSqlCell, NotebookTextCell } from '@/lib/types';
+import { facetPreferredHeight } from '@/lib/viz/facet-layout';
+// @ts-expect-error Monaco does not publish declarations for its internal URI parser.
+import { URI } from 'monaco-editor/esm/vs/base/common/uri.js';
 
 // useQueryResult: return a fixed result whenever a (non-empty) query is run.
+// Tests that need a specific result shape (e.g. facet-height sizing) override `result`.
+const queryResultCalls = vi.hoisted(() => ({
+  queries: [] as string[],
+  result: null as { columns: string[]; types: string[]; rows: Record<string, unknown>[] } | null,
+}));
 vi.mock('@/lib/hooks/file-state-hooks', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/hooks/file-state-hooks')>();
   return {
     ...actual,
-    useQueryResult: (query: string) =>
-      query
-        ? { data: { columns: ['n'], types: ['int'], rows: [{ n: 42 }] }, loading: false, error: null, isStale: false, refetch: vi.fn() }
-        : { data: null, loading: false, error: null, isStale: false, refetch: vi.fn() },
+    useQueryResult: (query: string) => {
+      queryResultCalls.queries.push(query);
+      return query
+        ? { data: queryResultCalls.result ?? { columns: ['n'], types: ['int'], rows: [{ n: 42 }] }, loading: false, error: null, isStale: false, refetch: vi.fn() }
+        : { data: null, loading: false, error: null, isStale: false, refetch: vi.fn() };
+    },
   };
 });
 
@@ -91,7 +101,7 @@ function textCell(over: Partial<NotebookTextCell> = {}): NotebookTextCell {
 }
 
 const onChange = vi.fn();
-beforeEach(() => { onChange.mockClear(); conns.map = {}; });
+beforeEach(() => { onChange.mockClear(); conns.map = {}; queryResultCalls.queries = []; queryResultCalls.result = null; });
 
 describe('NotebookView', () => {
   it('shows the empty state and add-cell controls when there are no cells', () => {
@@ -143,6 +153,51 @@ describe('NotebookView', () => {
     });
   });
 
+  it('debounces notebook persistence across a burst of SQL keystrokes', async () => {
+    renderWithProviders(<NotebookView content={{ description: null, cells: [sqlCell({ query: '' })] }} onChange={onChange} />);
+    const editor = await screen.findByLabelText('SQL editor');
+    vi.useFakeTimers();
+    try {
+      fireEvent.change(editor, { target: { value: 'S' } });
+      fireEvent.change(editor, { target: { value: 'SE' } });
+      fireEvent.change(editor, { target: { value: 'SELECT 99' } });
+      expect(onChange).not.toHaveBeenCalled();
+      await act(async () => { await vi.advanceTimersByTimeAsync(249); });
+      expect(onChange).not.toHaveBeenCalled();
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange.mock.calls[0][0].cells[0].query).toBe('SELECT 99');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('runs the current Monaco text even before its debounced persistence fires', async () => {
+    renderWithProviders(<NotebookView content={{ description: null, cells: [sqlCell({ query: 'SELECT 42' })] }} onChange={onChange} />);
+    fireEvent.change(await screen.findByLabelText('SQL editor'), { target: { value: 'SELECT 99' } });
+    fireEvent.click(screen.getByLabelText('Run query'));
+    await waitFor(() => expect(queryResultCalls.queries).toContain('SELECT 99'));
+  });
+
+  it('flushes a pending SQL edit when Monaco loses focus', async () => {
+    renderWithProviders(<NotebookView content={{ description: null, cells: [sqlCell({ query: '' })] }} onChange={onChange} />);
+    const editor = await screen.findByLabelText('SQL editor');
+    fireEvent.change(editor, { target: { value: 'SELECT 7' } });
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.blur(editor);
+    expect(onChange.mock.calls.at(-1)?.[0].cells[0].query).toBe('SELECT 7');
+  });
+
+  it('flushes a pending SQL edit when the editor unmounts', async () => {
+    const view = renderWithProviders(
+      <NotebookView content={{ description: null, cells: [sqlCell({ query: '' })] }} onChange={onChange} />,
+    );
+    fireEvent.change(await screen.findByLabelText('SQL editor'), { target: { value: 'SELECT 8' } });
+    expect(onChange).not.toHaveBeenCalled();
+    view.unmount();
+    expect(onChange.mock.calls.at(-1)?.[0].cells[0].query).toBe('SELECT 8');
+  });
+
   it('runs a SQL cell and shows the result', async () => {
     renderWithProviders(<NotebookView content={{ description: null, cells: [sqlCell()] }} onChange={onChange} />);
     expect(screen.queryByLabelText('Cell results')).not.toBeInTheDocument();
@@ -151,6 +206,35 @@ describe('NotebookView', () => {
     await waitFor(() => {
       expect(screen.getByLabelText('Cell results')).toHaveTextContent('42');
     });
+  });
+
+  it('grows the results area to a facet chart natural height', async () => {
+    const facetSpec = {
+      facet: { row: { field: 'ctx', type: 'nominal' } },
+      spec: { mark: 'bar', encoding: { x: { field: 'year', type: 'nominal' }, y: { field: 'n', type: 'quantitative' } } },
+    } as Record<string, unknown>;
+    const rows = ['a', 'b', 'c', 'd', 'e'].flatMap(ctx => [{ ctx, year: '2024', n: 1 }, { ctx, year: '2025', n: 2 }]);
+    queryResultCalls.result = { columns: ['ctx', 'year', 'n'], types: ['text', 'text', 'int'], rows };
+    const viz = {
+      version: 2 as const,
+      source: { kind: 'vega-lite' as const, grammar: 'vega-lite@6' as const, spec: facetSpec, detachedFrom: null },
+    };
+    renderWithProviders(
+      <NotebookView content={{ description: null, cells: [sqlCell({ viz, vizSettings: undefined })] }} onChange={onChange} />
+    );
+    fireEvent.click(await screen.findByLabelText('Run query'));
+    const area = await screen.findByLabelText('Cell results area');
+    // 5 facet rows: the wrapper takes the chart's natural height instead of the
+    // fixed 380px that squeezes every panel to the planner's minimum and clips.
+    expect(area.style.height).toBe(`${facetPreferredHeight(facetSpec, rows)!}px`);
+  });
+
+  it('keeps the fixed results height for non-facet results', async () => {
+    renderWithProviders(<NotebookView content={{ description: null, cells: [sqlCell()] }} onChange={onChange} />);
+    fireEvent.click(await screen.findByLabelText('Run query'));
+    const area = await screen.findByLabelText('Cell results area');
+    expect(area.className).toContain('h-[380px]');
+    expect(area.style.height).toBe('');
   });
 
   it('edits a cell viz through the direct Viz V2 panel', async () => {
@@ -217,6 +301,88 @@ describe('NotebookView', () => {
     expect(cells.map(c => c.type)).toEqual(['sql', 'text', 'sql']);
     expect(cells.map(c => c.id).slice(0, 1)).toEqual(['a']);
     expect(cells[2].id).toBe('b');
+  });
+
+  it('moves cells up and down from the numbered gutter controls', () => {
+    renderWithProviders(
+      <NotebookView
+        content={{
+          description: null,
+          cells: [sqlCell({ id: 'a' }), textCell({ id: 'b' }), sqlCell({ id: 'c' })],
+        }}
+        onChange={onChange}
+      />
+    );
+
+    const moveUp = screen.getAllByLabelText('Move cell up');
+    const moveDown = screen.getAllByLabelText('Move cell down');
+    expect(moveUp[0]).toBeDisabled();
+    expect(moveDown[2]).toBeDisabled();
+
+    fireEvent.click(moveDown[0]);
+    let cells = onChange.mock.calls.at(-1)![0].cells as NotebookContent['cells'];
+    expect(cells.map(cell => cell.id)).toEqual(['b', 'a', 'c']);
+
+    // Re-render the controlled view with the committed order, then move c upward.
+    onChange.mockClear();
+    renderWithProviders(
+      <NotebookView content={{ description: null, cells }} onChange={onChange} />
+    );
+    fireEvent.click(screen.getAllByLabelText('Move cell up').at(-1)!);
+    cells = onChange.mock.calls.at(-1)![0].cells as NotebookContent['cells'];
+    expect(cells.map(cell => cell.id)).toEqual(['b', 'c', 'a']);
+  });
+
+  it('reorders cells visually without remounting or physically moving Monaco hosts', async () => {
+    function ControlledNotebook() {
+      const [content, setContent] = React.useState<NotebookContent>({
+        description: null,
+        cells: [sqlCell({ id: 'a', query: 'SELECT 1' }), sqlCell({ id: 'b', query: 'SELECT 2' })],
+      });
+      return <NotebookView content={content} onChange={(patch) => setContent(prev => ({ ...prev, ...patch }))} />;
+    }
+
+    const { container } = renderWithProviders(<ControlledNotebook />);
+    const editorA = (await screen.findAllByLabelText('SQL editor'))[0];
+    const editorB = (await screen.findAllByLabelText('SQL editor'))[1];
+    fireEvent.click(screen.getAllByLabelText('Move cell down')[0]);
+
+    await waitFor(() => {
+      const hosts = [...container.querySelectorAll<HTMLElement>('[data-notebook-cell-id]')];
+      // DOM ownership stays stable for Monaco; CSS order alone changes the visual sequence.
+      expect(hosts.map(host => host.dataset.notebookCellId)).toEqual(['a', 'b']);
+      expect(hosts.map(host => host.style.order)).toEqual(['1', '0']);
+      expect(screen.getAllByLabelText('SQL editor')).toEqual([editorA, editorB]);
+    });
+  });
+
+  it('gives every notebook SQL editor a stable, cell-specific virtual model key', async () => {
+    renderWithProviders(
+      <NotebookView
+        content={{ description: null, cells: [sqlCell({ id: 'a' }), sqlCell({ id: 'b' })] }}
+        onChange={onChange}
+        filePath="/analysis/show-hn.notebook"
+      />
+    );
+    const keys = (await screen.findAllByLabelText('SQL editor')).map(editor => editor.getAttribute('data-virtual-model-key'));
+    expect(keys[0]).toContain('/a.sql');
+    expect(keys[1]).toContain('/b.sql');
+    expect(new Set(keys).size).toBe(2);
+    for (const key of keys) {
+      expect(() => URI.parse(key!)).not.toThrow();
+    }
+  });
+
+  it('hides cell movement controls in read-only notebooks', () => {
+    renderWithProviders(
+      <NotebookView
+        content={{ description: null, cells: [sqlCell({ id: 'a' }), textCell({ id: 'b' })] }}
+        onChange={onChange}
+        readOnly
+      />
+    );
+    expect(screen.queryByLabelText('Move cell up')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Move cell down')).not.toBeInTheDocument();
   });
 
   it('collapses a cell, hiding its body', async () => {

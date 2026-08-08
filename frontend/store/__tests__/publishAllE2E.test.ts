@@ -15,7 +15,7 @@ import queryResultsReducer from '../queryResultsSlice';
 import authReducer from '../authSlice';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from './test-utils';
 import { DocumentDB } from '@/lib/database/documents-db';
-import type { QuestionContent, DocumentContent, UserRole } from '@/lib/types';
+import type { QuestionContent, DocumentContent, NotebookContent, UserRole } from '@/lib/types';
 import { publishAll, discardAll } from '@/lib/file-state/file-state';
 import type { Mode } from '@/lib/mode/mode-types';
 import { POST as batchSaveHandler } from '@/app/api/files/batch-save/route';
@@ -92,6 +92,7 @@ describe('publishAll E2E', () => {
   let question2Id: number;
   let question3Id: number;  // unrelated question (not in dashboard)
   let dashboardId: number;
+  let notebookId: number;
 
   // Route batch API calls to real Next.js handlers (no backend to spawn)
   const mockFetch = setupMockFetch({
@@ -170,11 +171,34 @@ describe('publishAll E2E', () => {
       [question1Id, question2Id]
     );
 
+    notebookId = await DocumentDB.create(
+      'SQL Notebook',
+      '/org/sql-notebook',
+      'notebook',
+      {
+        description: null,
+        cells: [{
+          type: 'sql', id: 'new-cell', name: null, query: 'SELECT 42',
+          vizSettings: { type: 'table' }, parameters: [], parameterValues: {},
+          connection_name: 'test_db',
+        }],
+      } as NotebookContent,
+      []
+    );
+
     // Publish all files (set draft:false)
     await DocumentDB.update(question1Id, 'Revenue Query', '/org/revenue-query', { description: 'Revenue by month', query: 'SELECT month, SUM(revenue) FROM sales GROUP BY month', connection_name: 'test_db', parameters: [], vizSettings: { type: 'table' } } as QuestionContent, [], 'setup');
     await DocumentDB.update(question2Id, 'User Count', '/org/user-count', { description: 'Active user count', query: 'SELECT COUNT(*) FROM users WHERE active = true', connection_name: 'test_db', parameters: [], vizSettings: { type: 'table' } } as QuestionContent, [], 'setup');
     await DocumentDB.update(question3Id, 'Unrelated Query', '/org/unrelated-query', { description: 'Something unrelated', query: 'SELECT 1', connection_name: 'test_db', parameters: [], vizSettings: { type: 'table' } } as QuestionContent, [], 'setup');
     await DocumentDB.update(dashboardId, 'Analytics Dashboard', '/org/analytics-dashboard', { description: 'Analytics overview', assets: [{ type: 'question', id: question1Id }, { type: 'question', id: question2Id }], layout: { columns: 12, items: [{ id: question1Id, x: 0, y: 0, w: 6, h: 4 }, { id: question2Id, x: 6, y: 0, w: 6, h: 4 }] } } as DocumentContent, [question1Id, question2Id], 'setup');
+    await DocumentDB.update(notebookId, 'SQL Notebook', '/org/sql-notebook', {
+      description: null,
+      cells: [{
+        type: 'sql', id: 'new-cell', name: null, query: 'SELECT 42',
+        vizSettings: { type: 'table' }, parameters: [], parameterValues: {},
+        connection_name: 'test_db',
+      }],
+    } as NotebookContent, [], 'setup');
   });
 
   afterAll(async () => {
@@ -247,6 +271,27 @@ describe('publishAll E2E', () => {
     expect(idMap).toEqual({});
     expect(mockFetch).not.toHaveBeenCalled();
 
+  });
+
+  it('preserves notebook cell execution snapshots after a batch save', async () => {
+    await loadFilesIntoRedux(store, [notebookId]);
+    editInRedux(store, notebookId, { description: 'Saved notebook' });
+    store.dispatch({
+      type: 'files/setNotebookCellExecuted',
+      payload: {
+        fileId: notebookId,
+        cellId: 'new-cell',
+        executed: { query: 'SELECT 42', params: {}, database: 'test_db' },
+      },
+    });
+
+    await publishAll([notebookId]);
+
+    expect(getFileFromRedux(store, notebookId).ephemeralChanges.cellExecuted['new-cell']).toEqual({
+      query: 'SELECT 42',
+      params: {},
+      database: 'test_db',
+    });
   });
 
   // =========================================================================

@@ -180,6 +180,24 @@ describe('QuestionViewV2 (mounted via QuestionContainerV2) — Redux integration
     expect(screen.queryByLabelText('Database selector')).toBeNull();
   });
 
+  it('runs the live Monaco query before the shared persistence delay expires', async () => {
+    const store = setup(
+      { query: 'SELECT 1', connection_name: 'demo_db' },
+      { draft: true },
+    );
+    renderQuestion(store);
+
+    fireEvent.change(await screen.findByLabelText('SQL editor'), {
+      target: { value: 'SELECT 2' },
+    });
+    expect(store.getState().files.files[FILE_ID].persistableChanges).not.toHaveProperty('query');
+
+    fireEvent.click(screen.getByLabelText('Run query'));
+    const file = store.getState().files.files[FILE_ID];
+    expect((file.persistableChanges as Partial<QuestionContent>).query).toBe('SELECT 2');
+    expect(file.ephemeralChanges?.lastExecuted?.query).toBe('SELECT 2');
+  });
+
   it('materializes spreadsheet questions without calling /api/query', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch');
     const store = setup({

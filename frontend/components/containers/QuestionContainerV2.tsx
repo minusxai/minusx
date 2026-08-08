@@ -184,7 +184,7 @@ export default function QuestionContainerV2({ fileId, mode: containerMode, readO
   // execution that refreshes the durable cache — without it the cleared client
   // cache just gets re-served from the server's cache. Auto-execute on mount calls
   // this WITHOUT force, so navigating to a question stays cache-served.
-  const handleExecute = useCallback((overrideParamValues?: Record<string, any>, opts?: { force?: boolean }) => {
+  const handleExecute = useCallback((overrideParamValues?: Record<string, any>, opts?: { force?: boolean; query?: string }) => {
     if (!mergedContent) return;
 
     if (mergedContent.spreadsheet) {
@@ -212,7 +212,7 @@ export default function QuestionContainerV2({ fileId, mode: containerMode, readO
     const effectiveValues = buildQueryParamValues(mergedContent.parameters ?? [], sourceValues, {});
 
     const newQuery = {
-      query: mergedContent.query,
+      query: opts?.query ?? mergedContent.query,
       params: effectiveValues,
       database: mergedContent.connection_name
     };
@@ -285,7 +285,8 @@ export default function QuestionContainerV2({ fileId, mode: containerMode, readO
   // Cmd+Enter, param submit) → force a server refresh. Internal auto-execute calls
   // handleExecute directly (no force) so navigation stays cache-served.
   const handleExecuteForced = useCallback(
-    (overrideParamValues?: Record<string, any>) => handleExecute(overrideParamValues, { force: true }),
+    (overrideParamValues?: Record<string, any>, overrideQuery?: string) =>
+      handleExecute(overrideParamValues, { force: true, query: overrideQuery }),
     [handleExecute],
   );
 

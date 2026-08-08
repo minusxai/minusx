@@ -31,7 +31,12 @@ import { inferVizColumnsFromRows } from './query-data';
 import type { VizResultColumn } from './types';
 import { VIZ_DATASET_MAIN } from './types';
 import { loadGeoFeatures } from './geo-assets';
+import { computeFacetLayoutPlan, record, type FacetLayoutPlan } from './facet-layout';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
+
+// Facet layout math lives in ./facet-layout (pure, engine-free); re-exported here
+// because this pipeline is where every view build consumes the plan.
+export { computeFacetLayoutPlan, type FacetLayoutPlan };
 
 export type ResolvedEnvelopeSpec =
   | { ok: true; spec: Record<string, unknown>; engine: 'vega-lite' | 'vega'; assets?: Record<string, string> }
@@ -110,6 +115,8 @@ export interface VegaViewOptions {
   container?: HTMLElement;
   width?: number;
   height?: number;
+  /** Container-bounded child sizing for a top-level Vega-Lite facet. */
+  facetLayout?: FacetLayoutPlan | null;
   /** Install the styled HTML tooltip handler (browser only; styled in globals.css). */
   tooltipTheme?: 'light' | 'dark';
   /** Vega parser config — used by the native-vega engine (VL bakes theme at compile). */
@@ -247,8 +254,12 @@ function hasYField(spec: Record<string, unknown>): boolean {
   const y = (spec.encoding as Record<string, Record<string, unknown>> | undefined)?.y;
   if (y && typeof y === 'object' && 'field' in y) return true;
   const layers = spec.layer;
-  return Array.isArray(layers) && layers.some(l =>
-    l != null && typeof l === 'object' && !Array.isArray(l) && hasYField(l as Record<string, unknown>));
+  if (Array.isArray(layers) && layers.some(l =>
+    l != null && typeof l === 'object' && !Array.isArray(l) && hasYField(l as Record<string, unknown>))) {
+    return true;
+  }
+  const child = record(spec.spec);
+  return child ? hasYField(child) : false;
 }
 
 /** The color-channel def of a unit spec, or the first color among layers. */
@@ -264,6 +275,8 @@ function findColorDef(spec: Record<string, unknown>): Record<string, unknown> | 
       }
     }
   }
+  const child = record(spec.spec);
+  if (child) return findColorDef(child);
   return null;
 }
 
@@ -428,6 +441,8 @@ export interface CompileVegaLiteOptions {
   legendPlan?: LegendWrapPlan | null;
   /** Planned x label angle (computeXLabelAngle) — null/undefined = VL defaults. */
   xLabelAngle?: number | null;
+  /** Initial container-bounded dimensions for top-level facet child plots. */
+  facetLayout?: FacetLayoutPlan | null;
   /**
    * Categorical color range override — the surrounding design theme's `--chart-1..5` tokens
    * (lib/viz/chart-tokens.ts). null/undefined = the house palette. Applied to both engines:
@@ -451,6 +466,24 @@ export function compileVegaLite(
   // shared state — deep-clone here (specs are small).
   const prepared = prepareVegaLiteSpec(JSON.parse(JSON.stringify(spec)) as Record<string, unknown>);
   if (options?.xLabelAngle != null) injectXLabelAngle(prepared, options.xLabelAngle);
+  // A discrete x/y inside a facet normally compiles child_width/child_height as
+  // STEP-DERIVED signals. Runtime signal writes are then overwritten by the next
+  // dataflow pulse. Seed missing child dimensions before compile so both discrete
+  // and continuous facets produce directly resizable child signals. Authored
+  // dimensions remain the opt-out represented by an absent plan dimension.
+  if (options?.facetLayout && 'facet' in prepared) {
+    const child = record(prepared.spec);
+    if (child) {
+      if (options.facetLayout.childWidth != null
+        && !Object.prototype.hasOwnProperty.call(child, 'width')) {
+        child.width = options.facetLayout.childWidth;
+      }
+      if (options.facetLayout.childHeight != null
+        && !Object.prototype.hasOwnProperty.call(child, 'height')) {
+        child.height = options.facetLayout.childHeight;
+      }
+    }
+  }
   // Responsive container fill (`width/height: 'container'` is only valid for
   // single/layer specs). Without an explicit width, VL STEP-SIZES discrete axes
   // (band-step × category count) — a 3-category bar renders ~60px wide instead of
@@ -517,6 +550,38 @@ export function setMainData(view: View, rows: Record<string, unknown>[]): void {
   view.data(VIZ_DATASET_MAIN, rows.map(r => ({ ...r })));
 }
 
+const setSignalIfPresent = (view: View, name: string, value: number): void => {
+  try {
+    view.signal(name, value);
+  } catch {
+    // The plan is derived from the authored VL spec, but a future compiler may
+    // rename or omit the child signal. Leave that dimension at its compiled value.
+  }
+};
+
+/**
+ * Apply the correct responsive signals for the compiled view shape. Unit/layer
+ * charts use Vega's root dimensions; top-level facets use child dimensions and
+ * must not also receive a root size (that root becomes extra overflowing area).
+ */
+export function resizeVegaView(
+  view: View,
+  size: Pick<VegaViewOptions, 'width' | 'height' | 'facetLayout'>,
+): View {
+  if (size.facetLayout) {
+    if (size.facetLayout.childWidth != null) {
+      setSignalIfPresent(view, 'child_width', size.facetLayout.childWidth);
+    }
+    if (size.facetLayout.childHeight != null) {
+      setSignalIfPresent(view, 'child_height', size.facetLayout.childHeight);
+    }
+    return view;
+  }
+  if (size.width != null) view.width(size.width);
+  if (size.height != null) view.height(size.height);
+  return view;
+}
+
 /** Parse a compiled Vega spec and build a View with the query result bound as 'main'. */
 export function createVegaView(
   vegaSpec: VegaSpec,
@@ -534,9 +599,7 @@ export function createVegaView(
       : {}),
   });
   setMainData(view, rows);
-  if (opts.width != null) view.width(opts.width);
-  if (opts.height != null) view.height(opts.height);
-  return view;
+  return resizeVegaView(view, opts);
 }
 
 /** Headless render: the server/preview/export/image-attachment path. */
@@ -546,7 +609,15 @@ export async function renderVegaLiteToSvg(
   mode: 'light' | 'dark',
   size?: { width?: number; height?: number },
 ): Promise<string> {
-  const view = createVegaView(compileVegaLite(spec, mode), rows, { renderer: 'none', ...size });
+  const width = size?.width ?? 640;
+  const height = size?.height ?? 400;
+  const legendPlan = computeLegendPlan(spec, rows, width);
+  const facetLayout = computeFacetLayoutPlan(spec, rows, width, height);
+  const view = createVegaView(compileVegaLite(spec, mode, { legendPlan, facetLayout }), rows, {
+    renderer: 'none',
+    ...size,
+    facetLayout,
+  });
   try {
     await view.runAsync();
     return await view.toSVG();
@@ -572,9 +643,15 @@ export async function renderEnvelopeToCanvas(
   const xLabelAngle = resolved.engine === 'vega-lite'
     ? computeXLabelAngle(resolved.spec, rows, opts.width ?? 640)
     : null;
-  const { vegaSpec, parserConfig } = toVegaSpec(resolved, mode, { xLabelAngle });
+  const legendPlan = resolved.engine === 'vega-lite'
+    ? computeLegendPlan(resolved.spec, rows, opts.width ?? 640)
+    : null;
+  const facetLayout = resolved.engine === 'vega-lite'
+    ? computeFacetLayoutPlan(resolved.spec, rows, opts.width ?? 640, opts.height ?? 400)
+    : null;
+  const { vegaSpec, parserConfig } = toVegaSpec(resolved, mode, { legendPlan, xLabelAngle, facetLayout });
   const view = createVegaView(vegaSpec, rows, {
-    renderer: 'none', parserConfig, width: opts.width, height: opts.height,
+    renderer: 'none', parserConfig, width: opts.width, height: opts.height, facetLayout,
   });
   try {
     await injectNamedAssets(view, resolved.assets);
@@ -597,8 +674,16 @@ export async function renderEnvelopeToSvg(
   const xLabelAngle = resolved.engine === 'vega-lite'
     ? computeXLabelAngle(resolved.spec, rows, size?.width ?? 640)
     : null;
-  const { vegaSpec, parserConfig } = toVegaSpec(resolved, mode, { xLabelAngle });
-  const view = createVegaView(vegaSpec, rows, { renderer: 'none', parserConfig, ...size });
+  const legendPlan = resolved.engine === 'vega-lite'
+    ? computeLegendPlan(resolved.spec, rows, size?.width ?? 640)
+    : null;
+  const facetLayout = resolved.engine === 'vega-lite'
+    ? computeFacetLayoutPlan(resolved.spec, rows, size?.width ?? 640, size?.height ?? 400)
+    : null;
+  const { vegaSpec, parserConfig } = toVegaSpec(resolved, mode, { legendPlan, xLabelAngle, facetLayout });
+  const view = createVegaView(vegaSpec, rows, {
+    renderer: 'none', parserConfig, ...size, facetLayout,
+  });
   try {
     await injectNamedAssets(view, resolved.assets);
     await view.runAsync();

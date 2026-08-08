@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic';
 import { useAppSelector } from '@/store/hooks';
 import { format } from 'sql-formatter';
 import { cn } from '@/components/kit/cn';
-import { useRef, useEffect, useState, useMemo } from 'react';
+import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import { DatabaseWithSchema } from '@/lib/types';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import EditWithAgentPopover from '@/components/EditWithAgentPopover';
@@ -100,10 +100,16 @@ export interface ReferenceOption {
   alias: string;  // Pre-generated alias (e.g., "43_revenue_by_month")
 }
 
+/** One persistence cadence for every editable SQL surface. Monaco remains the
+ * immediate source of truth between commits; callers receive coalesced edits. */
+export const SQL_EDITOR_CHANGE_DEBOUNCE_MS = 250;
+
 interface SqlEditorProps {
   value: string;
   onChange?: (value: string) => void;
-  onRun?: () => void;
+  onRun?: (currentValue?: string) => void;
+  /** Override the shared persistence cadence; use 0 only for a caller that must observe every keystroke. */
+  onChangeDebounceMs?: number;
   readOnly?: boolean;
   showFormatButton?: boolean;
   showRunButton?: boolean;
@@ -113,6 +119,7 @@ interface SqlEditorProps {
   databaseName?: string;  // Database name for API autocomplete
   connectionType?: string;  // Connection type for dialect-aware autocomplete
   fillHeight?: boolean;  // When true, fills parent container height instead of fixed pixel height
+  virtualModelKey?: string;  // Stable virtual model key; never a filesystem path
   editWithAgent?: { fileName: string; filePath?: string; questionId?: number };  // Enables the "Interact with {agentName}" selection pill
 }
 
@@ -120,6 +127,7 @@ export default function SqlEditor({
   value,
   onChange,
   onRun,
+  onChangeDebounceMs = SQL_EDITOR_CHANGE_DEBOUNCE_MS,
   readOnly = false,
   showFormatButton = true,
   showRunButton = false,
@@ -129,11 +137,16 @@ export default function SqlEditor({
   databaseName,
   connectionType,
   fillHeight = false,
+  virtualModelKey,
   editWithAgent,
 }: SqlEditorProps) {
   const colorMode = useAppSelector((state) => state.ui.colorMode);
   const editorTheme = colorMode === 'dark' ? 'vs-dark' : 'vs-light';
   const onRunRef = useRef(onRun);
+  const onChangeRef = useRef(onChange);
+  const valueRef = useRef(value);
+  const pendingValueRef = useRef<string | null>(null);
+  const changeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<any>(null);
   const completionProviderRef = useRef<any>(null);
@@ -157,6 +170,14 @@ export default function SqlEditor({
   useEffect(() => {
     onRunRef.current = onRun;
   }, [onRun]);
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
 
   // Keep schemaData ref updated for schema completions
   const schemaDataRef = useRef(schemaData);
@@ -380,11 +401,96 @@ export default function SqlEditor({
     };
   }, []);
 
-  const handleChange = (value: string | undefined) => {
-    if (onChange && value !== undefined) {
-      onChange(value);
+  // Last value this editor emitted (or received). Committing records the emitted
+  // text so its echo — the caller persisting it back into the controlled `value` —
+  // is distinguishable from a genuine external edit.
+  const previousValueRef = useRef(value);
+
+  const commitValue = useCallback((nextValue: string) => {
+    if (changeTimeoutRef.current) {
+      clearTimeout(changeTimeoutRef.current);
+      changeTimeoutRef.current = null;
     }
-  };
+    pendingValueRef.current = null;
+    previousValueRef.current = nextValue;
+    onChangeRef.current?.(nextValue);
+  }, []);
+
+  const flushPendingChange = useCallback((): string | null => {
+    const pending = pendingValueRef.current;
+    if (pending != null) commitValue(pending);
+    return pending;
+  }, [commitValue]);
+
+  const handleChange = useCallback((nextValue: string | undefined) => {
+    if (nextValue === undefined || !onChangeRef.current) return;
+    if (onChangeDebounceMs <= 0) {
+      commitValue(nextValue);
+      return;
+    }
+    pendingValueRef.current = nextValue;
+    if (changeTimeoutRef.current) clearTimeout(changeTimeoutRef.current);
+    changeTimeoutRef.current = setTimeout(() => commitValue(nextValue), onChangeDebounceMs);
+  }, [commitValue, onChangeDebounceMs]);
+
+  // A controlled value we did not just commit is a genuine external edit (agent
+  // write, undo elsewhere) and is authoritative: discard any pending local timer
+  // rather than letting it overwrite the external text. The echo of our own
+  // commit matches previousValueRef and passes through, so keystrokes typed
+  // during the persist round trip keep their pending commit.
+  useEffect(() => {
+    if (value === previousValueRef.current) return;
+    previousValueRef.current = value;
+    if (pendingValueRef.current != null) {
+      if (changeTimeoutRef.current) clearTimeout(changeTimeoutRef.current);
+      changeTimeoutRef.current = null;
+      pendingValueRef.current = null;
+    }
+  }, [value]);
+
+  // Flush the latest editor text before Run so execution never trails the
+  // debounced controlled content, and before unmount so navigation cannot lose it.
+  const runCurrent = useCallback(() => {
+    const currentValue = pendingValueRef.current
+      ?? editorRef.current?.getValue?.()
+      ?? valueRef.current;
+    flushPendingChange();
+    onRunRef.current?.(currentValue);
+  }, [flushPendingChange]);
+
+  useEffect(() => () => {
+    flushPendingChange();
+  }, [flushPendingChange]);
+
+  const editorOptions = useMemo(() => ({
+    readOnly,
+    // Names Monaco's internal textarea so it's reachable via getByLabel.
+    ariaLabel: 'SQL editor',
+    fontFamily: 'var(--font-jetbrains-mono)',
+    lineNumbers: 'on' as const,
+    folding: true,
+    lineDecorationsWidth: 10,
+    lineNumbersMinChars: 3,
+    scrollBeyondLastLine: false,
+    wordWrap: 'on' as const,
+    wrappingIndent: 'indent' as const,
+    automaticLayout: true,
+    tabSize: 2,
+    fixedOverflowWidgets: true,
+    suggestOnTriggerCharacters: true,
+    quickSuggestions: true,
+    suggest: {
+      showReferences: true,
+      filterGraceful: true,
+    },
+    formatOnPaste: false,
+    formatOnType: false,
+    padding: {
+      top: 12,
+      bottom: 12,
+    },
+    placeholder: `Write your SQL query here, or just ask ${agentName}!`,
+  }), [readOnly, agentName]);
 
   const handleFormat = () => {
     try {
@@ -403,9 +509,7 @@ export default function SqlEditor({
 
       // Update editor value and trigger onChange
       editorRef.current.setValue(formatted);
-      if (onChange) {
-        onChange(formatted);
-      }
+      commitValue(formatted);
     } catch (error) {
       console.error('Failed to format SQL:', error);
     }
@@ -467,6 +571,7 @@ export default function SqlEditor({
             <Editor
               height={fillHeight ? '100%' : `${height}px`}
               defaultLanguage="sql"
+              path={virtualModelKey}
               value={value}
               onChange={handleChange}
               theme={editorTheme}
@@ -508,6 +613,7 @@ export default function SqlEditor({
                 editor.onDidScrollChange(() => {
                   if (editWithAgentRef.current) setEditSel(null);
                 });
+                editor.onDidBlurEditorWidget?.(() => flushPendingChange());
 
                 // Manually trigger suggestions when @ is typed
                 editor.onKeyUp(() => {
@@ -638,7 +744,7 @@ export default function SqlEditor({
                   editor.addCommand(
                     monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
                     () => {
-                      onRunRef.current?.();
+                      runCurrent();
                     }
                   );
                 }
@@ -652,36 +758,7 @@ export default function SqlEditor({
                   }
                 ]);
               }}
-              options={{
-                readOnly,
-                // Names Monaco's internal textarea so it's reachable via getByLabel.
-                ariaLabel: 'SQL editor',
-                fontFamily: 'var(--font-jetbrains-mono)',
-                lineNumbers: 'on',
-                folding: true,
-                lineDecorationsWidth: 10,
-                lineNumbersMinChars: 3,
-                scrollBeyondLastLine: false,
-                wordWrap: 'on',
-                wrappingIndent: 'indent',
-                automaticLayout: true,
-                tabSize: 2,
-                fixedOverflowWidgets: true,
-                // Enable autocomplete suggestions
-                suggestOnTriggerCharacters: true,
-                quickSuggestions: true,
-                suggest: {
-                  showReferences: true,
-                  filterGraceful: true,
-                },
-                formatOnPaste: false,
-                formatOnType: false,
-                padding: {
-                  top: 12,
-                  bottom: 12,
-                },
-                placeholder: `Write your SQL query here, or just ask ${agentName}!`,
-              }}
+              options={editorOptions}
             />
           )}
           {editWithAgent && editSel && (
@@ -699,7 +776,7 @@ export default function SqlEditor({
           showFormatButton={showFormatButton}
           showRunButton={showRunButton}
           onFormat={handleFormat}
-          onRun={onRun}
+          onRun={onRun ? runCurrent : undefined}
           isRunning={isRunning}
         />
       </div>

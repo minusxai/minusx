@@ -7,7 +7,7 @@
  */
 
 import { getStore } from '@/store/store';
-import { selectFile, selectIsDirty, persistableContentOf, setSaving, setFile, clearEdits, clearMetadataEdits, selectDirtyFiles, type FileState } from '@/store/filesSlice';
+import { selectFile, selectIsDirty, persistableContentOf, setSaving, setFile, setEphemeral, clearEdits, clearMetadataEdits, selectDirtyFiles, type FileState } from '@/store/filesSlice';
 import { ConflictError, FilesAPI } from '@/lib/data/files';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
 import type { FileType, DbFile } from '@/lib/types';
@@ -26,6 +26,23 @@ export interface PublishFileOptions {
 export interface PublishFileResult {
   id: number;
   name: string;
+}
+
+/**
+ * Install server-backed file state without clearing session-only UI state.
+ *
+ * A version-advancing `setFile` intentionally replaces stale persisted edits,
+ * but query execution identities are not persisted edits. Keeping them lets
+ * questions and notebook cells continue pointing at their existing query-cache
+ * entries after Save, including cells added during the current mount.
+ */
+function setFilePreservingEphemeral(file: DbFile): void {
+  const store = getStore();
+  const ephemeralChanges = selectFile(store.getState(), file.id)?.ephemeralChanges;
+  store.dispatch(setFile({ file }));
+  if (ephemeralChanges && Object.keys(ephemeralChanges).length > 0) {
+    store.dispatch(setEphemeral({ fileId: file.id, changes: ephemeralChanges }));
+  }
 }
 
 /**
@@ -108,7 +125,7 @@ export async function publishFile(
       // silently re-write a stale path. Overlay only the user's content edits
       // (persistableChanges) on top of the server's latest content.
       const serverFile = firstError.currentFile;
-      getStore().dispatch(setFile({ file: serverFile }));
+      setFilePreservingEphemeral(serverFile);
       const retryContent = (fileState.contentReplaced
         ? fileState.persistableChanges
         : { ...serverFile.content, ...fileState.persistableChanges }) as typeof saveContent;
@@ -135,7 +152,7 @@ export async function publishFile(
     getStore().dispatch(setSaving({ id: fileId, saving: false }));
   }
 
-  getStore().dispatch(setFile({ file: updatedFile! }));
+  setFilePreservingEphemeral(updatedFile!);
   getStore().dispatch(clearEdits(fileId));
   getStore().dispatch(clearMetadataEdits(fileId));
 
@@ -194,7 +211,7 @@ export async function publishAll(fileIds?: number[]): Promise<Record<number, num
 
   const { data: saved, conflicts = [] } = await FilesAPI.batchSaveFiles(toSave as any);
   for (const file of saved) {
-    getStore().dispatch(setFile({ file }));
+    setFilePreservingEphemeral(file);
     getStore().dispatch(clearEdits(file.id));
     getStore().dispatch(clearMetadataEdits(file.id));
   }

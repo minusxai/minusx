@@ -4,21 +4,23 @@
  * <VegaChart> — the single browser renderer for Viz V2 envelopes.
  * Pure view: envelope + rows + colorMode in, chart out. No Redux.
  *
- * Lifecycle: compile+parse+mount on spec/mode change (theme change = recompile,
- * ); data-only updates flow through view.datawithout a rebuild; container
- * resizes update the width/height signals; every view is finalized on unmount.
+ * Lifecycle: compile+parse+mount on spec/mode change (theme change = recompile);
+ * data-only updates flow through view.data without a rebuild; container resizes
+ * update root width/height signals (or a facet's child signals); every view is
+ * finalized on unmount.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChartError } from '@/components/plotx/ChartError';
 import type { View } from 'vega';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
-import { createVegaView, setMainData, resolveEnvelopeSpec, toVegaSpec, computeLegendPlan, computeXLabelAngle, injectNamedAssets } from '@/lib/viz/render-vega';
+import { createVegaView, setMainData, resolveEnvelopeSpec, toVegaSpec, computeLegendPlan, computeXLabelAngle, computeFacetLayoutPlan, resizeVegaView, injectNamedAssets } from '@/lib/viz/render-vega';
 import { inferVizColumnsFromRows } from '@/lib/viz/query-data';
 import { chartTokenRangeFromElement } from '@/lib/viz/chart-tokens';
 import { POINT_MAP_DEFAULT_TILE_URL, POINT_MAP_DARK_TILE_URL } from '@/lib/viz/viz-templates';
-import { buildTooltipPlan, buildTooltipData, renderSharedTooltipHtml, type TooltipPlan, type TooltipEntry } from '@/lib/viz/tooltip-plan';
+import { buildTooltipPlan, buildTooltipData, renderSharedTooltipHtml, tooltipEntryMatchesFacet, type TooltipPlan, type TooltipEntry } from '@/lib/viz/tooltip-plan';
 import { SharedTooltip } from '@/lib/viz/shared-tooltip';
 import { injectGuideMark, GUIDE_WIDTH, GUIDE_OPACITY, GUIDE_BAND_OPACITY } from '@/lib/viz/guide-mark';
+import { findFacetCellAtPoint } from '@/lib/viz/facet-tooltip';
 import { isInteractiveMapEnvelope } from '@/lib/viz/interactive-map';
 import { bridgeIframeDragEvents } from '@/lib/viz/iframe-event-bridge';
 
@@ -63,9 +65,10 @@ export interface VegaChartProps {
   onViewChange?: (params: Record<string, unknown>) => void;
 }
 
-// Vega's width/height signals size the data rectangle; axes/legends draw in the
-// padding. autosize fit+contains:padding (applied at compile) keeps the total within
-// the container, but the initial signal still needs a sane starting size.
+// Vega's root width/height signals size a unit chart's data rectangle; facet charts
+// use child_width/child_height instead (planned in lib/viz/facet-layout). Axes/legends draw in
+// the padding. autosize fit+contains:padding keeps unit charts within the container,
+// and every view still needs a sane outer size for its initial plan.
 const sizeOf = (el: HTMLElement) => ({
   width: Math.max(el.clientWidth, 80),
   height: Math.max(el.clientHeight, 60),
@@ -166,13 +169,30 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
           ? computeXLabelAngle(vlSpecRef.current, rowsRef.current, el.clientWidth)
           : null;
         legendPlanRef.current = JSON.stringify({ legend: legendPlan ?? null, xAngle: xLabelAngle });
+        const initialSize = sizeOf(el);
+        const facetLayout = vlSpecRef.current
+          ? computeFacetLayoutPlan(
+              vlSpecRef.current,
+              rowsRef.current,
+              initialSize.width,
+              initialSize.height,
+            )
+          : null;
         // Theme chart tokens: computed --chart-1..5 at the container (null outside a token
         // scope → house palette). Resolved per build so a [data-theme] switch recolors.
         const categoryRange = chartTokenRangeFromElement(el);
-        const { vegaSpec, parserConfig } = toVegaSpec(resolved, colorMode, { legendPlan, xLabelAngle, categoryRange });
-        // Shared-tooltip charts get a guide-line rule injected BEHIND the data (before parse).
+        const { vegaSpec, parserConfig } = toVegaSpec(resolved, colorMode, {
+          legendPlan, xLabelAngle, facetLayout, categoryRange,
+        });
+        // Shared-tooltip charts get a guide-line rule injected BEHIND the data
+        // (before parse). Unit rules live at root; facet rules repeat inside each
+        // compiled cell and are gated to the hovered facet datum.
         const tooltipPlan = vlSpecRef.current ? buildTooltipPlan(vlSpecRef.current) : null;
-        const hasGuide = tooltipPlan ? injectGuideMark(vegaSpec as Record<string, unknown>) : false;
+        const hasGuide = tooltipPlan
+          ? injectGuideMark(vegaSpec as Record<string, unknown>, {
+              facetFields: tooltipPlan.facets?.map(facet => facet.field),
+            })
+          : false;
         if (cancelled) return;
         el.replaceChildren(); // drop any stale chart DOM from a failed predecessor
         view = createVegaView(vegaSpec, rowsRef.current, {
@@ -182,7 +202,8 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
           container: el,
           tooltipTheme: colorMode,
           parserConfig,
-          ...sizeOf(el),
+          ...initialSize,
+          facetLayout,
         });
         viewRef.current = view;
         // Vega LOGS dataflow errors (an invalid axis format, a broken expression…)
@@ -239,14 +260,21 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
 
           // bandW > 0 (bar/band x scale) → grow the guide to the whole category slot, an
           // ECharts `axisPointer: 'shadow'`. 0 (line/area/scatter — point/linear x) → thin line.
-          const setGuide = (on: boolean, px = -1, bandW = 0) => {
+          const setGuide = (
+            on: boolean,
+            px = -1,
+            bandW = 0,
+            facetDatum?: Record<string, unknown>,
+            plotHeight?: number,
+          ) => {
             if (!hasGuide) return;
             v.signal('mxGuideOn', on ? 1 : 0);
+            if (plan.facets?.length) v.signal('mxGuideFacet', on ? (facetDatum ?? null) : null);
             if (on) {
               v.signal('mxGuidePx', px);
               // Grow the guide to the (now-settled) plot height ONLY on hover; it rests at
               // 0 so it never feeds the autosize:fit solve on first paint (see guide-mark.ts).
-              v.signal('mxGuideH', Number(v.height()) || 0);
+              v.signal('mxGuideH', (plotHeight ?? Number(v.height())) || 0);
               v.signal('mxGuideW', bandW > 0 ? bandW : GUIDE_WIDTH);
               v.signal('mxGuideOpacity', bandW > 0 ? GUIDE_BAND_OPACITY : GUIDE_OPACITY);
             }
@@ -266,19 +294,36 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
             const bandW = typeof xs.bandwidth === 'function' ? xs.bandwidth() : 0;
             const rect = svg.getBoundingClientRect();
             const origin = (v as unknown as { _origin?: [number, number] })._origin ?? [0, 0];
-            const width = Number(v.width());
-            const height = Number(v.height());
             const dataX = e.clientX - rect.left - origin[0];
             const dataY = e.clientY - rect.top - origin[1];
-            if (dataX < -6 || dataX > width + 6 || dataY < -6 || dataY > height + 6) { hideAll(); return; }
+            const facetFields = plan.facets?.map(facet => facet.field) ?? [];
+            const facetCell = facetFields.length > 0
+              ? findFacetCellAtPoint(
+                  (v as unknown as { scenegraph: () => { root: unknown } }).scenegraph().root,
+                  dataX,
+                  dataY,
+                  facetFields,
+                )
+              : null;
+            if (facetFields.length > 0 && !facetCell) { hideAll(); return; }
+
+            // Facet cell bounds live in root data-rectangle coordinates, while the
+            // shared x scale returns child-local pixels. Translate the pointer into
+            // that hovered cell before snapping; unit charts are already local.
+            const plotX = facetCell ? dataX - facetCell.x1 : dataX;
+            const plotY = facetCell ? dataY - facetCell.y1 : dataY;
+            const width = facetCell ? facetCell.x2 - facetCell.x1 : Number(v.width());
+            const height = facetCell ? facetCell.y2 - facetCell.y1 : Number(v.height());
+            if (plotX < -6 || plotX > width + 6 || plotY < -6 || plotY > height + 6) { hideAll(); return; }
             let best: TooltipEntry | null = null, bestDist = Infinity, bestPx = 0;
             for (const entry of holder.data.values()) {
+              if (!tooltipEntryMatchesFacet(entry, facetCell?.datum, plan)) continue;
               // xPlot (bin centers) positions on the scale; xRaw is the display label.
               const sv = entry.xPlot ?? (plan.xTemporal ? new Date(entry.xRaw as string | number | Date) : entry.xRaw);
               let px = xs(sv);
               if (typeof px !== 'number' || Number.isNaN(px)) continue;
               px += bandW / 2; // band scales anchor at the slot's left edge → shift to center
-              const d = Math.abs(px - dataX);
+              const d = Math.abs(px - plotX);
               if (d < bestDist) { bestDist = d; best = entry; bestPx = px; }
             }
             if (!best) { hideAll(); return; }
@@ -294,7 +339,7 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
             // value-sorting only applies to real multi-series (wide/long) charts.
             const sortByValue = plan.series.kind === 'wide' || plan.series.kind === 'long';
             controller.show(renderSharedTooltipHtml(best, { xTitle: plan.xTitle, colorFor, formatX, formatValue: fmtTooltipValue, sortByValue }), e.clientX, e.clientY);
-            setGuide(true, bestPx, bandW);
+            setGuide(true, bestPx, bandW, facetCell?.datum, height);
           };
           const onMove = (e: PointerEvent) => {
             pending = e;
@@ -348,7 +393,7 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
       tooltipRef.current = null;
       view?.finalize();
     };
-  }, [envelope, colorMode, legendEpoch, themeEpoch]);
+  }, [envelope, colorMode, legendEpoch, themeEpoch, replanLegendWrap]);
 
   // Rebuild when the surrounding design theme changes: observe data-theme attribute flips in
   // this chart's OWN document (story charts live in the story iframe). Fires only on an actual
@@ -366,6 +411,16 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
     const view = viewRef.current;
     if (!view) return;
     setMainData(view, rows);
+    const el = containerRef.current;
+    if (el) {
+      const size = sizeOf(el);
+      resizeVegaView(view, {
+        ...size,
+        facetLayout: vlSpecRef.current
+          ? computeFacetLayoutPlan(vlSpecRef.current, rows, size.width, size.height)
+          : null,
+      });
+    }
     // Keep the shared-tooltip index in sync with the live rows (no view rebuild).
     if (tooltipRef.current) tooltipRef.current.holder.data = buildTooltipData(rows, tooltipRef.current.plan);
     view.runAsync().catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
@@ -382,7 +437,7 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
     return () => mo.disconnect();
   }, []);
 
-  // Container resizes drive the size signals.
+  // Container resizes drive the shape-appropriate root or facet-child signals.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -394,7 +449,13 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
       const view = viewRef.current;
       if (!view) return;
       const { width, height } = sizeOf(el);
-      view.width(width).height(height).runAsync().catch(() => { /* resize race on unmount */ });
+      resizeVegaView(view, {
+        width,
+        height,
+        facetLayout: vlSpecRef.current
+          ? computeFacetLayoutPlan(vlSpecRef.current, rowsRef.current, width, height)
+          : null,
+      }).runAsync().catch(() => { /* resize race on unmount */ });
     });
     ro.observe(el);
     return () => ro.disconnect();

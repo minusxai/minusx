@@ -4,7 +4,7 @@
  * and the renderer emits swatch+name+value rows — all pure (DOM lives in VegaChart).
  */
 import { describe, it, expect } from 'vitest';
-import { buildTooltipPlan, buildTooltipData, tooltipXKey, renderSharedTooltipHtml } from '../tooltip-plan';
+import { buildTooltipPlan, buildTooltipData, tooltipEntryMatchesFacet, tooltipXKey, renderSharedTooltipHtml } from '../tooltip-plan';
 import { materializeRecipe, WATERFALL_UP_COLOR, WATERFALL_DOWN_COLOR, WATERFALL_TOTAL_COLOR } from '../viz-templates';
 
 const foldArea = {
@@ -34,6 +34,25 @@ const colorBar = {
   },
 };
 
+const facetedArea = {
+  facet: {
+    column: {
+      field: 'tag_valence',
+      header: { title: null },
+      sort: ['Positive', 'Negative'],
+      type: 'nominal',
+    },
+  },
+  spec: {
+    mark: { type: 'area', opacity: 0.8 },
+    encoding: {
+      x: { field: 'quarter_start', title: 'Quarter', type: 'temporal' },
+      y: { field: 'tag_assignments', title: 'Tag assignments', type: 'quantitative', stack: 'zero' },
+      color: { field: 'tag', title: 'Comment tag', type: 'nominal' },
+    },
+  },
+};
+
 describe('buildTooltipPlan', () => {
   it('folded multi-measure → wide series (the folded columns)', () => {
     const plan = buildTooltipPlan(foldArea)!;
@@ -55,6 +74,15 @@ describe('buildTooltipPlan', () => {
   it('a real color column → long series', () => {
     const plan = buildTooltipPlan(colorBar)!;
     expect(plan.series).toEqual({ kind: 'long', colorField: 'platform', valueField: 'sessions' });
+  });
+
+  it('a shared-scale facet plans its child chart and records the facet dimension', () => {
+    const plan = buildTooltipPlan(facetedArea)!;
+    expect(plan).not.toBeNull();
+    expect(plan.xField).toBe('quarter_start');
+    expect(plan.xTitle).toBe('Quarter');
+    expect(plan.facets).toEqual([{ field: 'tag_valence', title: 'tag_valence' }]);
+    expect(plan.series).toEqual({ kind: 'long', colorField: 'tag', valueField: 'tag_assignments' });
   });
 
   it('combo (layered bar+line, independent Y) → two wide series labelled by their color datum', () => {
@@ -159,6 +187,30 @@ describe('buildTooltipData', () => {
       { label: 'ios', value: 7, colorKey: 'ios' },
       { label: 'web', value: 2, colorKey: 'web' },
     ]);
+  });
+
+  it('keeps identical x values in different facet panels in separate buckets', () => {
+    const plan = buildTooltipPlan(facetedArea)!;
+    const idx = buildTooltipData([
+      { quarter_start: '2025-01-01', tag_valence: 'Positive', tag: 'generic_praise', tag_assignments: 10 },
+      { quarter_start: '2025-01-01', tag_valence: 'Positive', tag: 'cool_or_fun', tag_assignments: 5 },
+      { quarter_start: '2025-01-01', tag_valence: 'Negative', tag: 'constructive_criticism', tag_assignments: 20 },
+      { quarter_start: '2025-01-01', tag_valence: 'Negative', tag: 'bad_faith', tag_assignments: 7 },
+    ], plan);
+
+    expect(idx).toHaveLength(2);
+    const positive = [...idx.values()].find(entry => entry.facetLabel === 'Positive')!;
+    const negative = [...idx.values()].find(entry => entry.facetLabel === 'Negative')!;
+    expect(positive.rows.map(row => [row.label, row.value])).toEqual([
+      ['generic_praise', 10],
+      ['cool_or_fun', 5],
+    ]);
+    expect(negative.rows.map(row => [row.label, row.value])).toEqual([
+      ['constructive_criticism', 20],
+      ['bad_faith', 7],
+    ]);
+    expect(tooltipEntryMatchesFacet(positive, { tag_valence: 'Positive' }, plan)).toBe(true);
+    expect(tooltipEntryMatchesFacet(positive, { tag_valence: 'Negative' }, plan)).toBe(false);
   });
 });
 
@@ -280,6 +332,14 @@ describe('renderSharedTooltipHtml', () => {
     expect(html.indexOf('returning_users')).toBeLessThan(html.indexOf('new_users'));
     expect(html).toContain('background:#00f');
     expect(html).toContain('50');
+  });
+
+  it('includes the facet value in the header when present', () => {
+    const entry = { xRaw: '2025-01-01', facetLabel: 'Positive', rows: [] };
+    const html = renderSharedTooltipHtml(entry, {
+      xTitle: 'Quarter', colorFor: () => '#fff', formatX: String, formatValue: String,
+    });
+    expect(html).toContain('Positive · Quarter · 2025-01-01');
   });
 
   it('an explicit row color wins over the colorKey lookup', () => {

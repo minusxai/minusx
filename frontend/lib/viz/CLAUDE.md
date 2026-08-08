@@ -109,12 +109,27 @@ of it. Everything below the fold is a caller.
 **`components/viz/VegaChart.tsx`** is the only browser renderer. Pure view (envelope + rows +
 colorMode in, no Redux). It hard-forces Vega's **SVG** renderer because captures serialize live
 DOM and `<canvas>` serializes empty. It rebuilds the view on envelope/colorMode change, pushes
-data-only updates through `view.data()`, and drives width/height signals from a `ResizeObserver`.
+data-only updates through `view.data()`, and drives root width/height signals from a
+`ResizeObserver`; top-level facets instead receive container-planned `child_width`/`child_height`
+signals because Vega-Lite compiles each panel to those dimensions. The facet math lives in
+`lib/viz/facet-layout.ts` — a pure, engine-free module, so a surface that only needs to *size* a
+facet container can import it without pulling vega/vega-lite into its bundle: the notebook cell
+uses its `facetPreferredHeight` to grow the results area to a facet's natural height (fixed-height
+containers squeeze every panel to the planner's 40px floor and clip). `render-vega.ts` re-exports
+`computeFacetLayoutPlan`. The same plan is seeded into
+the nested facet spec before compilation so a discrete axis cannot replace `child_width` with its
+default category-count × band-step signal and silently undo responsive sizing.
 Several render-time decisions are *compile-time constants* baked before `parse` — the legend
 column count (`computeLegendPlan`) and the x-axis label angle (`computeXLabelAngle`) — so a
-resize that flips either decision bumps an epoch and rebuilds the whole view. It also owns the
+resize that flips either decision bumps an epoch and rebuilds the whole view. The planner descends
+into nested facet specs, so a long faceted-series legend wraps within the outer container instead
+of widening and shifting the facet grid. The component also owns the
 shared multi-series tooltip (`lib/viz/tooltip-plan.ts` builds the plan and HTML,
-`lib/viz/shared-tooltip.ts` positions the card, `lib/viz/guide-mark.ts` injects the guide rule)
+`lib/viz/shared-tooltip.ts` positions the card, `lib/viz/facet-tooltip.ts` resolves a hovered
+facet cell, `lib/viz/guide-mark.ts` injects the guide rule). Shared-scale top-level facets use
+the same axis tooltip as unit charts: their index is partitioned by facet value and the pointer
+snaps in child-local coordinates. Their guide rule is repeated inside the compiled `cell` group,
+clipped to each child plot, and gated by the hovered facet datum so only that panel's line appears.
 and the interactive-map zoom buttons.
 
 **Theme.** `lib/viz/theme.ts` generates the light/dark Vega-Lite `config` and the native-Vega
@@ -330,6 +345,10 @@ ESLint (`frontend/eslint.config.mjs`) bans Chakra imports under `components/plot
 - **`view.tooltip()` must be called before the first `runAsync()`.** It re-initializes the
   renderer, which synchronously clears the SVG. Calling it after the first render wipes the chart
   with no error and nothing repaints until the next interaction.
+- **Facet shared tooltips must hit-test the compiled `cell` scopes.** A facet view reports a
+  root width of zero and its shared x scale returns child-local pixels. `facet-tooltip.ts` finds
+  the hovered scope from scenegraph bounds; `VegaChart` subtracts that cell origin and filters the
+  tooltip index by its facet datum. Treating a facet like a unit chart mixes panels and never snaps.
 - **Vega logs dataflow errors instead of rejecting `runAsync`.** `VegaChart` installs a custom
   logger and promotes the first logged error to a throw, otherwise a broken spec renders as a
   silent blank card.
@@ -458,6 +477,7 @@ different lifecycles.
 | Add a viz type | `lib/validation/atlas-schemas.ts` (`VIZ_TYPES`) → `lib/viz/from-vizsettings.ts` switch → `components/question/VizTypeSelector.tsx` |
 | Add/change a recipe | `lib/viz/viz-templates.ts` (`VIZ_TEMPLATES`; bump `@2`, never mutate `@1`) |
 | Change how any chart is compiled or themed | `lib/viz/render-vega.ts`, `lib/viz/theme.ts` |
+| Change facet panel sizing / natural height | `lib/viz/facet-layout.ts` (pure; re-exported through `render-vega.ts`) |
 | Change a panel control / add a spec edit | `lib/viz/encoding-edit.ts` + `components/viz/VegaVizPanel.tsx` |
 | Change agent-facing validation | `lib/viz/validate.ts`, `lib/viz/types.ts`, `lib/viz/validate-remote.ts` |
 | Change server chart images | `lib/chart/render-viz-image.ts`, `lib/chart/svg-to-jpeg.ts`, `lib/chart/ChartImageRenderer.server.ts` |

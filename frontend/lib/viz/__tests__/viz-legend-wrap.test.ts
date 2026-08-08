@@ -128,6 +128,34 @@ describe('computeLegendPlan', () => {
     };
     expect(computeLegendPlan(spec, ROWS, 300)).not.toBeNull();
   });
+
+  it('wraps a long legend from inside a faceted child spec', () => {
+    const tags = [
+      'already_solved_just_use_x', 'bad_faith', 'constructive_criticism', 'cool_or_fun',
+      'effort_or_story', 'generic_praise', 'low_quality', 'nobody_needs_this',
+      'ridicule_or_personal', 'technically_impressive', 'trivial_or_obvious',
+      'useful_or_needed', 'well_executed', 'wont_work',
+    ];
+    const spec = {
+      facet: { column: { field: 'tag_valence', type: 'nominal' } },
+      spec: {
+        mark: 'area',
+        encoding: {
+          x: { field: 'quarter_start', type: 'temporal' },
+          y: { field: 'tag_assignments', type: 'quantitative' },
+          color: { field: 'tag', type: 'nominal' },
+        },
+      },
+    };
+    const rows = tags.flatMap((tag, i) => [
+      { quarter_start: '2020-01-01', tag_valence: 'Positive', tag, tag_assignments: i + 1 },
+      { quarter_start: '2020-01-01', tag_valence: 'Negative', tag, tag_assignments: i + 1 },
+    ]);
+    const plan = computeLegendPlan(spec, rows, 900);
+    expect(plan).not.toBeNull();
+    expect(plan!.columns).toBeGreaterThan(1);
+    expect(plan!.columns).toBeLessThan(tags.length);
+  });
 });
 
 describe('compileVegaLite legend plan injection', () => {

@@ -15,12 +15,12 @@
  * The JSON view is NOT this view's concern: FileView swaps in the shared CodeView
  * when the header's eye/code toggle selects "Code".
  */
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { PageMarkerDevOverlay } from '@/components/views/story/PageMarkerDevOverlay';
 import { Button } from '@/components/kit/button';
 import { cn } from '@/components/kit/cn';
-import { LuDatabase, LuFileText, LuPlay, LuChevronsDownUp, LuChevronsUpDown, LuPlus } from 'react-icons/lu';
+import { LuChevronDown, LuChevronUp, LuDatabase, LuFileText, LuPlay, LuChevronsDownUp, LuChevronsUpDown, LuPlus } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
 import NotebookSqlCell, { type Executed } from './notebook/NotebookSqlCell';
 import NotebookTextCell from './notebook/NotebookTextCell';
@@ -96,14 +96,31 @@ export default function NotebookView({
   content, onChange, readOnly = false, vizV2Enabled = true, filePath, fileId, activeCellId, onActivateCell, showDevMarkers, colorMode,
   reduxExecuted, onReduxExecutedChange,
 }: NotebookViewProps) {
-  const cells = content.cells ?? [];
+  const cells = useMemo(() => content.cells ?? [], [content.cells]);
 
   // Latest cells via ref so the mutation callbacks stay referentially stable
   // (cells change on every commit; stable callbacks avoid churning cell props
   // and the per-cell debounced query handler).
   const cellsRef = useRef(cells);
-  useEffect(() => { cellsRef.current = cells; }, [cells]);
-  const commit = useCallback((next: NotebookCell[]) => onChange({ cells: next }), [onChange]);
+  useEffect(() => {
+    cellsRef.current = cells;
+  }, [cells]);
+  const commit = useCallback((next: NotebookCell[]) => {
+    // Keep rapid consecutive commands based on the latest local order even before
+    // the controlled Redux value makes its round trip back into this component.
+    cellsRef.current = next;
+    onChange({ cells: next });
+  }, [onChange]);
+
+  // Monaco does not tolerate its host being physically detached/reinserted while
+  // React reorders a keyed list (it can race a disposed editor service). Render
+  // hosts in canonical stable-id order and use flex `order` for logical order.
+  // Adding/removing a key never changes the relative DOM order of existing hosts.
+  const domOrderedCells = useMemo(
+    () => [...cells].sort((a, b) => a.id.localeCompare(b.id)),
+    [cells],
+  );
+  const logicalIndexById = new Map(cells.map((cell, index) => [cell.id, index]));
 
   const updateCell = useCallback((id: string, partial: Partial<NotebookCell>) => {
     commit(cellsRef.current.map(c => (c.id === id ? ({ ...c, ...partial } as NotebookCell) : c)));
@@ -111,6 +128,15 @@ export default function NotebookView({
 
   const removeCell = useCallback((id: string) => {
     commit(cellsRef.current.filter(c => c.id !== id));
+  }, [commit]);
+
+  const moveCell = useCallback((id: string, offset: -1 | 1) => {
+    const next = [...cellsRef.current];
+    const from = next.findIndex(cell => cell.id === id);
+    const to = from + offset;
+    if (from < 0 || to < 0 || to >= next.length) return;
+    [next[from], next[to]] = [next[to], next[from]];
+    commit(next);
   }, [commit]);
 
   // A new SQL cell defaults to the most recent SQL cell's connection; with no
@@ -201,7 +227,7 @@ export default function NotebookView({
                   vizV2Enabled={vizV2Enabled}
                   filePath={filePath}
                   executed={executedById[cell.id] ?? null}
-                  onExecutedChange={(e) => setCellExecuted(cell.id, e)}
+                  onExecutedChange={setCellExecuted}
                   onCellChange={updateCell}
                   onRemove={removeCell}
                 />
@@ -256,11 +282,14 @@ export default function NotebookView({
           />
         ) : (
           <>
-            <CellInsertZone onInsert={(t) => insertAt(0, t)} readOnly={readOnly} />
-            {cells.map((cell, i) => {
+            <div style={{ order: -1 }}>
+              <CellInsertZone onInsert={(t) => insertAt(0, t)} readOnly={readOnly} />
+            </div>
+            {domOrderedCells.map((cell) => {
+              const i = logicalIndexById.get(cell.id) ?? 0;
               const active = cell.id === activeCellId;
               return (
-                <Fragment key={cell.id}>
+                <div key={cell.id} data-notebook-cell-id={cell.id} style={{ order: i }}>
                   <div className="relative">
                     {/* Jupyter-style cell number in the left gutter */}
                     <span
@@ -272,19 +301,43 @@ export default function NotebookView({
                     >
                       [{i + 1}]
                     </span>
+                    {!readOnly && (
+                      <div className="absolute top-[24px] left-[-34px] z-[2] hidden w-[28px] flex-col items-center md:flex">
+                        <button
+                          type="button"
+                          aria-label="Move cell up"
+                          title="Move cell up"
+                          disabled={i === 0}
+                          onClick={() => moveCell(cell.id, -1)}
+                          className="flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-[color,background,transform] hover:-translate-y-px hover:bg-muted hover:text-foreground disabled:cursor-default disabled:opacity-20 disabled:hover:translate-y-0 disabled:hover:bg-transparent"
+                        >
+                          <LuChevronUp size={16} strokeWidth={2.75} />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Move cell down"
+                          title="Move cell down"
+                          disabled={i === cells.length - 1}
+                          onClick={() => moveCell(cell.id, 1)}
+                          className="flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-[color,background,transform] hover:translate-y-px hover:bg-muted hover:text-foreground disabled:cursor-default disabled:opacity-20 disabled:hover:translate-y-0 disabled:hover:bg-transparent"
+                        >
+                          <LuChevronDown size={16} strokeWidth={2.75} />
+                        </button>
+                      </div>
+                    )}
                     {cell.type === 'sql' ? (
                       <NotebookSqlCell
                         cell={cell}
                         active={active}
                         onActivate={onActivateCell}
                         collapsed={collapsedIds.has(cell.id)}
-                        onToggleCollapse={() => toggleCollapse(cell.id)}
+                        onToggleCollapse={toggleCollapse}
                         runNonce={runNonce}
                         readOnly={readOnly}
                         vizV2Enabled={vizV2Enabled}
                         filePath={filePath}
                         executed={executedById[cell.id] ?? null}
-                        onExecutedChange={(e) => setCellExecuted(cell.id, e)}
+                        onExecutedChange={setCellExecuted}
                         onCellChange={updateCell}
                         onRemove={removeCell}
                       />
@@ -294,7 +347,7 @@ export default function NotebookView({
                         active={active}
                         onActivate={onActivateCell}
                         collapsed={collapsedIds.has(cell.id)}
-                        onToggleCollapse={() => toggleCollapse(cell.id)}
+                        onToggleCollapse={toggleCollapse}
                         readOnly={readOnly}
                         filePath={filePath}
                         onCellChange={updateCell}
@@ -303,7 +356,7 @@ export default function NotebookView({
                     )}
                   </div>
                   <CellInsertZone onInsert={(t) => insertAt(i + 1, t)} readOnly={readOnly} />
-                </Fragment>
+                </div>
               );
             })}
           </>

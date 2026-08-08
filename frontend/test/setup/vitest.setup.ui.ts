@@ -28,6 +28,10 @@ if (typeof structuredClone === 'undefined') {
 vi.mock('@monaco-editor/react', () => {
   const React = require('react');
   const MockEditor = ({ value, onChange, onMount, ...props }: any) => {
+    const blurController = React.useMemo(
+      () => ({ callback: null as (() => void) | null }),
+      [],
+    );
     React.useEffect(() => {
       // Editor instance stub — covers every method SqlEditor.onMount calls:
       //   focus, trigger, getPosition, getModel, onDidDispose, onKeyUp,
@@ -47,6 +51,10 @@ vi.mock('@monaco-editor/react', () => {
         onMouseUp: vi.fn(),
         onDidChangeCursorSelection: vi.fn(),
         onDidScrollChange: vi.fn(),
+        onDidBlurEditorWidget: vi.fn((callback: () => void) => {
+          blurController.callback = callback;
+          return { dispose: vi.fn() };
+        }),
         getSelection: () => null,
         getScrolledVisiblePosition: () => null,
         getDomNode: () => null,
@@ -81,11 +89,13 @@ vi.mock('@monaco-editor/react', () => {
       'aria-label': props.options?.ariaLabel ?? 'SQL editor',
       value: value ?? props.defaultValue ?? '',
       onChange: (e: any) => onChange?.(e.target.value),
+      onBlur: () => blurController.callback?.(),
       // Honor an explicit options.readOnly (JsonEditor); else infer from onChange
       readOnly: props.options?.readOnly ?? !onChange,
       'data-fixed-overflow-widgets': String(props.options?.fixedOverflowWidgets ?? false),
       'data-hover-sticky': String(props.options?.hover?.sticky ?? true),
       'data-hover-hiding-delay': String(props.options?.hover?.hidingDelay ?? ''),
+      'data-virtual-model-key': props.path ?? '',
     });
   };
   // __esModule: true is required so that `import Editor from '@monaco-editor/react'`

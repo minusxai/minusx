@@ -15,7 +15,7 @@
  * the query persists the cell but leaves `executed` untouched, so results stay
  * visible while typing.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/components/kit/cn';
 import NotebookCellHeader from './NotebookCellHeader';
 import SqlEditor from '@/components/query-builder/SqlEditor';
@@ -32,6 +32,7 @@ import { useConnections } from '@/lib/hooks/useConnections';
 import { useContext as useSchemaContext } from '@/lib/hooks/useContext';
 import { connectionTypeToDialect } from '@/lib/types';
 import { vizSettingsToEnvelope } from '@/lib/viz/from-vizsettings';
+import { facetPreferredHeight } from '@/lib/viz/facet-layout';
 import { toVizColumns } from '@/lib/viz/query-data';
 import type {
   NotebookSqlCell as SqlCell, QuestionContent, VizSettings, FullQuery,
@@ -48,7 +49,7 @@ interface NotebookSqlCellProps {
   active?: boolean;
   onActivate?: (cellId: string) => void;
   collapsed?: boolean;
-  onToggleCollapse?: () => void;
+  onToggleCollapse?: (cellId: string) => void;
   /** Bumped by the header "Run all" command — re-running this cell on change. */
   runNonce?: number;
   readOnly?: boolean;
@@ -60,7 +61,7 @@ interface NotebookSqlCellProps {
   /** What this cell last ran — lifted to NotebookView so results survive the
       edit↔present remount (the present view is a separate subtree). */
   executed?: Executed | null;
-  onExecutedChange?: (executed: Executed) => void;
+  onExecutedChange?: (cellId: string, executed: Executed) => void;
   onCellChange: (id: string, partial: Partial<SqlCell>) => void;
   onRemove: (id: string) => void;
 }
@@ -68,7 +69,14 @@ interface NotebookSqlCellProps {
 // Stable empty params so execution doesn't refetch every render.
 const EMPTY_PARAMS: Record<string, unknown> = {};
 
-export default function NotebookSqlCell({
+// Results-area heights. Fixed for tables/unit charts (they bound and scroll or
+// fit); facet charts instead get their natural height (see naturalChartHeight),
+// capped so a pathological facet cardinality cannot dwarf the notebook page.
+const RESULTS_HEIGHT_PX = 380;
+const PRESENT_HEIGHT_PX = 420;
+const RESULTS_MAX_HEIGHT_PX = 1600;
+
+function NotebookSqlCell({
   cell, active = false, onActivate, collapsed = false, onToggleCollapse, runNonce = 0,
   readOnly = false, vizV2Enabled = true, presentMode = false, filePath, executed = null, onExecutedChange, onCellChange, onRemove,
 }: NotebookSqlCellProps) {
@@ -112,13 +120,13 @@ export default function NotebookSqlCell({
   const [chartSeriesCount, setChartSeriesCount] = useState<number | undefined>(undefined);
 
 
-  const run = useCallback(() => {
-    onExecutedChange?.({
-      query: cell.query,
+  const run = useCallback((currentQuery?: string) => {
+    onExecutedChange?.(cell.id, {
+      query: currentQuery ?? cell.query,
       params: cell.parameterValues ?? {},
       database: cell.connection_name,
     });
-  }, [cell.query, cell.parameterValues, cell.connection_name, onExecutedChange]);
+  }, [cell.id, cell.query, cell.parameterValues, cell.connection_name, onExecutedChange]);
 
   // Header "Run all" command: re-run this cell when the nonce changes.
   const lastRunNonce = useRef(runNonce);
@@ -152,6 +160,16 @@ export default function NotebookSqlCell({
     return vizSettingsToEnvelope(cell.vizSettings, toVizColumns(data.columns, data.types));
   }, [cell.viz, cell.vizSettings, data, vizV2Enabled]);
 
+  // A facet chart has an intrinsic height (facet rows × per-panel height); inside
+  // the fixed results box the layout planner squeezes every panel to its 40px
+  // floor and the SVG clips. Grow the results area to the chart's natural height
+  // instead — the notebook page scrolls. Null = not a facet, keep the fixed height.
+  const naturalChartHeight = useMemo(() => {
+    if (effectiveViz?.source.kind !== 'vega-lite') return null;
+    const natural = facetPreferredHeight(effectiveViz.source.spec, data?.rows ?? []);
+    return natural == null ? null : Math.min(RESULTS_MAX_HEIGHT_PX, natural);
+  }, [effectiveViz, data]);
+
   // Present mode: render just the visualization (no header, editor, or tabs).
   // It shows results already run in this session; cells never run are skipped
   // (present does not execute queries — use "Run all" to refresh).
@@ -160,7 +178,10 @@ export default function NotebookSqlCell({
     return (
       <div>
         {cell.name && <p className="mb-2 text-sm font-semibold text-muted-foreground">{cell.name}</p>}
-        <div className="flex h-[420px] flex-col">
+        <div
+          className={cn('flex flex-col', naturalChartHeight == null && 'h-[420px]')}
+          style={naturalChartHeight != null ? { height: Math.max(PRESENT_HEIGHT_PX, naturalChartHeight) } : undefined}
+        >
           <QuestionVisualization
             currentState={cell as unknown as QuestionContent}
             config={{ showHeader: false, showJsonToggle: false, editable: false, viz: { showTypeButtons: false, showChartBuilder: false, typesButtonsOrientation: 'horizontal', showTitle: false }, fixError: true }}
@@ -190,7 +211,7 @@ export default function NotebookSqlCell({
       <NotebookCellHeader
         cellType="sql"
         collapsed={collapsed}
-        onToggleCollapse={() => onToggleCollapse?.()}
+        onToggleCollapse={() => onToggleCollapse?.(cell.id)}
         name={cell.name ?? ''}
         onNameChange={(name) => handleChange({ name })}
         onRemove={() => onRemove(cell.id)}
@@ -228,6 +249,7 @@ export default function NotebookSqlCell({
             schemaData={schemaData}
             databaseName={cell.connection_name}
             connectionType={connectionType}
+            virtualModelKey={`notebook-model/${encodeURIComponent(filePath ?? 'draft')}/${encodeURIComponent(cell.id)}.sql`}
           />
         </div>
       )}
@@ -288,7 +310,7 @@ export default function NotebookSqlCell({
           lastSubmittedValues={executed?.params}
           onValueChange={(name, value) =>
             handleChange({ parameterValues: { ...(cell.parameterValues ?? {}), [name]: value } })}
-          onSubmit={(values) => onExecutedChange?.({
+          onSubmit={(values) => onExecutedChange?.(cell.id, {
             query: cell.query, params: values, database: cell.connection_name,
           })}
           onParametersChange={(parameters) => handleChange({ parameters })}
@@ -298,9 +320,14 @@ export default function NotebookSqlCell({
 
       {/* Results — only after the cell has been run. Fixed height + minH:0 so
           the inner table/chart bounds to this area and scrolls (TableV2 scrolls
-          internally) instead of the cell growing infinitely with the row count. */}
+          internally) instead of the cell growing infinitely with the row count.
+          Facet charts are the exception: they take their natural height. */}
       {executed && (
-        <div className="flex h-[380px] min-h-0 flex-col p-2">
+        <div
+          aria-label="Cell results area"
+          className={cn('flex min-h-0 flex-col p-2', naturalChartHeight == null && 'h-[380px]')}
+          style={naturalChartHeight != null ? { height: Math.max(RESULTS_HEIGHT_PX, naturalChartHeight) } : undefined}
+        >
           <QuestionVisualization
             currentState={cell as unknown as QuestionContent}
             config={config}
@@ -332,3 +359,5 @@ export default function NotebookSqlCell({
     </div>
   );
 }
+
+export default memo(NotebookSqlCell);
