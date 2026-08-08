@@ -1,5 +1,6 @@
 /**
- * VizRecipeContainerV2's loading guard. A file first seen through a FOLDER
+ * VizRecipeContainerV2's loading guard. The app's own templates are not files
+ * and never reach this container — they render on `/templates` (lib/templates). A file first seen through a FOLDER
  * LISTING is metadata-only — `content` is null, because `getFiles` skips content
  * for speed — so spreading it yields `{}`, which is truthy. Guarding on "content
  * is truthy" therefore renders the view with no `bindings` and throws
@@ -26,11 +27,11 @@ const RECIPE = {
   template: { mark: 'bar', encoding: { x: { field: '{{label}}', type: '{{label:kind}}' }, y: { field: '{{value}}', type: 'quantitative' } } },
 };
 
-const dbFile = (content: unknown, meta?: Record<string, unknown>): DbFile => ({
+const dbFile = (content: unknown): DbFile => ({
   id: FILE_ID, name: 'kpi-bar', path: '/org/kpi-bar', type: 'viz',
   references: [], version: 1, last_edit_id: null,
   created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z',
-  content: content as DbFile['content'], ...(meta ? { meta } : {}),
+  content: content as DbFile['content'],
 } as DbFile);
 
 describe('VizRecipeContainerV2', () => {
@@ -46,19 +47,4 @@ describe('VizRecipeContainerV2', () => {
     expect(await screen.findByLabelText('Recipe slots')).toBeTruthy();
   });
 
-  it('shows the built-in notice and copy action for a catalog file', async () => {
-    const { store } = renderWithProviders(<VizRecipeContainerV2 fileId={FILE_ID} />);
-    store.dispatch(setFile({ file: dbFile(RECIPE, { readOnly: true, catalogTier: 'builtin', catalogCopyable: true }) }));
-    expect(await screen.findByLabelText('Built-in recipe notice')).toBeTruthy();
-    expect(await screen.findByLabelText('Copy recipe to my workspace')).toBeTruthy();
-  });
-
-  it('offers no copy action for a shipped recipe that is not a real template', async () => {
-    const { store } = renderWithProviders(<VizRecipeContainerV2 fileId={FILE_ID} />);
-    store.dispatch(setFile({ file: dbFile(RECIPE, {
-      readOnly: true, catalogTier: 'shipped', catalogCopyable: false, recipeId: 'minusx/trend@1',
-    }) }));
-    expect(await screen.findByLabelText('Built-in recipe notice')).toBeTruthy();
-    expect(screen.queryByLabelText('Copy recipe to my workspace')).toBeNull();
-  });
 });
