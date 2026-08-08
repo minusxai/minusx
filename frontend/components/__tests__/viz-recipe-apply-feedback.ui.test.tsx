@@ -1,8 +1,9 @@
 /**
- * Applying a workspace recipe whose slots don't fit the result columns must
- * FAIL VISIBLY (a toast naming the problem), never silently no-op — a clicked
- * tile that does nothing reads as broken. Shipped exactly that way once:
- * radar clicked on a single-number question (no nominal column) did nothing.
+ * A recipe that cannot bind to the current result must be visibly UNAVAILABLE:
+ * its tile greys out with a plain-words reason on hover, and clicking it does
+ * nothing. Shipped without this once: a radar click on a single-number question
+ * silently no-op'd and read as broken. The toast path stays as a backstop for
+ * a fit that fails between render and click.
  */
 import React from 'react'
 import { screen } from '@testing-library/react'
@@ -22,7 +23,7 @@ const { toastSpy } = vi.hoisted(() => ({ toastSpy: vi.fn() }))
 vi.mock('@/components/ui/toaster', () => ({ toaster: { create: toastSpy } }))
 
 const RADARISH: VizRecipeContent = {
-  description: 'Radar-like: needs a nominal metric + quantitative values',
+  description: 'Radar-like: needs a text metric + number values',
   engine: 'vega-lite',
   bindings: [
     { name: 'metric', label: 'Metrics', accepts: ['nominal'] },
@@ -43,10 +44,10 @@ const tableViz: VizEnvelope = {
   source: { kind: 'table', columnFormats: null, conditionalFormats: null, css: null },
 } as unknown as VizEnvelope
 
-describe('workspace recipe apply feedback', () => {
+describe('workspace recipe applicability', () => {
   beforeEach(() => toastSpy.mockClear())
 
-  it('a recipe that cannot auto-bind toasts the reason and changes nothing', async () => {
+  it('a recipe that cannot bind is greyed out with a plain-words hover reason, and clicks do nothing', async () => {
     const user = userEvent.setup()
     const onVizChange = vi.fn()
     renderWithProviders(
@@ -57,27 +58,27 @@ describe('workspace recipe apply feedback', () => {
         onVizChange={onVizChange}
       />,
     )
-    await user.click(screen.getByLabelText('Recipe radar'))
+    const tile = screen.getByLabelText('Recipe radar')
+    expect(tile.getAttribute('aria-disabled')).toBe('true')
+    expect(tile.getAttribute('title')).toMatch(/text column/i)
+    expect(tile.getAttribute('title')).toContain('Metrics')
+    expect(tile.getAttribute('title')).toMatch(/has none/i)
+
+    await user.click(tile)
     expect(onVizChange).not.toHaveBeenCalled()
-    expect(toastSpy).toHaveBeenCalledTimes(1)
-    const toast = toastSpy.mock.calls[0][0]
-    expect(String(toast.title) + String(toast.description)).toMatch(/metric/i)
-    expect(toast.type).toBe('error')
+    expect(toastSpy).not.toHaveBeenCalled() // disabled — nothing to report
   })
 
-  it('with NO result columns the toast says to run the query first', async () => {
-    const user = userEvent.setup()
-    const onVizChange = vi.fn()
+  it('with NO result yet the tile is greyed out with a run-the-query hint', () => {
     renderWithProviders(
-      <VegaVizPanel envelope={tableViz} columns={[]} types={[]} onVizChange={onVizChange} />,
+      <VegaVizPanel envelope={tableViz} columns={[]} types={[]} onVizChange={vi.fn()} />,
     )
-    await user.click(screen.getByLabelText('Recipe radar'))
-    expect(onVizChange).not.toHaveBeenCalled()
-    expect(toastSpy).toHaveBeenCalledTimes(1)
-    expect(String(toastSpy.mock.calls[0][0].description)).toMatch(/run the query/i)
+    const tile = screen.getByLabelText('Recipe radar')
+    expect(tile.getAttribute('aria-disabled')).toBe('true')
+    expect(tile.getAttribute('title')).toMatch(/run the query/i)
   })
 
-  it('a recipe that fits applies without any toast', async () => {
+  it('a recipe that fits is enabled and applies without any toast', async () => {
     const user = userEvent.setup()
     const onVizChange = vi.fn()
     renderWithProviders(
@@ -88,7 +89,9 @@ describe('workspace recipe apply feedback', () => {
         onVizChange={onVizChange}
       />,
     )
-    await user.click(screen.getByLabelText('Recipe radar'))
+    const tile = screen.getByLabelText('Recipe radar')
+    expect(tile.getAttribute('aria-disabled')).toBe('false')
+    await user.click(tile)
     expect(onVizChange).toHaveBeenCalledTimes(1)
     expect(toastSpy).not.toHaveBeenCalled()
   })
