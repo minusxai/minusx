@@ -1,11 +1,15 @@
 /**
- * Browser validation site for LIVE workspace viz-recipe references: the same
- * dry-run materialization walk as the server save gate
- * (lib/data/helpers/viz-recipe-refs.server.ts), run by the EditFile handler
- * at APPLY time so an unresolvable reference rejects atomically with the
- * available catalog — feedback the agent can act on in-loop. Nothing is
- * rewritten: the reference stays stored as-is, and rendering materializes it
- * (loader-computed on load, client-side for staged edits).
+ * Browser-side materialization of LIVE workspace viz-recipe references, over
+ * the Redux-loaded `.viz` files. Two entry points on one walk
+ * (lib/viz/recipe-reference-core.ts), shared with the server:
+ *  - `validateVizRecipeRefsClient` — the EditFile APPLY gate. An unresolvable
+ *    reference rejects atomically with the available catalog, feedback the
+ *    agent can act on in-loop. Nothing is rewritten: the reference stays as
+ *    authored.
+ *  - `materializeVizRecipeRefsClient` — attaches the computed spec for a
+ *    consumer that needs one before any save, i.e. the chart-image renderer.
+ *    The markup round-trip drops computed fields, so staged content ALWAYS
+ *    arrives bare; only a server-loaded file is already materialized.
  */
 import {
   availableRecipeNames,
@@ -37,6 +41,20 @@ function reduxLoaders(): { loaders: VizRecipeLoaders } {
       (augmented.find((a) => a.fileState.id === fileId)?.fileState.content as VizRecipeContent | undefined) ?? null,
   };
   return { loaders };
+}
+
+/**
+ * Materialize every live recipe reference in `content` for rendering. Never
+ * throws and never rejects: an unresolvable reference comes back marked
+ * `unresolved`, which every consumer degrades on (a table, or no image).
+ */
+export async function materializeVizRecipeRefsClient(
+  type: FileType,
+  content: unknown,
+  folder: string,
+): Promise<unknown> {
+  const { loaders } = reduxLoaders();
+  return materializeVizRecipeRefsInContent(type, stripVizRecipeComputedFields(type, content), folder, loaders);
 }
 
 export async function validateVizRecipeRefsClient(

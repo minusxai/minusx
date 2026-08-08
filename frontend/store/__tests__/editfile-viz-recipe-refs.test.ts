@@ -10,6 +10,7 @@ import { readFiles } from '@/lib/file-state/file-state';
 import { fileToMarkup } from '@/lib/data/story/file-markup';
 import { selectMergedContent } from '@/store/filesSlice';
 import { executeToolCall } from '@/lib/tools/tool-handlers';
+import { materializeVizRecipeRefsClient } from '@/lib/tools/handlers/viz-recipe-refs-client';
 import { configureStore } from '@reduxjs/toolkit';
 import filesReducer from '../filesSlice';
 import queryResultsReducer from '../queryResultsSlice';
@@ -146,6 +147,25 @@ describe('EditFile viz-recipe reference validation at apply', () => {
     expect(source.recipe).toBe('kpi-bar');
     expect(source.bindings).toEqual({ label: 'label', value: 'value' });
     expect(source.spec).toBeUndefined();
+  });
+
+  it('materializes a STAGED reference client-side (chart images + render need a spec)', async () => {
+    await readFiles([questionId]);
+    await executeToolCall(
+      { id: 'c2', type: 'function', function: { name: 'EditFile', arguments: {
+        fileId: questionId,
+        changes: [{ oldMatch: currentVizMarkup(), newMatch: RECIPE_VIZ }],
+      } } } as any,
+    );
+    // The staged content holds only the reference (the markup round-trip drops
+    // computed fields), so every browser consumer materializes from the Redux
+    // catalog — the chart-image renderer included.
+    const merged = selectMergedContent(testStore.getState(), questionId) as QuestionContent;
+    const live = await materializeVizRecipeRefsClient('question', merged, '/org') as QuestionContent;
+    const source = live.viz!.source as unknown as VizSourceRecipe & { spec?: Record<string, unknown>; grammar?: string };
+    expect(source.spec).toBeDefined();
+    expect((source.spec!.encoding as Record<string, { field: string }>).x.field).toBe('label');
+    expect(source.grammar).toBe('vega-lite@6');
   });
 
   it('rejects an unresolvable recipe name atomically, listing the catalog', async () => {

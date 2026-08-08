@@ -154,6 +154,23 @@ describe('live viz recipe references', () => {
     )).rejects.toThrow(/no-such-recipe[\s\S]*kpi-bar/);
   });
 
+  it('materializes a question reached as a dashboard REFERENCE, not only by id', async () => {
+    // Dashboards/stories/share pages read their questions through the reference
+    // expansion, which applies the per-type loader — otherwise every embedded
+    // chart would arrive bare and render as a table.
+    const dashboard = await FilesAPI.createFile(
+      { name: 'dash', path: '/org/dash', type: 'dashboard',
+        content: { description: null, questions: [{ id: questionId, x: 0, y: 0, w: 6, h: 4 }], paramValues: null, assets: [] } as never,
+        references: [questionId] },
+      user,
+    );
+    const { metadata } = await FilesAPI.loadFile(dashboard.data.id, user);
+    const ref = metadata.references.find((r) => r.id === questionId);
+    const source = (ref!.content as QuestionContent).viz!.source as unknown as LoadedSource;
+    expect(source.kind).toBe('recipe');
+    expect(source.spec).toBeDefined();
+  });
+
   it('materializes references inside notebook SQL cells too', async () => {
     const notebook = {
       description: null,

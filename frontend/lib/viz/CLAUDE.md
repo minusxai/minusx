@@ -103,7 +103,10 @@ loaders injected so the helper never imports `files.server`) STRIPS the computed
 dry-run-validates the reference — an unknown name rejects with the resolvable catalog, and the
 materialized spec is grammar-checked; and the EditFile handler validates the same way at apply
 time (`lib/tools/handlers/viz-recipe-refs-client.ts`, over the Redux file listing) so the agent
-gets in-loop feedback without the reference being rewritten. A recipe deleted AFTER save degrades
+gets in-loop feedback without the reference being rewritten. That third module also exports the
+browser MATERIALIZER, and `lib/tools/handlers/chart-images.ts` needs it: the markup round-trip
+drops computed fields, so staged content is always bare and the agent would otherwise get no
+image of the chart it just authored. A recipe deleted AFTER save degrades
 its charts to a plain TABLE fallback (`useLiveVizEnvelope` in `lib/hooks/use-viz-recipes.ts`
 reports `unresolved`; `QuestionVisualization` renders `TableV2`) — the reference survives, so
 restoring the recipe brings the chart back. Column kinds are unknown at read, so `{{slot:kind}}`
