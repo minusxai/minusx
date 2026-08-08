@@ -1,6 +1,6 @@
 'use client';
 
-import { LuAlignLeft, LuPlay } from 'react-icons/lu';
+import { LuAlignLeft, LuPlay, LuSquare } from 'react-icons/lu';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/kit/tooltip';
 
 interface SqlEditorToolbarProps {
@@ -10,6 +10,9 @@ interface SqlEditorToolbarProps {
   onFormat: () => void;
   onRun?: () => void;
   isRunning: boolean;
+  /** Cancel the running query — while running, the Run control becomes Stop.
+   * Omitted (surfaces that cannot cancel) keeps the legacy disabled spinner. */
+  onStop?: () => void;
 }
 
 /**
@@ -22,10 +25,12 @@ export default function SqlEditorToolbar({
   onFormat,
   onRun,
   isRunning,
+  onStop,
 }: SqlEditorToolbarProps) {
   if (readOnly || !(showFormatButton || showRunButton)) {
     return null;
   }
+  const showStop = isRunning && !!onStop;
 
   return (
     <TooltipProvider>
@@ -45,7 +50,24 @@ export default function SqlEditorToolbar({
             <TooltipContent side="left">Format SQL</TooltipContent>
           </Tooltip>
         )}
-        {showRunButton && onRun && (
+        {showRunButton && onRun && (showStop ? (
+          // Running + cancellable: the same control becomes STOP. The spinner
+          // ring keeps signalling execution; the square is the cancel target.
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={onStop}
+                aria-label="Stop query"
+                className="relative flex size-8 cursor-pointer items-center justify-center rounded-md bg-destructive text-white transition-colors hover:bg-destructive/90"
+              >
+                <span className="absolute size-6 animate-spin rounded-full border-2 border-white/25 border-t-white/70" />
+                <LuSquare size={10} fill="white" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="left">Stop query</TooltipContent>
+          </Tooltip>
+        ) : (
           <Tooltip>
             <TooltipTrigger asChild>
               <button
@@ -64,7 +86,7 @@ export default function SqlEditorToolbar({
             </TooltipTrigger>
             <TooltipContent side="left">Run Query (Cmd+Enter)</TooltipContent>
           </Tooltip>
-        )}
+        ))}
       </div>
     </TooltipProvider>
   );

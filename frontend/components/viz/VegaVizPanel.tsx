@@ -262,9 +262,10 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange, file
           the grid visible for authored compositions; clicking it previews the
           custom state (info only) rather than converting. */}
       <VizTypeSelector
-        // vizType is DERIVED from the source. Unrecognized shapes select Custom;
-        // clicking the active family is a no-op, preserving authored specs exactly.
-        value={customPreview ? 'custom' : (vizType ?? 'custom') as SelectableVizType}
+        // vizType is DERIVED from the source. Unrecognized shapes select Custom —
+        // EXCEPT when a workspace recipe is active: its Workspace tile is the
+        // highlight, and falling back to Custom would light both at once.
+        value={customPreview ? 'custom' : fileRecipeRef ? null : (vizType ?? 'custom') as SelectableVizType}
         includeV2Only
         onChange={(t) => {
           if (t === 'custom') { setCustomPreview(true); return; }
