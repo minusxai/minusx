@@ -18,6 +18,7 @@ import { hashOTP } from '@/lib/auth/otp-utils';
 import { OTP_MAX_ATTEMPTS, OTP_MAX_SENDS_PER_WINDOW } from '@/lib/auth/auth-constants';
 
 const EMAIL = 'otp-route@example.com';
+const TWOFA_EMAIL = 'otp-2fa@example.com';
 const UNKNOWN = 'nobody-here@example.com';
 
 /** One entry per dispatch actually attempted — the stand-in for "an email went out". */
@@ -96,6 +97,12 @@ describe('OTP routes', () => {
         password_hash: await hashPassword('correct-horse'),
         role: 'editor',
       });
+      await UserDB.create(TWOFA_EMAIL, 'Two Factor User', '', {
+        password_hash: await hashPassword('correct-horse'),
+        role: 'editor',
+        phone: '+15550001111',
+        state: JSON.stringify({ twofa_phone_otp_enabled: true }),
+      });
     },
   });
 
@@ -171,6 +178,25 @@ describe('OTP routes', () => {
 
     it('refuses a handle that was never issued', async () => {
       expect((await verify('f'.repeat(64), '123456')).status).toBe(401);
+    });
+
+    it('tells the client a password is still needed for a 2FA account', async () => {
+      // Otherwise the Email Code entry point dead-ends: the code verifies, the sign-in
+      // is then refused for having only one factor, and the user is left with a generic
+      // failure and no way forward. Disclosing this to someone who has just proven
+      // control of the mailbox reveals nothing they could not learn by trying to log in.
+      const { body } = await send({ email: TWOFA_EMAIL, channel: 'email' });
+      const res = await verify(body.data.token, issuedCodes[0]);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.passwordRequired).toBe(true);
+    });
+
+    it('does not ask for a password on a plain account', async () => {
+      const { body } = await send({ email: EMAIL, channel: 'email' });
+      const res = await verify(body.data.token, issuedCodes[0]);
+
+      expect(res.body.data.passwordRequired).toBe(false);
     });
 
     it('refuses the previous code once a new one is sent', async () => {

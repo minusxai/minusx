@@ -102,6 +102,9 @@ export function LoginOrRegisterForm({
   const [loginMethod, setLoginMethod] = useState<'password' | 'emailOtp'>('password');
   const [showOTPInput, setShowOTPInput] = useState(false);
   const [otpToken, setOtpToken] = useState<string | null>(null);
+  // Set only when a code has verified but the account still owes a password (2FA).
+  // Its presence is what switches the card to the password step.
+  const [verifiedToken, setVerifiedToken] = useState<string | null>(null);
   const [otp, setOtp] = useState('');
   const [otpLoading, setOtpLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
@@ -263,6 +266,37 @@ export function LoginOrRegisterForm({
     }
   };
 
+  /**
+   * Second half of the email-code login for an account that also has a second factor:
+   * the code is already verified, so this submits it together with the password.
+   */
+  const handleSubmitSecondFactorPassword = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!verifiedToken || !password) return;
+    setLoginError(null);
+    setLoginLoading(true);
+    try {
+      const result = await signIn('credentials', {
+        email,
+        password,
+        otp_verified_token: verifiedToken,
+        redirect: false,
+      });
+      if (result?.error) {
+        // The verified token outlives the code but not forever; say so, since the fix
+        // differs depending on which half was wrong.
+        setLoginError('Incorrect password, or the code expired. Please try again.');
+        setLoginLoading(false);
+        return;
+      }
+      window.location.href = callbackUrl || '/';
+    } catch (err) {
+      console.error('Second-factor password error:', err);
+      setLoginError('An unexpected error occurred');
+      setLoginLoading(false);
+    }
+  };
+
   const handleVerifyEmailOTP = async () => {
     if (!otpToken || otp.length !== 6) return;
     setLoginError(null);
@@ -277,6 +311,14 @@ export function LoginOrRegisterForm({
         });
       } catch (err) {
         setLoginError(otpErrorMessage(err));
+        setOtpLoading(false);
+        return;
+      }
+      // A code is one factor. An account with a second factor must also present its
+      // password, so ask for it rather than letting a correct code fail the sign-in.
+      if (verifyData.data.passwordRequired) {
+        setVerifiedToken(verifyData.data.verifiedToken);
+        setShowOTPInput(false);
         setOtpLoading(false);
         return;
       }
@@ -588,19 +630,44 @@ export function LoginOrRegisterForm({
                     bg={loginMethod === 'password' ? 'bg.surface' : 'transparent'}
                     color={loginMethod === 'password' ? 'fg.default' : 'fg.muted'}
                     fontWeight={loginMethod === 'password' ? 600 : 400}
-                    onClick={() => { setLoginMethod('password'); setShowOTPInput(false); setOtp(''); setOtpToken(null); setLoginError(null); }}
+                    onClick={() => { setLoginMethod('password'); setShowOTPInput(false); setOtp(''); setOtpToken(null); setVerifiedToken(null); setLoginError(null); }}
                   >Password</Button>
                   <Button
                     type="button" size="sm" variant="ghost" borderRadius="sm"
                     bg={loginMethod === 'emailOtp' ? 'bg.surface' : 'transparent'}
                     color={loginMethod === 'emailOtp' ? 'fg.default' : 'fg.muted'}
                     fontWeight={loginMethod === 'emailOtp' ? 600 : 400}
-                    onClick={() => { setLoginMethod('emailOtp'); setShowOTPInput(false); setOtp(''); setOtpToken(null); setLoginError(null); }}
+                    onClick={() => { setLoginMethod('emailOtp'); setShowOTPInput(false); setOtp(''); setOtpToken(null); setVerifiedToken(null); setLoginError(null); }}
                   >Email Code</Button>
                 </Box>
               )}
 
-              {loginMethod === 'emailOtp' ? (
+              {loginMethod === 'emailOtp' && verifiedToken ? (
+                /* The code checked out, but this account also has a second factor, so it
+                   still owes a password. Without this step a correct code would simply
+                   fail the sign-in with nothing the user could act on. */
+                <form onSubmit={handleSubmitSecondFactorPassword} style={{ width: '100%' }}>
+                  <VStack gap={4} w="full">
+                    <Text fontSize="sm" color="fg.muted" textAlign="center">
+                      Code verified. Enter the password for <strong>{email}</strong> to finish signing in.
+                    </Text>
+                    <Input
+                      type="password"
+                      aria-label="Password"
+                      placeholder="Password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      autoFocus
+                      size="lg"
+                    />
+                    <Button type="submit" aria-label="Finish sign in" w="full" bg="accent.teal" color="white" size="lg" loading={loginLoading} disabled={loginLoading || !password} _hover={{ bg: 'accent.teal', opacity: 0.9 }}>
+                      <LuLogIn />
+                      Sign In
+                    </Button>
+                  </VStack>
+                </form>
+              ) : loginMethod === 'emailOtp' ? (
                 <VStack gap={4} w="full">
                   <Input ref={emailRef} type="email" aria-label="Email" fontFamily="mono" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus size="lg" disabled={showOTPInput} />
                   {!showOTPInput ? (

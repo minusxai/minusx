@@ -10,6 +10,8 @@
 
 import { NextRequest } from 'next/server';
 import { createVerifiedToken } from '@/lib/auth/otp-utils';
+import { requiresTwoFactor } from '@/lib/auth/two-factor';
+import { UserDB } from '@/lib/database/user-db';
 import { AuthCodesDB } from '@/lib/database/auth-codes-db';
 import { successResponse, ApiErrors, handleApiError } from '@/lib/http/api-responses';
 
@@ -34,10 +36,18 @@ export async function POST(request: NextRequest) {
         : ApiErrors.unauthorized('Invalid or expired code');
     }
 
+    // A code is ONE factor. For a 2FA account the sign-in will require a password
+    // alongside it, and the caller has to be told so — otherwise the passwordless entry
+    // point dead-ends on a correct code with a generic failure and no way forward. This
+    // is only disclosed to someone who has just proven control of the address, who could
+    // learn the same thing by simply attempting to log in.
+    const user = await UserDB.getByEmail(result.email);
+
     return successResponse({
       success: true,
       email: result.email,
-      // Spent immediately by signIn(); carries no code and no digest.
+      passwordRequired: requiresTwoFactor(user),
+      // Spent by signIn(); carries no code and no digest.
       verifiedToken: createVerifiedToken(result.email),
       message: 'OTP verified successfully',
     });

@@ -103,14 +103,17 @@ describe('AuthCodesDB', () => {
       expect((await rowFor(handle))!.attempts).toBe(1);
     });
 
-    it('counts concurrent guesses individually — no lost updates', async () => {
+    it('never counts more attempts than the cap allows, however they arrive', async () => {
       const handle = await issue('123456');
-      // Ten racing wrong guesses against a cap of five: at most five may be counted as
-      // real attempts, and none may slip through uncounted.
       await Promise.all(
         Array.from({ length: 10 }, () => AuthCodesDB.verify(handle, '000000', NOW)),
       );
       expect((await rowFor(handle))!.attempts).toBe(OTP_MAX_ATTEMPTS);
+      // NOTE: this does NOT prove the increment is race-free. `PgliteAdapter` funnels
+      // every query through a promise chain, so `Promise.all` here runs sequentially and
+      // a naive SELECT-then-UPDATE would pass too. The atomicity comes from the single
+      // guarded `UPDATE … RETURNING` in `verify`, and only real Postgres could observe
+      // it. What this pins is the cap arithmetic.
     });
   });
 
@@ -122,13 +125,15 @@ describe('AuthCodesDB', () => {
       expect(await AuthCodesDB.verify(handle, '123456', NOW)).toEqual({ ok: false, reason: 'invalid' });
     });
 
-    it('lets exactly one of two concurrent correct submissions win', async () => {
+    it('lets exactly one of two correct submissions win', async () => {
       const handle = await issue('123456');
       const results = await Promise.all([
         AuthCodesDB.verify(handle, '123456', NOW),
         AuthCodesDB.verify(handle, '123456', NOW),
       ]);
       expect(results.filter(r => r.ok)).toHaveLength(1);
+      // As above: PGLite serializes these, so this pins the single-use rule rather than
+      // the concurrency guard (`WHERE consumed_at IS NULL` on the consuming UPDATE).
     });
   });
 

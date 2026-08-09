@@ -59,9 +59,9 @@ export function codeMatchesHash(submittedOTP: string, otpHash: string): boolean 
  * verification and spent immediately by `signIn()`.
  *
  * It carries no code and no digest, so it is safe as a stateless JWT; its exposure is
- * the 60-second window in which a caller who can already read the verify response could
- * replay it, and anyone who can read that response can read the session cookie it is
- * about to become.
+ * the window in which a caller who can already read the verify response could replay it,
+ * and anyone who can read that response can read the session cookie it is about to
+ * become.
  */
 export interface VerifiedOTPPayload {
   email: string;
@@ -73,7 +73,12 @@ export interface VerifiedOTPPayload {
   exp: number;
 }
 
-const VERIFIED_TOKEN_TTL_SECONDS = 60;
+/**
+ * Long enough to type a password into the prompt a 2FA account gets after its code
+ * verifies — that step happens inside this window, so a minute is not enough. Still far
+ * shorter than a session, and the token is spent on the very next request.
+ */
+const VERIFIED_TOKEN_TTL_SECONDS = 5 * 60;
 
 export function createVerifiedToken(email: string): string {
   const secret = NEXTAUTH_SECRET;
