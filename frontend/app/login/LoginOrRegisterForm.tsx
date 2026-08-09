@@ -630,6 +630,7 @@ export function LoginOrRegisterForm({
                     bg={loginMethod === 'password' ? 'bg.surface' : 'transparent'}
                     color={loginMethod === 'password' ? 'fg.default' : 'fg.muted'}
                     fontWeight={loginMethod === 'password' ? 600 : 400}
+                    aria-label="Password login"
                     onClick={() => { setLoginMethod('password'); setShowOTPInput(false); setOtp(''); setOtpToken(null); setVerifiedToken(null); setLoginError(null); }}
                   >Password</Button>
                   <Button
@@ -637,6 +638,7 @@ export function LoginOrRegisterForm({
                     bg={loginMethod === 'emailOtp' ? 'bg.surface' : 'transparent'}
                     color={loginMethod === 'emailOtp' ? 'fg.default' : 'fg.muted'}
                     fontWeight={loginMethod === 'emailOtp' ? 600 : 400}
+                    aria-label="Email code login"
                     onClick={() => { setLoginMethod('emailOtp'); setShowOTPInput(false); setOtp(''); setOtpToken(null); setVerifiedToken(null); setLoginError(null); }}
                   >Email Code</Button>
                 </Box>
@@ -671,7 +673,7 @@ export function LoginOrRegisterForm({
                 <VStack gap={4} w="full">
                   <Input ref={emailRef} type="email" aria-label="Email" fontFamily="mono" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus size="lg" disabled={showOTPInput} />
                   {!showOTPInput ? (
-                    <Button onClick={handleSendEmailOTP} w="full" bg="accent.teal" color="white" size="lg" loading={otpLoading} disabled={otpLoading} _hover={{ bg: 'accent.teal', opacity: 0.9 }}>
+                    <Button onClick={handleSendEmailOTP} aria-label="Send login code" w="full" bg="accent.teal" color="white" size="lg" loading={otpLoading} disabled={otpLoading} _hover={{ bg: 'accent.teal', opacity: 0.9 }}>
                       <LuLogIn />
                       Send Login Code
                     </Button>
@@ -681,7 +683,7 @@ export function LoginOrRegisterForm({
                         We&apos;ve sent a login code to <strong>{email}</strong>. Enter it below.
                       </Text>
                       <OTPInput value={otp} onChange={setOtp} onComplete={handleVerifyEmailOTP} disabled={otpLoading} />
-                      <Button onClick={handleVerifyEmailOTP} w="full" bg="accent.teal" color="white" size="lg" loading={otpLoading} disabled={otpLoading || otp.length !== 6} _hover={{ bg: 'accent.teal', opacity: 0.9 }}>
+                      <Button onClick={handleVerifyEmailOTP} aria-label="Verify login code" w="full" bg="accent.teal" color="white" size="lg" loading={otpLoading} disabled={otpLoading || otp.length !== 6} _hover={{ bg: 'accent.teal', opacity: 0.9 }}>
                         Verify Code
                       </Button>
                       <Button onClick={handleSendEmailOTP} variant="ghost" size="sm" disabled={resendCooldown > 0 || otpLoading}>

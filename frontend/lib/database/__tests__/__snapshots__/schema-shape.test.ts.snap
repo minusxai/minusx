@@ -163,6 +163,13 @@ TABLE llm_logs
   con  llm_logs_pkey PRIMARY KEY (call_id)
   idx  CREATE INDEX idx_llm_logs_ts ON public.llm_logs USING btree (created_at)
   idx  CREATE UNIQUE INDEX llm_logs_pkey ON public.llm_logs USING btree (call_id)
+TABLE login_attempts
+  col  email text NOT NULL
+  col  failures integer NOT NULL DEFAULT 0
+  col  window_started_at bigint NOT NULL
+  con  login_attempts_pkey PRIMARY KEY (email)
+  idx  CREATE INDEX idx_login_attempts_window ON public.login_attempts USING btree (window_started_at)
+  idx  CREATE UNIQUE INDEX login_attempts_pkey ON public.login_attempts USING btree (email)
 TABLE messages
   col  content jsonb NOT NULL
   col  conversation_id integer NOT NULL

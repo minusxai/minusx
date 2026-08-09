@@ -98,6 +98,7 @@ export function OTPInput({
         <Input
           key={index}
           ref={(el) => { inputRefs.current[index] = el; }}
+          aria-label={`Login code digit ${index + 1}`}
           type="text"
           inputMode="numeric"
           maxLength={1}

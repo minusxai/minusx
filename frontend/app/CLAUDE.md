@@ -161,7 +161,8 @@ promotion.
 `api/jobs/runs` (history), `api/jobs/test` (single eval Test via `createServerRunner`).
 
 **Auth, orgs, users.** `api/auth/[...nextauth]` re-exports the NextAuth handlers; `check-2fa`
-(advisory — it tells the form which flow to render and enforces nothing), `send-otp` (phone 2FA
+(advisory — it tells the form which flow to render and enforces nothing, but shares the credentials
+callback's failed-password counter, so it is not a cheaper password oracle), `send-otp` (phone 2FA
 *or* passwordless email) and `verify-otp` sit beside it. Both OTP routes are thin wrappers over
 `AuthCodesDB` (`lib/database/auth-codes-db.ts`), which holds the code digest, the attempt counter
 and single-use consumption; `send-otp` returns only an opaque handle.

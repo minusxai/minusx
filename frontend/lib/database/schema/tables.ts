@@ -438,6 +438,38 @@ export const AUTH_CODES = {
   ],
 } as const satisfies Schema[number];
 
+/**
+ * Failed-password counters, one row per address.
+ *
+ * A password check is an oracle: it answers "is this the password for this account",
+ * and it answered unlimited times. `check-2fa` was the cheapest way to ask, but the
+ * credentials callback answers identically, so throttling one endpoint would only have
+ * moved the question — the counter therefore lives under the shared decision in
+ * `lib/auth/credential-login.ts` and covers every caller of it.
+ *
+ * Rows are keyed on the SUBMITTED address, lowercased, and are written before the user
+ * lookup: engaging the counter only for addresses that resolve would make a
+ * rate-limited response a user-existence oracle, which is the leak the decoy in
+ * `send-otp` exists to close.
+ *
+ * Deliberately absent from `lib/database/import-export.ts` (which enumerates only
+ * `users` and `files`) — a transient counter must not survive a migration round-trip.
+ */
+export const LOGIN_ATTEMPTS = {
+  name: 'login_attempts',
+  scope: 'per-namespace',
+  columns: [
+    { name: 'email', type: 'TEXT', notNull: true },
+    { name: 'failures', type: 'INTEGER', notNull: true, default: '0' },
+    // Epoch milliseconds. Start of the window the count belongs to, not the last
+    // failure: the window is fixed once opened, so a steady drip of guesses cannot keep
+    // pushing the expiry out and hold an address locked indefinitely.
+    { name: 'window_started_at', type: 'BIGINT', notNull: true },
+  ],
+  primaryKey: ['email'],
+  indexes: [{ name: 'idx_login_attempts_window', columns: ['window_started_at'] }],
+} as const satisfies Schema[number];
+
 export const PUBLIC_DATA = {
   name: 'public_data',
   scope: 'public',
@@ -472,5 +504,6 @@ export const PUBLIC_DATA = {
 export const TABLES: Schema = [
   USERS, FILES, SECRETS, JOB_RUNS, CONFIGS,
   FILE_EVENTS, LLM_CALL_EVENTS, LLM_LOGS, QUERIES, QUERY_EXECUTION_EVENTS,
-  FEEDBACK_EVENTS, APP_EVENTS, CONVERSATIONS, MESSAGES, QUERY_CACHE, AUTH_CODES, PUBLIC_DATA,
+  FEEDBACK_EVENTS, APP_EVENTS, CONVERSATIONS, MESSAGES, QUERY_CACHE, AUTH_CODES,
+  LOGIN_ATTEMPTS, PUBLIC_DATA,
 ];

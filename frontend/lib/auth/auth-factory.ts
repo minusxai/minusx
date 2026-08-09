@@ -1,7 +1,7 @@
 import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import { UserDB } from '@/lib/database/user-db';
-import { evaluateCredentials, type CredentialSubject } from '@/lib/auth/credential-login';
+import { attemptCredentialLogin, type CredentialSubject } from '@/lib/auth/credential-login';
 import { IS_DEV } from '@/lib/constants';
 import type { UserRole } from '@/lib/types';
 import { EMBED_ENABLED } from '@/lib/config';
@@ -56,22 +56,24 @@ export function createAuthConfig(options: AuthConfigOptions = {}) {
           if (!credentials?.email) return null;
           try {
             const user = await doLookup(credentials.email as string);
-            if (!user) {
-              console.log('User not found:', credentials.email);
-              return null;
-            }
-            // The decision — including the two-factor gate — lives in
-            // `lib/auth/credential-login.ts`. Keeping it out of here is what makes it
-            // reachable from a test without standing up the whole NextAuth handler.
-            const decision = await evaluateCredentials(user as CredentialSubject, {
-              email: credentials.email as string,
-              password: credentials.password,
-              otp_verified_token: credentials.otp_verified_token,
-            });
+            // An unknown address is NOT short-circuited: it goes through the same door so
+            // it consumes the same failed-password budget. Returning early here would
+            // make being rate-limited a user-existence oracle.
+            const decision = await attemptCredentialLogin(
+              (user as CredentialSubject | null) ?? null,
+              {
+                email: credentials.email as string,
+                password: credentials.password,
+                otp_verified_token: credentials.otp_verified_token,
+              },
+            );
             if (!decision.ok) {
               console.log(`Login refused for ${credentials.email}: ${decision.reason}`);
               return null;
             }
+            // Unreachable: a null user always decides `bad-password` above. Present so
+            // the narrowing below is the type system's, not a cast.
+            if (!user) return null;
             return {
               id: user.email,
               userId: user.id,

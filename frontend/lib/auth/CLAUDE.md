@@ -387,6 +387,7 @@ The constants live beside the rules (`scoring.ts`: weights `0.3/0.3/0.4` for vis
 | Change what logs a user in (password, OTP, the 2FA gate) | `lib/auth/credential-login.ts` |
 | Change what counts as having a second factor | `lib/auth/two-factor.ts` (one predicate, three call sites) |
 | Change login-code storage, attempt cap, or send throttle | `lib/database/auth-codes-db.ts` + `lib/auth/auth-constants.ts` |
+| Change the failed-password cap or window | `lib/database/login-attempts-db.ts` + `lib/auth/auth-constants.ts` |
 | Change what identity a request resolves to | `lib/auth/auth-helpers.ts` |
 | Add/alter a request header, public route, or redirect | `lib/middleware/create-middleware.ts` |
 | Change role → file-type permissions | `frontend/rules.json` + both `lib/auth/access-rules*.ts` |
@@ -434,7 +435,17 @@ The two clocks are different on purpose: `expires_at` governs the code (minutes)
 
 **The second factor is enforced in `evaluateCredentials`, not by the login form.** `check-2fa` is advisory: it tells the form which flow to render. The gate itself is one rule — an account with a second factor needs a valid password *and* a completed code challenge; an account without one needs either. It previously existed only in the browser, so posting email+password straight at the credentials provider skipped the code entirely. A passwordless email code therefore cannot log into a 2FA account on its own: one factor is one factor whichever channel delivered it. `requiresTwoFactor` (`two-factor.ts`) includes the phone number in the condition, so clearing the number is how an admin turns 2FA off — a flag with no number to send to would describe an unperformable factor, and the gate would make the account unloginable.
 
-**`/api/auth/check-2fa` is an unthrottled password oracle** — 401 vs 200 on `{email, password}`, unauthenticated. Throttling it alone would close nothing, since the credentials callback answers the same question; the fix is login rate limiting generally, and neither is implemented.
+**Every password check is counted, in one place.** A login endpoint is inherently a password oracle — `check-2fa` answers "is this the password for this account" with 200 vs 401, unauthenticated — and the credentials callback answers identically, so throttling one route would only move the question. `attemptCredentialLogin` (`credential-login.ts`) is therefore the single stateful door: it consults `login_attempts`, calls the pure `evaluateCredentials`, and records the outcome. `check-2fa` and `authorize()` both go through it, and `check-2fa` no longer carries its own copy of the password logic — it reads `otp-required` (returned only *after* the password is accepted) as `requires2FA: true`.
+
+Three properties are load-bearing, and `__tests__/login-rate-limit.test.ts` pins each:
+
+- **An unknown address is counted like a real one.** `authorize()` deliberately does not short-circuit on a missing user, and the route passes `null`. Counting only resolvable addresses would make a rate-limited response the user-existence oracle the `send-otp` decoy exists to close.
+- **The lock covers a CORRECT password.** Otherwise the cap only slows a guesser down — they still learn the answer the moment they hit it.
+- **Only a wrong password counts.** `otp-required` clears the counter (the password was right), and a code-only attempt never touches it — a stranger must not be able to lock an address out through an endpoint that never sees a password. Failed codes have their own tighter budget in `auth_codes`.
+
+The window is FIXED, not sliding: `window_started_at` moves only when a window has actually elapsed, so a steady drip of guesses cannot hold an address locked indefinitely.
+
+**The lockout is a denial-of-service surface, deliberately accepted.** `ADMIN_PWD` is checked inside `passwordAccepted` and so is subject to the same counter — someone who knows an admin's address can deny that admin a login for a window at a time. That is why the window is short and self-clearing, and why the escape hatch is worth knowing: deleting the address's row from `login_attempts` lifts a lock immediately.
 
 **The runtime E2E opt-in is a hygiene gate, not a security boundary.** `?e2e=<E2E_RUNTIME_SECRET>` (validated in `lib/auth/e2e-runtime.ts`, persisted as the `mx_e2e` cookie, surfaced to SSR as the `x-e2e-enabled` header) does exactly one thing: it lets `ReduxProvider` expose `window.__MX_STORE__`, which is the requester's own Redux state, already present in their browser. No other user's data is behind it, so a leaked secret is a rotation rather than an incident. The faux-LLM channel is the part that stays build-time-only and 404s on a production build.
 

@@ -30,3 +30,20 @@ export const OTP_MAX_SENDS_PER_WINDOW = 5;
  * two thirds of the way through the window.
  */
 export const OTP_RETENTION_MS = OTP_SEND_WINDOW_MS;
+
+/**
+ * Failed-password policy.
+ *
+ * A password is not a six-digit code, so this is not sized against exhaustive search —
+ * it is sized against credential stuffing and against the password oracle that any
+ * login endpoint inherently is. Ten is comfortably above what a real person typing a
+ * forgotten password produces.
+ *
+ * The tradeoff is stated rather than hidden: because the counter is keyed on the
+ * address and `ADMIN_PWD` is checked inside the same gate, someone who knows an
+ * admin's address can deny that admin a login for the length of a window, repeatedly.
+ * The window is short and self-clearing for that reason, and an operator can lift a
+ * lock immediately by deleting the address's row from `login_attempts`.
+ */
+export const LOGIN_MAX_FAILURES = 10;
+export const LOGIN_FAILURE_WINDOW_MS = 15 * 60 * 1000;
