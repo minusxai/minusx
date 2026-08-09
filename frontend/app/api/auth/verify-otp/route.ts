@@ -1,51 +1,44 @@
 /**
  * POST /api/auth/verify-otp
- * Verify OTP submitted by user against JWT token
- * Fully stateless - no cache needed
+ * Check a submitted login code against the handle `send-otp` returned.
+ *
+ * All the state that makes this safe — the attempt counter, single-use consumption,
+ * expiry — lives in `auth_codes`. The route is thin on purpose: counting an attempt
+ * before comparing, and consuming on success, are one indivisible operation inside
+ * `AuthCodesDB.verify` rather than three steps a caller could reorder.
  */
 
 import { NextRequest } from 'next/server';
-import { verifyOTPToken, validateOTP, createVerifiedToken } from '@/lib/auth/otp-utils';
+import { createVerifiedToken } from '@/lib/auth/otp-utils';
+import { AuthCodesDB } from '@/lib/database/auth-codes-db';
 import { successResponse, ApiErrors, handleApiError } from '@/lib/http/api-responses';
 
 export async function POST(request: NextRequest) {
   try {
-    // Parse request body
     const body = await request.json();
-    const { token, otp } = body;
-
-    console.log('[verify-otp] Received request with OTP length:', otp?.length);
+    const { token, otp } = body as { token?: string; otp?: string };
 
     if (!token || !otp) {
       return ApiErrors.badRequest('Token and OTP are required');
     }
 
-    // Verify JWT token
-    const payload = verifyOTPToken(token);
-    if (!payload) {
-      console.error('[verify-otp] Token verification failed');
-      return ApiErrors.unauthorized('Invalid or expired OTP token');
+    const result = await AuthCodesDB.verify(token, otp, Date.now());
+
+    if (!result.ok) {
+      // `exhausted` is the caller's own attempt count, which they can already derive, and
+      // "request a new code" is the only useful thing to say. Everything else — unknown
+      // handle, expired, already used, simply wrong — answers identically, so a guess
+      // cannot be used to learn which of those states it reached.
+      return result.reason === 'exhausted'
+        ? ApiErrors.tooManyRequests('Too many incorrect attempts. Please request a new code.')
+        : ApiErrors.unauthorized('Invalid or expired code');
     }
 
-    console.log('[verify-otp] Token verified, validating OTP for user:', payload.email);
-
-    // Validate OTP
-    const isValid = validateOTP(otp, payload.otpHash);
-    if (!isValid) {
-      console.error('[verify-otp] OTP validation failed for user:', payload.email);
-      return ApiErrors.unauthorized('Invalid OTP');
-    }
-
-    console.log('[verify-otp] OTP verified successfully for user:', payload.email);
-
-    // Create a short-lived verified token so the frontend can call signIn() without a password
-    const verifiedToken = createVerifiedToken(payload.email);
-
-    // Return success - frontend can now proceed with signIn()
     return successResponse({
       success: true,
-      email: payload.email,
-      verifiedToken,
+      email: result.email,
+      // Spent immediately by signIn(); carries no code and no digest.
+      verifiedToken: createVerifiedToken(result.email),
       message: 'OTP verified successfully',
     });
   } catch (error) {

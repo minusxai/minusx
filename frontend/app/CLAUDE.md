@@ -160,8 +160,11 @@ promotion.
 `api/jobs/run` (manual/forced → `runJob`, whose typed outcome union maps 1:1 to status codes),
 `api/jobs/runs` (history), `api/jobs/test` (single eval Test via `createServerRunner`).
 
-**Auth, orgs, users.** `api/auth/[...nextauth]` re-exports the NextAuth handlers; `check-2fa`,
-`send-otp` (phone 2FA *or* passwordless email), `verify-otp` (stateless JWT round-trip) sit beside it.
+**Auth, orgs, users.** `api/auth/[...nextauth]` re-exports the NextAuth handlers; `check-2fa`
+(advisory — it tells the form which flow to render and enforces nothing), `send-otp` (phone 2FA
+*or* passwordless email) and `verify-otp` sit beside it. Both OTP routes are thin wrappers over
+`AuthCodesDB` (`lib/database/auth-codes-db.ts`), which holds the code digest, the attempt counter
+and single-use consumption; `send-otp` returns only an opaque handle.
 `api/orgs/register` is the workspace bootstrap (gated by `ENABLE_ORG_CREATION`).
 `api/users` + `api/users/[id]` use `auth()` directly rather than
 `withAuth` and do their own admin-vs-self authorization.

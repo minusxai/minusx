@@ -7,7 +7,7 @@
 import { NextRequest } from 'next/server';
 import { UserDB } from '@/lib/database/user-db';
 import { verifyPassword } from '@/lib/auth/password-utils';
-import { UserState } from '@/lib/types';
+import { requiresTwoFactor } from '@/lib/auth/two-factor';
 import { successResponse, ApiErrors, handleApiError } from '@/lib/http/api-responses';
 import { IS_DEV } from '@/lib/constants';
 import { isAdmin } from '@/lib/auth/role-helpers';
@@ -40,10 +40,10 @@ export async function POST(request: NextRequest) {
       return ApiErrors.unauthorized('Invalid credentials');
     }
 
-    const userState: UserState | null = user.state ? JSON.parse(user.state) : null;
-    const requires2FA = user.phone && (userState?.twofa_phone_otp_enabled === true || (userState as any)?.twofa_whatsapp_enabled === true);
-
-    return successResponse({ requires2FA, email: user.email });
+    // Advisory only. This tells the login form which flow to render; it is NOT what
+    // enforces the second factor — `evaluateCredentials` is, on every login, from the
+    // same predicate. A client that skips this call gains nothing.
+    return successResponse({ requires2FA: requiresTwoFactor(user), email: user.email });
   } catch (error) {
     return handleApiError(error);
   }

@@ -108,6 +108,12 @@ export const ApiErrors = {
     errorResponse(ErrorCodes.CONFLICT, message, 409),
 
   /**
+   * 429 Too Many Requests - a rate limit or attempt cap was reached
+   */
+  tooManyRequests: (message: string) =>
+    errorResponse(ErrorCodes.RATE_LIMITED, message, 429),
+
+  /**
    * 500 Internal Server Error
    */
   internalError: (message = 'Internal server error') =>

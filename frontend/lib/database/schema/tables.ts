@@ -386,6 +386,58 @@ export const QUERY_CACHE = {
   indexes: [{ name: 'idx_query_cache_expire', columns: ['expire_at'] }],
 } as const satisfies Schema[number];
 
+/**
+ * Login codes (OTP), one row per issued code.
+ *
+ * The code's digest lives here and NOT in anything handed to the client. The
+ * predecessor design put `sha256(code)` inside a JWT that `send-otp` returned in its
+ * response body — a JWT payload is base64url, not encrypted, so an unauthenticated
+ * caller could enumerate all 10^6 six-digit digests offline and recover the code
+ * without ever calling `verify-otp`. No amount of rate limiting on the verify endpoint
+ * can fix that; the digest simply must not leave the server. Everything else this table
+ * provides — the attempt counter, single-use consumption — is state the stateless
+ * design could not hold at all.
+ *
+ * Two clocks, deliberately different. `expires_at` is when the CODE stops being usable
+ * (minutes). Rows outlive that, because the send-rate throttle counts `created_at`
+ * over a longer window; deleting a row as soon as its code expired would reset the
+ * throttle. `AuthCodesDB.issue` prunes on `created_at + OTP_RETENTION_MS`.
+ *
+ * Deliberately absent from `lib/database/import-export.ts`, which enumerates only
+ * `users` and `files`: a short-lived login credential must not survive an
+ * export/import migration round-trip.
+ */
+export const AUTH_CODES = {
+  name: 'auth_codes',
+  scope: 'per-namespace',
+  columns: [
+    // Opaque 32-byte random handle. This is what the client holds and returns; it is a
+    // lookup key, not a secret verifier, so nothing is derivable from it.
+    { name: 'handle', type: 'TEXT', notNull: true },
+    { name: 'email', type: 'TEXT', notNull: true },
+    { name: 'code_hash', type: 'TEXT', notNull: true },
+    {
+      name: 'channel',
+      type: 'TEXT',
+      notNull: true,
+      check: "channel IN ('email', 'phone')",
+    },
+    { name: 'attempts', type: 'INTEGER', notNull: true, default: '0' },
+    // Epoch milliseconds, following `query_cache` — a BIGINT is read back identically by
+    // both adapters, where a TIMESTAMP is a Date on `pg` and an ISO string on PGLite.
+    { name: 'consumed_at', type: 'BIGINT' },
+    { name: 'expires_at', type: 'BIGINT', notNull: true },
+    { name: 'created_at', type: 'BIGINT', notNull: true },
+  ],
+  primaryKey: ['handle'],
+  indexes: [
+    // The send-rate throttle: count an email's rows inside the window.
+    { name: 'idx_auth_codes_email_created', columns: ['email', 'created_at'] },
+    // Retention pruning.
+    { name: 'idx_auth_codes_created', columns: ['created_at'] },
+  ],
+} as const satisfies Schema[number];
+
 export const PUBLIC_DATA = {
   name: 'public_data',
   scope: 'public',
@@ -420,5 +472,5 @@ export const PUBLIC_DATA = {
 export const TABLES: Schema = [
   USERS, FILES, SECRETS, JOB_RUNS, CONFIGS,
   FILE_EVENTS, LLM_CALL_EVENTS, LLM_LOGS, QUERIES, QUERY_EXECUTION_EVENTS,
-  FEEDBACK_EVENTS, APP_EVENTS, CONVERSATIONS, MESSAGES, QUERY_CACHE, PUBLIC_DATA,
+  FEEDBACK_EVENTS, APP_EVENTS, CONVERSATIONS, MESSAGES, QUERY_CACHE, AUTH_CODES, PUBLIC_DATA,
 ];

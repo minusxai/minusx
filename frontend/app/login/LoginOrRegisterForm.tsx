@@ -37,6 +37,19 @@ interface LoginFormProps {
 }
 
 /**
+ * Surface the OTP endpoints' own message rather than a fixed string.
+ *
+ * They distinguish two cases a user needs to tell apart — a wrong code, and a spent
+ * attempt budget that only a NEW code will clear — and `fetchWithCache` already unwraps
+ * the standard envelope's `error.message` into the thrown Error.
+ */
+function otpErrorMessage(err: unknown): string {
+  const message = err instanceof Error ? err.message.trim() : '';
+  // An HTTP fallback string means the response had no envelope; it is not user-facing.
+  return message && !message.startsWith('HTTP ') ? message : 'Invalid code. Please try again.';
+}
+
+/**
  * Reactive read of the `.dark` class on <html>. That class is set synchronously by the inline
  * theme script in layout.tsx (before first paint) and kept current by ColorModeSync on toggle,
  * making it the single authoritative color-mode signal — unlike Redux `state.ui.colorMode`,
@@ -178,7 +191,7 @@ export function LoginOrRegisterForm({
       }, 1000);
     } catch (err) {
       console.error('Send OTP error:', err);
-      setLoginError('Failed to send OTP');
+      setLoginError(otpErrorMessage(err));
     } finally {
       setOtpLoading(false);
     }
@@ -189,18 +202,27 @@ export function LoginOrRegisterForm({
     setLoginError(null);
     setOtpLoading(true);
     try {
+      let verifyData;
       try {
-        await fetchWithCache('/api/auth/verify-otp', {
+        verifyData = await fetchWithCache('/api/auth/verify-otp', {
           method: 'POST',
           body: JSON.stringify({ token: otpToken, otp }),
           cacheStrategy: API.auth.verifyOTP.cache,
         });
-      } catch {
-        setLoginError('Invalid OTP. Please try again.');
+      } catch (err) {
+        setLoginError(otpErrorMessage(err));
         setOtpLoading(false);
         return;
       }
-      const result = await signIn('credentials', { email, password, redirect: false });
+      // Both factors go to the provider together. The server requires them together for
+      // a 2FA account, so sending only the password here would be refused — which is
+      // exactly the check that used to be missing.
+      const result = await signIn('credentials', {
+        email,
+        password,
+        otp_verified_token: verifyData.data.verifiedToken,
+        redirect: false,
+      });
       if (result?.error) {
         setLoginError('Sign-in failed after OTP verification');
         setOtpLoading(false);
@@ -235,7 +257,7 @@ export function LoginOrRegisterForm({
       }, 1000);
     } catch (err) {
       console.error('Send email OTP error:', err);
-      setLoginError('Failed to send login code. Please check your email and try again.');
+      setLoginError(otpErrorMessage(err));
     } finally {
       setOtpLoading(false);
     }
@@ -253,8 +275,8 @@ export function LoginOrRegisterForm({
           body: JSON.stringify({ token: otpToken, otp }),
           cacheStrategy: API.auth.verifyOTP.cache,
         });
-      } catch {
-        setLoginError('Invalid or expired code. Please try again.');
+      } catch (err) {
+        setLoginError(otpErrorMessage(err));
         setOtpLoading(false);
         return;
       }
