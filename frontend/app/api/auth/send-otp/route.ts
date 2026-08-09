@@ -23,6 +23,9 @@ import { executeWebhook, sendEmailViaWebhook } from '@/lib/messaging/webhook-exe
 import { resolveWebhook } from '@/lib/messaging/webhook-resolver.server';
 import { successResponse, ApiErrors, handleApiError } from '@/lib/http/api-responses';
 import { buildOTPEmailHtml } from '@/lib/messaging/otp-email-html';
+import { appEventRegistry } from '@/lib/app-event-registry/registry';
+import { AppEvents } from '@/lib/app-event-registry/events';
+import { DEFAULT_MODE } from '@/lib/mode/mode-types';
 import { IS_DEV } from '@/lib/constants';
 
 /**
@@ -82,32 +85,48 @@ export async function POST(request: NextRequest) {
     }
 
     if (eligible && code) {
-      if (channel === 'email') {
-        const agentName = config.branding.agentName;
-        const result = await sendEmailViaWebhook(
-          webhook,
-          user!.email,
-          `Your ${agentName} Login Code`,
-          buildOTPEmailHtml({ otp: code, agentName, logoUrl: emailLogoUrl(request, config.branding.logoExpanded) }),
-        );
-        if (!result.success) {
-          return ApiErrors.internalError(`Failed to send OTP email: ${result.error}`);
-        }
-      } else {
-        if (IS_DEV) console.log('[send-otp/phone] Generated OTP:', code);
-        const result = await executeWebhook(webhook, { USER_NUMBER: user!.phone!, AUTH_OTP: code });
-        if (!result.success) {
-          return ApiErrors.internalError(`Failed to send OTP: ${result.error}`);
-        }
-      }
+      const agentName = config.branding.agentName;
+      const deliver = channel === 'email'
+        ? sendEmailViaWebhook(
+            webhook,
+            user!.email,
+            `Your ${agentName} Login Code`,
+            buildOTPEmailHtml({ otp: code, agentName, logoUrl: emailLogoUrl(request, config.branding.logoExpanded) }),
+          )
+        : executeWebhook(webhook, { USER_NUMBER: user!.phone!, AUTH_OTP: code });
+
+      if (IS_DEV && channel === 'phone') console.log('[send-otp/phone] Generated OTP:', code);
+
+      // DETACHED, and both halves of that matter. Awaiting it made a real recipient cost
+      // a webhook round-trip while a decoy returned at once, and a delivery failure
+      // answered 500 where a decoy answered 200 — so both the timing and the status told
+      // an anonymous caller whether the address was real. Everything the send needs is
+      // already resolved (the webhook, the code, the rendered body), so nothing here
+      // reads namespaced storage after the request ends.
+      void deliver
+        .then(result => {
+          if (result.success) return;
+          // The caller is told nothing either way — this endpoint never confirms
+          // delivery, so a delivery failure is the OPERATOR's problem and belongs in
+          // monitoring. A user who receives no code contacts support; support finds this.
+          appEventRegistry.publish(AppEvents.ERROR, {
+            mode: DEFAULT_MODE,
+            source: 'send-otp',
+            message: `Failed to dispatch login code over ${channel}: ${result.error}`,
+          });
+        })
+        .catch(err => {
+          appEventRegistry.publish(AppEvents.ERROR, {
+            mode: DEFAULT_MODE,
+            source: 'send-otp',
+            message: `Login code dispatch threw over ${channel}: ${err instanceof Error ? err.message : String(err)}`,
+          });
+        });
     }
 
-    // The response body is identical for a real recipient and a decoy. The send itself
-    // is awaited, so DISPATCH LATENCY still distinguishes the two — a real address costs
-    // a webhook round-trip and a decoy returns at once. Closing that would mean not
-    // awaiting the send, which would also mean never being able to tell a user their
-    // code failed to go out. The body-level uniformity here is what removes the trivial
-    // status-code oracle; it does not make the endpoint a black box.
+    // One response for every address, produced before delivery has been attempted, so
+    // neither the body, the status, nor the latency distinguishes a real recipient from
+    // the decoy issued for an unknown one.
     return successResponse({ success: true, token: issued.handle, message: NEUTRAL_MESSAGE });
   } catch (error) {
     return handleApiError(error);

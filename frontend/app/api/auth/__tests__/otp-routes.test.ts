@@ -29,6 +29,8 @@ const sent: string[] = [];
  * scraping it would be testing the template, not the route.
  */
 const issuedCodes: string[] = [];
+/** Lets a test make delivery fail, or hold it open to prove the response never waits. */
+const h = { sendFails: false, sendGate: null as PromiseWithResolvers<void> | null };
 
 vi.mock('@/lib/auth/otp-utils', async (orig) => {
   const actual = await orig<typeof import('@/lib/auth/otp-utils')>();
@@ -53,9 +55,15 @@ vi.mock('@/lib/data/configs.server', () => ({
 vi.mock('@/lib/messaging/webhook-resolver.server', () => ({
   resolveWebhook: (w: unknown) => w,
 }));
+async function dispatch(kind: 'email' | 'phone') {
+  if (h.sendGate) await h.sendGate.promise;
+  if (h.sendFails) return { success: false, error: 'smtp exploded' };
+  sent.push(kind);
+  return { success: true };
+}
 vi.mock('@/lib/messaging/webhook-executor', () => ({
-  sendEmailViaWebhook: async () => { sent.push('email'); return { success: true }; },
-  executeWebhook: async () => { sent.push('phone'); return { success: true }; },
+  sendEmailViaWebhook: () => dispatch('email'),
+  executeWebhook: () => dispatch('phone'),
 }));
 
 async function routes() {
@@ -109,6 +117,8 @@ describe('OTP routes', () => {
   beforeEach(async () => {
     sent.length = 0;
     issuedCodes.length = 0;
+    h.sendFails = false;
+    h.sendGate = null;
     await clearCodes();
   });
 
@@ -223,6 +233,35 @@ describe('OTP routes', () => {
     it('sends nothing to an unknown address', async () => {
       await send({ email: UNKNOWN, channel: 'email' });
       expect(sent).toHaveLength(0);
+    });
+
+    it('answers identically when the webhook FAILS for a real recipient', async () => {
+      // The 500 this used to return was reachable only for an address that actually has
+      // a code dispatched to it, which made "did the send blow up" a user-existence
+      // oracle — the one the decoy exists to close. The endpoint already declines to
+      // confirm delivery, so reporting a delivery failure contradicted its own design.
+      h.sendFails = true;
+      const real = await send({ email: EMAIL, channel: 'email' });
+      const unknown = await send({ email: UNKNOWN, channel: 'email' });
+
+      expect(real.status).toBe(unknown.status);
+      expect(real.body.data.message).toBe(unknown.body.data.message);
+      expect(Object.keys(real.body.data).sort()).toEqual(Object.keys(unknown.body.data).sort());
+    });
+
+    it('does not wait on the webhook before responding', async () => {
+      // Dispatch latency was the other half of the leak: a real recipient cost a network
+      // round-trip and a decoy returned at once. The send is detached, so the response
+      // is produced before it has been attempted.
+      h.sendGate = Promise.withResolvers<void>();
+      const responded = await send({ email: EMAIL, channel: 'email' });
+
+      expect(responded.status).toBe(200);
+      expect(sent).toHaveLength(0);   // still blocked on the gate
+
+      h.sendGate.resolve();
+      await vi.waitFor(() => expect(sent).toEqual(['email']));
+      h.sendGate = null;
     });
 
     it('issues a decoy that can never verify', async () => {

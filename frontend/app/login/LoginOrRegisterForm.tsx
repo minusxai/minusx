@@ -205,8 +205,14 @@ export function LoginOrRegisterForm({
     }
   };
 
-  const handleVerifyOTP = async () => {
-    if (!otpToken || otp.length !== 6) return;
+  /**
+   * `submitted` is the value `OTPInput` reports on its last digit. It must be preferred
+   * over `otp`: React has not re-rendered yet when `onComplete` fires, so the state read
+   * here still holds five digits and the guard below would reject every auto-submit.
+   */
+  const handleVerifyOTP = async (submitted?: string) => {
+    const code = submitted ?? otp;
+    if (!otpToken || code.length !== 6) return;
     setLoginError(null);
     setOtpLoading(true);
     try {
@@ -214,7 +220,7 @@ export function LoginOrRegisterForm({
       try {
         verifyData = await fetchWithCache('/api/auth/verify-otp', {
           method: 'POST',
-          body: JSON.stringify({ token: otpToken, otp }),
+          body: JSON.stringify({ token: otpToken, otp: code }),
           cacheStrategy: API.auth.verifyOTP.cache,
         });
       } catch (err) {
@@ -302,8 +308,10 @@ export function LoginOrRegisterForm({
     }
   };
 
-  const handleVerifyEmailOTP = async () => {
-    if (!otpToken || otp.length !== 6) return;
+  /** Same contract as `handleVerifyOTP` — see the note there on why `submitted` wins. */
+  const handleVerifyEmailOTP = async (submitted?: string) => {
+    const code = submitted ?? otp;
+    if (!otpToken || code.length !== 6) return;
     setLoginError(null);
     setOtpLoading(true);
     try {
@@ -311,7 +319,7 @@ export function LoginOrRegisterForm({
       try {
         verifyData = await fetchWithCache('/api/auth/verify-otp', {
           method: 'POST',
-          body: JSON.stringify({ token: otpToken, otp }),
+          body: JSON.stringify({ token: otpToken, otp: code }),
           cacheStrategy: API.auth.verifyOTP.cache,
         });
       } catch (err) {
@@ -688,7 +696,7 @@ export function LoginOrRegisterForm({
                         We&apos;ve sent a login code to <strong>{email}</strong>. Enter it below.
                       </Text>
                       <OTPInput value={otp} onChange={setOtp} onComplete={handleVerifyEmailOTP} disabled={otpLoading} />
-                      <Button onClick={handleVerifyEmailOTP} aria-label="Verify login code" w="full" bg="accent.teal" color="white" size="lg" loading={otpLoading} disabled={otpLoading || otp.length !== 6} _hover={{ bg: 'accent.teal', opacity: 0.9 }}>
+                      <Button onClick={() => handleVerifyEmailOTP()} aria-label="Verify login code" w="full" bg="accent.teal" color="white" size="lg" loading={otpLoading} disabled={otpLoading || otp.length !== 6} _hover={{ bg: 'accent.teal', opacity: 0.9 }}>
                         Verify Code
                       </Button>
                       <Button onClick={handleSendEmailOTP} variant="ghost" size="sm" disabled={resendCooldown > 0 || otpLoading}>
@@ -712,7 +720,7 @@ export function LoginOrRegisterForm({
                           We&apos;ve sent a verification code to your phone. Please enter it below.
                         </Text>
                         <OTPInput value={otp} onChange={setOtp} onComplete={handleVerifyOTP} disabled={otpLoading} />
-                        <Button onClick={handleVerifyOTP} w="full" bg="accent.teal" color="white" size="lg" loading={otpLoading} disabled={otpLoading || otp.length !== 6} _hover={{ bg: 'accent.teal', opacity: 0.9 }}>
+                        <Button onClick={() => handleVerifyOTP()} w="full" bg="accent.teal" color="white" size="lg" loading={otpLoading} disabled={otpLoading || otp.length !== 6} _hover={{ bg: 'accent.teal', opacity: 0.9 }}>
                           Verify OTP
                         </Button>
                         <Button onClick={() => handleSendOTP()} variant="ghost" size="sm" disabled={resendCooldown > 0 || otpLoading}>

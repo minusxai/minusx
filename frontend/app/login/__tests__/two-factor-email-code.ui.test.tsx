@@ -48,15 +48,40 @@ async function reachVerifiedCode(screen: ReturnType<typeof renderWithProviders>)
   });
   await act(async () => { fireEvent.click(screen.getByLabelText('Send login code')); });
 
-  // One field per digit. Filling the last one does NOT auto-submit — OTPInput's
-  // `onComplete` fires with the new value while the form's guard still reads the
-  // previous render's `otp`, so the button is the real path a user takes.
+  // One field per digit; the last one submits on its own via `onComplete`, so there is
+  // no button press here. The explicit-button path is covered by the `verify-otp` route
+  // tests and by the dedicated auto-submit case below.
   const digits = await screen.findAllByLabelText(/Login code digit/i);
   for (let i = 0; i < digits.length; i++) {
     await act(async () => { fireEvent.change(digits[i], { target: { value: String(i + 1) } }); });
   }
-  await act(async () => { fireEvent.click(screen.getByLabelText('Verify login code')); });
 }
+
+describe('completing the code submits it', () => {
+  beforeEach(() => {
+    h.signInCalls.length = 0;
+    h.passwordRequired = false;
+  });
+
+  it('verifies as soon as the sixth digit is entered, with no button press', async () => {
+    // `OTPInput` calls `onComplete(newValue)` on the last digit, but the handler used to
+    // read `otp` from state — which, in that same render, still holds five digits. The
+    // guard therefore rejected every auto-submit and the affordance did nothing.
+    const screen = renderWithProviders(<LoginOrRegisterForm hasEmailOTP />);
+    await act(async () => { fireEvent.click(screen.getByLabelText('Email code login')); });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'u@example.com' } });
+    });
+    await act(async () => { fireEvent.click(screen.getByLabelText('Send login code')); });
+
+    const digits = await screen.findAllByLabelText(/Login code digit/i);
+    for (let i = 0; i < digits.length; i++) {
+      await act(async () => { fireEvent.change(digits[i], { target: { value: String(i + 1) } }); });
+    }
+
+    await waitFor(() => expect(h.signInCalls).toHaveLength(1));
+  });
+});
 
 describe('email-code login for a 2FA account', () => {
   beforeEach(() => {
