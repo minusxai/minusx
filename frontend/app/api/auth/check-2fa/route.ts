@@ -34,9 +34,13 @@ export async function POST(request: NextRequest) {
     if (decision.ok) return successResponse({ requires2FA: false, email });
     if (decision.reason === 'otp-required') return successResponse({ requires2FA: true, email });
 
+    // Both messages are shown to the user verbatim by the login form, so they are
+    // written for a person rather than for a log. They must also stay
+    // indistinguishable across "no such account" and "wrong password" — the shared
+    // counter is what makes the rate-limited case safe to name.
     return decision.reason === 'rate-limited'
       ? ApiErrors.tooManyRequests('Too many failed sign-in attempts. Please try again later.')
-      : ApiErrors.unauthorized('Invalid credentials');
+      : ApiErrors.unauthorized('Invalid email or password');
   } catch (error) {
     return handleApiError(error);
   }

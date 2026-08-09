@@ -37,16 +37,21 @@ interface LoginFormProps {
 }
 
 /**
- * Surface the OTP endpoints' own message rather than a fixed string.
+ * Surface the auth endpoints' own message rather than a fixed string.
  *
- * They distinguish two cases a user needs to tell apart — a wrong code, and a spent
- * attempt budget that only a NEW code will clear — and `fetchWithCache` already unwraps
- * the standard envelope's `error.message` into the thrown Error.
+ * They distinguish cases the user has to tell apart, and where the distinction changes
+ * what the user should DO: a wrong code versus a spent code budget, and a wrong password
+ * versus a rate-limited account. Reporting a lock as "invalid password" is actively
+ * misleading — it reads as "try again", which is the one thing that cannot work, since
+ * the lock refuses a correct password too.
+ *
+ * `fetchWithCache` already unwraps the standard envelope's `error.message` into the
+ * thrown Error. A message that still looks like its `HTTP <status>` fallback means the
+ * response carried no envelope, so it is transport noise rather than anything to show.
  */
-function otpErrorMessage(err: unknown): string {
+function authErrorMessage(err: unknown, fallback: string): string {
   const message = err instanceof Error ? err.message.trim() : '';
-  // An HTTP fallback string means the response had no envelope; it is not user-facing.
-  return message && !message.startsWith('HTTP ') ? message : 'Invalid code. Please try again.';
+  return message && !message.startsWith('HTTP ') ? message : fallback;
 }
 
 /**
@@ -150,8 +155,8 @@ export function LoginOrRegisterForm({
           body: JSON.stringify({ email, password }),
           cacheStrategy: API.auth.check2FA.cache,
         });
-      } catch {
-        setLoginError('Invalid email or password');
+      } catch (err) {
+        setLoginError(authErrorMessage(err, 'Invalid email or password'));
         setLoginLoading(false);
         return;
       }
@@ -194,7 +199,7 @@ export function LoginOrRegisterForm({
       }, 1000);
     } catch (err) {
       console.error('Send OTP error:', err);
-      setLoginError(otpErrorMessage(err));
+      setLoginError(authErrorMessage(err, 'Invalid code. Please try again.'));
     } finally {
       setOtpLoading(false);
     }
@@ -213,7 +218,7 @@ export function LoginOrRegisterForm({
           cacheStrategy: API.auth.verifyOTP.cache,
         });
       } catch (err) {
-        setLoginError(otpErrorMessage(err));
+        setLoginError(authErrorMessage(err, 'Invalid code. Please try again.'));
         setOtpLoading(false);
         return;
       }
@@ -260,7 +265,7 @@ export function LoginOrRegisterForm({
       }, 1000);
     } catch (err) {
       console.error('Send email OTP error:', err);
-      setLoginError(otpErrorMessage(err));
+      setLoginError(authErrorMessage(err, 'Invalid code. Please try again.'));
     } finally {
       setOtpLoading(false);
     }
@@ -310,7 +315,7 @@ export function LoginOrRegisterForm({
           cacheStrategy: API.auth.verifyOTP.cache,
         });
       } catch (err) {
-        setLoginError(otpErrorMessage(err));
+        setLoginError(authErrorMessage(err, 'Invalid code. Please try again.'));
         setOtpLoading(false);
         return;
       }
@@ -717,7 +722,7 @@ export function LoginOrRegisterForm({
                     )}
 
                     {!showOTPInput && (
-                      <Button type="submit" w="full" bg="accent.teal" color="white" size="lg" loading={loginLoading} disabled={loginLoading} _hover={{ bg: 'accent.teal', opacity: 0.9 }}>
+                      <Button type="submit" aria-label="Sign in" w="full" bg="accent.teal" color="white" size="lg" loading={loginLoading} disabled={loginLoading} _hover={{ bg: 'accent.teal', opacity: 0.9 }}>
                         <LuLogIn />
                         Sign In
                       </Button>
