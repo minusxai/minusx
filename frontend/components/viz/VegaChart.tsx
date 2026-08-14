@@ -259,7 +259,7 @@ export function VegaChart({ envelope, rows, colorMode, onViewChange }: VegaChart
           const v = view; // default per-mark tooltip already suppressed pre-run (above)
 
           // bandW > 0 (bar/band x scale) → grow the guide to the whole category slot, an
-          // ECharts `axisPointer: 'shadow'`. 0 (line/area/scatter — point/linear x) → thin line.
+          // ECharts `axisPointer: 'shadow'`. 0 (line/area — point/linear x) → thin line.
           const setGuide = (
             on: boolean,
             px = -1,

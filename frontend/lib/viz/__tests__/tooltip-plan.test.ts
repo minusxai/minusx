@@ -109,22 +109,36 @@ describe('buildTooltipPlan', () => {
     expect(buildTooltipPlan({ mark: { type: 'line' }, encoding: { y: { field: 'b', type: 'quantitative' } } })).toBeNull();
   });
 
-  it('scatter (point mark, quantitative x) → single wide series', () => {
-    const plan = buildTooltipPlan({ mark: { type: 'point' }, encoding: {
+  it('scatter (point mark) stays on the native per-mark tooltip', () => {
+    expect(buildTooltipPlan({ mark: { type: 'point' }, encoding: {
       x: { field: 'height', type: 'quantitative' },
       y: { field: 'weight', type: 'quantitative' },
-    } })!;
-    expect(plan.xField).toBe('height');
-    expect(plan.series).toEqual({ kind: 'wide', series: [{ field: 'weight', label: 'weight', colorKey: 'weight' }] });
-  });
-
-  it('scatter with a color column → long series', () => {
-    const plan = buildTooltipPlan({ mark: { type: 'point' }, encoding: {
+    } })).toBeNull();
+    // Even with a category column: many points share one x, so an axis card would
+    // pick an arbitrary one per series.
+    expect(buildTooltipPlan({ mark: { type: 'point' }, encoding: {
       x: { field: 'height', type: 'quantitative' },
       y: { field: 'weight', type: 'quantitative' },
       color: { field: 'species', type: 'nominal' },
+    } })).toBeNull();
+  });
+
+  it('a faceted scatter is null too (the child plan gates the facet plan)', () => {
+    expect(buildTooltipPlan({
+      facet: { field: 'region', type: 'nominal' },
+      spec: { mark: { type: 'point' }, encoding: {
+        x: { field: 'height', type: 'quantitative' },
+        y: { field: 'weight', type: 'quantitative' },
+      } },
+    })).toBeNull();
+  });
+
+  it('a line with a point overlay keeps the shared tooltip', () => {
+    const plan = buildTooltipPlan({ mark: { type: 'line', point: true }, encoding: {
+      x: { field: 'month', type: 'temporal' },
+      y: { field: 'revenue', type: 'quantitative' },
     } })!;
-    expect(plan.series).toEqual({ kind: 'long', colorField: 'species', valueField: 'weight' });
+    expect(plan.xField).toBe('month');
   });
 
   it('histogram (binned x, count y) → bins plan', () => {
