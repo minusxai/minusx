@@ -37,6 +37,24 @@ interface LoginFormProps {
 }
 
 /**
+ * Surface the auth endpoints' own message rather than a fixed string.
+ *
+ * They distinguish cases the user has to tell apart, and where the distinction changes
+ * what the user should DO: a wrong code versus a spent code budget, and a wrong password
+ * versus a rate-limited account. Reporting a lock as "invalid password" is actively
+ * misleading — it reads as "try again", which is the one thing that cannot work, since
+ * the lock refuses a correct password too.
+ *
+ * `fetchWithCache` already unwraps the standard envelope's `error.message` into the
+ * thrown Error. A message that still looks like its `HTTP <status>` fallback means the
+ * response carried no envelope, so it is transport noise rather than anything to show.
+ */
+function authErrorMessage(err: unknown, fallback: string): string {
+  const message = err instanceof Error ? err.message.trim() : '';
+  return message && !message.startsWith('HTTP ') ? message : fallback;
+}
+
+/**
  * Reactive read of the `.dark` class on <html>. That class is set synchronously by the inline
  * theme script in layout.tsx (before first paint) and kept current by ColorModeSync on toggle,
  * making it the single authoritative color-mode signal — unlike Redux `state.ui.colorMode`,
@@ -89,6 +107,9 @@ export function LoginOrRegisterForm({
   const [loginMethod, setLoginMethod] = useState<'password' | 'emailOtp'>('password');
   const [showOTPInput, setShowOTPInput] = useState(false);
   const [otpToken, setOtpToken] = useState<string | null>(null);
+  // Set only when a code has verified but the account still owes a password (2FA).
+  // Its presence is what switches the card to the password step.
+  const [verifiedToken, setVerifiedToken] = useState<string | null>(null);
   const [otp, setOtp] = useState('');
   const [otpLoading, setOtpLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
@@ -134,8 +155,8 @@ export function LoginOrRegisterForm({
           body: JSON.stringify({ email, password }),
           cacheStrategy: API.auth.check2FA.cache,
         });
-      } catch {
-        setLoginError('Invalid email or password');
+      } catch (err) {
+        setLoginError(authErrorMessage(err, 'Invalid email or password'));
         setLoginLoading(false);
         return;
       }
@@ -178,29 +199,44 @@ export function LoginOrRegisterForm({
       }, 1000);
     } catch (err) {
       console.error('Send OTP error:', err);
-      setLoginError('Failed to send OTP');
+      setLoginError(authErrorMessage(err, 'Invalid code. Please try again.'));
     } finally {
       setOtpLoading(false);
     }
   };
 
-  const handleVerifyOTP = async () => {
-    if (!otpToken || otp.length !== 6) return;
+  /**
+   * `submitted` is the value `OTPInput` reports on its last digit. It must be preferred
+   * over `otp`: React has not re-rendered yet when `onComplete` fires, so the state read
+   * here still holds five digits and the guard below would reject every auto-submit.
+   */
+  const handleVerifyOTP = async (submitted?: string) => {
+    const code = submitted ?? otp;
+    if (!otpToken || code.length !== 6) return;
     setLoginError(null);
     setOtpLoading(true);
     try {
+      let verifyData;
       try {
-        await fetchWithCache('/api/auth/verify-otp', {
+        verifyData = await fetchWithCache('/api/auth/verify-otp', {
           method: 'POST',
-          body: JSON.stringify({ token: otpToken, otp }),
+          body: JSON.stringify({ token: otpToken, otp: code }),
           cacheStrategy: API.auth.verifyOTP.cache,
         });
-      } catch {
-        setLoginError('Invalid OTP. Please try again.');
+      } catch (err) {
+        setLoginError(authErrorMessage(err, 'Invalid code. Please try again.'));
         setOtpLoading(false);
         return;
       }
-      const result = await signIn('credentials', { email, password, redirect: false });
+      // Both factors go to the provider together. The server requires them together for
+      // a 2FA account, so sending only the password here would be refused — which is
+      // exactly the check that used to be missing.
+      const result = await signIn('credentials', {
+        email,
+        password,
+        otp_verified_token: verifyData.data.verifiedToken,
+        redirect: false,
+      });
       if (result?.error) {
         setLoginError('Sign-in failed after OTP verification');
         setOtpLoading(false);
@@ -235,14 +271,47 @@ export function LoginOrRegisterForm({
       }, 1000);
     } catch (err) {
       console.error('Send email OTP error:', err);
-      setLoginError('Failed to send login code. Please check your email and try again.');
+      setLoginError(authErrorMessage(err, 'Invalid code. Please try again.'));
     } finally {
       setOtpLoading(false);
     }
   };
 
-  const handleVerifyEmailOTP = async () => {
-    if (!otpToken || otp.length !== 6) return;
+  /**
+   * Second half of the email-code login for an account that also has a second factor:
+   * the code is already verified, so this submits it together with the password.
+   */
+  const handleSubmitSecondFactorPassword = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!verifiedToken || !password) return;
+    setLoginError(null);
+    setLoginLoading(true);
+    try {
+      const result = await signIn('credentials', {
+        email,
+        password,
+        otp_verified_token: verifiedToken,
+        redirect: false,
+      });
+      if (result?.error) {
+        // The verified token outlives the code but not forever; say so, since the fix
+        // differs depending on which half was wrong.
+        setLoginError('Incorrect password, or the code expired. Please try again.');
+        setLoginLoading(false);
+        return;
+      }
+      window.location.href = callbackUrl || '/';
+    } catch (err) {
+      console.error('Second-factor password error:', err);
+      setLoginError('An unexpected error occurred');
+      setLoginLoading(false);
+    }
+  };
+
+  /** Same contract as `handleVerifyOTP` — see the note there on why `submitted` wins. */
+  const handleVerifyEmailOTP = async (submitted?: string) => {
+    const code = submitted ?? otp;
+    if (!otpToken || code.length !== 6) return;
     setLoginError(null);
     setOtpLoading(true);
     try {
@@ -250,11 +319,19 @@ export function LoginOrRegisterForm({
       try {
         verifyData = await fetchWithCache('/api/auth/verify-otp', {
           method: 'POST',
-          body: JSON.stringify({ token: otpToken, otp }),
+          body: JSON.stringify({ token: otpToken, otp: code }),
           cacheStrategy: API.auth.verifyOTP.cache,
         });
-      } catch {
-        setLoginError('Invalid or expired code. Please try again.');
+      } catch (err) {
+        setLoginError(authErrorMessage(err, 'Invalid code. Please try again.'));
+        setOtpLoading(false);
+        return;
+      }
+      // A code is one factor. An account with a second factor must also present its
+      // password, so ask for it rather than letting a correct code fail the sign-in.
+      if (verifyData.data.passwordRequired) {
+        setVerifiedToken(verifyData.data.verifiedToken);
+        setShowOTPInput(false);
         setOtpLoading(false);
         return;
       }
@@ -566,23 +643,50 @@ export function LoginOrRegisterForm({
                     bg={loginMethod === 'password' ? 'bg.surface' : 'transparent'}
                     color={loginMethod === 'password' ? 'fg.default' : 'fg.muted'}
                     fontWeight={loginMethod === 'password' ? 600 : 400}
-                    onClick={() => { setLoginMethod('password'); setShowOTPInput(false); setOtp(''); setOtpToken(null); setLoginError(null); }}
+                    aria-label="Password login"
+                    onClick={() => { setLoginMethod('password'); setShowOTPInput(false); setOtp(''); setOtpToken(null); setVerifiedToken(null); setLoginError(null); }}
                   >Password</Button>
                   <Button
                     type="button" size="sm" variant="ghost" borderRadius="sm"
                     bg={loginMethod === 'emailOtp' ? 'bg.surface' : 'transparent'}
                     color={loginMethod === 'emailOtp' ? 'fg.default' : 'fg.muted'}
                     fontWeight={loginMethod === 'emailOtp' ? 600 : 400}
-                    onClick={() => { setLoginMethod('emailOtp'); setShowOTPInput(false); setOtp(''); setOtpToken(null); setLoginError(null); }}
+                    aria-label="Email code login"
+                    onClick={() => { setLoginMethod('emailOtp'); setShowOTPInput(false); setOtp(''); setOtpToken(null); setVerifiedToken(null); setLoginError(null); }}
                   >Email Code</Button>
                 </Box>
               )}
 
-              {loginMethod === 'emailOtp' ? (
+              {loginMethod === 'emailOtp' && verifiedToken ? (
+                /* The code checked out, but this account also has a second factor, so it
+                   still owes a password. Without this step a correct code would simply
+                   fail the sign-in with nothing the user could act on. */
+                <form onSubmit={handleSubmitSecondFactorPassword} style={{ width: '100%' }}>
+                  <VStack gap={4} w="full">
+                    <Text fontSize="sm" color="fg.muted" textAlign="center">
+                      Code verified. Enter the password for <strong>{email}</strong> to finish signing in.
+                    </Text>
+                    <Input
+                      type="password"
+                      aria-label="Password"
+                      placeholder="Password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      autoFocus
+                      size="lg"
+                    />
+                    <Button type="submit" aria-label="Finish sign in" w="full" bg="accent.teal" color="white" size="lg" loading={loginLoading} disabled={loginLoading || !password} _hover={{ bg: 'accent.teal', opacity: 0.9 }}>
+                      <LuLogIn />
+                      Sign In
+                    </Button>
+                  </VStack>
+                </form>
+              ) : loginMethod === 'emailOtp' ? (
                 <VStack gap={4} w="full">
                   <Input ref={emailRef} type="email" aria-label="Email" fontFamily="mono" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus size="lg" disabled={showOTPInput} />
                   {!showOTPInput ? (
-                    <Button onClick={handleSendEmailOTP} w="full" bg="accent.teal" color="white" size="lg" loading={otpLoading} disabled={otpLoading} _hover={{ bg: 'accent.teal', opacity: 0.9 }}>
+                    <Button onClick={handleSendEmailOTP} aria-label="Send login code" w="full" bg="accent.teal" color="white" size="lg" loading={otpLoading} disabled={otpLoading} _hover={{ bg: 'accent.teal', opacity: 0.9 }}>
                       <LuLogIn />
                       Send Login Code
                     </Button>
@@ -592,7 +696,7 @@ export function LoginOrRegisterForm({
                         We&apos;ve sent a login code to <strong>{email}</strong>. Enter it below.
                       </Text>
                       <OTPInput value={otp} onChange={setOtp} onComplete={handleVerifyEmailOTP} disabled={otpLoading} />
-                      <Button onClick={handleVerifyEmailOTP} w="full" bg="accent.teal" color="white" size="lg" loading={otpLoading} disabled={otpLoading || otp.length !== 6} _hover={{ bg: 'accent.teal', opacity: 0.9 }}>
+                      <Button onClick={() => handleVerifyEmailOTP()} aria-label="Verify login code" w="full" bg="accent.teal" color="white" size="lg" loading={otpLoading} disabled={otpLoading || otp.length !== 6} _hover={{ bg: 'accent.teal', opacity: 0.9 }}>
                         Verify Code
                       </Button>
                       <Button onClick={handleSendEmailOTP} variant="ghost" size="sm" disabled={resendCooldown > 0 || otpLoading}>
@@ -616,7 +720,7 @@ export function LoginOrRegisterForm({
                           We&apos;ve sent a verification code to your phone. Please enter it below.
                         </Text>
                         <OTPInput value={otp} onChange={setOtp} onComplete={handleVerifyOTP} disabled={otpLoading} />
-                        <Button onClick={handleVerifyOTP} w="full" bg="accent.teal" color="white" size="lg" loading={otpLoading} disabled={otpLoading || otp.length !== 6} _hover={{ bg: 'accent.teal', opacity: 0.9 }}>
+                        <Button onClick={() => handleVerifyOTP()} w="full" bg="accent.teal" color="white" size="lg" loading={otpLoading} disabled={otpLoading || otp.length !== 6} _hover={{ bg: 'accent.teal', opacity: 0.9 }}>
                           Verify OTP
                         </Button>
                         <Button onClick={() => handleSendOTP()} variant="ghost" size="sm" disabled={resendCooldown > 0 || otpLoading}>
@@ -626,7 +730,7 @@ export function LoginOrRegisterForm({
                     )}
 
                     {!showOTPInput && (
-                      <Button type="submit" w="full" bg="accent.teal" color="white" size="lg" loading={loginLoading} disabled={loginLoading} _hover={{ bg: 'accent.teal', opacity: 0.9 }}>
+                      <Button type="submit" aria-label="Sign in" w="full" bg="accent.teal" color="white" size="lg" loading={loginLoading} disabled={loginLoading} _hover={{ bg: 'accent.teal', opacity: 0.9 }}>
                         <LuLogIn />
                         Sign In
                       </Button>

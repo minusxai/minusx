@@ -1,6 +1,11 @@
 /**
- * OTP (One-Time Password) utilities for 2FA
- * Handles OTP generation, hashing, and JWT token creation/validation
+ * Login-code (OTP) primitives.
+ *
+ * Generation, digesting, and the short-lived token that carries "this address
+ * completed a code challenge" from `verify-otp` to the credentials provider. The codes
+ * themselves live in `auth_codes` (`lib/database/auth-codes-db.ts`) — nothing here
+ * stores state, and nothing here puts a code or its digest into a value the client
+ * receives.
  */
 
 import crypto from 'crypto';
@@ -10,7 +15,7 @@ import { NEXTAUTH_SECRET } from '@/lib/config';
 /**
  * Generate a cryptographically random 6-digit OTP.
  *
- * `crypto.randomInt`, not `Math.random`: this is a 2FA secret, and `Math.random`
+ * `crypto.randomInt`, not `Math.random`: this is a login secret, and `Math.random`
  * is a non-cryptographic PRNG whose internal state is recoverable from a modest
  * number of observed outputs — after which every later code is predictable.
  * Samples are easy to obtain, since anyone can request codes for their own
@@ -22,109 +27,82 @@ export function generateOTP(): string {
 }
 
 /**
- * Hash an OTP using SHA-256
- * Used to securely store OTP in JWT token
+ * Digest a code for storage in `auth_codes.code_hash`.
+ *
+ * Plain SHA-256 is sufficient *because the digest never leaves the server*. The 10^6
+ * preimage space means a digest an attacker can see is a digest an attacker has already
+ * broken, which is exactly what sank the predecessor design; it is not a reason to
+ * reach for a slow KDF here, where the attempt cap — not the hash cost — is what bounds
+ * guessing.
  */
 export function hashOTP(otp: string): string {
   return crypto.createHash('sha256').update(otp).digest('hex');
 }
 
 /**
- * OTP payload structure stored in JWT
+ * Constant-time comparison of a submitted code against a stored digest.
+ *
+ * Both sides are fixed-length hex digests, so the length guard below only ever fires on
+ * a corrupt stored value. Timing was not the weakness in the predecessor design — it
+ * compared digests, not secrets — but a comparison that is constant-time by
+ * construction removes the question rather than leaving it to be re-argued.
  */
-export interface OTPPayload {
-  email: string;
-  phone?: string;  // optional — not present for email OTP
-  otpHash: string;
-  exp: number;  // Unix timestamp (expiry)
-  nonce: string;  // Random string so two tokens issued for the same email/OTP differ.
-                  // Verification is stateless — nothing tracks spent nonces, so a token
-                  // stays replayable until its 5-minute exp.
+export function codeMatchesHash(submittedOTP: string, otpHash: string): boolean {
+  const submitted = Buffer.from(hashOTP(submittedOTP), 'hex');
+  const stored = Buffer.from(otpHash, 'hex');
+  if (submitted.length !== stored.length) return false;
+  return crypto.timingSafeEqual(submitted, stored);
 }
 
 /**
- * Verified OTP payload — created after successful OTP verification
- * Short-lived token proving the user completed OTP verification
+ * Proof that an address completed a code challenge — created after a successful
+ * verification and spent immediately by `signIn()`.
+ *
+ * It carries no code and no digest, so it is safe as a stateless JWT; its exposure is
+ * the window in which a caller who can already read the verify response could replay it,
+ * and anyone who can read that response can read the session cookie it is about to
+ * become.
  */
 export interface VerifiedOTPPayload {
   email: string;
+  /** Discriminator. `NEXTAUTH_SECRET` also signs the MCP OAuth tokens
+   *  (`lib/oauth/db.ts`), so a token's *type* must be asserted rather than inferred
+   *  from the presence of a field another type might one day also carry. */
+  typ: 'otp_verified';
   verified: true;
   exp: number;
 }
 
 /**
- * Create a short-lived JWT proving OTP verification was completed
- * Expires in 60 seconds — just enough time for signIn() to be called
+ * Long enough to type a password into the prompt a 2FA account gets after its code
+ * verifies — that step happens inside this window, so a minute is not enough. Still far
+ * shorter than a session, and the token is spent on the very next request.
  */
+const VERIFIED_TOKEN_TTL_SECONDS = 5 * 60;
+
 export function createVerifiedToken(email: string): string {
   const secret = NEXTAUTH_SECRET;
   if (!secret) {
     throw new Error('NEXTAUTH_SECRET is not configured');
   }
-  const exp = Math.floor(Date.now() / 1000) + 60;
-  return jwt.sign({ email, verified: true, exp }, secret);
+  const exp = Math.floor(Date.now() / 1000) + VERIFIED_TOKEN_TTL_SECONDS;
+  return jwt.sign({ email, typ: 'otp_verified', verified: true, exp }, secret);
 }
 
 /**
- * Verify and decode a verified OTP token
- * Returns null if token is invalid, expired, or not a verified token
+ * Verify and decode a verified-OTP token.
+ * Returns null if the token is invalid, expired, or not a verified-OTP token.
  */
 export function verifyVerifiedToken(token: string): VerifiedOTPPayload | null {
   try {
     const secret = NEXTAUTH_SECRET;
     if (!secret) throw new Error('NEXTAUTH_SECRET is not configured');
-    const payload = jwt.verify(token, secret) as VerifiedOTPPayload;
-    if (!payload.verified) return null;
-    return payload;
+    const payload = jwt.verify(token, secret) as Partial<VerifiedOTPPayload>;
+    if (payload.typ !== 'otp_verified') return null;
+    if (payload.verified !== true) return null;
+    if (typeof payload.email !== 'string' || !payload.email) return null;
+    return payload as VerifiedOTPPayload;
   } catch {
     return null;
   }
-}
-
-/**
- * Create a JWT token containing OTP hash
- * Token expires in 5 minutes
- */
-export function createOTPToken(payload: Omit<OTPPayload, 'exp' | 'nonce'>): string {
-  const secret = NEXTAUTH_SECRET;
-  if (!secret) {
-    throw new Error('NEXTAUTH_SECRET is not configured');
-  }
-
-  const nonce = crypto.randomBytes(16).toString('hex');
-  const exp = Math.floor(Date.now() / 1000) + 300;  // 5 minutes from now
-
-  return jwt.sign(
-    { ...payload, exp, nonce },
-    secret
-  );
-}
-
-/**
- * Verify and decode an OTP JWT token
- * Returns null if token is invalid or expired
- */
-export function verifyOTPToken(token: string): OTPPayload | null {
-  try {
-    const secret = NEXTAUTH_SECRET;
-    if (!secret) {
-      console.error('[verifyOTPToken] NEXTAUTH_SECRET is not configured');
-      throw new Error('NEXTAUTH_SECRET is not configured');
-    }
-
-    const payload = jwt.verify(token, secret) as OTPPayload;
-    console.log('[verifyOTPToken] Token verified successfully:', { email: payload.email, exp: payload.exp, now: Math.floor(Date.now() / 1000) });
-    return payload;
-  } catch (err: any) {
-    // Token is invalid or expired
-    console.error('[verifyOTPToken] Token verification failed:', err.message);
-    return null;
-  }
-}
-
-/**
- * Validate a submitted OTP against the hashed OTP in the token
- */
-export function validateOTP(submittedOTP: string, otpHash: string): boolean {
-  return hashOTP(submittedOTP) === otpHash;
 }

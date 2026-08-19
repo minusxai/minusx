@@ -38,8 +38,11 @@ test('welcome: a click completes the typewriter instead of waiting it out', asyn
   const skip = page.getByLabel('Skip setup');
   await skip.waitFor({ state: 'visible' });
 
-  // Click a neutral part of the page — the point is that ANY click cuts it short.
-  await page.mouse.click(20, 400);
+  // Click a neutral part of the WIZARD PANE — the point is that ANY click cuts it short.
+  // It must clear the ~72px navigation rail on the left: a click there lands on a nav
+  // link, and the assertion below then races the resulting route change against the
+  // greeting finishing. That race is why this passed only intermittently.
+  await page.mouse.click(640, 690);
 
   // The action cards are gated behind the greeting finishing, so their presence proves the
   // whole sequence completed rather than merely that some text is on screen. Without the fix

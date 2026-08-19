@@ -39,7 +39,7 @@ table definitions live here; queries are in `lib/analytics/`).
 `components/plotx/TableV2.tsx` for column stats and by `lib/chart/histogram.ts`.
 
 **`lib/database/schema/`** — the schema, declared as data rather than as SQL text. `schema/tables.ts`
-declares all 16 tables as typed `Table` objects: columns, primary key, uniques, partial and
+declares all 18 tables as typed `Table` objects: columns, primary key, uniques, partial and
 expression indexes, and a `touchUpdatedAt` flag standing in for the four identical `updated_at`
 triggers. `schema/render.ts` turns that into the DDL string. The point is that a deployment needing a
 *variant* maps over the declaration instead of restating every table — two copies of a schema drift,
@@ -415,6 +415,8 @@ connector on first use. After adding a migration, `npm run update-workspace-temp
 | Change what a file type looks like on read | `lib/data/loaders/registry.ts` + the loader (guard `content === null`) |
 | Change permission semantics | `lib/data/helpers/permissions.ts` (`canAccessFile`, `canViewFileInUI`) |
 | Add SQL against `files` | `lib/database/documents-db.ts` (nowhere else) |
+| Change login-code storage, the attempt cap, or the send throttle | `lib/database/auth-codes-db.ts` — see `frontend/lib/auth/CLAUDE.md` for why it is stateful |
+| Change the failed-password cap or window | `lib/database/login-attempts-db.ts` — the counter behind every login endpoint |
 | Add a table/column/index | `lib/database/schema/tables.ts` (declare `scope`), then re-record `lib/database/__tests__/__snapshots__/schema-shape.test.ts.snap`. **No migration entry** — `schema/render.ts` emits `ALTER TABLE … ADD COLUMN IF NOT EXISTS` for every column on every boot |
 | Change what a loader may skip | `lib/data/loaders/types.ts` (`LoaderOptions`) — a new flag must never be able to skip redaction |
 | Widen what the schema can express | `lib/database/schema/types.ts` + `schema/render.ts` — never a raw-SQL string |

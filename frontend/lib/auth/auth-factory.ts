@@ -1,12 +1,10 @@
 import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import { UserDB } from '@/lib/database/user-db';
-import { verifyPassword } from '@/lib/auth/password-utils';
-import { verifyVerifiedToken } from '@/lib/auth/otp-utils';
+import { attemptCredentialLogin, type CredentialSubject } from '@/lib/auth/credential-login';
 import { IS_DEV } from '@/lib/constants';
 import type { UserRole } from '@/lib/types';
-import { isAdmin } from '@/lib/auth/role-helpers';
-import { ADMIN_PWD, EMBED_ENABLED } from '@/lib/config';
+import { EMBED_ENABLED } from '@/lib/config';
 import { buildEmbedCookieConfig } from '@/lib/auth/embed';
 import { CURRENT_TOKEN_VERSION } from '@/lib/auth/auth-constants';
 import { appEventRegistry } from '@/lib/app-event-registry/registry';
@@ -58,33 +56,24 @@ export function createAuthConfig(options: AuthConfigOptions = {}) {
           if (!credentials?.email) return null;
           try {
             const user = await doLookup(credentials.email as string);
-            if (!user) {
-              console.log('User not found:', credentials.email);
+            // An unknown address is NOT short-circuited: it goes through the same door so
+            // it consumes the same failed-password budget. Returning early here would
+            // make being rate-limited a user-existence oracle.
+            const decision = await attemptCredentialLogin(
+              (user as CredentialSubject | null) ?? null,
+              {
+                email: credentials.email as string,
+                password: credentials.password,
+                otp_verified_token: credentials.otp_verified_token,
+              },
+            );
+            if (!decision.ok) {
+              console.log(`Login refused for ${credentials.email}: ${decision.reason}`);
               return null;
             }
-            if (credentials.otp_verified_token && !credentials.password) {
-              const payload = verifyVerifiedToken(credentials.otp_verified_token as string);
-              if (!payload || payload.email !== credentials.email) {
-                console.log('Invalid or mismatched OTP verified token for:', credentials.email);
-                return null;
-              }
-              console.log('User logged in via email OTP (passwordless):', credentials.email);
-            } else {
-              if (!credentials.password) return null;
-              if (IS_DEV && credentials.password === user.email) {
-                console.log('⚠️  Dev mode: User logged in using email as password');
-              } else if (isAdmin(user.role as UserRole) && ADMIN_PWD && credentials.password === ADMIN_PWD) {
-                console.log('⚠️  Prod mode: Admin logged in using ADMIN_PWD');
-              } else if (!user.password_hash) {
-                return null;
-              } else {
-                const isValid = await verifyPassword(credentials.password as string, user.password_hash);
-                if (!isValid) {
-                  console.log('Invalid password for user:', credentials.email);
-                  return null;
-                }
-              }
-            }
+            // Unreachable: a null user always decides `bad-password` above. Present so
+            // the narrowing below is the type system's, not a cast.
+            if (!user) return null;
             return {
               id: user.email,
               userId: user.id,

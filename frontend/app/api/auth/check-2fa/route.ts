@@ -1,49 +1,46 @@
 /**
  * POST /api/auth/check-2fa
- * Check if a user requires 2FA before attempting login
- * This allows the login UI to show OTP flow when needed
+ * Tell the login form which flow to render for these credentials.
+ *
+ * Advisory only — it enforces nothing, and a client that skips it gains nothing, because
+ * `attemptCredentialLogin` decides every login from the same predicate.
+ *
+ * It verifies the password rather than answering from the address alone: without that
+ * it would report any account's 2FA status to a stranger. That makes it a password
+ * oracle, which is why it runs through `attemptCredentialLogin` — the same door, and
+ * therefore the same failed-password counter, as the credentials callback. Throttling
+ * only this route would have moved the question rather than answered it.
  */
 
 import { NextRequest } from 'next/server';
 import { UserDB } from '@/lib/database/user-db';
-import { verifyPassword } from '@/lib/auth/password-utils';
-import { UserState } from '@/lib/types';
+import { attemptCredentialLogin } from '@/lib/auth/credential-login';
 import { successResponse, ApiErrors, handleApiError } from '@/lib/http/api-responses';
-import { IS_DEV } from '@/lib/constants';
-import { isAdmin } from '@/lib/auth/role-helpers';
-import { ADMIN_PWD } from '@/lib/config';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { email, password } = body;
+    const { email, password } = body as { email?: string; password?: string };
 
     if (!email || !password) {
       return ApiErrors.badRequest('Email and password are required');
     }
 
     const user = await UserDB.getByEmail(email);
-    if (!user) {
-      return ApiErrors.unauthorized('Invalid credentials');
-    }
+    const decision = await attemptCredentialLogin(user, { email, password });
 
-    let passwordValid = false;
-    if (IS_DEV && password === user.email) {
-      passwordValid = true;
-    } else if (isAdmin(user.role) && ADMIN_PWD && password === ADMIN_PWD) {
-      passwordValid = true;
-    } else if (user.password_hash) {
-      passwordValid = await verifyPassword(password, user.password_hash);
-    }
+    // `otp-required` is the interesting case, not an error: it is returned only after
+    // the password has been accepted, and means the account owes a second factor.
+    if (decision.ok) return successResponse({ requires2FA: false, email });
+    if (decision.reason === 'otp-required') return successResponse({ requires2FA: true, email });
 
-    if (!passwordValid) {
-      return ApiErrors.unauthorized('Invalid credentials');
-    }
-
-    const userState: UserState | null = user.state ? JSON.parse(user.state) : null;
-    const requires2FA = user.phone && (userState?.twofa_phone_otp_enabled === true || (userState as any)?.twofa_whatsapp_enabled === true);
-
-    return successResponse({ requires2FA, email: user.email });
+    // Both messages are shown to the user verbatim by the login form, so they are
+    // written for a person rather than for a log. They must also stay
+    // indistinguishable across "no such account" and "wrong password" — the shared
+    // counter is what makes the rate-limited case safe to name.
+    return decision.reason === 'rate-limited'
+      ? ApiErrors.tooManyRequests('Too many failed sign-in attempts. Please try again later.')
+      : ApiErrors.unauthorized('Invalid email or password');
   } catch (error) {
     return handleApiError(error);
   }

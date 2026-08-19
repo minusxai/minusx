@@ -29,6 +29,7 @@ export const ErrorCodes = {
   NOT_FOUND: 'NOT_FOUND',
   CONFLICT: 'CONFLICT',
   BAD_REQUEST: 'BAD_REQUEST',
+  RATE_LIMITED: 'RATE_LIMITED',
 
   // 500-level errors (server errors)
   INTERNAL_ERROR: 'INTERNAL_ERROR',

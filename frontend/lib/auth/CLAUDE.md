@@ -43,7 +43,8 @@ the single request-scoped identity resolver every server route uses. `access-rul
 `access-rules.client.ts` own *role → file-type* permission, read from `frontend/rules.json`.
 `role-helpers.ts` owns the three role predicates. `guest-session.ts` + `share-tokens.ts` own
 anonymous public-share identity. `embed.ts` owns iframe-embedding cookie/CSP config.
-`otp-utils.ts` / `password-utils.ts` own credential primitives. `e2e-runtime.ts` owns the
+`otp-utils.ts` / `password-utils.ts` own credential primitives; `credential-login.ts` owns the
+login DECISION and `two-factor.ts` the one predicate that decides it. `e2e-runtime.ts` owns the
 runtime E2E opt-in gate.
 
 It does **not** own per-file ACL. Whether *this* user may touch *this* file is
@@ -383,6 +384,10 @@ The constants live beside the rules (`scoring.ts`: weights `0.3/0.3/0.4` for vis
 | Task | File |
 |---|---|
 | Change who is authenticated / add a login path | `lib/auth/auth-factory.ts` (+ `frontend/auth.ts`) |
+| Change what logs a user in (password, OTP, the 2FA gate) | `lib/auth/credential-login.ts` |
+| Change what counts as having a second factor | `lib/auth/two-factor.ts` (one predicate, three call sites) |
+| Change login-code storage, attempt cap, or send throttle | `lib/database/auth-codes-db.ts` + `lib/auth/auth-constants.ts` |
+| Change the failed-password cap or window | `lib/database/login-attempts-db.ts` + `lib/auth/auth-constants.ts` |
 | Change what identity a request resolves to | `lib/auth/auth-helpers.ts` |
 | Add/alter a request header, public route, or redirect | `lib/middleware/create-middleware.ts` |
 | Change role → file-type permissions | `frontend/rules.json` + both `lib/auth/access-rules*.ts` |
@@ -411,7 +416,38 @@ The constants live beside the rules (`scoring.ts`: weights `0.3/0.3/0.4` for vis
 
 **`embed-too-narrow` judges the desktop base layout on purpose.** `deterministic/story-layout.ts` resolves an embed's column-width share structurally — dividing by the track count of any multi-column `grid-template-columns` ancestor (resolving both inline `style` objects and class rules out of the story's `<style>` block), multiplying through percentage widths, and taking the tightest fixed `px` cap. `stripAtBlocks` removes `@container` / `@media` / `@supports` / `@keyframes` blocks *before* that resolution, so a narrow-viewport override that collapses the grid to one column cannot mask a base layout that squeezes a chart into a third of a column. The rule reports the structural cause of a cramped chart; whether the rendered result actually looks cramped is the judge's call.
 
-**Two password bypasses sit ahead of the hash check in the credentials `authorize` chain.** `lib/auth/auth-factory.ts` accepts `password === user.email` when `IS_DEV`, and accepts the configured `ADMIN_PWD` for any admin in any environment, before it ever reaches `verifyPassword(password, user.password_hash)`. The dev shortcut is what lets `test/e2e/auth.setup.ts` register the workspace admin idempotently via `POST /api/orgs/register` and then log in with no seeded credential — and it is why a dev build must not be run on a reachable host.
+**Two password shortcuts sit ahead of the hash check.** `passwordAccepted` in `lib/auth/credential-login.ts` accepts `password === user.email` when `IS_DEV`, and accepts the configured `ADMIN_PWD` for any admin in any environment, before it reaches `verifyPassword(password, user.password_hash)`. The dev shortcut is what lets `test/e2e/auth.setup.ts` register the workspace admin idempotently via `POST /api/orgs/register` and then log in with no seeded credential — and it is why a dev build must not be run on a reachable host. Both sit INSIDE the password branch, so the two-factor gate applies to them exactly as to a real hash check; `__tests__/credential-login.test.ts` pins that for each.
+
+**Login codes are stateful, and that is the whole design.** A six-digit code is 10^6 wide, which makes it a secret only while guesses are counted — so `auth_codes` (declared in `lib/database/schema/tables.ts`, accessed through `lib/database/auth-codes-db.ts`) holds the digest, the attempt counter, and the consumption flag. `send-otp` returns nothing but an opaque 32-byte handle.
+
+Four properties, each of which the endpoints depend on and none of which a caller can compose for itself, which is why `AuthCodesDB.verify` is one operation rather than three:
+
+- **The digest never reaches the client.** This is the load-bearing one. Its predecessor returned `sha256(code)` inside a JWT — a payload is base64url, not encrypted — so an unauthenticated caller could enumerate all 10^6 digests offline and never call `verify-otp` at all. A rate limit on the verify endpoint would not have touched that. `app/api/auth/__tests__/otp-routes.test.ts` asserts the response body against the actual issued code.
+- **Attempts are counted before the comparison and committed regardless**, in a single `UPDATE … WHERE attempts < $cap RETURNING *`. A SELECT-then-UPDATE would let N concurrent guesses read the same count, and a client that hangs up mid-request would guess for free.
+- **Issuing retires the address's outstanding codes.** Without it the real budget is `OTP_MAX_ATTEMPTS × sends` and compounds with every re-send. It is scoped by address and not by channel, because a live phone code plus a live email code is two budgets for one account.
+- **A correct code is consumed**, guarded on `consumed_at IS NULL` so two concurrent correct submissions yield one login.
+
+The two clocks are different on purpose: `expires_at` governs the code (minutes), while rows survive to `created_at + OTP_RETENTION_MS` because rows are what the send throttle counts — pruning on code expiry would hand back send budget mid-window. Constants live in `auth-constants.ts`.
+
+**An unknown or ineligible address gets a decoy** — a real row whose digest no six-digit code can produce — so the reply does not answer "does this account exist". A decoy deliberately does *not* retire live codes, or naming an address would cancel that person's in-flight login. The dispatch is **detached**, which is what makes the uniformity real rather than cosmetic: awaiting it left two signals that a uniform body did not cover — latency (a real recipient cost a webhook round-trip, a decoy returned at once) and a 500 on delivery failure, which only a real recipient could trigger. A failed send now publishes `AppEvents.ERROR` instead. That is the right destination anyway: the endpoint never confirms delivery to the caller, so reporting a delivery failure *to* the caller contradicted its own contract, and the person who can act on it is the operator.
+
+**A code is one factor, so the passwordless entry point has two steps for a 2FA account.** `verify-otp` returns `passwordRequired` (computed from the same `requiresTwoFactor`), and the login form answers it by prompting for the password and submitting it together with the verified token. Without that the Email Code tab dead-ends: the code verifies, `evaluateCredentials` then refuses a single factor, and the user sees a generic sign-in failure with nothing to act on. It is disclosed only to a caller who has just proven control of the address, who could learn the same by attempting to log in. The verified token's 5-minute life is sized for that prompt — the password is typed inside its window.
+
+**Each OTP channel requires its own webhook type, and there is no fallback.** `send-otp` selects `email_otp` or `phone_otp` by type and refuses with "not configured" when the one it needs is absent — checked before the user lookup, so the answer is a deployment fact that cannot vary by address. It previously fell back to `webhooks[0]` for the phone channel, which could only ever fire when `phone_otp` was missing and could never work: `executeWebhook` substitutes `{{USER_NUMBER}}`/`{{AUTH_OTP}}`, which only `phone_otp` declares, and unlike the email types it has no keyword alias to resolve. The result was a request that succeeded while no code reached the phone — survivable while the second factor was unenforced, and an account lockout once it is. **Enabling 2FA for a user therefore requires a `phone_otp` webhook in `config.messaging.webhooks`.**
+
+**The second factor is enforced in `evaluateCredentials`, not by the login form.** `check-2fa` is advisory: it tells the form which flow to render. The gate itself is one rule — an account with a second factor needs a valid password *and* a completed code challenge; an account without one needs either. It previously existed only in the browser, so posting email+password straight at the credentials provider skipped the code entirely. A passwordless email code therefore cannot log into a 2FA account on its own: one factor is one factor whichever channel delivered it. `requiresTwoFactor` (`two-factor.ts`) includes the phone number in the condition, so clearing the number is how an admin turns 2FA off — a flag with no number to send to would describe an unperformable factor, and the gate would make the account unloginable.
+
+**Every password check is counted, in one place.** A login endpoint is inherently a password oracle — `check-2fa` answers "is this the password for this account" with 200 vs 401, unauthenticated — and the credentials callback answers identically, so throttling one route would only move the question. `attemptCredentialLogin` (`credential-login.ts`) is therefore the single stateful door: it consults `login_attempts`, calls the pure `evaluateCredentials`, and records the outcome. `check-2fa` and `authorize()` both go through it, and `check-2fa` no longer carries its own copy of the password logic — it reads `otp-required` (returned only *after* the password is accepted) as `requires2FA: true`.
+
+Three properties are load-bearing, and `__tests__/login-rate-limit.test.ts` pins each:
+
+- **An unknown address is counted like a real one.** `authorize()` deliberately does not short-circuit on a missing user, and the route passes `null`. Counting only resolvable addresses would make a rate-limited response the user-existence oracle the `send-otp` decoy exists to close.
+- **The lock covers a CORRECT password.** Otherwise the cap only slows a guesser down — they still learn the answer the moment they hit it.
+- **Only a wrong password counts.** `otp-required` clears the counter (the password was right), and a code-only attempt never touches it — a stranger must not be able to lock an address out through an endpoint that never sees a password. Failed codes have their own tighter budget in `auth_codes`.
+
+The window is FIXED, not sliding: `window_started_at` moves only when a window has actually elapsed, so a steady drip of guesses cannot hold an address locked indefinitely.
+
+**The lockout is a denial-of-service surface, deliberately accepted.** `ADMIN_PWD` is checked inside `passwordAccepted` and so is subject to the same counter — someone who knows an admin's address can deny that admin a login for a window at a time. That is why the window is short and self-clearing, and why the escape hatch is worth knowing: deleting the address's row from `login_attempts` lifts a lock immediately.
 
 **The runtime E2E opt-in is a hygiene gate, not a security boundary.** `?e2e=<E2E_RUNTIME_SECRET>` (validated in `lib/auth/e2e-runtime.ts`, persisted as the `mx_e2e` cookie, surfaced to SSR as the `x-e2e-enabled` header) does exactly one thing: it lets `ReduxProvider` expose `window.__MX_STORE__`, which is the requester's own Redux state, already present in their browser. No other user's data is behind it, so a leaked secret is a rotation rather than an incident. The faux-LLM channel is the part that stays build-time-only and 404s on a production build.
 
