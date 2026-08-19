@@ -82,9 +82,17 @@ it tests.
   addressed as `minusx/funnel@1` and shadows nothing. `CatalogEntry.key` (`<tier>:<name>`) is
   what list keys and selection use; `name` is for display and for shadowing.
 - **The shipped `minusx/…@1` recipes are NOT templates.** They are `build()` functions with
-  real logic (funnel geometry, radar polygons, map projections) in `lib/viz/viz-templates.ts`,
-  and cannot move to disk. The Templates page shows both tiers; only this one is overridable
-  by a mounted directory.
+  real logic (funnel geometry, map projections) in `lib/viz/viz-templates.ts`, and cannot move
+  to disk. The Templates page shows both tiers; only this one is overridable by a mounted
+  directory.
+- **When the APP ships a template file for a code recipe's name, the code recipe is hidden from
+  the catalog** — `radar` is the case in hand: `templates/viz/radar.viz` is what a user browses
+  and copies, while `minusx/radar@1` stays in the registry only so saved charts keep rendering
+  and detaching. The list is `SUPERSEDED_BY_APP_TEMPLATE` in `lib/viz/recipe-catalog.ts`, keyed
+  on the id rather than on the live origin (a `TEMPLATE_DIR` override flips origin to
+  `deployment` and would let the builder back in beside it), and pinned against the real
+  directory by `lib/viz/__tests__/viz-shipped-recipes.test.ts`. This is the opposite of the
+  `funnel` case above, where the two ARE different offerings and both stay listed.
 
 ## Key files
 

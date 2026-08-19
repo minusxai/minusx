@@ -8,7 +8,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { catalogEntries, shippedRecipeAsContent } from '@/lib/viz/recipe-catalog';
-import { getBuiltinVizRecipes, setBuiltinVizTemplates } from '@/lib/viz/builtin-recipes';
+import { getBuiltinVizRecipes, getBuiltinVizOrigin, setBuiltinVizTemplates } from '@/lib/viz/builtin-recipes';
 import { VIZ_TEMPLATES } from '@/lib/viz/viz-templates';
 import { materializeFileRecipe, sampleDataForRecipe } from '@/lib/viz/recipe-file';
 import type { VizResultColumn } from '@/lib/viz/types';
@@ -31,12 +31,19 @@ const bindAll = (content: { bindings: ReadonlyArray<{ name: string; accepts: rea
 };
 
 describe('recipe catalog', () => {
-  it('covers every built-in and every shipped recipe', () => {
+  it('covers every built-in, and every shipped recipe the app does not also ship as a template', () => {
     const entries = catalogEntries();
     const builtins = entries.filter((e) => e.tier === 'builtin').map((e) => e.name);
     const shipped = entries.filter((e) => e.tier === 'shipped').map((e) => e.recipeId);
     expect(builtins).toEqual(Object.keys(getBuiltinVizRecipes()));
-    expect(shipped).toEqual(Object.keys(VIZ_TEMPLATES));
+    // `minusx/radar@1` is absent: radar's browsable definition is the built-in
+    // template file, and the registry entry exists only to keep saved charts
+    // rendering (see the superseding test below).
+    const superseded = Object.keys(VIZ_TEMPLATES).filter(
+      (id) => getBuiltinVizRecipes()[id.replace(/^minusx\//, '').replace(/@\d+$/, '')],
+    );
+    expect(superseded, 'expected radar to be shipped twice').toEqual(['minusx/radar@1']);
+    expect(shipped).toEqual(Object.keys(VIZ_TEMPLATES).filter((id) => !superseded.includes(id)));
   });
 
   it('projects a built-in verbatim', () => {
@@ -89,8 +96,11 @@ describe('recipe catalog', () => {
     // These builders manipulate the bound name as a STRING — a multi slot
     // embedded in a Vega expression, an upper-cased label — which a token
     // cannot survive, so they project as a generated spec instead.
+    // `minusx/radar@1` was the third: it is no longer listed at all, because
+    // radar now ships as a built-in template FILE, which IS copyable — so the
+    // one radar a user meets on the Templates page is the editable one.
     const notCopyable = catalogEntries().filter((e) => e.tier === 'shipped' && !e.copyable).map((e) => e.recipeId);
-    expect(notCopyable).toEqual(['minusx/radar@1', 'minusx/trend@1', 'minusx/single-value@1']);
+    expect(notCopyable).toEqual(['minusx/trend@1', 'minusx/single-value@1']);
   });
 
   it('every hand-written preview sample binds exactly the recipe it is for', () => {
@@ -154,6 +164,36 @@ describe('recipe catalog', () => {
       // Both are present and distinguishable by tier.
       const funnels = entries.filter((e) => e.name === 'funnel');
       expect(funnels.map((e) => e.tier).sort()).toEqual(['builtin', 'shipped']);
+    } finally {
+      setBuiltinVizTemplates(original);
+    }
+  });
+
+  it('lists a name ONCE when the app ships both a template file and a code recipe for it', () => {
+    // `radar` ships as a built-in template FILE (templates/viz/radar.viz) — that
+    // is its browsable definition. The `minusx/radar@1` registry entry stays so
+    // saved charts keep rendering and detaching, but offering both would put two
+    // "radar" cards on the Templates page, only one of which a workspace recipe
+    // named `radar` would shadow.
+    const radars = catalogEntries().filter((e) => e.name === 'radar');
+    expect(radars.map((e) => e.tier)).toEqual(['builtin']);
+    expect(VIZ_TEMPLATES['minusx/radar@1'], 'the registry entry must survive for saved charts').toBeDefined();
+  });
+
+  it('keeps the code recipe hidden even when a DEPLOYMENT overrides the app template of that name', () => {
+    // The hole in keying off the registry's origin: a TEMPLATE_DIR file named
+    // `radar.viz` makes radar's origin 'deployment', and a rule that skips only
+    // 'builtin' would let `minusx/radar@1` back into the list beside it — two
+    // "radar" cards again. Whoever supplies the radar TEMPLATE, the builder
+    // behind it stays plumbing for saved charts, never a second offering.
+    const original = Object.fromEntries(
+      Object.entries(getBuiltinVizRecipes()).map(([n, c]) => [n, { content: c, origin: getBuiltinVizOrigin(n)! }]),
+    );
+    try {
+      setBuiltinVizTemplates({ ...original, radar: { content: original.radar.content, origin: 'deployment' } });
+      const names = catalogEntries().map((e) => e.name);
+      expect(new Set(names).size, `duplicate names: ${names}`).toBe(names.length);
+      expect(catalogEntries().filter((e) => e.name === 'radar').map((e) => e.tier)).toEqual(['builtin']);
     } finally {
       setBuiltinVizTemplates(original);
     }

@@ -1,0 +1,46 @@
+{
+  "description": "Heatmap: two discrete axes with the measure as cell colour (SUM-aggregated)",
+  "engine": "vega-lite",
+  "bindings": [
+    {
+      "name": "x",
+      "label": "X axis",
+      "accepts": [
+        "nominal",
+        "temporal"
+      ]
+    },
+    {
+      "name": "y",
+      "label": "Y axis",
+      "accepts": [
+        "nominal"
+      ]
+    },
+    {
+      "name": "value",
+      "label": "Value",
+      "accepts": [
+        "quantitative"
+      ]
+    }
+  ],
+  "template": {
+    "mark": "rect",
+    "encoding": {
+      "x": {
+        "field": "{{x}}",
+        "type": "{{x:kind}}"
+      },
+      "y": {
+        "field": "{{y}}",
+        "type": "nominal"
+      },
+      "color": {
+        "field": "{{value}}",
+        "type": "quantitative",
+        "aggregate": "sum"
+      }
+    }
+  }
+}

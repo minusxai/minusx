@@ -1,11 +1,12 @@
 /**
- * Workspace viz recipes QA flow (tutorial mode, real clicks, aria-labels only).
- * The workspace template seeds `radar` and `heatmap` as `.viz` files at the
- * tutorial root; this flow pins the whole user journey: the seeded recipes
- * surface as Workspace tiles on a question (while the retired static Radar /
- * Heatmap tiles stay absent), clicking one applies it (auto-bound, recipe
- * zones shown), and Save persists a LIVE reference to the tutorial file —
- * served back loader-materialized with the computed spec.
+ * Viz recipes QA flow (tutorial mode, real clicks, aria-labels only).
+ * `radar` and `heatmap` ship as BUILT-IN recipes on disk (`templates/viz/`), so
+ * they resolve in every workspace with no seeding; this flow pins the whole user
+ * journey: they surface as Workspace tiles on a question (while the retired
+ * static Radar / Heatmap tiles stay absent), clicking one applies it (auto-bound,
+ * recipe zones shown), and Save persists a LIVE reference by NAME — served back
+ * loader-materialized with the computed spec. The second test covers the other
+ * half: browsing the same recipe on the Templates page.
  */
 import { expect } from '@playwright/test';
 import {
@@ -16,7 +17,7 @@ import {
   assertTutorialMode,
 } from './flows';
 
-test('seeded recipes surface as Workspace tiles and apply + save a live reference', async ({ page, request }) => {
+test('built-in recipes surface as Workspace tiles and apply + save a live reference', async ({ page, request }) => {
   // The tutorial seed carries this question (two categoricals + a measure —
   // exactly the heatmap recipe's slots).
   const question = await findFile(request, 'question', 'Orders by Day of Week and Hour (Last Month)');
@@ -25,7 +26,7 @@ test('seeded recipes surface as Workspace tiles and apply + save a live referenc
   await openFileByClick(page, 'question', question!);
   await assertTutorialMode(page); // never mutate org/production
 
-  // The seeded recipe files resolve into Workspace tiles…
+  // The built-in recipes resolve into Workspace tiles in every folder…
   await expect(page.getByLabel('Recipe heatmap')).toBeVisible({ timeout: 60_000 });
   await expect(page.getByLabel('Recipe radar')).toBeVisible();
   // …and the retired static tiles are gone from every grid.
@@ -43,9 +44,9 @@ test('seeded recipes surface as Workspace tiles and apply + save a live referenc
   // An already-saved question saves directly (no name dialog).
   await page.getByLabel('Save', { exact: true }).click();
 
-  // The stored artifact is a LIVE reference to the tutorial recipe file; the
-  // read path serves it materialized (computed spec attached by the loader),
-  // so recipe edits propagate to this chart.
+  // The stored artifact is a LIVE reference BY NAME (a built-in has no path);
+  // the read path serves it materialized (computed spec attached by the loader),
+  // so shipping a changed recipe propagates to this chart.
   await expect
     .poll(async () => {
       const res = await request.get(`/api/files/${question!.id}?mode=tutorial`);
@@ -57,23 +58,22 @@ test('seeded recipes surface as Workspace tiles and apply + save a live referenc
         ? { kind: source.kind, recipe: source.recipe, mark: source.spec?.mark }
         : null;
     }, { timeout: 30_000 })
-    .toEqual({ kind: 'recipe', recipe: '/tutorial/heatmap', mark: 'rect' });
+    .toEqual({ kind: 'recipe', recipe: 'heatmap', mark: 'rect' });
 
   // Hard-check we never left tutorial (QA suite invariant).
   expect(question!.path.startsWith('/tutorial')).toBe(true);
 });
 
-test('the seeded radar recipe file opens with a sample-data preview', async ({ page, request }) => {
-  const res = await request.get(`/api/files/by-path?path=${encodeURIComponent('/tutorial/radar')}&mode=tutorial`);
-  expect(res.ok()).toBeTruthy();
-  const body = await res.json();
-  const radar = body?.data?.data ?? body?.data;
-  expect(radar?.type).toBe('viz');
-
-  await page.goto(e2eUrl(`/f/${radar.id}`));
+test('the built-in radar recipe is browsable on the Templates page', async ({ page }) => {
+  // A built-in is not a file, so there is no `/f/<id>` to open: the Templates
+  // page IS its viewer, and the only place a user meets it before copying.
+  await page.goto(e2eUrl('/templates'));
+  await page.getByLabel('Template radar').click();
   await expect(page.getByLabel('Chart recipe')).toBeVisible({ timeout: 60_000 });
   await expect(page.getByLabel('Recipe preview')).toBeVisible();
   await expect(page.getByLabel('Recipe slots')).toBeVisible();
+  // A built-in is read-only here, offered as a copy rather than edited in place.
+  await expect(page.getByLabel('Copy recipe to my workspace')).toBeVisible();
   // The preview actually DREW the native-vega radar (an svg inside the preview card).
   await expect(page.getByLabel('Recipe preview').locator('svg').first()).toBeVisible({ timeout: 30_000 });
 });

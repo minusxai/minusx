@@ -76,10 +76,11 @@ const ALL_VIZ_GROUPS: VizTypeGroup[] = [
       { type: 'combo', icon: <LuChartNoAxesCombined size={16} />, label: 'Combo' },
       { type: 'funnel', icon: <LuFilter size={16} />, label: 'Funnel' },
       { type: 'waterfall', icon: <LuChartNoAxesColumn size={16} />, label: 'Waterfall' },
-      // Radar and heatmap are NOT offered here: they ship as workspace recipe
-      // FILES (seeded at the mode roots by the workspace template) and surface
-      // as Workspace tiles instead. Saved charts keep rendering — the shipped
-      // minusx/radar@1 registry entry and the rect→heatmap classification stay.
+      // Radar and heatmap are NOT offered here: they ship as BUILT-IN recipes
+      // on disk (`templates/viz/`), so they resolve in every folder of every
+      // workspace and surface as Workspace tiles instead. Saved charts keep
+      // rendering — the shipped minusx/radar@1 registry entry and the
+      // rect→heatmap classification stay.
       // Candlestick is Lucide's closest glyph to a box-and-whisker plot.
       { type: 'boxplot', icon: <LuChartCandlestick size={16} />, label: 'Boxplot', v2Only: true },
       { type: 'histogram', icon: <LuChartColumnBig size={16} />, label: 'Histogram', v2Only: true },

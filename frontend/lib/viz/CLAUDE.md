@@ -81,10 +81,13 @@ Identity is the FILE NAME — no name field, no version suffix. `lib/viz/recipe-
 a folder's visible set: built-ins < root < … < nearest folder, same-name shadowing, sibling
 isolation (pure path math over a file listing; mirrors `findNearestAncestorContext`).
 
-**Radar and heatmap are file-tier, not selector tiles.** The workspace template seeds `radar` and
-`heatmap` recipe files at both mode roots (`/tutorial`, `/org` — pinned by
-`lib/viz/__tests__/viz-seed-recipes.test.ts`), and `VizTypeSelector` deliberately offers no static
-tile for either — they surface as Workspace tiles from the files. Saved charts are unaffected: the
+**Radar and heatmap are recipe-tier, not selector tiles.** They ship as built-in recipe files on
+disk (`frontend/templates/viz/radar.viz`, `heatmap.viz` — pinned by
+`lib/viz/__tests__/viz-shipped-recipes.test.ts`), so they resolve in every folder of every
+workspace with no seeding and no migration, and `VizTypeSelector` deliberately offers no static
+tile for either — they surface as Workspace tiles. Seeding them into the workspace template
+instead would reach only workspaces created after that build; `AuthModule.register` runs once and
+nothing backfills. Saved charts are unaffected: the
 shipped `minusx/radar@1` registry entry stays (live references must keep rendering and detaching),
 and `getVizType()` still classifies a `rect` spec as `heatmap` for settings behavior. The radar
 FILE recipe is fold-only (`metric` + multi `values`; a single bound column folds fine) and drops

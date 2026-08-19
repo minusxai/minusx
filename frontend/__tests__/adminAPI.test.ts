@@ -358,7 +358,7 @@ describe('POST /api/admin/reset-tutorial', () => {
     const body = await response.json();
     expect(body.success).toBe(true);
     // Only /tutorial + /internals seed docs are (re)created.
-    expect(body.documentsCreated).toBe(63);
+    expect(body.documentsCreated).toBe(61);
 
     const db = getModules().db;
 
@@ -366,9 +366,10 @@ describe('POST /api/admin/reset-tutorial', () => {
       "SELECT COUNT(*) as count FROM files WHERE (path = '/tutorial' OR path LIKE '/tutorial/%')",
       []
     );
-    // Exactly the 32 template tutorial docs (incl. the radar + heatmap recipe files) — these modes are wiped wholesale, so
+    // Exactly the 30 template tutorial docs — radar and heatmap are built-in
+    // templates on disk, not seeded files. These modes are wiped wholesale, so
     // the user-created tutorial question (id=500) is NOT preserved.
-    expect(tutorialResult.rows[0].count).toBe(32);
+    expect(tutorialResult.rows[0].count).toBe(30);
 
     const userFileResult = await db.exec<{ count: number }>(
       "SELECT COUNT(*) as count FROM files WHERE id = 500",
@@ -483,7 +484,7 @@ describe('POST /api/admin/reset-tutorial', () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.success).toBe(true);
-    expect(body.documentsCreated).toBe(63);
+    expect(body.documentsCreated).toBe(61);
 
     // The template doc is restored at that path under its template id (11), drift gone.
     const pathResult = await db.exec<{ id: number }>(
@@ -500,25 +501,25 @@ describe('POST /api/admin/reset-tutorial', () => {
     expect(driftedResult.rows[0].count).toBe(0);
   });
 
-  it('should be idempotent — second call also returns 63 docs', async () => {
+  it('should be idempotent — second call also returns 61 docs', async () => {
     const request1 = createResetRequest();
     const response1 = await resetTutorialHandler(request1, {} as any);
     expect(response1.status).toBe(200);
     const body1 = await response1.json();
-    expect(body1.documentsCreated).toBe(63);
+    expect(body1.documentsCreated).toBe(61);
 
     const request2 = createResetRequest();
     const response2 = await resetTutorialHandler(request2, {} as any);
     expect(response2.status).toBe(200);
     const body2 = await response2.json();
     expect(body2.success).toBe(true);
-    expect(body2.documentsCreated).toBe(63);
+    expect(body2.documentsCreated).toBe(61);
 
     const result = await getModules().db.exec<{ count: number }>(
       "SELECT COUNT(*) as count FROM files WHERE (path = '/tutorial' OR path LIKE '/tutorial/%')",
       []
     );
-    expect(result.rows[0].count).toBe(32); // exactly the 32 template tutorial docs (incl. radar + heatmap recipes)
+    expect(result.rows[0].count).toBe(30); // exactly the 30 template tutorial docs (radar + heatmap are built-in templates on disk, not seeded files)
   });
 
   it('never resets /org — preserves the company config / setup-wizard state', async () => {

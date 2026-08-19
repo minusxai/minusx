@@ -30,6 +30,7 @@
  * else.
  */
 import { getBuiltinVizOrigin, getBuiltinVizRecipes } from './builtin-recipes';
+import { immutableSet } from '@/lib/utils/immutable-collections';
 import { materializeFileRecipe, sampleDataForRecipe } from './recipe-file';
 import { VIZ_TEMPLATES } from './viz-templates';
 import type { VizRecipeContent } from '@/lib/validation/atlas-schemas';
@@ -243,6 +244,26 @@ export interface CatalogEntry {
  * Every catalog entry, in code order. Built-ins first (they are copyable,
  * shadowable vocabulary), then the shipped recipes.
  */
+/**
+ * Shipped registry ids whose BROWSABLE definition is an app template file
+ * (`templates/viz/<name>.viz`) rather than the builder. The registry entry stays —
+ * saved charts reference `minusx/radar@1` and must keep rendering and detaching —
+ * but listing it as well would offer one recipe twice under a single name, and a
+ * workspace `.viz` of that name would shadow only one of the two.
+ *
+ * Keyed on the id rather than on `getBuiltinVizOrigin(name) === 'builtin'`,
+ * because a `TEMPLATE_DIR` file of the same name flips that origin to
+ * 'deployment' and would let the builder back into the list beside it. Whoever
+ * supplies the template, the builder behind it is plumbing, not an offering.
+ * `lib/viz/__tests__/viz-shipped-recipes.test.ts` pins this against the real
+ * directory, so it cannot drift from what ships.
+ *
+ * NOT the same as a deployment shipping a template that merely shares a name
+ * with a code recipe the app still offers (`funnel`): there both are real
+ * offerings and both stay listed, distinguished by tier.
+ */
+export const SUPERSEDED_BY_APP_TEMPLATE: ReadonlySet<string> = immutableSet(['minusx/radar@1']);
+
 export function catalogEntries(): CatalogEntry[] {
   const entries: CatalogEntry[] = [];
   for (const [name, content] of Object.entries(getBuiltinVizRecipes())) {
@@ -252,6 +273,7 @@ export function catalogEntries(): CatalogEntry[] {
     const projected = shippedRecipeAsContent(id);
     if (!projected) continue;
     const name = id.replace(/^minusx\//, '').replace(/@\d+$/, '');
+    if (SUPERSEDED_BY_APP_TEMPLATE.has(id)) continue;
     entries.push({
       key: `shipped:${name}`, name, tier: 'shipped', recipeId: id,
       copyable: projected.copyable, assets: projected.assets,
