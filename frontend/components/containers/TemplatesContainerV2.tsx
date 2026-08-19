@@ -9,6 +9,7 @@
 import { useCallback, useMemo } from 'react';
 import { useAppSelector } from '@/store/hooks';
 import { selectEffectiveUser } from '@/store/authSlice';
+import { selectVizTemplates } from '@/store/configsSlice';
 import { applyJsonContentEdit, createDraftFile } from '@/lib/file-state/file-state';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { canCreateFileByRole } from '@/lib/auth/access-rules.client';
@@ -20,8 +21,12 @@ export default function TemplatesContainerV2() {
   const user = useAppSelector(selectEffectiveUser);
   const router = useRouter();
 
-  // The catalog is code — computed once, never fetched.
-  const entries = useMemo(() => catalogEntries(), []);
+  // The built-in half of the catalog comes from REDUX, not from the recipe
+  // module's state: that state is written by DataLoader's effect, so reading it
+  // during render disagrees with the server (React #418) and a memo with no
+  // dependency on it never picks the templates up at all.
+  const vizTemplates = useAppSelector(selectVizTemplates);
+  const entries = useMemo(() => catalogEntries(vizTemplates), [vizTemplates]);
 
   const canCopy = !user?.role || canCreateFileByRole(user.role, 'viz');
 

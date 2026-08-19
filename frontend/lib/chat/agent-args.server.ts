@@ -23,6 +23,7 @@ import type { ContextContent, DatabaseWithSchema, ResolvedContextDocs, TableAnno
 import type { ResolvedCustomAgent } from '@/agents/analyst/types';
 import { LLM_GRADES, type LlmGrade } from '@/lib/llm/llm-config-types';
 import { resolveVizRecipes } from '@/lib/viz/recipe-resolve';
+import { getTemplateRegistry } from '@/lib/templates/registry.server';
 import { toAgentVizRecipeInfo, type AgentVizRecipeInfo } from '@/lib/viz/recipe-prompt';
 import type { VizRecipeContent } from '@/lib/validation/atlas-schemas';
 
@@ -276,6 +277,11 @@ export async function buildServerAgentArgs(
   try {
     const anchor = options?.anchorPath ?? resolveHomeFolderSync(user.mode, user.home_folder || '');
     const modeRoot = resolvePath(user.mode, '/');
+    // Load the built-in recipes here too: this runs per turn in whichever module
+    // instance serves the chat route, which is not necessarily the one a boot
+    // task wrote the set into. Without it the agent is advertised only the
+    // workspace's own recipe files and never hears about the built-ins. Memoized.
+    getTemplateRegistry();
     const { data: vizFiles } = await FilesAPI.getFiles({ paths: [modeRoot], type: 'viz', depth: -1 }, user);
     const resolved = [...resolveVizRecipes(
       vizFiles.map((f) => ({ id: f.id, name: f.name, path: f.path })),

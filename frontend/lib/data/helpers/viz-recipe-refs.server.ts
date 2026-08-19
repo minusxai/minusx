@@ -21,6 +21,7 @@ import {
   type MaterializedRecipeSource,
   type VizRecipeLoaders,
 } from '@/lib/viz/recipe-reference-core';
+import { getTemplateRegistry } from '@/lib/templates/registry.server';
 import { validateVizEnvelope } from '@/lib/viz/validate';
 import { formatVizIssues } from '@/lib/viz/types';
 import type { FileType } from '@/lib/types';
@@ -39,6 +40,14 @@ export async function validateAndStripVizRecipeRefs(
 ): Promise<RecipeGateResult> {
   const stripped = stripVizRecipeComputedFields(type, content);
   if (type !== 'question' && type !== 'notebook') return { ok: true, content: stripped };
+
+  // Load the built-in recipes here rather than trusting a boot task to have
+  // done it. `setBuiltinVizTemplates` writes module-level state, and the module
+  // instance serving this route is not guaranteed to be the one boot tasks (or
+  // the RSC layout) wrote to — when it is not, every built-in recipe is simply
+  // absent and a valid save is rejected as an unknown name. Memoized, so this
+  // is a map lookup after the first call.
+  getTemplateRegistry();
 
   // Dry-run materialization over the stripped content; strictness comes from
   // inspecting the outcome rather than a second resolution walk.

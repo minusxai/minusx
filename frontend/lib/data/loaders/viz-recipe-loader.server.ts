@@ -12,6 +12,7 @@
  * published vocabulary).
  */
 import { DocumentDB } from '@/lib/database/documents-db';
+import { getTemplateRegistry } from '@/lib/templates/registry.server';
 import { materializeVizRecipeRefsInContent } from '@/lib/viz/recipe-reference-core';
 import type { VizRecipeContent } from '@/lib/validation/atlas-schemas';
 import type { CustomLoader } from './types';
@@ -19,6 +20,10 @@ import type { CustomLoader } from './types';
 export const vizRecipeLoader: CustomLoader = async (file, _user, options) => {
   if (!file.content || options?.skipEnrichment) return file;
   if (file.type !== 'question' && file.type !== 'notebook') return file;
+  // Same reason as the save gate: an unbooted module instance has no built-in
+  // recipes, and an unresolved reference renders as a silent table fallback
+  // rather than an error. Memoized.
+  getTemplateRegistry();
 
   const folder = file.path.substring(0, file.path.lastIndexOf('/')) || '/';
   const content = await materializeVizRecipeRefsInContent(file.type, file.content, folder, {

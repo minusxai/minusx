@@ -29,7 +29,7 @@
  * the code registry, so projecting them here adds a viewing surface and nothing
  * else.
  */
-import { getBuiltinVizOrigin, getBuiltinVizRecipes } from './builtin-recipes';
+import { getBuiltinVizOrigin, getBuiltinVizRecipes, type BuiltinVizTemplate } from './builtin-recipes';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import { materializeFileRecipe, sampleDataForRecipe } from './recipe-file';
 import { VIZ_TEMPLATES } from './viz-templates';
@@ -264,10 +264,19 @@ export interface CatalogEntry {
  */
 export const SUPERSEDED_BY_APP_TEMPLATE: ReadonlySet<string> = immutableSet(['minusx/radar@1']);
 
-export function catalogEntries(): CatalogEntry[] {
+export function catalogEntries(builtins?: Record<string, BuiltinVizTemplate>): CatalogEntry[] {
+  // `builtins` is explicit for RENDER callers. The module-level set is written
+  // by DataLoader's effect — after first render, after hydration — so a
+  // component reading it during render disagrees with the server and never
+  // recovers from a dependency-free memo. The Templates page passes the Redux
+  // value (`configs.vizTemplates`), which is in preloadedState at SSR and is
+  // therefore identical on both sides. Server callers keep the default.
+  const resolved = builtins ?? Object.fromEntries(
+    Object.entries(getBuiltinVizRecipes()).map(([n, content]) => [n, { content, origin: getBuiltinVizOrigin(n) }]),
+  ) as Record<string, BuiltinVizTemplate>;
   const entries: CatalogEntry[] = [];
-  for (const [name, content] of Object.entries(getBuiltinVizRecipes())) {
-    entries.push({ key: `builtin:${name}`, name, tier: 'builtin', origin: getBuiltinVizOrigin(name), copyable: true, content });
+  for (const [name, { content, origin }] of Object.entries(resolved)) {
+    entries.push({ key: `builtin:${name}`, name, tier: 'builtin', origin, copyable: true, content });
   }
   for (const id of Object.keys(VIZ_TEMPLATES)) {
     const projected = shippedRecipeAsContent(id);
