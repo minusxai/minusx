@@ -59,15 +59,22 @@ export async function POST(request: NextRequest) {
     // Whether a channel is configured at all is a property of the DEPLOYMENT, not of the
     // address, so answering it plainly reveals nothing about any account. Resolved
     // before the user lookup so the answer cannot vary per address.
+    //
+    // Each channel requires its OWN webhook type and has no fallback. Only `phone_otp`
+    // is templated with {{USER_NUMBER}}/{{AUTH_OTP}}, and unlike the email types it has
+    // no keyword alias, so it must be configured explicitly. Falling back to whatever
+    // webhook came first — as this once did — fires an email or Slack endpoint with
+    // placeholders it does not declare: the request succeeds, no code reaches the phone,
+    // and since the second factor is enforced the account is simply locked out. Refusing
+    // here turns that into a visible misconfiguration instead.
     const { config } = await getConfigsForMode();
-    const rawWebhook = channel === 'email'
-      ? config.messaging?.webhooks?.find(w => w.type === 'email_otp')
-      : (config.messaging?.webhooks?.find(w => w.type === 'phone_otp') ?? config.messaging?.webhooks?.[0]);
+    const wanted = channel === 'email' ? 'email_otp' : 'phone_otp';
+    const rawWebhook = config.messaging?.webhooks?.find(w => w.type === wanted);
     const webhook = rawWebhook ? resolveWebhook(rawWebhook) : null;
     if (!webhook) {
-      return channel === 'email'
-        ? ApiErrors.badRequest('Email OTP is not configured')
-        : ApiErrors.internalError('Phone OTP webhook could not be resolved');
+      return ApiErrors.badRequest(
+        channel === 'email' ? 'Email OTP is not configured' : 'Phone OTP is not configured',
+      );
     }
 
     const now = Date.now();

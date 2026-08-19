@@ -30,7 +30,14 @@ const sent: string[] = [];
  */
 const issuedCodes: string[] = [];
 /** Lets a test make delivery fail, or hold it open to prove the response never waits. */
-const h = { sendFails: false, sendGate: null as PromiseWithResolvers<void> | null };
+const h = {
+  sendFails: false,
+  sendGate: null as PromiseWithResolvers<void> | null,
+  webhooks: [] as Array<Record<string, unknown>>,
+};
+const DEFAULT_WEBHOOKS = [{ type: 'email_otp', url: 'https://email.invalid/send' }];
+/** Every dispatch, with the webhook it was routed to and the vars it substituted. */
+const dispatched: Array<{ webhookType: unknown; vars: Record<string, string> }> = [];
 
 vi.mock('@/lib/auth/otp-utils', async (orig) => {
   const actual = await orig<typeof import('@/lib/auth/otp-utils')>();
@@ -48,22 +55,23 @@ vi.mock('@/lib/data/configs.server', () => ({
   getConfigsForMode: async () => ({
     config: {
       branding: { agentName: 'MinusX', logoExpanded: '' },
-      messaging: { webhooks: [{ type: 'email_otp', url: 'https://example.invalid/send' }] },
+      messaging: { webhooks: h.webhooks },
     },
   }),
 }));
 vi.mock('@/lib/messaging/webhook-resolver.server', () => ({
   resolveWebhook: (w: unknown) => w,
 }));
-async function dispatch(kind: 'email' | 'phone') {
+async function dispatch(kind: 'email' | 'phone', webhook: unknown, vars: Record<string, string>) {
   if (h.sendGate) await h.sendGate.promise;
+  dispatched.push({ webhookType: (webhook as { type?: unknown })?.type, vars });
   if (h.sendFails) return { success: false, error: 'smtp exploded' };
   sent.push(kind);
   return { success: true };
 }
 vi.mock('@/lib/messaging/webhook-executor', () => ({
-  sendEmailViaWebhook: () => dispatch('email'),
-  executeWebhook: () => dispatch('phone'),
+  sendEmailViaWebhook: (w: unknown, to: string) => dispatch('email', w, { EMAIL_TO: to }),
+  executeWebhook: (w: unknown, vars: Record<string, string>) => dispatch('phone', w, vars),
 }));
 
 async function routes() {
@@ -119,6 +127,8 @@ describe('OTP routes', () => {
     issuedCodes.length = 0;
     h.sendFails = false;
     h.sendGate = null;
+    h.webhooks = [...DEFAULT_WEBHOOKS];
+    dispatched.length = 0;
     await clearCodes();
   });
 
@@ -315,12 +325,69 @@ describe('OTP routes', () => {
     });
   });
 
+  describe('phone channel dispatch', () => {
+    const PHONE_HOOK = { type: 'phone_otp', url: 'https://sms.invalid/{{USER_NUMBER}}/{{AUTH_OTP}}' };
+
+    it('routes a 2FA user\'s code to the phone_otp webhook with the number and code', async () => {
+      h.webhooks = [...DEFAULT_WEBHOOKS, PHONE_HOOK];
+      const res = await send({ email: TWOFA_EMAIL, channel: 'phone' });
+
+      expect(res.status).toBe(200);
+      await vi.waitFor(() => expect(dispatched).toHaveLength(1));
+      expect(dispatched[0].webhookType).toBe('phone_otp');
+      expect(dispatched[0].vars).toEqual({ USER_NUMBER: '+15550001111', AUTH_OTP: issuedCodes[0] });
+    });
+
+    it('picks phone_otp by TYPE, not by position', async () => {
+      // The email webhook is first in the array; selection must not depend on order.
+      h.webhooks = [{ type: 'slack_alert', url: 'https://slack.invalid' }, ...DEFAULT_WEBHOOKS, PHONE_HOOK];
+      await send({ email: TWOFA_EMAIL, channel: 'phone' });
+
+      await vi.waitFor(() => expect(dispatched).toHaveLength(1));
+      expect(dispatched[0].webhookType).toBe('phone_otp');
+    });
+
+    it('refuses to send when no phone_otp webhook is configured', async () => {
+      // Only `phone_otp` is templated with {{USER_NUMBER}}/{{AUTH_OTP}} — and it has no
+      // keyword alias, so it must be configured explicitly. Falling back to whatever
+      // webhook happens to be first fires an email or Slack endpoint with placeholders
+      // it does not declare: the request goes out, no code reaches the phone, and the
+      // account is locked out because the second factor is now enforced.
+      h.webhooks = [...DEFAULT_WEBHOOKS, { type: 'slack_alert', url: 'https://slack.invalid' }];
+      const res = await send({ email: TWOFA_EMAIL, channel: 'phone' });
+
+      expect(res.status).toBe(400);
+      await new Promise(r => setTimeout(r, 50));
+      expect(dispatched).toHaveLength(0);
+    });
+
+    it('never routes a phone code through an email webhook', async () => {
+      h.webhooks = [...DEFAULT_WEBHOOKS];
+      await send({ email: TWOFA_EMAIL, channel: 'phone' });
+
+      await new Promise(r => setTimeout(r, 50));
+      expect(dispatched.map(d => d.webhookType)).not.toContain('email_otp');
+    });
+  });
+
   describe('phone channel', () => {
     it('sends nothing for a user without 2FA enabled, but answers identically', async () => {
+      h.webhooks = [...DEFAULT_WEBHOOKS, { type: 'phone_otp', url: 'https://sms.invalid' }];
       const res = await send({ email: EMAIL, channel: 'phone' });
       expect(res.status).toBe(200);
       expect(sent).toHaveLength(0);
       expect(res.body.data.token).toMatch(/^[0-9a-f]{64}$/);
+    });
+  });
+
+  describe('a missing channel webhook is a deployment fact, not a user fact', () => {
+    it('answers the same for a known and an unknown address', async () => {
+      h.webhooks = [...DEFAULT_WEBHOOKS];   // no phone_otp
+      const known = await send({ email: TWOFA_EMAIL, channel: 'phone' });
+      const unknown = await send({ email: UNKNOWN, channel: 'phone' });
+
+      expect(known.status).toBe(unknown.status);
+      expect(known.body.error.message).toBe(unknown.body.error.message);
     });
   });
 
