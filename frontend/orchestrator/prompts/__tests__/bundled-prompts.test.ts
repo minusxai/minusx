@@ -11,6 +11,7 @@ const SYSTEM_VARS = {
   agent_name: 'MinusX',
   max_steps: '30',
   allowed_viz_types: 'all',
+  viz_recipes: '',
   role: '',
   schema: '',
   context: '',

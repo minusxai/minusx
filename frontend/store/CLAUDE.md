@@ -69,7 +69,11 @@ editFile / editFileStr / applyJsonContentEdit
 
 `publishAll` expands the requested ids to include their dirty references (via `extractReferencesFromContent`), sends one batch, then resolves any per-file `conflicts` by re-running `publishFile` on each — which is where the 409 overlay logic lives (take the server's `name`/`path`, overlay only the local `persistableChanges` on the server's content, retry at the server's version). `store/__tests__/staleSaveBugE2E.test.ts` pins this whole chain.
 
-**Query path.**
+**Query path.** A running execution is cancellable: `cancelQueryExecution({query, params, database})`
+aborts the in-flight fetch via a module-level controller registry keyed on the same query hash, so
+the question page's Stop button (the Run control while executing — `SqlEditorToolbar`) cancels the
+query no matter which path started it; the abort lands as the normalized "Query cancelled" error,
+which the cache treats as fresh.
 
 ```
 useQueryResult(query, params, db)

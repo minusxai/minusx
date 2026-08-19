@@ -15,7 +15,7 @@ import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import {
   isEnvelopeEditable, getEnvelopeZones, getZoneFields, addZoneField, removeZoneField,
   getVizColumnFormats, mergeVizColumnFormat,
-  getChannelPresentation, setChannelPresentation, type EditableChannel,
+  getChannelPresentation, setChannelPresentation, type EditableChannel, type FileRecipeEditContext,
 } from '@/lib/viz/encoding-edit';
 import { sqlTypeToVizKind } from '@/lib/viz/query-data';
 import { VizFieldPopover } from './VizFieldPopover';
@@ -29,9 +29,12 @@ export interface VegaEncodingPanelProps {
    * read-only reference view a real custom spec gets, with copy explaining what
    * Custom is (the envelope itself is untouched). */
   customPreview?: boolean;
+  /** Injected definition for a FROZEN file-recipe source — keeps its zones
+   * bindable (zone edits re-substitute + re-freeze via lib/viz/recipe-rebind). */
+  fileRecipe?: FileRecipeEditContext | null;
 }
 
-export function VegaEncodingPanel({ envelope, columns, types, onVizChange, customPreview }: VegaEncodingPanelProps) {
+export function VegaEncodingPanel({ envelope, columns, types, onVizChange, customPreview, fileRecipe }: VegaEncodingPanelProps) {
   const isTouchDevice = useIsTouchDevice();
   const [dragged, setDragged] = useState<string | null>(null);
   // Zone-to-zone moves (V1 AxisBuilder parity): when the drag starts on a chip ALREADY
@@ -41,13 +44,13 @@ export function VegaEncodingPanel({ envelope, columns, types, onVizChange, custo
   const [dragSource, setDragSource] = useState<string | null>(null);
   const dropLandedRef = useRef(false);
   const [mobileSelected, setMobileSelected] = useState<string | null>(null);
-  const editable = isEnvelopeEditable(envelope) && !customPreview;
+  const editable = isEnvelopeEditable(envelope, fileRecipe) && !customPreview;
 
   // Zones are source-aware: recipes expose their binding slots (funnel → Stages/Value);
   // native unit specs expose type-aware channels (pie → Slices/Value, never x/y).
   // Multi-capable zones (native Y via fold, recipe slots flagged `multi`) hold lists.
-  const zones = editable ? getEnvelopeZones(envelope) : [];
-  const assigned = new Set(zones.flatMap(z => getZoneFields(envelope, z.channel)));
+  const zones = editable ? getEnvelopeZones(envelope, fileRecipe) : [];
+  const assigned = new Set(zones.flatMap(z => getZoneFields(envelope, z.channel, fileRecipe)));
   const isRecipe = (envelope.source as unknown as { kind: string }).kind === 'recipe';
   // Recipe chips carry the CLASSIC format popover (alias/decimals/prefix/suffix) —
   // stored as source.columnFormats and applied at materialization. Native specs use
@@ -57,12 +60,12 @@ export function VegaEncodingPanel({ envelope, columns, types, onVizChange, custo
   const columnOf = (name: string) => ({ name, kind: sqlTypeToVizKind(types[columns.indexOf(name)] ?? '') });
 
   const assign = (channel: string, name: string) => {
-    onVizChange(addZoneField(envelope, channel, columnOf(name)));
+    onVizChange(addZoneField(envelope, channel, columnOf(name), fileRecipe));
     setMobileSelected(null);
   };
 
   const removeFromZone = (channel: string, name: string) => {
-    onVizChange(removeZoneField(envelope, channel, name));
+    onVizChange(removeZoneField(envelope, channel, name, fileRecipe));
   };
 
   const endDrag = () => {
@@ -77,7 +80,7 @@ export function VegaEncodingPanel({ envelope, columns, types, onVizChange, custo
     if (dragSource != null) {
       // MOVE between zones: one atomic edit (dropping back on the source is a no-op).
       if (dragSource !== channel) {
-        onVizChange(removeZoneField(addZoneField(envelope, channel, columnOf(col)), dragSource, col));
+        onVizChange(removeZoneField(addZoneField(envelope, channel, columnOf(col), fileRecipe), dragSource, col, fileRecipe));
       }
     } else {
       assign(channel, col);
@@ -89,7 +92,7 @@ export function VegaEncodingPanel({ envelope, columns, types, onVizChange, custo
   const handleZoneChipDragEnd = () => {
     // Drag ended on no zone → drag-out removes the chip from its source (V1 parity).
     if (dragSource != null && dragged != null && !dropLandedRef.current) {
-      onVizChange(removeZoneField(envelope, dragSource, dragged));
+      onVizChange(removeZoneField(envelope, dragSource, dragged, fileRecipe));
     }
     endDrag();
   };
@@ -121,7 +124,7 @@ export function VegaEncodingPanel({ envelope, columns, types, onVizChange, custo
         </p>
       ) : <div className="flex flex-wrap items-stretch gap-2">
         {zones.map(({ channel, label }) => {
-          const fields = getZoneFields(envelope, channel).filter(f => f !== '__mx_key');
+          const fields = getZoneFields(envelope, channel, fileRecipe).filter(f => f !== '__mx_key');
           return (
             <div key={channel} className="min-w-[120px] flex-1">
               <DropZone

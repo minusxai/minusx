@@ -123,6 +123,8 @@ interface QuestionViewV2Props {
   onChange: (updates: Partial<QuestionContent>) => void;
   onParameterValueChange?: (paramName: string, value: string | number | null) => void;  // Ephemeral
   onExecute: (overrideParamValues?: Record<string, any>, overrideQuery?: string) => void;  // Phase 3: Explicit execute
+  /** Cancel the running query (Run button becomes Stop while executing). */
+  onStopExecution?: () => void;
 
   /** Viz V2 format flag (uiSlice `vizV2`, passed down — views are Redux-free).
    * Off (V1): classic config panel for every question (saved envelopes ignored).
@@ -157,6 +159,7 @@ export default function QuestionViewV2({
   onChange,
   onParameterValueChange,
   onExecute,
+  onStopExecution,
   vizV2Enabled = true, // matches the product default (uiSlice vizV2); containers pass the live value
 }: QuestionViewV2Props) {
   const fullMode = viewMode === 'page';
@@ -797,6 +800,7 @@ export default function QuestionViewV2({
                     value={isPreview ? (originalQuery ?? content.query) : content.query}
                     onChange={handleQueryChange}
                     onRun={handleSqlExecute}
+                    onStop={onStopExecution}
                     showRunButton={!isPreview}
                     showFormatButton={!isPreview}
                     isRunning={queryLoading && !queryData}
@@ -868,6 +872,7 @@ export default function QuestionViewV2({
                       columns={queryData?.columns ?? []}
                       types={queryData?.types ?? []}
                       rows={queryData?.rows}
+                      filePath={filePath}
                       onVizChange={(viz) => onChange({ viz })}
                     />
                   </div>
@@ -992,6 +997,7 @@ export default function QuestionViewV2({
             ) : (
               <QuestionVisualization
                 currentState={content}
+                filePath={filePath}
                 config={{
                   showHeader: fullMode,
                   showJsonToggle: false,
@@ -1082,6 +1088,7 @@ export default function QuestionViewV2({
                       columns={queryData?.columns ?? []}
                       types={queryData?.types ?? []}
                       rows={queryData?.rows}
+                      filePath={filePath}
                       onVizChange={(viz) => onChange({ viz })}
                     />
                   </div>

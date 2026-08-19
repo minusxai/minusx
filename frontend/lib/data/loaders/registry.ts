@@ -9,6 +9,7 @@ import { configLoader } from './config-loader';
 import { connectionLoader } from './connection-loader';
 import { contextLoader } from './context-loader';
 import { storyLoader } from './story-loader';
+import { vizRecipeLoader } from './viz-recipe-loader.server';
 
 /**
  * Loader registry: Maps file types to custom loader functions
@@ -21,6 +22,9 @@ const registry: LoaderRegistry = {
   connection: connectionLoader,
   context: contextLoader,
   story: storyLoader,
+  // Live workspace-recipe references materialize at read time.
+  question: vizRecipeLoader,
+  notebook: vizRecipeLoader,
   // All other types use defaultLoader (pass-through)
 };
 

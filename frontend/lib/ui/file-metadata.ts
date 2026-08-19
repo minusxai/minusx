@@ -1,4 +1,4 @@
-import { LuScrollText, LuFileText, LuNotebook, LuScanSearch, LuLayoutDashboard, LuDatabase, LuFileCode, LuUsers, LuFolder, LuRocket, LuPlay, LuNotebookText, LuTable, LuColumns3, LuSquareFunction, LuBell } from 'react-icons/lu';
+import { LuScrollText, LuFileText, LuNotebook, LuScanSearch, LuLayoutDashboard, LuDatabase, LuFileCode, LuUsers, LuFolder, LuRocket, LuPlay, LuNotebookText, LuTable, LuColumns3, LuSquareFunction, LuBell, LuChartSpline } from 'react-icons/lu';
 import { IconType } from 'react-icons';
 
 /**
@@ -66,6 +66,19 @@ export const FILE_TYPE_METADATA = {
     supported: true,
     h: 'none',
     markers: true,
+  },
+  // Workspace chart recipe: an inert spec template with declared binding slots
+  // (lib/viz/recipe-file.ts). Identity is the file name; nearest ancestor wins
+  // when a child folder holds a same-named recipe.
+  viz: {
+    label: 'Chart Recipe',
+    icon: LuChartSpline,
+    color: 'accent.success',
+    category: 'analytics',
+    supported: true,
+    // Full page flow: the viewer is a scrolling document (preview + slots +
+    // template editor), not an internally-scrolled workbench.
+    h: 'none',
   },
   connection: {
     label: 'Databases',

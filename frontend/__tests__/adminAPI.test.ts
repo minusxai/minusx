@@ -366,7 +366,8 @@ describe('POST /api/admin/reset-tutorial', () => {
       "SELECT COUNT(*) as count FROM files WHERE (path = '/tutorial' OR path LIKE '/tutorial/%')",
       []
     );
-    // Exactly the 30 template tutorial docs — these modes are wiped wholesale, so
+    // Exactly the 30 template tutorial docs — radar and heatmap are built-in
+    // templates on disk, not seeded files. These modes are wiped wholesale, so
     // the user-created tutorial question (id=500) is NOT preserved.
     expect(tutorialResult.rows[0].count).toBe(30);
 
@@ -518,7 +519,7 @@ describe('POST /api/admin/reset-tutorial', () => {
       "SELECT COUNT(*) as count FROM files WHERE (path = '/tutorial' OR path LIKE '/tutorial/%')",
       []
     );
-    expect(result.rows[0].count).toBe(30); // exactly the 30 template tutorial docs
+    expect(result.rows[0].count).toBe(30); // exactly the 30 template tutorial docs (radar + heatmap are built-in templates on disk, not seeded files)
   });
 
   it('never resets /org — preserves the company config / setup-wizard state', async () => {

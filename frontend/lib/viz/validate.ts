@@ -20,7 +20,7 @@ import vegaLiteSchema from 'vega-lite/vega-lite-schema.json';
 import { VIZ_GRAMMAR_VEGA_LITE, VIZ_GRAMMAR_VEGA } from '@/lib/validation/atlas-schemas';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import { prepareVegaLiteSpec } from './prepare';
-import { materializeRecipe } from './viz-templates';
+import { getTemplate, materializeRecipe } from './viz-templates';
 import { collectFieldRefs, collectDerivedFieldNames, hasUnverifiableTransform } from './field-refs';
 import { VIZ_DATASET_MAIN } from './types';
 import type { VizIssue, VizResultColumn, VizValidationResult } from './types';
@@ -287,11 +287,6 @@ export function validateVizEnvelope(
   }
   if (source.kind === 'recipe') {
     const recipeSource = source as unknown as { recipe: string; bindings: Record<string, string | string[]> };
-    const materialized = materializeRecipe(recipeSource);
-    if (!materialized.ok) {
-      issues.push(err('E_RECIPE', '/source/recipe', materialized.error));
-      return { ok: false, issues };
-    }
     // Bindings are the recipe's field references — check them against the columns
     // directly (skipped when the result is unknown; the materialized spec's own
     // refs are then internally consistent either way).
@@ -306,6 +301,23 @@ export function validateVizEnvelope(
           }
         }
       }
+    }
+    // A recipe id outside the shipped `minusx/` namespace is a WORKSPACE recipe
+    // reference (a `.viz` file path, or a file/built-in name resolved against the
+    // saved file's folder). The registry can't see those here — the reference
+    // gate (lib/data/helpers/viz-recipe-refs.server.ts) resolves it at save and
+    // grammar-checks the materialized spec. Only the bindings are checkable now.
+    if (!getTemplate(recipeSource.recipe) && !recipeSource.recipe.startsWith('minusx/')) {
+      return { ok: !issues.some(i => i.severity === 'error'), issues };
+    }
+    const materialized = materializeRecipe(recipeSource);
+    if (!materialized.ok) {
+      issues.push(err('E_RECIPE', '/source/recipe', materialized.error));
+      return { ok: false, issues };
+    }
+    if (columns) {
+      const known = new Set(columns.map(c => c.name));
+      const available = columns.map(c => `${c.name} (${c.kind})`).join(', ');
       // columnFormats keys are column references too (applied at materialization).
       for (const key of Object.keys((source.columnFormats as Record<string, unknown> | null | undefined) ?? {})) {
         if (!known.has(key)) {

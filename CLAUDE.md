@@ -30,6 +30,7 @@ covered by a sibling's doc carry a one-line pointer file, so the right doc loads
 | `lib/data`, `lib/database`, `lib/object-store`, `lib/secrets` | `frontend/lib/database/CLAUDE.md` | The document plane: `FilesAPI`, schema-as-data, adapters, migrations, the version gate |
 | `lib/semantic`, `lib/context`, `lib/views`, `lib/validation` | `frontend/lib/semantic/CLAUDE.md` | Semantic models, the context tree, saved views, Atlas content schemas |
 | `lib/viz`, `lib/chart` | `frontend/lib/viz/CLAUDE.md` | Vega rendering, the V1→V2 bridge, the editing surface |
+| `lib/templates` | `frontend/lib/templates/CLAUDE.md` | Templates on disk: the app's + `TEMPLATE_DIR`, overlaid by name |
 | `lib/story-ui`, `lib/jsx` | `frontend/lib/story-ui/CLAUDE.md` | Story authoring: static JSX as inert data, registry, interpreter |
 | `lib/story-surface`, `lib/dashboard-surface`, `lib/html` | `frontend/lib/story-surface/CLAUDE.md` | Mounting a self-contained document surface, plus the shared render gotchas |
 | `lib/screenshot`, `lib/headless-capture` | `frontend/lib/screenshot/CLAUDE.md` | Capture: serialization to image, client and headless |
@@ -154,6 +155,8 @@ recipe system, the Vega/Vega-Lite render pipeline, the editing surface and the v
 **Vega is the only chart engine** — there is no second renderer to fall back to.
 
 → **`frontend/lib/viz/CLAUDE.md`** for the full pipeline, the V1→V2 bridge and the gotchas.
+→ **`frontend/lib/templates/CLAUDE.md`** for templates: the chart recipes a deployment ships
+  as data on disk, and why they are deliberately not files.
 
 ## Render surfaces
 

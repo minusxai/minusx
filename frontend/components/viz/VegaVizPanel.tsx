@@ -4,7 +4,10 @@
  * The V2 viz settings panel: Fields (drop-zone lens) | Settings (mark type, stacking,
  * log scale) | Spec (raw envelope inspector) — mirroring the classic AxisBuilder's
  * subtab idiom. Every control performs a SURGICAL spec edit (lib/viz/encoding-edit);
- * the long tail of styling stays with the agent. Pure view: no Redux.
+ * the long tail of styling stays with the agent. One deliberate Redux read: the
+ * panel owns workspace-recipe resolution (useVizRecipes over loaded `.viz` files)
+ * so the selector's Workspace tiles and recipe-reference rebinding need no prop
+ * threading through the Redux-banned view chain above it.
  */
 import { useCallback, useMemo, useState } from 'react';
 import { LuLayoutGrid, LuSettings2, LuBraces } from 'react-icons/lu';
@@ -33,6 +36,10 @@ import { GEO_ASSET_OPTIONS, resolveGeoAsset } from '@/lib/viz/geo-assets';
 import { TableConditionalFormatPanel } from '@/components/plotx/TableConditionalFormatPanel';
 import { PivotAxisBuilder } from '@/components/plotx/PivotAxisBuilder';
 import { VegaEncodingPanel } from './VegaEncodingPanel';
+import { useVizRecipes } from '@/lib/hooks/use-viz-recipes';
+import { toaster } from '@/components/ui/toaster';
+import { getFileRecipeRef, applyFileRecipeSelection, explainRecipeFit } from '@/lib/viz/recipe-rebind';
+import type { FileRecipeEditContext } from '@/lib/viz/encoding-edit';
 import { VizSpecInspector } from './VizSpecInspector';
 import {
   aggregatePivotData, getUniqueTopLevelRowValues, getUniqueTopLevelColumnValues, getUniqueRowValuesAtLevel,
@@ -78,9 +85,11 @@ export interface VegaVizPanelProps {
    * from the data, not the schema). Omit and formulas simply don't render. */
   rows?: Record<string, unknown>[];
   onVizChange: (envelope: VizEnvelope) => void;
+  /** The edited file's path — scopes which workspace recipes resolve (shadowing). */
+  filePath?: string | null;
 }
 
-export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: VegaVizPanelProps) {
+export function VegaVizPanel({ envelope, columns, types, rows, onVizChange, filePath }: VegaVizPanelProps) {
   const [activeTab, setActiveTab] = useState<'fields' | 'settings' | 'spec'>('fields');
   const source = envelope.source as unknown as Record<string, unknown>;
   const isRecipe = source.kind === 'recipe';
@@ -88,7 +97,30 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
   const isPivot = source.kind === 'pivot';
   const isDomTier = isTable || isPivot;
   const spec = isRecipe || isDomTier ? null : (source as { spec: Record<string, unknown> }).spec;
-  const isUnit = isEnvelopeEditable(envelope);
+  // Workspace recipes: the folder's resolved catalog (selector tiles) and, when
+  // the current chart is a FROZEN file recipe, the definition that keeps its
+  // zones bindable (lib/viz/recipe-rebind.ts).
+  const folderPath = filePath ? (filePath.substring(0, filePath.lastIndexOf('/')) || '/') : null;
+  const { available, contentFor } = useVizRecipes(folderPath);
+  const vizResultColumns = useMemo(
+    () => columns.map((name, i) => ({ name, kind: sqlTypeToVizKind(types[i] ?? '') })),
+    [columns, types],
+  );
+  // Applicability is precomputed so a recipe that cannot bind to this result
+  // greys out with the reason on hover, instead of a click that goes nowhere.
+  const workspaceRecipes = useMemo(
+    () => available.map((r) => {
+      const content = contentFor(r.address);
+      return { ...r, disabledReason: content ? explainRecipeFit(content, vizResultColumns) : 'Recipe not loaded yet' };
+    }),
+    [available, contentFor, vizResultColumns],
+  );
+  const fileRecipeRef = getFileRecipeRef(envelope);
+  const fileRecipeContent = fileRecipeRef ? contentFor(fileRecipeRef.recipe) : undefined;
+  const fileRecipe: FileRecipeEditContext | null = fileRecipeContent
+    ? { content: fileRecipeContent, columns: vizResultColumns }
+    : null;
+  const isUnit = isEnvelopeEditable(envelope, fileRecipe);
   const vizType = getEnvelopeVizType(envelope);
   // Clicking the Custom icon "visits" the custom state without converting anything
   // (custom is derived from the spec, never stored). Pure UI state: any family
@@ -230,9 +262,10 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
           the grid visible for authored compositions; clicking it previews the
           custom state (info only) rather than converting. */}
       <VizTypeSelector
-        // vizType is DERIVED from the source. Unrecognized shapes select Custom;
-        // clicking the active family is a no-op, preserving authored specs exactly.
-        value={customPreview ? 'custom' : (vizType ?? 'custom') as SelectableVizType}
+        // vizType is DERIVED from the source. Unrecognized shapes select Custom —
+        // EXCEPT when a workspace recipe is active: its Workspace tile is the
+        // highlight, and falling back to Custom would light both at once.
+        value={customPreview ? 'custom' : fileRecipeRef ? null : (vizType ?? 'custom') as SelectableVizType}
         includeV2Only
         onChange={(t) => {
           if (t === 'custom') { setCustomPreview(true); return; }
@@ -240,13 +273,37 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
           if (t === vizType) return;
           if ((V2_SUPPORTED_VIZ_TYPES as readonly string[]).includes(t)) {
             // Columns feed fallback inference for table/custom composed sources.
-            const cols = columns.map((name, i) => ({ name, kind: sqlTypeToVizKind(types[i] ?? '') }));
-            onVizChange(setEnvelopeVizType(envelope, t as V2VizType, cols));
+            onVizChange(setEnvelopeVizType(envelope, t as V2VizType, vizResultColumns));
           }
         }}
         orientation="grouped"
         disabledTypes={V2_DISABLED_TYPES}
         disabledReason="Not yet supported for Vega charts — ask the agent"
+        workspaceRecipes={workspaceRecipes}
+        activeRecipeAddress={fileRecipeRef?.recipe ?? null}
+        onRecipeSelect={(address) => {
+          const name = address.split('/').pop() ?? address;
+          const content = contentFor(address);
+          if (!content) {
+            toaster.create({ title: `Recipe "${name}" isn't loaded yet — try again in a moment`, type: 'error' });
+            return;
+          }
+          const applied = applyFileRecipeSelection(content, address, vizResultColumns);
+          if (!applied.ok) {
+            // A clicked tile that silently does nothing reads as broken — say
+            // exactly why the recipe's slots can't bind to this result.
+            toaster.create({
+              title: `Can't apply "${name}" to this result`,
+              description: vizResultColumns.length === 0
+                ? 'Run the query first — recipes bind to the result columns.'
+                : applied.error,
+              type: 'error',
+            });
+            return;
+          }
+          setCustomPreview(false);
+          onVizChange(applied.envelope);
+        }}
       />
       <div className="flex items-center gap-1 pb-2">
         {TABS.map(({ key, icon: Icon, label }) => (
@@ -266,7 +323,7 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
 
       {activeTab === 'fields' && (
         customPreview ? (
-          <VegaEncodingPanel envelope={envelope} columns={columns} types={types} onVizChange={onVizChange} customPreview />
+          <VegaEncodingPanel envelope={envelope} columns={columns} types={types} onVizChange={onVizChange} fileRecipe={fileRecipe} customPreview />
         ) : isTable ? (
           <p aria-label="Table fields hint" className="py-1 text-xs leading-[1.6] text-muted-foreground">
             Table columns are managed on the table itself — sort/filter/hide via the column
@@ -286,7 +343,7 @@ export function VegaVizPanel({ envelope, columns, types, rows, onVizChange }: Ve
             section="fields"
           />
         ) : (
-          <VegaEncodingPanel envelope={envelope} columns={columns} types={types} onVizChange={onVizChange} />
+          <VegaEncodingPanel envelope={envelope} columns={columns} types={types} onVizChange={onVizChange} fileRecipe={fileRecipe} />
         )
       )}
 

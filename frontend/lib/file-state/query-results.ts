@@ -33,6 +33,25 @@ import { PromiseManager } from '@/lib/file-state/shared';
  */
 const queryPromiseManager = new PromiseManager<QueryResult>();
 
+// In-flight fetch controllers keyed by query hash, so the Run button's Stop can
+// abort a running query REGARDLESS of which path started it (explicit Run,
+// auto-execute, a deduped embed join). Per-browser-tab state, never server-side.
+// eslint-disable-next-line no-restricted-syntax
+const inFlightControllers = new Map<string, AbortController>();
+
+/**
+ * Abort the in-flight fetch for an execution (same key derivation as
+ * getQueryResult). Returns false when nothing matching is running. The abort
+ * surfaces through the existing normalized path as "Query cancelled".
+ */
+export function cancelQueryExecution(execution: { query: string; params: Record<string, unknown>; database: string }): boolean {
+  const queryId = getQueryHash(execution.query, execution.params, execution.database);
+  const controller = inFlightControllers.get(queryId);
+  if (!controller) return false;
+  controller.abort();
+  return true;
+}
+
 // Caps concurrent /api/query calls across the tab. Limit is read from the
 // store on each acquire (hydrated from the MAX_CONCURRENT_QUERIES runtime env),
 // defaulting to 10 if configs aren't loaded yet or the store shape is partial.
@@ -143,6 +162,8 @@ export async function getQueryResult(
       if (external.aborted) controller.abort();
       else external.addEventListener('abort', onExternalAbort, { once: true });
     }
+    // Registered for the Stop button (cancelQueryExecution); cleaned up in finally.
+    inFlightControllers.set(queryId, controller);
     try {
       const response = await fetch('/api/query', {
         method: 'POST',
@@ -229,6 +250,7 @@ export async function getQueryResult(
     } finally {
       if (timer) clearTimeout(timer);
       external?.removeEventListener('abort', onExternalAbort);
+      if (inFlightControllers.get(queryId) === controller) inFlightControllers.delete(queryId);
     }
     });
   });

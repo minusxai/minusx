@@ -1,0 +1,91 @@
+{
+  "description": "Bullet chart: value bars with a target tick per category (value vs goal)",
+  "engine": "vega-lite",
+  "bindings": [
+    {
+      "name": "category",
+      "label": "Category",
+      "accepts": [
+        "nominal",
+        "temporal"
+      ]
+    },
+    {
+      "name": "value",
+      "label": "Value",
+      "accepts": [
+        "quantitative"
+      ]
+    },
+    {
+      "name": "target",
+      "label": "Target",
+      "accepts": [
+        "quantitative"
+      ]
+    }
+  ],
+  "params": [
+    {
+      "name": "tickColor",
+      "label": "Target color",
+      "default": "#e11d48"
+    }
+  ],
+  "template": {
+    "layer": [
+      {
+        "mark": {
+          "type": "bar",
+          "height": {
+            "band": 0.6
+          }
+        },
+        "encoding": {
+          "x": {
+            "field": "{{value}}",
+            "type": "quantitative",
+            "title": null
+          },
+          "y": {
+            "field": "{{category}}",
+            "type": "{{category:kind}}",
+            "title": null
+          }
+        }
+      },
+      {
+        "mark": {
+          "type": "tick",
+          "color": "{{tickColor}}",
+          "thickness": 2,
+          "size": 24
+        },
+        "encoding": {
+          "x": {
+            "field": "{{target}}",
+            "type": "quantitative"
+          },
+          "y": {
+            "field": "{{category}}",
+            "type": "{{category:kind}}"
+          },
+          "tooltip": [
+            {
+              "field": "{{category}}",
+              "type": "{{category:kind}}"
+            },
+            {
+              "field": "{{value}}",
+              "type": "quantitative"
+            },
+            {
+              "field": "{{target}}",
+              "type": "quantitative"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

@@ -22,6 +22,7 @@ import { useConfigs } from '@/lib/hooks/useConfigs';
 import { shallowEqualExcept } from '@/lib/hooks/use-stable-callback';
 import { setRecipeParam } from '@/lib/viz/encoding-edit';
 import { resolveLegacyRenderEnvelope, vizSettingsToEnvelopeStatic } from '@/lib/viz/from-vizsettings';
+import { useLiveVizEnvelope } from '@/lib/hooks/use-viz-recipes';
 import { toVizColumns } from '@/lib/viz/query-data';
 import { ChartDownloadMenu } from '@/components/viz/ChartDownloadMenu';
 import { getBrandLogoUrl } from '@/lib/branding/whitelabel';
@@ -48,6 +49,8 @@ export interface ContainerConfig {
 
 interface QuestionVisualizationProps {
   currentState: QuestionContent | null;
+  /** The question file's path — resolution scope for a LIVE workspace-recipe reference staged but not yet saved. */
+  filePath?: string | null;
   config: ContainerConfig;
   loading: boolean;
   error: string | null;
@@ -144,6 +147,7 @@ function QueryLoadingIndicator({ estimatedDurationMs }: { estimatedDurationMs?: 
 
 function QuestionVisualizationInner({
   currentState,
+  filePath,
   config,
   loading,
   error,
@@ -202,6 +206,14 @@ function QuestionVisualizationInner({
   // Vega view mid-interaction.
   const memoVizV2 = vizV2Enabled && currentState?.viz != null;
   const vizSettings = currentState?.vizSettings;
+  // LIVE workspace-recipe references: saved content arrives loader-materialized
+  // (computed `spec` on the source) and passes through; a staged reference
+  // materializes here from the Redux catalog. An unresolvable one (recipe
+  // deleted/renamed) degrades to the table fallback below, never an error card.
+  const { envelope: liveViz, unresolved: vizUnresolved } = useLiveVizEnvelope(
+    memoVizV2 ? currentState!.viz : null,
+    filePath,
+  );
   const legacyRenderViz = useMemo(() => (
     data
       ? resolveLegacyRenderEnvelope({
@@ -225,6 +237,11 @@ function QuestionVisualizationInner({
   const vizV2Kind = hasVizV2 ? (currentState.viz!.source as unknown as { kind: string }).kind : null;
   const isVizV2Table = vizV2Kind === 'table';
   const isVizV2Pivot = vizV2Kind === 'pivot';
+  // An unresolvable live recipe reference renders as a plain table — the
+  // reference (and its columnFormats) survives in the file; restoring the
+  // recipe brings the chart back.
+  const isVizUnresolved = hasVizV2 && vizUnresolved != null;
+  const renderVizEnvelope = liveViz ?? currentState?.viz ?? null;
   // vizSettings is OPTIONAL (viz-first files omit it): when the classic format is
   // authoritative and there is no vizSettings, fall back to the table just-in-time
   // — a viz-only file must never render blank on rollback.
@@ -406,10 +423,15 @@ function QuestionVisualizationInner({
                     enableDrilldown={config.enableDrilldown !== false}
                   />
                 )}
-                {hasVizV2 && !isVizV2Table && !isVizV2Pivot && (
+                {isVizUnresolved && (
+                  <div className="flex w-full min-h-0 flex-1 flex-col items-stretch overflow-hidden">
+                    <TableV2 columns={data.columns} types={data.types} rows={data.rows} sql={currentState?.query} databaseName={currentState?.connection_name} enableDrilldown={config.enableDrilldown !== false} columnFormats={((currentState.viz!.source as unknown as { columnFormats?: Record<string, ColumnFormatConfig> | null }).columnFormats) ?? undefined} />
+                  </div>
+                )}
+                {hasVizV2 && !isVizV2Table && !isVizV2Pivot && !isVizUnresolved && (
                   <div className="group/chart relative flex min-h-0 flex-1 overflow-hidden p-3 [&:hover_.mx-chart-dl]:opacity-100 [&:focus-within_.mx-chart-dl]:opacity-100">
                     <VegaChart
-                      envelope={currentState.viz!}
+                      envelope={renderVizEnvelope!}
                       rows={data.rows}
                       colorMode={colorMode}
                       onViewChange={config.editable && onVizChange
@@ -424,7 +446,7 @@ function QuestionVisualizationInner({
                           }
                         : undefined}
                     />
-                    {chartDownloadOverlay(currentState.viz!)}
+                    {chartDownloadOverlay(renderVizEnvelope!)}
                   </div>
                 )}
                 {!hasVizV2 && legacyVizType === 'table' && (

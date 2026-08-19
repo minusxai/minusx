@@ -1,7 +1,8 @@
 /**
- * Heatmap viz-type icon — V2-only entry in the selector: classic surfaces never
- * see it (no ECharts renderer); the Vega panel offers it and clicking converts
- * the envelope to a native rect spec.
+ * Heatmap in the selector: NOT a static tile on any surface — it ships as a
+ * workspace recipe FILE (seeded by the workspace template) and surfaces as a
+ * Workspace tile instead. Saved rect-spec heatmaps keep rendering and keep
+ * their settings behavior; only the built-in offering is gone.
  */
 import React from 'react'
 import { screen } from '@testing-library/react'
@@ -31,48 +32,32 @@ const pivotViz: VizEnvelope = {
   },
 } as unknown as VizEnvelope
 
-describe('VizTypeSelector — v2-only heatmap entry', () => {
-  it('classic surfaces (no includeV2Only) never render the Heatmap entry', () => {
+describe('VizTypeSelector — heatmap and radar are workspace recipes, not tiles', () => {
+  it('no surface renders a Heatmap or Radar tile, with or without includeV2Only', () => {
     renderWithProviders(
       <VizTypeSelector value="bar" onChange={vi.fn()} orientation="grouped" />
     )
     expect(screen.queryByLabelText('Heatmap')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Radar')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Bar')).toBeInTheDocument()
-  })
 
-  it('includeV2Only surfaces the Heatmap entry and reports clicks', async () => {
-    const user = userEvent.setup()
-    const onChange = vi.fn()
     renderWithProviders(
-      <VizTypeSelector value="bar" onChange={onChange} orientation="grouped" includeV2Only />
+      <VizTypeSelector value="bar" onChange={vi.fn()} orientation="grouped" includeV2Only />
     )
-    await user.click(screen.getByLabelText('Heatmap'))
-    expect(onChange).toHaveBeenCalledWith('heatmap')
+    expect(screen.queryByLabelText('Heatmap')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Radar')).not.toBeInTheDocument()
   })
-})
 
-describe('VegaVizPanel — pivot to heatmap via the icon', () => {
-  it('clicking Heatmap converts the pivot envelope into a native rect spec', async () => {
-    const user = userEvent.setup()
-    const onVizChange = vi.fn()
+  it('the Vega panel offers no Heatmap tile for a pivot envelope', () => {
     renderWithProviders(
       <VegaVizPanel
         envelope={pivotViz}
         columns={['region', 'month', 'revenue']}
         types={['VARCHAR', 'VARCHAR', 'DOUBLE']}
-        onVizChange={onVizChange}
+        onVizChange={vi.fn()}
       />
     )
-    await user.click(screen.getByLabelText('Heatmap'))
-
-    const next = onVizChange.mock.calls.at(-1)![0] as VizEnvelope
-    const source = next.source as unknown as { kind: string; spec: Record<string, unknown> }
-    expect(source.kind).toBe('vega-lite')
-    expect((source.spec.mark as { type: string }).type).toBe('rect')
-    const enc = source.spec.encoding as Record<string, Record<string, unknown>>
-    expect(enc.x.field).toBe('month')
-    expect(enc.y.field).toBe('region')
-    expect(enc.color).toMatchObject({ field: 'revenue', aggregate: 'sum' })
+    expect(screen.queryByLabelText('Heatmap')).not.toBeInTheDocument()
   })
 })
 

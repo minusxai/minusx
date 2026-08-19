@@ -12,6 +12,7 @@ import type { AugmentedFile, VizSettings } from '@/lib/types';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 import { renderEnvelopeImageDataUrl } from '@/lib/chart/VizImageRenderer.client';
 import { resolveImageEnvelope } from '@/lib/viz/from-vizsettings';
+import { materializeVizRecipeRefsClient } from './viz-recipe-refs-client';
 import { uploadChartOrEmbed } from '@/lib/chart/chart-attachments';
 
 /** Cap on chart images rendered per tool call (main-thread render + 2 uploads each). */
@@ -30,7 +31,14 @@ export async function renderFileChartImageBlocks(
 
   const thunks: ImageThunk[] = [];
   for (const f of files) {
-    const content = f.fileState.content as { viz?: VizEnvelope; vizSettings?: VizSettings } | undefined;
+    // A live workspace-recipe reference carries no spec until it is materialized:
+    // staged content always arrives bare (the markup round-trip drops computed
+    // fields), so materialize here or the agent gets no image of the chart it
+    // just authored. A no-op for every other source kind.
+    const path = f.fileState.path ?? '';
+    const content = await materializeVizRecipeRefsClient(
+      f.fileState.type, f.fileState.content, path.substring(0, path.lastIndexOf('/')) || '/',
+    ).catch(() => f.fileState.content) as { viz?: VizEnvelope; vizSettings?: VizSettings } | undefined;
     const qr = f.queryResults?.[0];
     // Need actual rows to render — an empty/errored result yields no chart, so skip it
     // here rather than emit a blank image block.
