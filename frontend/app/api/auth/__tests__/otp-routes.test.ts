@@ -264,6 +264,33 @@ describe('OTP routes', () => {
       h.sendGate = null;
     });
 
+    it('runs the detached send inside the request\'s context runner', async () => {
+      // `app_events` is a per-namespace table, so the failure report below is a
+      // namespaced write happening after the response. A deployment that implements the
+      // namespace seam supplies `getContextRunner`, and the dispatch must go through it
+      // or that write lands outside the namespace the request belonged to. In this
+      // single-workspace build the hook is absent and the wrapper is identity — which is
+      // exactly why nothing here would notice the omission without this test.
+      const { getModules } = await import('@/lib/modules/registry');
+      const real = getModules();
+      let wrapped = 0;
+      const spy = vi.spyOn(await import('@/lib/modules/registry'), 'getModules').mockReturnValue({
+        ...real,
+        auth: {
+          ...real.auth,
+          getContextRunner: async () => (fn: () => Promise<unknown>) => { wrapped += 1; return fn(); },
+        },
+      } as ReturnType<typeof getModules>);
+
+      try {
+        await send({ email: EMAIL, channel: 'email' });
+        await vi.waitFor(() => expect(sent).toEqual(['email']));
+        expect(wrapped).toBe(1);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
     it('issues a decoy that can never verify', async () => {
       const { body } = await send({ email: UNKNOWN, channel: 'email' });
       for (let i = 0; i < OTP_MAX_ATTEMPTS; i++) {

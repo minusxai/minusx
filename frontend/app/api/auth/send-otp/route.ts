@@ -23,6 +23,7 @@ import { executeWebhook, sendEmailViaWebhook } from '@/lib/messaging/webhook-exe
 import { resolveWebhook } from '@/lib/messaging/webhook-resolver.server';
 import { successResponse, ApiErrors, handleApiError } from '@/lib/http/api-responses';
 import { buildOTPEmailHtml } from '@/lib/messaging/otp-email-html';
+import { getModules } from '@/lib/modules/registry';
 import { appEventRegistry } from '@/lib/app-event-registry/registry';
 import { AppEvents } from '@/lib/app-event-registry/events';
 import { DEFAULT_MODE } from '@/lib/mode/mode-types';
@@ -86,25 +87,32 @@ export async function POST(request: NextRequest) {
 
     if (eligible && code) {
       const agentName = config.branding.agentName;
-      const deliver = channel === 'email'
-        ? sendEmailViaWebhook(
-            webhook,
-            user!.email,
-            `Your ${agentName} Login Code`,
-            buildOTPEmailHtml({ otp: code, agentName, logoUrl: emailLogoUrl(request, config.branding.logoExpanded) }),
-          )
-        : executeWebhook(webhook, { USER_NUMBER: user!.phone!, AUTH_OTP: code });
-
+      const emailHtml = channel === 'email'
+        ? buildOTPEmailHtml({ otp: code, agentName, logoUrl: emailLogoUrl(request, config.branding.logoExpanded) })
+        : '';
+      const recipient = user!.email;
+      const phone = user!.phone;
       if (IS_DEV && channel === 'phone') console.log('[send-otp/phone] Generated OTP:', code);
 
-      // DETACHED, and both halves of that matter. Awaiting it made a real recipient cost
-      // a webhook round-trip while a decoy returned at once, and a delivery failure
-      // answered 500 where a decoy answered 200 — so both the timing and the status told
-      // an anonymous caller whether the address was real. Everything the send needs is
-      // already resolved (the webhook, the code, the rendered body), so nothing here
-      // reads namespaced storage after the request ends.
-      void deliver
-        .then(result => {
+      // Captured while the request is still alive — that is the contract, and it is what
+      // lets the reporting write below land in the right namespace. `app_events` is a
+      // per-namespace table, so publishing from a bare detached promise would write it
+      // outside the namespace the request belongs to.
+      const runInContext = (await getModules().auth.getContextRunner?.()) ?? ((fn: () => Promise<unknown>) => fn());
+
+      // DETACHED, and both halves of that matter. Awaiting the send made a real
+      // recipient cost a webhook round-trip while a decoy returned at once, and a
+      // delivery failure answered 500 where a decoy answered 200 — so both the timing
+      // and the status told an anonymous caller whether the address was real.
+      //
+      // `void runInContext(...)` is the same shape the chat-turn route uses for work it
+      // starts and does not await. `after()` would also fit, but it throws outside a
+      // request scope, which is why the Slack route has to export its worker for tests.
+      void runInContext(async () => {
+        try {
+          const result = channel === 'email'
+            ? await sendEmailViaWebhook(webhook, recipient, `Your ${agentName} Login Code`, emailHtml)
+            : await executeWebhook(webhook, { USER_NUMBER: phone!, AUTH_OTP: code });
           if (result.success) return;
           // The caller is told nothing either way — this endpoint never confirms
           // delivery, so a delivery failure is the OPERATOR's problem and belongs in
@@ -114,15 +122,14 @@ export async function POST(request: NextRequest) {
             source: 'send-otp',
             message: `Failed to dispatch login code over ${channel}: ${result.error}`,
           });
-        })
-        .catch(err => {
+        } catch (err) {
           appEventRegistry.publish(AppEvents.ERROR, {
             mode: DEFAULT_MODE,
             source: 'send-otp',
             message: `Login code dispatch threw over ${channel}: ${err instanceof Error ? err.message : String(err)}`,
           });
-        });
-    }
+        }
+      });    }
 
     // One response for every address, produced before delivery has been attempted, so
     // neither the body, the status, nor the latency distinguishes a real recipient from
