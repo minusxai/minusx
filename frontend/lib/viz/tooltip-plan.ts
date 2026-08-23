@@ -178,8 +178,9 @@ function waterfallPlan(spec: Record<string, unknown>): TooltipPlan | null {
 /**
  * Build a shared-tooltip plan from a spec, or null when the chart isn't shared-x. The
  * combo and waterfall recipes are recognized structurally first; otherwise a unit (or
- * annotated-unit) line/area/bar/point/boxplot spec plans off its x/y channels. Everything
- * else — pie, heatmap, maps, an unbinned bar on a quantitative x (row) — returns null.
+ * annotated-unit) line/area/bar/boxplot spec plans off its x/y channels. Everything
+ * else — scatter, pie, heatmap, maps, an unbinned bar on a quantitative x (row) —
+ * returns null and keeps vega's native per-mark tooltip.
  */
 export function buildTooltipPlan(spec: Record<string, unknown>): TooltipPlan | null {
   const combo = comboPlan(spec);
@@ -204,7 +205,11 @@ export function buildTooltipPlan(spec: Record<string, unknown>): TooltipPlan | n
   if (unit != null && unit !== spec) return buildTooltipPlan(unit);
 
   const mark = markType(spec);
-  if (mark !== 'line' && mark !== 'area' && mark !== 'bar' && mark !== 'point' && mark !== 'boxplot') return null;
+  // `point` is deliberately absent: a scatter has no shared x to snap to — many points
+  // can sit at the same x, and an axis card would show one arbitrary point per series
+  // while the guide line implied a category slot that isn't there. Scatter keeps vega's
+  // native per-mark tooltip, which reports the point actually under the cursor.
+  if (mark !== 'line' && mark !== 'area' && mark !== 'bar' && mark !== 'boxplot') return null;
 
   const x = channel(spec, 'x');
   const y = channel(spec, 'y');

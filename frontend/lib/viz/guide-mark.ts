@@ -15,7 +15,7 @@
  *   mxGuideW       — the guide's stroke width in px. Rests at the thin-line default; VegaChart
  *                    widens it to the x-scale BAND width on hover for bar/band charts, so the
  *                    guide fills the whole category slot (an ECharts `axisPointer: 'shadow'`).
- *                    Line/area/scatter keep the thin default (their x scale has no bandwidth).
+ *                    Line/area keep the thin default (their x scale has no bandwidth).
  *   mxGuideOpacity — the guide's fill opacity. Rests at the thin-line default; softened for the
  *                    wide band so a full-slot fill doesn't overpower the bars.
  *   mxGuideFacet   — facet datum for the hovered repeated cell (facet charts only).
