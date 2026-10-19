@@ -1102,7 +1102,7 @@ describe('getNodeConnector() factory', () => {
   });
 
   it('returns null for unknown types', () => {
-    expect(getNodeConnector('x', 'mysql', {})).toBeNull();
+    expect(getNodeConnector('x', 'unknown-engine', {})).toBeNull();
     expect(getNodeConnector('x', 'redshift', {})).toBeNull();
   });
 });

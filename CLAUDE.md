@@ -64,7 +64,7 @@ public documentation site.
                                    │                               │
                        document DB │                               │ analytics engines
                   (PGLite/Postgres)│                               │ (DuckDB, BigQuery, Postgres,
-                   files, contexts,│                               │  SQLite, Athena, Mongo,
+                   files, contexts,│                               │  SQLite, MySQL, Athena, Mongo,
               conversations, users │                               │  ClickHouse, CSV, Sheets)
 ```
 
@@ -122,7 +122,7 @@ text/AST work with no I/O, `lib/connections` owns driver contact, `lib/query-cac
 in a durable SWR + lease + blob cache.
 
 → **`frontend/lib/sql/CLAUDE.md`** — SQL ↔ IR. The subtlest correctness traps in the repo.
-→ **`frontend/lib/connections/CLAUDE.md`** — the nine connectors.
+→ **`frontend/lib/connections/CLAUDE.md`** — the ten connectors.
 → **`frontend/lib/query-cache/CLAUDE.md`** — the execution pipeline and the cache.
 
 ## Semantic models, contexts, views, and Atlas schemas

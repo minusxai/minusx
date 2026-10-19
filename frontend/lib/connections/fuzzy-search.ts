@@ -2,6 +2,7 @@ import 'server-only';
 
 import type { QueryResult } from './base';
 import { dialectProcessesBackslashEscapes } from '@/lib/sql/sql-literal';
+import { quoteMySqlIdentifier } from '@/lib/sql/mysql-ident';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -97,8 +98,7 @@ export const FUZZY_TERM_MAX = 200;
  * reach such an engine, and neither is hypothetical: the `bigquery` branch, and the
  * `default:` branch of `fuzzyMatch` — where **ClickHouse** lands. ClickHouse is a
  * shipped connector (`clickhouse-connector.ts`) with no `case` of its own in that
- * switch, so it falls through to the generic substring path. (MySQL is in the same
- * camp in `sql-literal.ts`, but no MySQL connector exists yet.)
+ * switch, so it falls through to the generic substring path. (MySQL uses the same literal-escaping camp with its own identifier quoting.)
  *
  * The camps come from `lib/sql/sql-literal.ts` so there is one definition of them.
  *
@@ -271,11 +271,11 @@ type QuoteStyle = 'double' | 'backtick';
 /**
  * `dialect` selects the escaping camp, so it must be the connector's REAL type —
  * this is the fallback for connectors `fuzzyMatch` does not dispatch by name
- * (ClickHouse, MySQL), and those process backslash escapes. Passing a stand-in
+ * (ClickHouse), and those process backslash escapes. Passing a stand-in
  * like 'duckdb' here would silently reinstate the injection.
  */
 async function fuzzySubstring(queryFn: QueryFn, p: ResolvedParams, dialect: string, quoteStyle: QuoteStyle = 'double'): Promise<FuzzyMatchResultEntry> {
-  const q = quoteStyle === 'backtick' ? escapeBacktickIdent : escapeIdent;
+  const q = dialect === 'mysql' ? quoteMySqlIdentifier : quoteStyle === 'backtick' ? escapeBacktickIdent : escapeIdent;
 
   // Lowercasing after escaping is safe: it changes neither quotes nor backslashes.
   const term = escapeFuzzyTerm(p.searchTerm, dialect).toLowerCase();
@@ -405,6 +405,11 @@ export async function fuzzyMatch(
     case 'sqlite':
       raw = await fuzzyDuckDb(queryFn, p);
       break;
+    case 'mysql': {
+      const substringEntry = await fuzzySubstring(queryFn, p, 'mysql');
+      raw = { results: [substringEntry], searchTerm: p.searchTerm };
+      break;
+    }
     case 'postgresql':
       raw = await fuzzyPostgres(queryFn, p);
       break;

@@ -1021,7 +1021,7 @@ describe('buildSampleSql', () => {
   });
 
   it('falls back to ORDER BY RANDOM() for unknown dialects', () => {
-    expect(buildSampleSql('mysql', 'public', 't', 50)).toBe(
+    expect(buildSampleSql('unknown-engine', 'public', 't', 50)).toBe(
       'SELECT * FROM "public"."t" ORDER BY RANDOM() LIMIT 50',
     );
   });

@@ -39,7 +39,7 @@ import { useFileByPath } from '@/lib/hooks/file-state-hooks';
 import ConnectionTablesBrowser from '../schema-browser/ConnectionTablesBrowser';
 import StaticTablesBrowser from '../schema-browser/StaticTablesBrowser';
 import { useContext as useContextHook } from '@/lib/hooks/useContext';
-import { BigQueryConfig, PostgreSQLConfig, CsvConfig, GoogleSheetsConfig, AthenaConfig, StaticConnectionConfig, DuckDBConfig, SqliteConfig, ClickHouseConfig } from './connection-configs';
+import { BigQueryConfig, PostgreSQLConfig, MySQLConfig, CsvConfig, GoogleSheetsConfig, AthenaConfig, StaticConnectionConfig, DuckDBConfig, SqliteConfig, ClickHouseConfig } from './connection-configs';
 import EgressIpHint from './connection-configs/EgressIpHint';
 import { cursorBlinkKeyframes } from '@/lib/ui/animations';
 import { CONNECTION_TYPES } from '@/lib/ui/connection-type-options';
@@ -185,7 +185,7 @@ export default function ConnectionFormV2({
       }
       return;
     }
-    handleTypeChange(selectedType as 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena' | 'clickhouse');
+    handleTypeChange(selectedType as 'bigquery' | 'mysql' | 'postgresql' | 'csv' | 'google-sheets' | 'athena' | 'clickhouse');
     setStep('configure');
   };
 
@@ -247,6 +247,8 @@ export default function ConnectionFormV2({
           schema_name: config.schema_name || '',
           work_group: config.work_group || ''
         }
+      : content.type === 'mysql'
+      ? { host: config.host || '', port: config.port ?? 3306, database: config.database || '', username: config.username || '', password: config.password ? '***REDACTED***' : '', ssl_mode: config.ssl_mode || 'disabled' }
       : content.type === 'clickhouse'
       ? {
           host: config.host || '',
@@ -307,6 +309,9 @@ export default function ConnectionFormV2({
       if (!config.files?.length) return false;
     } else if (content.type === 'athena') {
       if (!config.region_name || !config.s3_staging_dir) return false;
+    } else if (content.type === 'mysql') {
+      const port = Number(config.port ?? 3306);
+      if (!config.host?.trim() || !config.username?.trim() || !Number.isInteger(port) || port < 1 || port > 65535) return false;
     } else if (content.type === 'clickhouse') {
       if (!config.host || !config.username) return false;
     }
@@ -324,7 +329,7 @@ export default function ConnectionFormV2({
     }
   };
 
-  const handleTypeChange = (newType: 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena' | 'duckdb' | 'sqlite' | 'clickhouse') => {
+  const handleTypeChange = (newType: 'bigquery' | 'mysql' | 'postgresql' | 'csv' | 'google-sheets' | 'athena' | 'duckdb' | 'sqlite' | 'clickhouse') => {
     // Clear config when switching types
     const configByType: Record<string, Record<string, any>> = {
       bigquery: { project_id: '', service_account_json: '' },
@@ -332,6 +337,7 @@ export default function ConnectionFormV2({
       'google-sheets': { spreadsheet_url: '', spreadsheet_id: '', schema_name: 'public', files: [] },
       duckdb: { file_path: '' },
       sqlite: { file_path: '' },
+      mysql: { host: '', port: 3306, database: '', username: '', password: '', ssl_mode: 'disabled' },
       clickhouse: { protocol: 'https', host: '', port: 8443, database: '', username: '', password: '' },
     };
     onChange({
@@ -543,6 +549,11 @@ export default function ConnectionFormV2({
           setNameError('Username is required');
           return;
         }
+      }
+    } else if (content.type === 'mysql') {
+      if (!isFormValidForTest()) {
+        setNameError('Host, username, and a valid port are required');
+        return;
       }
     } else if (content.type === 'csv' && fileName !== 'static') {
       // For non-static CSV connections, validate that files have been uploaded
@@ -885,6 +896,10 @@ export default function ConnectionFormV2({
             onChange={(newConfig) => onChange({ config: newConfig })}
             mode={mode}
           />
+        )}
+
+        {content.type === 'mysql' && (
+          <MySQLConfig config={config} onChange={(newConfig) => onChange({ config: newConfig })} mode={mode} />
         )}
 
         {/* PostgreSQL Configuration */}

@@ -8,3 +8,4 @@ export { default as SqliteConfig } from './SqliteConfig';
 export { default as ClickHouseConfig } from './ClickHouseConfig';
 export { default as StaticConnectionConfig } from './StaticConnectionConfig';
 export type { BaseConfigProps } from './types';
+export { default as MySQLConfig } from './MySQLConfig';

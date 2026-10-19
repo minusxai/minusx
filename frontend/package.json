@@ -107,6 +107,7 @@
     "mammoth": "^1.11.0",
     "mixpanel-browser": "^2.74.0",
     "mongodb": "^6.21.0",
+    "mysql2": "^3.24.6",
     "next": "16.1.6",
     "next-auth": "^5.0.0-beta.30",
     "pako": "^2.1.0",

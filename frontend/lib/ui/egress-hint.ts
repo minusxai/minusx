@@ -13,7 +13,7 @@
 import { immutableSet } from '@/lib/utils/immutable-collections';
 
 /** Engines reached over the network at host:port, where a firewall sits in the path. */
-const NETWORK_REACHED_TYPES = immutableSet(['postgresql', 'clickhouse']);
+const NETWORK_REACHED_TYPES = immutableSet(['postgresql', 'mysql', 'clickhouse']);
 
 /** Split a comma/whitespace-separated env value into a de-duplicated list. */
 export function parseEgressIps(raw: string | undefined | null): string[] {

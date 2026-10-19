@@ -34,7 +34,7 @@ export interface SchemaColumn {
  * filtering/joining on indexed columns. Populated by connectors that can
  * introspect indexes (Postgres, SQLite, DuckDB, benchmark DuckDB-attached
  * SQLite); left `undefined` by every other connector (BigQuery, Athena, CSV,
- * ClickHouse, Mongo, internal_db) — an honest absence rather than a fabricated
+ * ClickHouse, MySQL, Mongo, internal_db) — an honest absence rather than a fabricated
  * empty list.
  */
 export interface TableIndex {
@@ -242,7 +242,7 @@ export abstract class NodeConnector {
    * `params` is `:name` substitution for SQL connectors (ignored by Mongo).
    * `timeoutMs` is a best-effort cancellation hint: connectors that can
    * interrupt / time-bound an in-flight query (DuckDB, SQLite-via-DuckDB,
-   * ClickHouse via `max_execution_time`, Mongo via `maxTimeMS`) honour it;
+   * ClickHouse via `max_execution_time`, Mongo via `maxTimeMS`, MySQL via socket destruction) honour it;
    * the rest (Postgres, BigQuery, Athena, CSV, internal_db) ignore it.
    */
   abstract query(
