@@ -1,7 +1,7 @@
 # Connections — the analytics data plane
 
-Driver contact: one `NodeConnector` implementation per engine — **nine of them** (DuckDB, SQLite,
-Postgres, BigQuery, Athena, ClickHouse, Mongo, CSV/Google-Sheets, internal_db) — plus connection
+Driver contact: one `NodeConnector` implementation per engine — **ten of them** (DuckDB, SQLite,
+Postgres, MySQL, BigQuery, Athena, ClickHouse, Mongo, CSV/Google-Sheets, internal_db) — plus connection
 resolution, the row-cap seam, schema introspection and column profiling. It does **not** own
 connection *documents* (those
 are files, loaded via `ConnectionsAPI` / `connectionLoader` in `frontend/lib/data`), SQL parsing
@@ -41,24 +41,24 @@ the route additionally applies                     │
 
 Everything is **streaming-first**. `NodeConnector.queryStream()` returns `{columns, types, finalQuery,
 rows: AsyncIterable}`. On the base class it is a *concrete* wrapper that materializes via `query()`;
-eight of the nine connectors override it with a driver-native cursor (only
+nine of the ten connectors override it with a driver-native cursor (only
 `internal-db-connector.ts` does not). Note that `query()` and `queryStream()` are implemented
-*independently* in each connector — no connector file calls `drainQueryStream`; that happens one
-level up, in `runQuery` and in the cache's degrade path. Agent consumers use
+*independently* in most connectors. MySQL's `query()` drains its streaming implementation;
+`runQuery` and the cache's degrade path also use `drainQueryStream`. Agent consumers use
 `drainQueryStreamBounded` / `getCachedResultBounded`, which stop pulling at a row/byte budget —
 because the stream is pull-based, stopping also stops the connector cursor
 (`lib/connections/__tests__/bounded-drain.test.ts`).
 
 ## Connectors
 
-There are nine connector files for ten registered type strings: `csv-connector.ts` serves both `csv`
+There are ten connector files for eleven registered type strings: `csv-connector.ts` serves both `csv`
 and `google-sheets`. `getNodeConnector(name, type, config)` in `lib/connections/index.ts` is the only
 factory; unknown types (and a `csv`/`google-sheets` config without a `files` array) return `null`, and
 `runQueryStream` throws.
 
 Each SQL connector rewrites `:name` placeholders into its driver's form through the shared grammar in
 `named-to-positional.ts` — `$N` positional via `namedToPositional` (Postgres, DuckDB, SQLite,
-internal_db), `@name` (BigQuery), `?` (Athena), `{name:Type}` (ClickHouse). The grammar's `(?<!:)`
+internal_db), `@name` (BigQuery), `?` (Athena/MySQL), `{name:Type}` (ClickHouse). The grammar's `(?<!:)`
 lookbehind is load-bearing: without it `col::text` becomes `col:$1` and the query dies at the colon.
 Mongo ignores params entirely: its "query" is JSON `{collection, pipeline}` and its row cap is
 `enforceMongoLimit`, a hand-written mirror of `enforceQueryLimit`'s 1000/10000 contract.
@@ -86,6 +86,19 @@ elsewhere — an honest absence, not a fabricated empty list). `statistics-engin
 columns with `ColumnMeta` (category, null counts, top values, min/max) and dispatches per connector
 type; unknown types pass through unprofiled rather than issuing speculative queries. ClickHouse
 profiling is metadata-only (`system.columns`) and never scans rows.
+
+`mysql-connector.ts` uses mysql2's backpressured row stream and binary prepared parameters
+for queries containing `:name` bindings. Its linear placeholder scanner skips quoted text and
+comments, including unterminated input. Result metadata tagged CESU-8 is decoded as UTF-8 because
+Doris sends four-byte Unicode under MySQL's utf8mb3 tag; binary and other encodings are preserved.
+Queries without parameters use the text protocol. `mysql-registry.ts` shares pools by target,
+credentials and TLS mode; password rotation cannot reuse a pool with old credentials. Early stream
+termination and query deadlines destroy the checked-out socket rather than returning an unfinished
+query to the pool. BIGINT/DECIMAL and dates remain strings to preserve precision and wall-clock values.
+Database discovery uses `information_schema.columns`, scoped to the configured database or all
+accessible non-system databases when unset. MySQL profiling classifies column types without table
+scans, which also works for Doris warehouses. TLS mode `required` verifies the server certificate;
+`disabled` is the default. Doris uses the MySQL connection type with its FE query port (usually 9030).
 
 ## Adding a connector
 

@@ -1,5 +1,5 @@
 export type ConnectionTypeOption = {
-  type: 'bigquery' | 'postgresql' | 'csv' | 'xlsx' | 'google-sheets' | 'athena' | 'clickhouse' | 'databricks' | 'snowflake' | 'duckdb' | 'sqlite';
+  type: 'bigquery' | 'mysql' | 'postgresql' | 'csv' | 'xlsx' | 'google-sheets' | 'athena' | 'clickhouse' | 'databricks' | 'snowflake' | 'duckdb' | 'sqlite';
   name: string;
   logo: string;
   comingSoon: boolean;
@@ -27,6 +27,14 @@ export const CONNECTION_TYPES: ConnectionTypeOption[] = [
     comingSoon: false,
     group: 'external-engine',
     description: 'Query your Postgres database or warehouse directly.',
+  },
+  {
+    type: 'mysql',
+    name: 'MySQL',
+    logo: '/logos/mysql.svg',
+    comingSoon: false,
+    group: 'external-engine',
+    description: 'Query MySQL or Apache Doris through its MySQL endpoint.',
   },
   {
     type: 'athena',

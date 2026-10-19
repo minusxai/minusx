@@ -65,6 +65,10 @@ export function getSafeConfig(type: string, config: any): Record<string, any> {
     };
   }
 
+  if (type === 'mysql') {
+    return { host: config.host, port: config.port, database: config.database, username: config.username, ssl_mode: config.ssl_mode };
+  }
+
   if (type === 'clickhouse') {
     // Hide password only — username is not a secret on its own and is needed to edit.
     return {

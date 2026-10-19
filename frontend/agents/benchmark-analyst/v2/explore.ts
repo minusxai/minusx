@@ -12,6 +12,7 @@ import { getCatalogStore } from './catalog';
 import { V2DataTool, getLighterModel } from './data-tool-base';
 import { compressQueryResult, TOOL_MAX_LIMIT_CHARS } from '@/lib/chat/compress-augmented';
 import type { ResultEntry } from '../result-shapes';
+import { quoteMySqlIdentifier } from '@/lib/sql/mysql-ident';
 
 const ExploreFilter = Type.Object({
   connection: Type.Optional(Type.String({ description: 'Limit search to this connection' })),
@@ -243,6 +244,24 @@ Examples:
     // Mongo: SQL doesn't apply — use a native aggregation pipeline.
     if (target.dialect === 'mongo') {
       return this.searchMongoColumn(connector, target, match);
+    }
+
+    if (target.dialect === 'mysql') {
+      const column = quoteMySqlIdentifier(target.column);
+      const table = target.schema
+        ? `${quoteMySqlIdentifier(target.schema)}.${quoteMySqlIdentifier(target.table)}`
+        : quoteMySqlIdentifier(target.table);
+      // MySQL/Doris has no implicit rowid. Return the matched value as the
+      // discovery identifier, and bind both the label and search text.
+      const result = await connector.query(`
+        SELECT CAST(${column} AS CHAR) AS id, ${column} AS matched_text,
+               :source AS source,
+               ${match ? `CASE WHEN LOWER(${column}) = LOWER(:match) THEN 1.0 ELSE 0.8 END` : '1.0'} AS score
+        FROM ${table}
+        WHERE ${column} IS NOT NULL ${match ? `AND LOWER(${column}) LIKE LOWER(:pattern)` : ''}
+        ORDER BY score DESC LIMIT 100
+      `, { source: `${target.table}.${target.column}`, ...(match ? { match, pattern: `%${match}%` } : {}) });
+      return result.rows;
     }
 
     // Postgres: try pg_trgm `similarity()` first; fall back to LIKE-only if

@@ -15,6 +15,7 @@ MinusX connects to your existing databases to query and analyze data. Connection
 |----------|------|-------|
 | **DuckDB** | Local file | Default for local development. Fast, embedded analytics. |
 | **PostgreSQL** | Remote | Production databases, data warehouses |
+| **MySQL** | Remote | MySQL databases and Apache Doris MySQL endpoints |
 | **BigQuery** | Cloud | Google Cloud data warehouse |
 | **Athena** | Cloud | AWS Athena over S3 |
 | **ClickHouse** | Remote | Column-oriented OLAP databases |
@@ -45,11 +46,30 @@ MinusX connects to your existing databases to query and analyze data. Connection
 Connection credentials are stored securely in the documents database. For production deployments, use environment variables for sensitive values.
 </Callout>
 
+## MySQL and Apache Doris
+
+Choose **MySQL** and enter the host, port, username, and password. The default port is
+**3306**. For Apache Doris, use the **FE MySQL query endpoint**, usually on port **9030**.
+
+The optional **Database** sets the default database for queries and scopes schema discovery.
+Leave it blank to discover all accessible non-system databases; qualify tables as
+`database.table` when querying across databases.
+
+Set **TLS** to **Required** for encrypted connections with server certificate verification
+against the system trust store. The default is **Disabled**. Passwords support the same
+secret references as other connection types.
+
+Schema refresh reads column metadata without scanning your tables. MySQL and Doris have
+engine-specific SQL features; a MySQL connection provides protocol access rather than translating
+all SQL between the two engines. Parameterized queries use server-side prepared statements.
+Unicode query results, including emoji, are supported on Doris endpoints that report utf8mb3
+column metadata while returning UTF-8 text.
+
 ## Allowing access through a firewall
 
 If your database only accepts connections from known addresses, allow the IPs MinusX
 connects **from**. On MinusX Cloud those addresses are shown directly in the connection
-form for the engines it applies to — PostgreSQL and ClickHouse — and highlighted if a
+form for the engines it applies to — PostgreSQL, MySQL and ClickHouse — and highlighted if a
 connection test fails, so you can copy them straight into your firewall rule.
 
 BigQuery and Athena are reached over their public service endpoints and authorised by
@@ -69,4 +89,4 @@ set `MX_EGRESS_IPS` to a comma-separated list of the deployment's egress address
 
 Each question is tied to a connection. When you create a new question, it uses the default connection unless you specify otherwise.
 
---- 
+---

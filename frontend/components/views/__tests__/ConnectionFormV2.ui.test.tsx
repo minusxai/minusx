@@ -76,6 +76,17 @@ afterEach(() => {
 });
 
 describe('ConnectionFormV2 via ConnectionContainerV2', () => {
+  it('renders and edits a MySQL connection using the Doris port', () => {
+    const store = storeModule.makeStore();
+    vi.spyOn(storeModule, 'getStore').mockReturnValue(store);
+    store.dispatch(setFile({ file: makeConnectionFile({ type: 'mysql', config: { host: 'doris.local', port: 9030, username: 'reader', password: '' } }), references: [] }));
+    renderWithProviders(<ConnectionContainerV2 fileId={CONNECTION_ID} />, { store });
+    fireEvent.click(screen.getByLabelText('Settings view'));
+    expect(screen.getByLabelText('mysql port')).toHaveValue(9030);
+    fireEvent.change(screen.getByLabelText('mysql host'), { target: { value: 'new-doris.local' } });
+    expect(screen.getByLabelText('mysql host')).toHaveValue('new-doris.local');
+    expect(screen.getByLabelText('mysql ssl_mode')).toBeInTheDocument();
+  });
   // MX_EGRESS_IPS reaches the form as a prop (this view is Redux-restricted), so a
   // hosted customer can see which source IPs to allow through their DB firewall.
   describe('egress IP hint (configs.egressIps)', () => {

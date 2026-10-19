@@ -19,6 +19,12 @@ export interface DialectHint {
 }
 
 export const DIALECT_HINTS: Record<string, DialectHint> = {
+  mysql: {
+    dialect: 'mysql',
+    fuzzyFunctions: 'Use LOWER(column) LIKE LOWER(pattern) for case-insensitive substring matching.',
+    additionalInfo: 'Quote identifiers with backticks and qualify tables as `database`.`table`. Use CONCAT() for concatenation, RAND() for random values, and LIMIT for row caps. No ILIKE or DISTINCT ON. This connection may target Apache Doris via the MySQL protocol; use the server version and schema to determine engine-specific functions.',
+    crossDb: 'Local DuckDB handle tables are unavailable here. Chain cross-connection queries with sequential: true and $label.column references.',
+  },
   duckdb: {
     dialect: 'duckdb',
     fuzzyFunctions: 'jaro_winkler_similarity(), levenshtein(), jaccard()',

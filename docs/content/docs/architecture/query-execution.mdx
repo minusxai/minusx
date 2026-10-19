@@ -34,6 +34,7 @@ The route resolves the connection, derives the SQL dialect, and dispatches to th
 |---|---|
 | DuckDB / SQLite / CSV | driver stream + chunk fetch (shared implementation) |
 | PostgreSQL | `pg-cursor` batched server-side cursor |
+| MySQL / Doris | mysql2 row stream with backpressure; socket closed on timeout or early termination |
 | MongoDB | aggregation cursor (columns sampled from the first batch) |
 | BigQuery | paged `getQueryResults` |
 | ClickHouse | `JSONCompactEachRowWithNamesAndTypes` stream |

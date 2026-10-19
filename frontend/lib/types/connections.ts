@@ -12,7 +12,7 @@ import type { JobSchedule } from './jobs';
  */
 export interface DatabaseConnection extends BaseEntity {
   name: string;
-  type: 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena' | 'sqlite' | 'internal_db' | 'clickhouse';
+  type: 'duckdb' | 'bigquery' | 'mysql' | 'postgresql' | 'csv' | 'google-sheets' | 'athena' | 'sqlite' | 'internal_db' | 'clickhouse';
   config: Record<string, any>;  // Safe config fields only (no sensitive data)
 }
 
@@ -66,7 +66,7 @@ export interface CsvConnectionConfig {
 
 // Connection file content type (stored as file in /database/)
 export interface ConnectionContent extends BaseFileContent {
-  type: 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena' | 'sqlite' | 'internal_db' | 'clickhouse';
+  type: 'duckdb' | 'bigquery' | 'mysql' | 'postgresql' | 'csv' | 'google-sheets' | 'athena' | 'sqlite' | 'internal_db' | 'clickhouse';
   config: Record<string, any>;
   description?: string;
   schema?: DatabaseSchema;  // Added by connection loader via introspection
@@ -131,6 +131,7 @@ export function connectionTypeToDialect(type: string): string {
     duckdb: 'duckdb',
     bigquery: 'bigquery',
     postgresql: 'postgres',
+    mysql: 'mysql',
     csv: 'duckdb',
     'google-sheets': 'duckdb',
     athena: 'presto',

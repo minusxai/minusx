@@ -13,8 +13,8 @@
 //     SELECT * FROM "<table>" USING SAMPLE <n> ROWS
 //   DuckDB's `USING SAMPLE n ROWS` is a reservoir sampler — bounded
 //   memory AND returns min(K, N) for K < N. Already-correct.
-// - postgresql / bigquery / fallback: `ORDER BY RANDOM() LIMIT n`
-//   (`ORDER BY RAND()` for BigQuery — different keyword). Slow on huge
+// - postgresql / bigquery / mysql / fallback: `ORDER BY RANDOM() LIMIT n`
+//   (`ORDER BY RAND()` for BigQuery/MySQL — different keyword). Slow on huge
 //   tables (full sort), but benchmark tables are small and the engine
 //   short-circuits LIMIT. Correctness > speed here.
 // - mongo: `{$sample: {size: n}}` — already correct for any collection
@@ -22,6 +22,8 @@
 //
 // Identifier escaping is conservative — we quote every identifier even
 // though most are simple — matches how the rest of catalog.ts builds SQL.
+
+import { quoteMySqlIdentifier } from '@/lib/sql/mysql-ident';
 
 function quoteIdent(name: string): string {
   return `"${name.replace(/"/g, '""')}"`;
@@ -39,6 +41,10 @@ export function buildSampleSql(
     : quoteIdent(table);
 
   switch (dialect) {
+    case 'mysql': {
+      const ref = schema ? `${quoteMySqlIdentifier(schema)}.${quoteMySqlIdentifier(table)}` : quoteMySqlIdentifier(table);
+      return `SELECT * FROM ${ref} ORDER BY RAND() LIMIT ${n}`;
+    }
     case 'duckdb':
     case 'sqlite':
       return `SELECT * FROM ${qualifiedSql} USING SAMPLE ${n} ROWS`;

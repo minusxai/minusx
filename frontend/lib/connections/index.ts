@@ -2,6 +2,7 @@ import 'server-only';
 import type { NodeConnector } from './base';
 import { DuckDbConnector } from './duckdb-connector';
 import { CsvConnector } from './csv-connector';
+import { MySqlConnector } from './mysql-connector';
 import { PostgresConnector } from './postgres-connector';
 import { BigQueryConnector } from './bigquery-connector';
 import { AthenaConnector } from './athena-connector';
@@ -14,7 +15,7 @@ export { NodeConnector } from './base';
 
 /**
  * Factory: return a NodeConnector for the given type, or null if the type is unknown.
- * Every supported type (postgresql, bigquery, athena, duckdb, sqlite, csv,
+ * Every supported type (mysql, postgresql, bigquery, athena, duckdb, sqlite, csv,
  * google-sheets, internal_db, mongo, clickhouse) is handled by a Node.js connector.
  *
  * CSV routing:
@@ -27,6 +28,8 @@ export function getNodeConnector(
   type: string,
   config: Record<string, any>
 ): NodeConnector | null {
+  if (type === 'mysql') return new MySqlConnector(name, config);
+
   if (type === 'postgresql') {
     return new PostgresConnector(name, config);
   }

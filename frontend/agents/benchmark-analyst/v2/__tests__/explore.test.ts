@@ -83,6 +83,17 @@ describe('ExploreV2', () => {
   });
 
   describe('filter scoping', () => {
+    it.each([undefined, "O'Brien\\"] )('searches MySQL without rowid or PostgreSQL quoting (match=%s)', async (match) => {
+      const tool = new ExploreV2(new Orchestrator([ExploreV2]), { filter: { match } }, {
+        ...CTX, connections: [{ name: 'mysql_db', dialect: 'mysql', config: {} }],
+      }, 'test-mysql');
+      await tool.run();
+      const sql = mockQuery.mock.calls.map(call => call[0]).filter(Boolean).join('\n');
+      expect(sql).toContain('`public`.`products`');
+      expect(sql).not.toContain('rowid');
+      expect(sql).not.toContain('VARCHAR');
+      if (match) expect(sql).toContain(':match');
+    });
     it('searches all connections when no filter specified', async () => {
       const orch = new Orchestrator([ExploreV2]);
       const tool = new ExploreV2(

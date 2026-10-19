@@ -14,8 +14,7 @@
  * `bigquery`, and the `default:` branch of `fuzzyMatch` sends every UNRECOGNISED
  * connector to `fuzzySubstring` — which is where ClickHouse, a shipped connector with
  * no `case` of its own, lands. So the unsafe camp is reached both by name and by
- * falling through. (`mysql` is in the same camp in sql-literal.ts, but no MySQL
- * connector exists yet; it is covered here so one cannot arrive unprotected.)
+ * falling through. MySQL uses the same escaping camp and dispatches its substring search explicitly.
  *
  * Sibling of `fuzzy-escape-truncation.test.ts`: that one pins truncate-before-escape,
  * this one pins dialect-correct escaping. Both are about the same literal staying closed.

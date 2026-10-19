@@ -6,6 +6,7 @@ import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
 import { ChakraProvider, defaultSystem } from '@chakra-ui/react';
 import compatibility from '@/compatibility.json';
+import MySQLConfig from '../views/connection-configs/MySQLConfig';
 import PostgreSQLConfig from '../views/connection-configs/PostgreSQLConfig';
 import BigQueryConfig from '../views/connection-configs/BigQueryConfig';
 import AthenaConfig from '../views/connection-configs/AthenaConfig';
@@ -13,6 +14,7 @@ import ClickHouseConfig from '../views/connection-configs/ClickHouseConfig';
 
 interface FormProps { config: Record<string, never>; onChange: () => void; mode: 'create' }
 const FORMS: Record<string, (props: FormProps) => React.ReactElement> = {
+  mysql: (p) => <MySQLConfig {...p} />,
   postgresql: (p) => <PostgreSQLConfig {...p} />,
   bigquery: (p) => <BigQueryConfig {...p} />,
   athena: (p) => <AthenaConfig {...p} />,

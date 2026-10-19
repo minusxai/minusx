@@ -71,6 +71,21 @@ export async function profileDatabase(
   let enrichedTables: Array<{ schema: string; table: string; columns: SchemaColumn[] }>;
 
   switch (connectorType) {
+    case 'mysql':
+      // MySQL endpoints can be Doris warehouses. Schema refresh must not scan
+      // entire tables to derive cardinalities or value distributions.
+      enrichedTables = allTables.map(t => ({
+        ...t,
+        columns: t.columns.map(col => {
+          const type = col.type.toLowerCase();
+          const category: ColumnClassification = /bool|^bit$/.test(type) ? 'boolean'
+            : /date|time|year/.test(type) ? 'temporal'
+            : /int|float|double|decimal|numeric|real/.test(type) ? 'numeric'
+            : /char|text|string|enum|set/.test(type) ? 'text' : 'unknown';
+          return buildColumn(col, category);
+        }),
+      }));
+      break;
     case 'postgresql':
       enrichedTables = await profilePostgres(allTables, countedQueryFn);
       break;
