@@ -16,18 +16,42 @@ const MYSQL_TYPES: Readonly<Record<number, string>> = Object.freeze({
 /** Use the shared placeholder grammar only outside MySQL literals/identifiers/comments. */
 function bindParams(sql: string, params?: Record<string, string | number>) {
   const values: Array<string | number | null> = [];
-  const quoted = /'(?:\\.|''|[^'\\])*'|"(?:\\.|""|[^"\\])*"|`(?:``|[^`])*`|--(?=\s|$)[^\n]*|#[^\n]*|\/\*[\s\S]*?\*\//g;
   let offset = 0;
-  let rewritten = '';
+  const chunks: string[] = [];
   const rewrite = (part: string) => rewriteNamedParams(part, params, (name, value) => {
     values.push(params && Object.hasOwn(params, name) ? value ?? null : null);
     return '?';
   });
-  for (const match of sql.matchAll(quoted)) {
-    rewritten += rewrite(sql.slice(offset, match.index)) + match[0];
-    offset = match.index! + match[0].length;
+  // Scan each character at most once, including unterminated quotes/comments.
+  // A regex that searches for a closing delimiter can repeatedly backtrack on
+  // malformed user SQL and block the server's event loop.
+  for (let i = 0; i < sql.length;) {
+    const start = i;
+    const quote = sql[i];
+    if (quote === "'" || quote === '"' || quote === '`') {
+      i++;
+      while (i < sql.length) {
+        if (sql[i] === '\\' && quote !== '`') { i = Math.min(i + 2, sql.length); continue; }
+        if (sql[i++] === quote) {
+          if (sql[i] === quote) { i++; continue; }
+          break;
+        }
+      }
+    } else if (sql.startsWith('/*', i)) {
+      const end = sql.indexOf('*/', i + 2);
+      i = end === -1 ? sql.length : end + 2;
+    } else if (quote === '#' || (sql.startsWith('--', i) && (i + 2 === sql.length || /\s/.test(sql[i + 2])))) {
+      const end = sql.indexOf('\n', i);
+      i = end === -1 ? sql.length : end;
+    } else {
+      i++;
+      continue;
+    }
+    chunks.push(rewrite(sql.slice(offset, start)), sql.slice(start, i));
+    offset = i;
   }
-  return { sql: rewritten + rewrite(sql.slice(offset)), values };
+  chunks.push(rewrite(sql.slice(offset)));
+  return { sql: chunks.join(''), values };
 }
 
 export class MySqlConnector extends NodeConnectorBase {
@@ -61,7 +85,16 @@ export class MySqlConnector extends NodeConnectorBase {
       stream.once('close', () => finish(false));
       command.once('end', () => finish(true));
       const fields = await new Promise<FieldPacket[]>((resolve, reject) => {
-        command.once('fields', fields => resolve(fields ?? []));
+        command.once('fields', (fields: FieldPacket[] | undefined) => {
+          // Doris advertises utf8mb3 (33) while sending full UTF-8. mysql2 maps
+          // that to CESU-8, corrupting supplementary characters such as emoji.
+          // UTF-8 also decodes valid MySQL utf8mb3; leave binary/other charsets alone.
+          // The driver emits fields before constructing either row parser.
+          for (const field of fields ?? []) {
+            if (field.encoding === 'cesu8') field.encoding = 'utf8';
+          }
+          resolve(fields ?? []);
+        });
         command.once('end', () => resolve([]));
         command.once('error', error => { finish(false); reject(error); });
         stream.once('error', reject);

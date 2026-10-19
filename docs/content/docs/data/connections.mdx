@@ -62,6 +62,8 @@ secret references as other connection types.
 Schema refresh reads column metadata without scanning your tables. MySQL and Doris have
 engine-specific SQL features; a MySQL connection provides protocol access rather than translating
 all SQL between the two engines. Parameterized queries use server-side prepared statements.
+Unicode query results, including emoji, are supported on Doris endpoints that report utf8mb3
+column metadata while returning UTF-8 text.
 
 ## Allowing access through a firewall
 
@@ -87,4 +89,4 @@ set `MX_EGRESS_IPS` to a comma-separated list of the deployment's egress address
 
 Each question is tied to a connection. When you create a new question, it uses the default connection unless you specify otherwise.
 
---- 
+---

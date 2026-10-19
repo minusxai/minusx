@@ -66,6 +66,24 @@ describe('MySQL connector', () => {
     expect(await new MySqlConnector('db', config).query('SELECT label FROM events WHERE 0')).toMatchObject({ columns: ['label'], types: ['VARCHAR'], rows: [] });
   });
 
+  it('uses UTF-8 for Doris text advertised as utf8mb3 without changing binary or other encodings', async () => {
+    const fields = [
+      { name: 'unicode', columnType: 253, characterSet: 33, encoding: 'cesu8' },
+      { name: 'bytes', columnType: 252, characterSet: 63, encoding: 'binary' },
+      { name: 'western', columnType: 253, characterSet: 8, encoding: 'latin1' },
+    ];
+    driver({ fields });
+    await new MySqlConnector('db', config).query('SELECT unicode, bytes, western FROM events');
+    expect(fields.map(field => field.encoding)).toEqual(['utf8', 'binary', 'latin1']);
+  });
+
+  it.each(["'", '"', '/*'])('does not bind parameters inside unterminated %s text', async opener => {
+    const { run } = driver();
+    const sql = `SELECT :id, ${opener}${'a/*'.repeat(2000)} :hidden`;
+    await new MySqlConnector('db', config).query(sql, { id: 7, hidden: 8 });
+    expect(run).toHaveBeenCalledWith({ sql: sql.replace(':id', '?'), values: [7] });
+  });
+
   it('binds repeated parameters in occurrence order without rewriting quoted text or comments', async () => {
     const { run } = driver();
     await new MySqlConnector('db', config).query("SELECT :id, ':literal', `:column`, :id, :missing -- :comment\n/* :block */", { id: "x\\' OR 1=1 --" });

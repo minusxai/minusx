@@ -88,7 +88,9 @@ type; unknown types pass through unprofiled rather than issuing speculative quer
 profiling is metadata-only (`system.columns`) and never scans rows.
 
 `mysql-connector.ts` uses mysql2's backpressured row stream and binary prepared parameters
-for queries containing `:name` bindings. Its placeholder rewrite skips quoted text and comments.
+for queries containing `:name` bindings. Its linear placeholder scanner skips quoted text and
+comments, including unterminated input. Result metadata tagged CESU-8 is decoded as UTF-8 because
+Doris sends four-byte Unicode under MySQL's utf8mb3 tag; binary and other encodings are preserved.
 Queries without parameters use the text protocol. `mysql-registry.ts` shares pools by target,
 credentials and TLS mode; password rotation cannot reuse a pool with old credentials. Early stream
 termination and query deadlines destroy the checked-out socket rather than returning an unfinished
