@@ -58,7 +58,7 @@ export default function JsonEditor({ value, onChange, originalValue, readOnly = 
     automaticLayout: true,
     fixedOverflowWidgets: true,
     hover: {
-      enabled: true,
+      enabled: 'on' as const,
       sticky: false,
       hidingDelay: 0,
     },

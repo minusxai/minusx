@@ -2,7 +2,7 @@
 # Build from the repository root: docker build -f docs/Dockerfile .
 
 # ===== BUILDER STAGE ===== #
-FROM node:20-slim AS builder
+FROM node:22.23.4-slim AS builder
 
 WORKDIR /app
 
@@ -16,7 +16,7 @@ COPY frontend/compatibility.json /frontend/compatibility.json
 RUN npm run build
 
 # ===== RUNTIME STAGE ===== #
-FROM node:20-alpine AS runner
+FROM node:22.23.4-alpine AS runner
 
 RUN npm install -g serve
 
