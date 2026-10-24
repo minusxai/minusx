@@ -48,6 +48,14 @@ jobs:
         working-directory: ./frontend
         run: npm ci
 
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.3'
+          cache: false
+      - name: Prepare matching esbuild binaries
+        working-directory: ./frontend
+        run: bash scripts/rebuild-esbuild.sh
+
       # Cache the Playwright browser binaries by the installed Playwright version.
       - name: Resolve Playwright version
         id: pw

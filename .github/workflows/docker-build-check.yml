@@ -11,6 +11,7 @@ on:
   pull_request:
     paths:
       - 'frontend/Dockerfile'
+      - 'frontend/.dockerignore'
       - 'frontend/patches/**'
       - 'frontend/package.json'
       - 'frontend/package-lock.json'
@@ -18,6 +19,8 @@ on:
       - 'frontend/next.config.ts'
       - 'frontend/scripts/copy-duckdb-wasm.mjs'
       - 'frontend/scripts/patch-npm.mjs'
+      - 'frontend/scripts/patch-esbuild.mjs'
+      - 'frontend/scripts/check-runtime.cjs'
       - '.github/workflows/docker-build-check.yml'
 
 jobs:
@@ -38,9 +41,17 @@ jobs:
           file: frontend/Dockerfile
           platforms: linux/amd64
           push: false
+          load: true
+          tags: app-validation
           build-args: |
             GIT_COMMIT_SHA=${{ github.sha }}
             NEXT_PUBLIC_DEFAULT_ANALYTICS_CONFIG=${{ secrets.NEXT_PUBLIC_DEFAULT_ANALYTICS_CONFIG }}
           secrets: |
             sentry_auth_token=${{ secrets.SENTRY_AUTH_TOKEN }}
           cache-from: type=gha
+
+      - name: Check native runtime modules
+        run: >-
+          docker run --rm --entrypoint node
+          -v "${{ github.workspace }}/frontend/scripts/check-runtime.cjs:/app/check-runtime.cjs:ro"
+          app-validation /app/check-runtime.cjs

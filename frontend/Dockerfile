@@ -1,6 +1,21 @@
 # syntax=docker/dockerfile:1
 # Frontend Dockerfile for MinusX BI - Multi-stage build with standalone mode
 
+# Preserve esbuild's exact JavaScript/binary protocol while rebuilding its Go runtime.
+FROM golang:1.27.3-bookworm@sha256:972b4110ba0f47539a975c31e52c64765e1ff19f2d74469ae4a595c6676e80a5 AS esbuild-runtime
+ENV CGO_ENABLED=0 GOTOOLCHAIN=local
+RUN for version in 0.28.1 0.28.2; do \
+      mkdir -p /build/$version /out/$version; cd /build/$version; \
+      go mod init build-source \
+      && go mod download github.com/evanw/esbuild@v$version \
+      && cp -R "$(go env GOPATH)/pkg/mod/github.com/evanw/esbuild@v$version/." . \
+      && chmod -R u+w . \
+      && go mod edit -require=golang.org/x/sys@v0.44.0 \
+      && go mod download golang.org/x/sys \
+      && go build -trimpath -ldflags='-s -w' -o /out/$version/esbuild ./cmd/esbuild \
+      && test "$(/out/$version/esbuild --version)" = "$version" || exit 1; \
+    done
+
 # ===== BUILDER STAGE ===== #
 FROM node:22.23.4-slim AS base
 COPY scripts/patch-npm.mjs /tmp/patch-npm.mjs
@@ -30,6 +45,10 @@ COPY patches ./patches
 
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --cache /root/.npm
+
+COPY --from=esbuild-runtime /out /opt/esbuild
+COPY scripts/patch-esbuild.mjs /tmp/patch-esbuild.mjs
+RUN node /tmp/patch-esbuild.mjs
 
 # Verify the pi-ai patch (web search + image-URL support) was actually applied
 # by postinstall. patch-package --error-on-fail silently exits 0 when no patches
@@ -86,6 +105,8 @@ RUN apt-get update && apt-get upgrade -y \
 
 # Copy standalone output (much smaller than node_modules - only runtime dependencies)
 COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/package-lock.json ./package-lock.json
+COPY --from=builder /app/.npmrc ./.npmrc
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
@@ -111,8 +132,19 @@ COPY --from=builder /app/setup-cli ./setup-cli
 COPY --from=builder /app/patches ./patches
 # @aws/lambda-invoke-store: aws-sdk transitive that standalone tracing misses.
 # The setup-cli bundle keeps node_modules external, so it must resolve here.
-RUN npm install --ignore-scripts tsx@4.21.0 "@tailwindcss/node@4.2.1" "@tailwindcss/oxide@4.2.1" "tailwindcss@4.2.1" "@aws/lambda-invoke-store@0.2.4"
-RUN npx --yes patch-package@8.0.1 --error-on-fail && rm -rf ./patches
+# Restore the complete locked production graph: traced directories can omit
+# files needed by dynamic imports even when npm sees the correct package version.
+RUN rm -rf node_modules \
+    && npm ci --omit=dev --ignore-scripts \
+    && npm install --omit=dev --ignore-scripts tsx@4.21.0 "@tailwindcss/node@4.2.1" "@tailwindcss/oxide@4.2.1" "tailwindcss@4.2.1" "@aws/lambda-invoke-store@0.2.4"
+COPY --from=esbuild-runtime /out /opt/esbuild
+COPY scripts/patch-esbuild.mjs /tmp/patch-esbuild.mjs
+RUN node /tmp/patch-esbuild.mjs
+# npm's runtime reconciliation replaces package files while scripts are disabled.
+# Retain the binding compiled against this exact lock and Node ABI in the builder.
+COPY --from=builder /app/node_modules/better-sqlite3/build/Release/better_sqlite3.node /app/node_modules/better-sqlite3/build/Release/better_sqlite3.node
+RUN npx --yes patch-package@8.0.1 --error-on-fail \
+    && rm -rf ./patches && npm cache clean --force
 RUN grep -q "MX PATCH" /app/node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js \
     || (echo "ERROR: pi-ai patch missing from runtime image" && exit 1)
 

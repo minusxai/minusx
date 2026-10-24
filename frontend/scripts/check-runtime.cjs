@@ -1,0 +1,21 @@
+const assert = require('node:assert/strict');
+(async () => {
+  const Database = require('better-sqlite3');
+  const sqlite = new Database(':memory:');
+  assert.equal(sqlite.prepare('select 42 as answer').get().answer, 42);
+  sqlite.close();
+  const { DuckDBInstance } = require('@duckdb/node-api');
+  const instance = await DuckDBInstance.create(':memory:');
+  const connection = await instance.connect();
+  const reader = await connection.runAndReadAll('select 42 as answer');
+  assert.equal(reader.getRowObjects()[0].answer, 42);
+  connection.closeSync(); instance.closeSync();
+  await require('sharp')({ create: { width: 4, height: 4, channels: 3, background: '#ffffff' } }).png().toBuffer();
+  const { Scanner } = require('@tailwindcss/oxide');
+  const scanner = new Scanner({ sources: [] });
+  assert.ok(scanner.scanFiles([{ content: '<div class="flex"></div>', extension: 'html' }]).includes('flex'));
+  const css = await require('@tailwindcss/node').compile('@tailwind utilities;', { base: process.cwd() });
+  assert.match(css.build(['flex']), /display: flex/);
+  require('node:child_process').execFileSync(process.execPath, ['node_modules/tsx/dist/cli.mjs', '-e', 'const n: number = 42; if(n !== 42) process.exit(1)']);
+  console.log('Native SQLite, DuckDB, Sharp, Tailwind oxide/compiler and tsx checks passed');
+})().catch(error => { console.error(error); process.exit(1); });
