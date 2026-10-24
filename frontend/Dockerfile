@@ -173,7 +173,7 @@ COPY --from=pcre2 /out/pcre2.deb /tmp/pcre2.deb
 COPY --from=archive /out/tar.deb /tmp/tar.deb
 COPY --from=shell /out/dash.deb /tmp/dash.deb
 COPY --from=utilities /out/coreutils.deb /out/libtinfo6.deb /out/ncurses-bin.deb /out/ncurses-base.deb /tmp/runtime-debs/
-RUN dpkg --path-include='/usr/share/doc/tar/*' --path-include='/usr/share/doc/dash/*' -i /tmp/runtime-debs/*.deb /tmp/pcre2.deb /tmp/tar.deb /tmp/dash.deb && rm -rf /tmp/runtime-debs && ldconfig && rm -f /tmp/pcre2.deb /tmp/tar.deb /tmp/dash.deb
+RUN dpkg --path-include='/usr/share/doc/tar/*' --path-include='/usr/share/doc/dash/*' --path-include='/usr/share/doc/coreutils/*' --path-include='/usr/share/doc/libtinfo6/*' --path-include='/usr/share/doc/ncurses-bin/*' --path-include='/usr/share/doc/ncurses-base/*' -i /tmp/runtime-debs/*.deb /tmp/pcre2.deb /tmp/tar.deb /tmp/dash.deb && rm -rf /tmp/runtime-debs && ldconfig && rm -f /tmp/pcre2.deb /tmp/tar.deb /tmp/dash.deb
 
 # Copy standalone output (much smaller than node_modules - only runtime dependencies)
 COPY --from=builder /app/.next/standalone ./

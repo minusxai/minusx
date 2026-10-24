@@ -6,6 +6,11 @@ const path = require('node:path');
 for (const [name, version] of [['libpcre2-8-0', '10.49-1+runtime1'], ['tar', '1.35+fedora10-1+runtime1'], ['dash', '0.5.12+libcfnmatch-1+runtime1'], ['coreutils', '9.12-1+runtime1'], ['libtinfo6', '6.6-1+runtime1'], ['ncurses-bin', '6.6-1+runtime1'], ['ncurses-base', '6.6-1+runtime1']]) {
   assert.equal(execFileSync('dpkg-query', ['-W', '-f=${Version}', name], { encoding: 'utf8' }), version, name);
 }
+for (const name of ['coreutils', 'libtinfo6', 'ncurses-bin', 'ncurses-base']) {
+  const receipt = JSON.parse(fs.readFileSync('/usr/share/doc/' + name + '/runtime-source.json', 'utf8'));
+  assert.match(receipt.archive.sha256, /^[a-f0-9]{64}$/);
+  assert.ok(receipt.replaced.length > 0, name + ' source receipt');
+}
 assert.equal(execFileSync('grep', ['-P', '^native[0-9]+$'], { input: 'native42\n', encoding: 'utf8' }).trim(), 'native42');
 execFileSync('dash', ['-c', 'set -eu; value=alpha; case "$value" in a*[!0-9]) ;; *) exit 1;; esac; f() { printf "%s" "$1"; }; test "$(f quoted)" = quoted; test "$(printf "%s\\n" pipeline | sed s/line//)" = pipe'], { timeout: 5000 });
 assert.equal(execFileSync('dash', ['-c', String.raw`printf '\u20ac'`], { encoding: 'utf8' }), String.raw`\u20ac`);

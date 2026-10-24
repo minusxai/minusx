@@ -1,5 +1,8 @@
 """Preserve installed interfaces, replace upstream payloads, and derive package ABI."""
 import json
+import hashlib
+import os
+import tempfile
 import re
 from pathlib import Path
 import shutil
@@ -55,9 +58,26 @@ for package in packages:
         if data and name.startswith('/usr/lib/terminfo/'):
             candidate = stage / 'usr/share/terminfo' / name.removeprefix('/usr/lib/terminfo/')
         if binary or data:
+            derivation = {}
+            if binary and not (candidate.is_file() or candidate.is_symlink()) and src.is_symlink():
+                rebuilt_target = stage / normalized(str(src.resolve())).lstrip('/')
+                assert rebuilt_target.is_file(), f'No rebuilt target for installed alias {original}'
+                copy(src, dest)
+                replaced.append({'installed': original, 'retained_alias': os.readlink(src), 'rebuilt_target': str(rebuilt_target)})
+                continue
+            if data and '/terminfo/' in name and not (candidate.is_file() or candidate.is_symlink()):
+                # Debian carries terminal definitions not shipped in the upstream database.
+                # Reconstruct the exact installed entry and compile it using the rebuilt tic.
+                definition = subprocess.check_output(['/usr/bin/infocmp', '-x', '-I', '-A', str(src.parent.parent), src.name])
+                derivation = {'method': 'Installed Debian entry reconstructed by stock infocmp and recompiled by upstream tic', 'original_sha256': hashlib.sha256(src.read_bytes()).hexdigest(), 'definition_sha256': hashlib.sha256(definition).hexdigest()}
+                with tempfile.TemporaryDirectory() as temporary:
+                    entry = Path(temporary) / 'entry.src'
+                    entry.write_bytes(definition)
+                    env = dict(os.environ, LD_LIBRARY_PATH=str(stage / 'usr/lib' / triplet))
+                    subprocess.run([str(stage / 'usr/bin/tic'), '-x', '-o', str(stage / 'usr/share/terminfo'), str(entry)], env=env, check=True)
             assert candidate.is_file() or candidate.is_symlink(), f'No upstream replacement for {original}'
             copy(candidate, dest)
-            replaced.append({'installed': original, 'upstream': str(candidate)})
+            replaced.append({'installed': original, 'upstream': str(candidate), **derivation})
         else:
             copy(src, dest)
     if package in ('libtinfo6', 'libncursesw6'):
