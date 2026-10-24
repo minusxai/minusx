@@ -188,6 +188,10 @@
     "tsx": {
       "esbuild": "0.28.1"
     },
-    "eslint-plugin-react-hooks": "7.0.1"
+    "eslint-plugin-react-hooks": "7.0.1",
+    "monaco-editor": {
+      "dompurify": "3.4.17"
+    },
+    "happy-dom": "21.0.4"
   }
 }
