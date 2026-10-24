@@ -10,8 +10,8 @@ mode, stage_arg, out_arg = sys.argv[1:]
 stage, out = Path(stage_arg), Path(out_arg)
 triplet = subprocess.check_output(['dpkg-architecture', '-qDEB_HOST_MULTIARCH'], text=True).strip()
 arch = subprocess.check_output(['dpkg', '--print-architecture'], text=True).strip()
-version = '9.12-1+runtime1' if mode == 'coreutils' else '6.6-1+runtime1'
-packages = ['coreutils'] if mode == 'coreutils' else ['libtinfo6', 'ncurses-bin', 'ncurses-base']
+version = {'coreutils': '9.12-1+runtime1', 'ncurses': '6.6-1+runtime1', 'dash': '0.5.12+libcfnmatch-1+runtime1'}[mode]
+packages = ['libtinfo6', 'ncurses-bin', 'ncurses-base'] if mode == 'ncurses' else [mode]
 if mode == 'ncurses' and subprocess.run(['dpkg-query', '-W', '-f=${db:Status-Status}', 'libncursesw6'], capture_output=True, text=True).stdout == 'installed':
     packages.append('libncursesw6')
 
@@ -75,20 +75,27 @@ for package in packages:
                 replaced.append({'installed': str(old), 'upstream': str(library)})
     doc = root / 'usr/share/doc' / package
     doc.mkdir(parents=True, exist_ok=True)
-    license_file = Path('/corebuild/COPYING' if mode == 'coreutils' else '/cursesbuild/COPYING')
+    license_file = Path({'coreutils': '/corebuild/COPYING', 'ncurses': '/cursesbuild/COPYING', 'dash': '/dashbuild/COPYING'}[mode])
     copy(license_file, doc / 'COPYING.upstream')
-    (doc / 'runtime-source.json').write_text(json.dumps({'source': mode, 'version': version, 'replaced': replaced}, indent=2) + '\n')
+    source_receipt = {
+        'coreutils': {'url': 'https://ftp.gnu.org/gnu/coreutils/coreutils-9.12.tar.xz', 'sha256': 'a480198559733e9b3da999e90543ac6f888a2caa544d8d664c5a1f17e528e210'},
+        'ncurses': {'url': 'https://invisible-island.net/archives/ncurses/ncurses-6.6.tar.gz', 'sha256': '355b4cbbed880b0381a04c46617b7656e362585d52e9cf84a67e2009b749ff11'},
+        'dash': {'url': 'https://git.kernel.org/pub/scm/utils/dash/dash.git/snapshot/dash-0.5.12.tar.gz', 'sha256': '0d632f6b945058d84809cac7805326775bd60cb4a316907d0bd4228ff7107154', 'configuration': '--enable-fnmatch'},
+    }[mode]
+    (doc / 'runtime-source.json').write_text(json.dumps({'source': mode, 'version': version, 'archive': source_receipt, 'replaced': replaced}, indent=2) + '\n')
     roots[package] = root
 
 # Give dpkg-shlibdeps the exact replacement libraries and their honest package versions.
 local_shlibs = Path('/tmp/runtime-shlibs')
-local_shlibs.write_text(f'libtinfo 6 libtinfo6 (>= {version})\nlibtic 6 libtinfo6 (>= {version})\n' if mode == 'ncurses' else '')
+local_shlibs.write_text(''.join(f'{family} 6 {package} (>= {version})\n' for family, package in [('libtinfo', 'libtinfo6'), ('libtic', 'libtinfo6'), ('libncursesw', 'libncursesw6'), ('libpanelw', 'libncursesw6'), ('libmenuw', 'libncursesw6'), ('libformw', 'libncursesw6')]) if mode == 'ncurses' else '')
 Path('debian').mkdir(exist_ok=True)
 Path('debian/control').write_text('Source: ' + mode + '\nMaintainer: Runtime Maintainers <maintainers@example.invalid>\n\n' + '\n'.join('Package: ' + p + '\nArchitecture: any\nDescription: upstream runtime\n' for p in packages))
 for package, root in roots.items():
     elf = [p for p in root.rglob('*') if p.is_file() and not p.is_symlink() and p.open('rb').read(4) == b'\x7fELF']
     deps = ''
     if elf:
+        for binary in elf:
+            subprocess.run(['strip', '--strip-unneeded', str(binary)], check=True)
         command = ['dpkg-shlibdeps', '-O', '-x' + package]
         if mode == 'ncurses':
             command += ['-l' + str(stage / 'usr/lib' / triplet), '-L' + str(local_shlibs)]
@@ -112,8 +119,9 @@ for package, root in roots.items():
         original_deps = re.sub(r'(?<![A-Za-z0-9+.-])' + re.escape(rebuilt) + r'\s*\([^)]*\)', rebuilt + ' (>= ' + version + ')', original_deps)
     combined = list(dict.fromkeys(part.strip() for part in (original_deps + ',' + deps).split(',') if part.strip()))
     if combined: fields['Depends'] = ', '.join(combined)
-    if package == 'libtinfo6':
-        (control / 'shlibs').write_text(f'libtinfo 6 libtinfo6 (>= {version})\nlibtic 6 libtinfo6 (>= {version})\n')
+    if package in ('libtinfo6', 'libncursesw6'):
+        family_names = ('libtinfo', 'libtic') if package == 'libtinfo6' else families
+        (control / 'shlibs').write_text(''.join(f'{family} 6 {package} (>= {version})\n' for family in family_names))
     for suffix in ('preinst', 'postinst', 'prerm', 'postrm', 'triggers', 'conffiles'):
         candidates = [Path('/var/lib/dpkg/info') / (package + '.' + suffix), Path('/var/lib/dpkg/info') / (package + ':' + arch + '.' + suffix)]
         present = next((p for p in candidates if p.is_file()), None)

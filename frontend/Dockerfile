@@ -57,7 +57,7 @@ RUN original_defaults="$(tar --show-defaults)" && \
 # Run upstream tests without root so privileged-xattr checks correctly detect unavailable capabilities.
 RUN chown -R nobody:nogroup /tarbuild && runuser -u nobody -- make check
 RUN mkdir -p /tarpkg/DEBIAN /tarpkg/usr/bin /tarpkg/usr/sbin /tarpkg/usr/share/doc/tar /out && \
-    dpkg-query -L tar | while IFS= read -r entry; do if test -f "$entry" || test -L "$entry"; then cp -a --parents "$entry" /tarpkg; fi; done && \
+    dpkg-query -L tar | while IFS= read -r entry; do if test -f "$entry" || test -L "$entry"; then normalized="$entry"; case "$entry" in /bin/*|/sbin/*|/lib/*|/lib64/*) normalized="/usr$entry";; esac; mkdir -p "$(dirname "/tarpkg$normalized")"; cp -a "$entry" "/tarpkg$normalized"; fi; done && \
     for control in preinst postinst prerm postrm triggers conffiles; do original="$(dpkg-query --control-path tar "$control" 2>/dev/null || true)"; if test -n "$original"; then cp -a "$original" /tarpkg/DEBIAN/"$control"; fi; done && \
     cp src/tar /tarpkg/usr/bin/tar && cp rmt/rmt /tarpkg/usr/sbin/rmt-tar && cp COPYING /tarpkg/usr/share/doc/tar/COPYING.upstream && cp -a /patches /tarpkg/usr/share/doc/tar/patches && \
     mkdir -p debian && printf 'Source: tar\nMaintainer: Runtime Maintainers <maintainers@example.invalid>\n\nPackage: tar\nArchitecture: any\nDescription: GNU tar runtime\n' > debian/control && \
@@ -73,8 +73,8 @@ WORKDIR /shellbuild
 RUN autoreconf -fi && eval "$(dpkg-buildflags --export=sh)" && ./configure --prefix=/usr --enable-fnmatch && make -j2 && nm -D src/dash | grep -w fnmatch
 RUN src/dash -c 'set -eu; value=alpha; case "$value" in a*[!0-9]) ;; *) exit 1;; esac; f() { printf "%s" "$1"; }; test "$(f quoted)" = quoted; test "$(printf "%s\n" pipeline | sed s/line//)" = pipe; test "$(printf "\\u20ac")" = "\u20ac"; d=$(mktemp -d); cd "$d"; touch alpha.txt beta.txt; set -- *.txt; test "$#" = 2; test "$1" = alpha.txt'
 RUN timeout 5 src/dash -c 'value=$(printf "%050000d" 0 | tr 0 .); case "$value" in *.*.*.*.*.tar.gz) exit 1;; *) printf "libc matcher stress passed\n";; esac'
-RUN mkdir -p /shellpkg/DEBIAN /shellpkg/usr/bin /out && \
-    dpkg-query -L dash | while IFS= read -r entry; do if test -f "$entry" || test -L "$entry"; then cp -a --parents "$entry" /shellpkg; fi; done && \
+RUN mkdir -p /shellpkg/DEBIAN /shellpkg/usr/bin /shellpkg/usr/share/doc/dash /out && \
+    dpkg-query -L dash | while IFS= read -r entry; do if test -f "$entry" || test -L "$entry"; then normalized="$entry"; case "$entry" in /bin/*|/sbin/*|/lib/*|/lib64/*) normalized="/usr$entry";; esac; mkdir -p "$(dirname "/shellpkg$normalized")"; cp -a "$entry" "/shellpkg$normalized"; fi; done && \
     for control in preinst postinst prerm postrm triggers conffiles; do original="$(dpkg-query --control-path dash "$control" 2>/dev/null || true)"; if test -n "$original"; then cp -a "$original" /shellpkg/DEBIAN/"$control"; fi; done && \
     cp src/dash /shellpkg/usr/bin/dash && cp COPYING /shellpkg/usr/share/doc/dash/COPYING.upstream && \
     mkdir -p debian && printf 'Source: dash\nMaintainer: Runtime Maintainers <maintainers@example.invalid>\n\nPackage: dash\nArchitecture: any\nDescription: POSIX shell with libc matcher\n' > debian/control && \

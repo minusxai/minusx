@@ -32,6 +32,8 @@ elif mode == 'ncurses':
         assert result.returncode == 0, result.stderr
         env = dict(os.environ, TERMINFO=str(database), TERM='runtimefixture')
         result = run(['infocmp', '-i', 'runtimefixture'], env=env)
+        assert result.returncode == 0 and b'is1:' in result.stdout and b'is2:' in result.stdout, result.stderr
+        result = run(['infocmp', '-I', 'runtimefixture'], env=env)
         assert result.returncode == 0 and b'runtimefixture' in result.stdout, result.stderr
         result = run(['tput', 'cols'], env=env)
         assert result.returncode == 0 and result.stdout.strip() == b'80', result
