@@ -17,7 +17,7 @@ RUN for version in 0.28.1 0.28.2; do \
     done
 
 # ===== BUILDER STAGE ===== #
-FROM node:22.23.4-slim AS base
+FROM node:22.23.4-trixie-slim@sha256:8eb619e402eaede1748a3c8173bffab391592812e85136452f781741c7242ddf AS base
 COPY scripts/patch-npm.mjs /tmp/patch-npm.mjs
 RUN npm install --global --no-audit --no-fund npm@12.2.1 \
     && node /tmp/patch-npm.mjs && npm cache clean --force
