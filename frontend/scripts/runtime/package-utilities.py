@@ -69,14 +69,35 @@ for package in packages:
                 # Debian carries terminal definitions not shipped in the upstream database.
                 # Reconstruct the exact installed entry and compile it using the rebuilt tic.
                 definition = subprocess.check_output(['/usr/bin/infocmp', '-x', '-I', '-A', str(src.parent.parent), src.name])
-                derivation = {'method': 'Installed Debian entry reconstructed by stock infocmp and recompiled by upstream tic', 'original_sha256': hashlib.sha256(src.read_bytes()).hexdigest(), 'definition_sha256': hashlib.sha256(definition).hexdigest()}
+                # Compiled Debian database aliases can be absent from infocmp's
+                # canonical header. Preserve the exact installed lookup name.
+                header = re.search(rb'(?m)^([^#\s][^,\n]*),', definition)
+                assert header, f'No reconstructed terminal header for {original}'
+                names = header.group(1).split(b'|')
+                lookup = src.name.encode()
+                if lookup not in names:
+                    names.insert(max(1, len(names) - 1), lookup)
+                    definition = definition[:header.start(1)] + b'|'.join(names) + definition[header.end(1):]
+                derivation = {'method': 'Installed Debian entry reconstructed by stock infocmp and recompiled by upstream tic', 'installed_lookup_name': src.name, 'original_sha256': hashlib.sha256(src.read_bytes()).hexdigest(), 'definition_sha256': hashlib.sha256(definition).hexdigest()}
                 with tempfile.TemporaryDirectory() as temporary:
                     entry = Path(temporary) / 'entry.src'
                     entry.write_bytes(definition)
                     env = dict(os.environ, LD_LIBRARY_PATH=str(stage / 'usr/lib' / triplet))
                     subprocess.run([str(stage / 'usr/bin/tic'), '-x', '-o', str(stage / 'usr/share/terminfo'), str(entry)], env=env, check=True)
             assert candidate.is_file() or candidate.is_symlink(), f'No upstream replacement for {original}'
-            copy(candidate, dest)
+            if data and candidate.is_symlink():
+                # The installed subset may omit upstream's canonical filename.
+                # Materialize identical compiled data for the existing alias so
+                # it never points at an entry absent from the runtime package.
+                compiled = candidate.resolve()
+                assert compiled.is_relative_to(stage.resolve()) and compiled.is_file(), candidate
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                if dest.exists() or dest.is_symlink():
+                    dest.unlink()
+                shutil.copy2(compiled, dest)
+                derivation['compiled_alias_materialized'] = hashlib.sha256(compiled.read_bytes()).hexdigest()
+            else:
+                copy(candidate, dest)
             replaced.append({'installed': original, 'upstream': str(candidate), **derivation})
         else:
             copy(src, dest)
