@@ -22,6 +22,72 @@ COPY scripts/patch-npm.mjs /tmp/patch-npm.mjs
 RUN npm install --global --no-audit --no-fund npm@12.2.1 \
     && node /tmp/patch-npm.mjs && npm cache clean --force
 
+FROM base AS pcre2
+ENV DEB_BUILD_MAINT_OPTIONS=hardening=+all
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends build-essential pkg-config && rm -rf /var/lib/apt/lists/*
+ADD --checksum=sha256:929f0b20e62879252a15886b06c89f1edef61a363cbd5826fb041080a5e557ae https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.49/pcre2-10.49.tar.gz /tmp/pcre2.tar.gz
+RUN mkdir /build && tar -xzf /tmp/pcre2.tar.gz --strip-components=1 -C /build
+WORKDIR /build
+RUN eval "$(dpkg-buildflags --export=sh)" && ./configure --prefix=/usr --libdir=/usr/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH) --enable-jit --disable-static && make -j2 && make check && make DESTDIR=/stage install
+RUN mkdir -p /pkg/DEBIAN /pkg/usr/share/doc/libpcre2-8-0 /pkg/usr/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH) /out && \
+    cp -a /stage/usr/lib/*/libpcre2-8.so.* /pkg/usr/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH)/ && \
+    cp LICENCE.md /pkg/usr/share/doc/libpcre2-8-0/copyright && \
+    for control in preinst postinst prerm postrm triggers conffiles; do original="$(dpkg-query --control-path libpcre2-8-0 "$control" 2>/dev/null || true)"; if test -n "$original"; then cp -a "$original" /pkg/DEBIAN/"$control"; fi; done && \
+    mkdir -p debian && printf 'Source: pcre2\nMaintainer: Runtime Maintainers <maintainers@example.invalid>\n\nPackage: libpcre2-8-0\nArchitecture: any\nDescription: PCRE2 runtime\n' > debian/control && \
+    dependencies="$(dpkg-shlibdeps -O -e$(find /pkg/usr/lib -type f -name 'libpcre2-8.so.*') | sed -n 's/^shlibs:Depends=//p')" && test -n "$dependencies" && \
+    original_dependencies="$(dpkg-query -W -f='${Depends}' libpcre2-8-0)" && if test -n "$original_dependencies"; then dependencies="$original_dependencies, $dependencies"; fi && \
+    printf 'Package: libpcre2-8-0\nSource: pcre2\nVersion: 10.49-1+runtime1\nArchitecture: %s\nMulti-Arch: same\nSection: libs\nPriority: optional\nMaintainer: Runtime Maintainers <maintainers@example.invalid>\nDepends: %s\nDescription: PCRE2 8-bit runtime built from verified upstream 10.49\n' "$(dpkg --print-architecture)" "$dependencies" > /pkg/DEBIAN/control && \
+    original_predepends="$(dpkg-query -W -f='${Pre-Depends}' libpcre2-8-0)" && if test -n "$original_predepends"; then printf 'Pre-Depends: %s\n' "$original_predepends" >> /pkg/DEBIAN/control; fi && \
+    dpkg-deb --build --root-owner-group /pkg /out/pcre2.deb
+
+FROM pcre2 AS archive
+RUN apt-get update && apt-get install -y --no-install-recommends autoconf automake gettext texinfo libacl1-dev libselinux1-dev attr acl xz-utils && rm -rf /var/lib/apt/lists/*
+ADD --checksum=sha256:4d62ff37342ec7aed748535323930c7cf94acf71c3591882b26a7ea50f3edc16 https://ftp.gnu.org/gnu/tar/tar-1.35.tar.xz /tmp/tar.tar.xz
+COPY scripts/tar-patches /patches
+RUN cd /patches && sha256sum -c SHA256SUMS
+RUN mkdir /tarbuild && tar -xJf /tmp/tar.tar.xz --strip-components=1 -C /tarbuild
+WORKDIR /tarbuild
+RUN for patchfile in /patches/*.patch; do patch --batch -p1 < "$patchfile"; done && autoreconf -v
+RUN original_defaults="$(tar --show-defaults)" && \
+    original_rmt="$(printf '%s\n' "$original_defaults" | sed -n 's/.*--rmt-command=\([^ ]*\).*/\1/p')" && \
+    original_rsh="$(printf '%s\n' "$original_defaults" | sed -n 's/.*--rsh-command=\([^ ]*\).*/\1/p')" && \
+    test -n "$original_rmt" && test -n "$original_rsh" && \
+    eval "$(dpkg-buildflags --export=sh)" && FORCE_UNSAFE_CONFIGURE=1 ./configure --prefix=/usr --with-lzma='xz --format=lzma' DEFAULT_RMT_DIR="$(dirname "$original_rmt")" RSH="$original_rsh" && make -j2 && \
+    src/tar --show-defaults | grep -F -- "--rmt-command=$original_rmt" && src/tar --show-defaults | grep -F -- "--rsh-command=$original_rsh"
+# Run upstream tests without root so privileged-xattr checks correctly detect unavailable capabilities.
+RUN chown -R nobody:nogroup /tarbuild && runuser -u nobody -- make check
+RUN mkdir -p /tarpkg/DEBIAN /tarpkg/usr/bin /tarpkg/usr/sbin /tarpkg/usr/share/doc/tar /out && \
+    dpkg-query -L tar | while IFS= read -r entry; do if test -f "$entry" || test -L "$entry"; then cp -a --parents "$entry" /tarpkg; fi; done && \
+    for control in preinst postinst prerm postrm triggers conffiles; do original="$(dpkg-query --control-path tar "$control" 2>/dev/null || true)"; if test -n "$original"; then cp -a "$original" /tarpkg/DEBIAN/"$control"; fi; done && \
+    cp src/tar /tarpkg/usr/bin/tar && cp rmt/rmt /tarpkg/usr/sbin/rmt-tar && cp COPYING /tarpkg/usr/share/doc/tar/COPYING.upstream && cp -a /patches /tarpkg/usr/share/doc/tar/patches && \
+    mkdir -p debian && printf 'Source: tar\nMaintainer: Runtime Maintainers <maintainers@example.invalid>\n\nPackage: tar\nArchitecture: any\nDescription: GNU tar runtime\n' > debian/control && \
+    dependencies="$(dpkg-shlibdeps -O -e/tarpkg/usr/bin/tar -e/tarpkg/usr/sbin/rmt-tar | sed -n 's/^shlibs:Depends=//p')" && test -n "$dependencies" && \
+    original_dependencies="$(dpkg-query -W -f='${Depends}' tar)" && if test -n "$original_dependencies"; then dependencies="$original_dependencies, $dependencies"; fi && \
+    printf 'Package: tar\nSource: tar\nVersion: 1.35+fedora10-1+runtime1\nArchitecture: %s\nEssential: yes\nSection: utils\nPriority: required\nMaintainer: Runtime Maintainers <maintainers@example.invalid>\nDepends: %s\nDescription: GNU tar with verified Fedora 1.35-10 security backports\n' "$(dpkg --print-architecture)" "$dependencies" > /tarpkg/DEBIAN/control && \
+    original_predepends="$(dpkg-query -W -f='${Pre-Depends}' tar)" && if test -n "$original_predepends"; then printf 'Pre-Depends: %s\n' "$original_predepends" >> /tarpkg/DEBIAN/control; fi && dpkg-deb --build --root-owner-group /tarpkg /out/tar.deb
+
+FROM archive AS shell
+ADD --checksum=sha256:0d632f6b945058d84809cac7805326775bd60cb4a316907d0bd4228ff7107154 https://git.kernel.org/pub/scm/utils/dash/dash.git/snapshot/dash-0.5.12.tar.gz /tmp/dash.tar.gz
+RUN mkdir /shellbuild && tar -xzf /tmp/dash.tar.gz --strip-components=1 -C /shellbuild
+WORKDIR /shellbuild
+RUN autoreconf -fi && eval "$(dpkg-buildflags --export=sh)" && ./configure --prefix=/usr --enable-fnmatch && make -j2 && nm -D src/dash | grep -w fnmatch
+RUN src/dash -c 'set -eu; value=alpha; case "$value" in a*[!0-9]) ;; *) exit 1;; esac; f() { printf "%s" "$1"; }; test "$(f quoted)" = quoted; test "$(printf "%s\n" pipeline | sed s/line//)" = pipe; test "$(printf "\\u20ac")" = "\u20ac"; d=$(mktemp -d); cd "$d"; touch alpha.txt beta.txt; set -- *.txt; test "$#" = 2; test "$1" = alpha.txt'
+RUN timeout 5 src/dash -c 'value=$(printf "%050000d" 0 | tr 0 .); case "$value" in *.*.*.*.*.tar.gz) exit 1;; *) printf "libc matcher stress passed\n";; esac'
+RUN mkdir -p /shellpkg/DEBIAN /shellpkg/usr/bin /out && \
+    dpkg-query -L dash | while IFS= read -r entry; do if test -f "$entry" || test -L "$entry"; then cp -a --parents "$entry" /shellpkg; fi; done && \
+    for control in preinst postinst prerm postrm triggers conffiles; do original="$(dpkg-query --control-path dash "$control" 2>/dev/null || true)"; if test -n "$original"; then cp -a "$original" /shellpkg/DEBIAN/"$control"; fi; done && \
+    cp src/dash /shellpkg/usr/bin/dash && cp COPYING /shellpkg/usr/share/doc/dash/COPYING.upstream && \
+    mkdir -p debian && printf 'Source: dash\nMaintainer: Runtime Maintainers <maintainers@example.invalid>\n\nPackage: dash\nArchitecture: any\nDescription: POSIX shell with libc matcher\n' > debian/control && \
+    dependencies="$(dpkg-shlibdeps -O -e/shellpkg/usr/bin/dash | sed -n 's/^shlibs:Depends=//p')" && test -n "$dependencies" && \
+    original_dependencies="$(dpkg-query -W -f='${Depends}' dash)" && if test -n "$original_dependencies"; then dependencies="$original_dependencies, $dependencies"; fi && \
+    printf 'Package: dash\nSource: dash\nVersion: 0.5.12+libcfnmatch-1+runtime1\nArchitecture: %s\nEssential: yes\nSection: shells\nPriority: required\nMaintainer: Runtime Maintainers <maintainers@example.invalid>\nDepends: %s\nDescription: Upstream dash 0.5.12 with libc fnmatch enabled\n' "$(dpkg --print-architecture)" "$dependencies" > /shellpkg/DEBIAN/control && \
+    original_predepends="$(dpkg-query -W -f='${Pre-Depends}' dash)" && if test -n "$original_predepends"; then printf 'Pre-Depends: %s\n' "$original_predepends" >> /shellpkg/DEBIAN/control; fi && dpkg-deb --build --root-owner-group /shellpkg /out/dash.deb
+
+FROM shell AS utilities
+RUN apt-get update && apt-get install -y --no-install-recommends python3 curl ca-certificates locales perl libgmp-dev libattr1-dev libacl1-dev libselinux1-dev bison gperf && rm -rf /var/lib/apt/lists/*
+COPY scripts/runtime /runtime-build
+RUN sh /runtime-build/build-utilities.sh coreutils && sh /runtime-build/build-utilities.sh ncurses
+
 FROM base AS builder
 
 # Set working directory
@@ -102,6 +168,12 @@ RUN apt-get update && apt-get upgrade -y \
     curl \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+
+COPY --from=pcre2 /out/pcre2.deb /tmp/pcre2.deb
+COPY --from=archive /out/tar.deb /tmp/tar.deb
+COPY --from=shell /out/dash.deb /tmp/dash.deb
+COPY --from=utilities /out/coreutils.deb /out/libtinfo6.deb /out/ncurses-bin.deb /out/ncurses-base.deb /tmp/runtime-debs/
+RUN dpkg --path-include='/usr/share/doc/tar/*' --path-include='/usr/share/doc/dash/*' -i /tmp/runtime-debs/*.deb /tmp/pcre2.deb /tmp/tar.deb /tmp/dash.deb && rm -rf /tmp/runtime-debs && ldconfig && rm -f /tmp/pcre2.deb /tmp/tar.deb /tmp/dash.deb
 
 # Copy standalone output (much smaller than node_modules - only runtime dependencies)
 COPY --from=builder /app/.next/standalone ./

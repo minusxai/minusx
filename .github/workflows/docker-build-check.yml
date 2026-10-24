@@ -21,6 +21,9 @@ on:
       - 'frontend/scripts/patch-npm.mjs'
       - 'frontend/scripts/patch-esbuild.mjs'
       - 'frontend/scripts/check-runtime.cjs'
+      - 'frontend/scripts/check-system-runtime.cjs'
+      - 'frontend/scripts/tar-patches/**'
+      - 'frontend/scripts/runtime/**'
       - '.github/workflows/docker-build-check.yml'
 
 jobs:
@@ -56,6 +59,9 @@ jobs:
           -v "${{ github.workspace }}/frontend/scripts/check-runtime.cjs:/app/check-runtime.cjs:ro"
           app-validation /app/check-runtime.cjs
 
+      - name: Release intermediate build cache
+        run: docker builder prune --all --force
+
       - name: Record all image dependencies
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -80,7 +86,7 @@ jobs:
           import hashlib, json, os
           from pathlib import Path
           raw = json.loads(Path('image-scan.raw.json').read_text())
-          files = ['frontend/Dockerfile', 'frontend/package.json', 'frontend/package-lock.json', 'frontend/scripts/patch-npm.mjs', 'frontend/scripts/patch-esbuild.mjs', 'frontend/scripts/check-runtime.cjs']
+          files = ['frontend/Dockerfile', 'frontend/package.json', 'frontend/package-lock.json', 'frontend/scripts/patch-npm.mjs', 'frontend/scripts/patch-esbuild.mjs', 'frontend/scripts/check-runtime.cjs', 'frontend/scripts/check-system-runtime.cjs'] + [str(p) for p in sorted(Path('frontend/scripts/tar-patches').glob('*'))] + [str(p) for p in sorted(Path('frontend/scripts/runtime').glob('*'))]
           report = {
               'source_head': os.environ['SOURCE_HEAD'],
               'checkout_sha': os.environ['CHECKOUT_SHA'],
