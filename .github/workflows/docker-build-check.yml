@@ -55,3 +55,48 @@ jobs:
           docker run --rm --entrypoint node
           -v "${{ github.workspace }}/frontend/scripts/check-runtime.cjs:/app/check-runtime.cjs:ro"
           app-validation /app/check-runtime.cjs
+
+      - name: Record all image dependencies
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: 'v0.70.0'
+          image-ref: app-validation
+          scan-type: image
+          scanners: vuln
+          format: json
+          output: image-scan.raw.json
+          list-all-pkgs: 'true'
+          ignore-unfixed: 'false'
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          exit-code: '0'
+          timeout: 10m
+      - name: Prepare dependency report
+        working-directory: ${{ github.workspace }}
+        env:
+          SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          CHECKOUT_SHA: ${{ github.sha }}
+        run: |
+          python3 - <<'PY_REPORT'
+          import hashlib, json, os
+          from pathlib import Path
+          raw = json.loads(Path('image-scan.raw.json').read_text())
+          files = ['frontend/Dockerfile', 'frontend/package.json', 'frontend/package-lock.json', 'frontend/scripts/patch-npm.mjs', 'frontend/scripts/patch-esbuild.mjs', 'frontend/scripts/check-runtime.cjs']
+          report = {
+              'source_head': os.environ['SOURCE_HEAD'],
+              'checkout_sha': os.environ['CHECKOUT_SHA'],
+              'source_hashes': {p: hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in files},
+              'SchemaVersion': raw['SchemaVersion'],
+              'ArtifactName': 'app-validation',
+              'ArtifactType': raw.get('ArtifactType'),
+              'Metadata': {k: raw.get('Metadata', {}).get(k) for k in ('ImageID', 'DiffIDs', 'OS')},
+              'Results': raw.get('Results', []),
+              'coverage_limits': 'Reports recognized installed components. Stripped binaries and downloaded extensions may be absent; matching esbuild source/toolchain rebuilds and native runtime checks provide separate evidence.'
+          }
+          Path('image-report.json').write_text(json.dumps(report, indent=2) + '\n')
+          PY_REPORT
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image-dependencies
+          path: image-report.json
+          if-no-files-found: error
+          retention-days: 7
