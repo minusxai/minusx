@@ -193,5 +193,14 @@
       "dompurify": "3.4.17"
     },
     "happy-dom": "21.0.4"
+  },
+  "allowScripts": {
+    "@sentry/cli": true,
+    "better-sqlite3": true,
+    "esbuild": true,
+    "protobufjs": true,
+    "unrs-resolver": true,
+    "@google/genai": false,
+    "fsevents": false
   }
 }

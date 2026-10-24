@@ -2,7 +2,12 @@
 # Frontend Dockerfile for MinusX BI - Multi-stage build with standalone mode
 
 # ===== BUILDER STAGE ===== #
-FROM node:22.23.4-slim AS builder
+FROM node:22.23.4-slim AS base
+COPY scripts/patch-npm.mjs /tmp/patch-npm.mjs
+RUN npm install --global --no-audit --no-fund npm@12.2.1 \
+    && node /tmp/patch-npm.mjs && npm cache clean --force
+
+FROM base AS builder
 
 # Set working directory
 WORKDIR /app
@@ -61,7 +66,7 @@ RUN --mount=type=cache,target=/app/.next/cache \
 RUN npm run build:setup-cli
 
 # ===== RUNTIME STAGE ===== #
-FROM node:22.23.4-slim AS runner
+FROM base AS runner
 
 # Set working directory
 WORKDIR /app
@@ -73,7 +78,8 @@ ENV DB_TYPE=pglite
 ENV PGLITE_DATA_DIR=/app/data/pglite
 
 # Install curl and ca-certificates for downloading DuckDB files
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
@@ -105,8 +111,8 @@ COPY --from=builder /app/setup-cli ./setup-cli
 COPY --from=builder /app/patches ./patches
 # @aws/lambda-invoke-store: aws-sdk transitive that standalone tracing misses.
 # The setup-cli bundle keeps node_modules external, so it must resolve here.
-RUN npm install --ignore-scripts tsx "@tailwindcss/node@^4" "@tailwindcss/oxide@^4" "tailwindcss@^4" "@aws/lambda-invoke-store"
-RUN npx --yes patch-package --error-on-fail && rm -rf ./patches
+RUN npm install --ignore-scripts tsx@4.21.0 "@tailwindcss/node@4.2.1" "@tailwindcss/oxide@4.2.1" "tailwindcss@4.2.1" "@aws/lambda-invoke-store@0.2.4"
+RUN npx --yes patch-package@8.0.1 --error-on-fail && rm -rf ./patches
 RUN grep -q "MX PATCH" /app/node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js \
     || (echo "ERROR: pi-ai patch missing from runtime image" && exit 1)
 

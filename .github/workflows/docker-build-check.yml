@@ -17,6 +17,7 @@ on:
       - 'frontend/.npmrc'
       - 'frontend/next.config.ts'
       - 'frontend/scripts/copy-duckdb-wasm.mjs'
+      - 'frontend/scripts/patch-npm.mjs'
       - '.github/workflows/docker-build-check.yml'
 
 jobs:

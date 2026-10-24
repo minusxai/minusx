@@ -15,7 +15,7 @@ import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import type { NotebookContent, NotebookSqlCell, NotebookTextCell } from '@/lib/types';
 import { facetPreferredHeight } from '@/lib/viz/facet-layout';
 // @ts-expect-error Monaco does not publish declarations for its internal URI parser.
-import { URI } from 'monaco-editor/base/common/uri.js';
+import { URI } from 'monaco-editor/esm/vs/base/common/uri.js';
 
 // useQueryResult: return a fixed result whenever a (non-empty) query is run.
 // Tests that need a specific result shape (e.g. facet-height sizing) override `result`.

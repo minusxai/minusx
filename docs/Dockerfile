@@ -3,11 +3,14 @@
 
 # ===== BUILDER STAGE ===== #
 FROM node:22.23.4-slim AS builder
+COPY docs/scripts/patch-npm.mjs /tmp/patch-npm.mjs
+RUN npm install --global --no-audit --no-fund npm@12.2.1 \
+    && node /tmp/patch-npm.mjs && npm cache clean --force
 
 WORKDIR /app
 
 COPY docs/package*.json docs/.npmrc ./
-RUN rm -f package-lock.json && npm install
+RUN npm ci
 
 # Keep frontend/compatibility.json as the one shared compatibility contract.
 # Its destination preserves components/compatibility-tables.tsx's relative import.
@@ -18,7 +21,11 @@ RUN npm run build
 # ===== RUNTIME STAGE ===== #
 FROM node:22.23.4-alpine AS runner
 
-RUN npm install -g serve
+COPY docs/scripts/patch-npm.mjs /tmp/patch-npm.mjs
+RUN npm install --global --no-audit --no-fund npm@12.2.1 \
+    && node /tmp/patch-npm.mjs && npm cache clean --force
+RUN npm install -g serve@14.2.6 \
+    && npm install --omit=dev --ignore-scripts --prefix /usr/local/lib/node_modules/serve compression@1.8.2
 
 COPY --from=builder /app/out /app/out
 
