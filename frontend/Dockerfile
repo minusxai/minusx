@@ -28,6 +28,12 @@ RUN apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+FROM runtime-profile AS sqlitebuilder
+COPY scripts/sqlite /runtime-build/sqlite
+RUN dpkg-query -W -f='${binary:Package}\n' | sed 's/:.*//' | sort -u > /tmp/sqlite-runtime-package-names \
+    && SQLITE_RUNTIME_PACKAGE_LIST=/tmp/sqlite-runtime-package-names sh /runtime-build/sqlite/build.sh \
+    && rm -rf /build/sqlite
+
 FROM runtime-profile AS networkbuilder
 COPY scripts/network /runtime-build/network
 COPY scripts/curl-runtime-probe.c /runtime-build/curl-runtime-probe.c
@@ -37,11 +43,15 @@ RUN sh /runtime-build/network/build-network.sh && mkdir -p /out/test-tools && cc
     -lcurl -o /out/test-tools/curl-runtime-probe \
     && rm -rf /network-work
 
-FROM runtime-profile AS librarybuilder
+FROM runtime-profile AS library-source-proof
 COPY scripts/libraries /runtime-build/libraries
-RUN sh /runtime-build/libraries/build.sh && rm -rf /libraries-work
+RUN sh /runtime-build/libraries/build.sh
+
+FROM library-source-proof AS librarybuilder
+RUN rm -rf /libraries-work
 
 FROM scratch AS network-test-tools
+COPY --from=sqlitebuilder /out/ /sqlite/
 COPY --from=networkbuilder /out/ /network/
 COPY --from=librarybuilder /out/ /libraries/
 
@@ -239,8 +249,9 @@ RUN grep -q "MX PATCH" /app/node_modules/@earendil-works/pi-ai/dist/api/anthropi
 # Install only network packages captured in the original runtime profile.
 COPY --from=networkbuilder /out/*.deb /tmp/network-debs/
 COPY --from=librarybuilder /out/*.deb /tmp/library-debs/
-RUN dpkg --path-include='/usr/share/doc/runtime-network/*' --path-include='/usr/share/doc/runtime-libraries/*' -i /tmp/network-debs/*.deb /tmp/library-debs/*.deb \
-    && ldconfig && rm -rf /tmp/network-debs /tmp/library-debs \
+COPY --from=sqlitebuilder /out/*.deb /tmp/sqlite-debs/
+RUN dpkg --path-include='/usr/share/doc/runtime-network/*' --path-include='/usr/share/doc/runtime-libraries/*' -i /tmp/network-debs/*.deb /tmp/library-debs/*.deb /tmp/sqlite-debs/*.deb \
+    && ldconfig && rm -rf /tmp/network-debs /tmp/library-debs /tmp/sqlite-debs \
     && apt-get check \
     && { audit="$(dpkg --audit 2>&1)"; audit_status=$?; \
          if test "$audit_status" -ne 0 || test -n "$audit"; then printf '%s\n' "$audit"; exit 1; fi; }

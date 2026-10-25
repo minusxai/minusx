@@ -1,0 +1,18 @@
+{
+  "sqlite3_3.46.1-7+deb13u2.dsc": {
+    "url": "https://deb.debian.org/debian/pool/main/s/sqlite3/sqlite3_3.46.1-7+deb13u2.dsc",
+    "sha256": "46e1eec171e11108fc436e45309b635b601029726b6ffd3bf435bb474e511638"
+  },
+  "sqlite3_3.46.1.orig.tar.xz": {
+    "url": "https://deb.debian.org/debian/pool/main/s/sqlite3/sqlite3_3.46.1.orig.tar.xz",
+    "sha256": "d0cdd2ece271b29e7ce18095745d892517ee26d0f270065b3a25c2e9eb11639c"
+  },
+  "sqlite3_3.46.1.orig-www.tar.xz": {
+    "url": "https://deb.debian.org/debian/pool/main/s/sqlite3/sqlite3_3.46.1.orig-www.tar.xz",
+    "sha256": "648df41a8e532882b1905df45919aae4bafaf74c455f66bc86f1f52f45c8b8f0"
+  },
+  "sqlite3_3.46.1-7+deb13u2.debian.tar.xz": {
+    "url": "https://deb.debian.org/debian/pool/main/s/sqlite3/sqlite3_3.46.1-7+deb13u2.debian.tar.xz",
+    "sha256": "59d33bc436258603702bb051d645743ab03612b82f79e7c7d638c65127c21261"
+  }
+}

@@ -68,11 +68,40 @@ jobs:
           docker buildx build --target network-test-tools --platform linux/amd64
           --output type=local,dest=/tmp/network-test-tools frontend
 
+      - name: Check actual kernel keyring source coverage
+        run: |
+          docker buildx build --target library-source-proof --platform linux/amd64 --load --tag library-source-validation frontend
+          sh frontend/scripts/libraries/run-keyring-hosted.sh library-source-validation /runtime-build/libraries/run-keyring-source-proof.sh 2>&1 | tee /tmp/keyring-source-proof.log
+          docker image rm library-source-validation
+
+      - name: Retain actual kernel keyring proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-keyring-source-proof
+          path: /tmp/keyring-source-proof.log
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Check installed network runtime
         run: >-
           docker run --rm --entrypoint node
           --mount type=bind,source=/tmp/network-test-tools,target=/test-tools,readonly
           app-validation scripts/check-network-runtime.cjs /test-tools/network/test-tools/curl-runtime-probe /test-tools/libraries
+
+      - name: Check installed SQLite runtime
+        run: >-
+          docker run --rm --entrypoint sh
+          --mount type=bind,source=/tmp/network-test-tools/sqlite,target=/sqlite-proof,readonly
+          app-validation /sqlite-proof/verify-sqlite.sh /sqlite-proof
+
+      - name: Retain SQLite validation proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: sqlite-runtime-proof
+          path: /tmp/network-test-tools/sqlite/
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Retain rebuilt network packages
         uses: actions/upload-artifact@v4
@@ -111,7 +140,7 @@ jobs:
           import hashlib, json, os
           from pathlib import Path
           raw = json.loads(Path('image-scan.raw.json').read_text())
-          files = ['frontend/Dockerfile', 'frontend/package.json', 'frontend/package-lock.json', 'frontend/scripts/patch-npm.mjs', 'frontend/scripts/patch-esbuild.mjs', 'frontend/scripts/check-runtime.cjs', 'frontend/scripts/check-system-runtime.cjs'] + [str(p) for p in sorted(Path('frontend/scripts/tar-patches').glob('*'))] + [str(p) for p in sorted(Path('frontend/scripts/runtime').glob('*'))] + ['frontend/scripts/curl-runtime-probe.c', 'frontend/scripts/check-network-runtime.cjs'] + [str(p) for p in sorted(Path('frontend/scripts/network').rglob('*')) if p.is_file()] + [str(p) for p in sorted(Path('frontend/scripts/libraries').rglob('*')) if p.is_file()]
+          files = ['frontend/Dockerfile', 'frontend/package.json', 'frontend/package-lock.json', 'frontend/scripts/patch-npm.mjs', 'frontend/scripts/patch-esbuild.mjs', 'frontend/scripts/check-runtime.cjs', 'frontend/scripts/check-system-runtime.cjs'] + [str(p) for p in sorted(Path('frontend/scripts/tar-patches').glob('*'))] + [str(p) for p in sorted(Path('frontend/scripts/runtime').glob('*'))] + ['frontend/scripts/curl-runtime-probe.c', 'frontend/scripts/check-network-runtime.cjs'] + [str(p) for p in sorted(Path('frontend/scripts/network').rglob('*')) if p.is_file()] + [str(p) for p in sorted(Path('frontend/scripts/libraries').rglob('*')) if p.is_file()] + [str(p) for p in sorted(Path('frontend/scripts/sqlite').rglob('*')) if p.is_file()]
           report = {
               'source_head': os.environ['SOURCE_HEAD'],
               'checkout_sha': os.environ['CHECKOUT_SHA'],

@@ -1,0 +1,40 @@
+{
+  "base_source_version": "3.46.1-7+deb13u2",
+  "package_version": "3.46.1-7+deb13u2+runtime1",
+  "source_files": {
+    "sqlite3_3.46.1-7+deb13u2.dsc": {
+      "url": "https://deb.debian.org/debian/pool/main/s/sqlite3/sqlite3_3.46.1-7+deb13u2.dsc",
+      "sha256": "46e1eec171e11108fc436e45309b635b601029726b6ffd3bf435bb474e511638"
+    },
+    "sqlite3_3.46.1.orig.tar.xz": {
+      "url": "https://deb.debian.org/debian/pool/main/s/sqlite3/sqlite3_3.46.1.orig.tar.xz",
+      "sha256": "d0cdd2ece271b29e7ce18095745d892517ee26d0f270065b3a25c2e9eb11639c"
+    },
+    "sqlite3_3.46.1.orig-www.tar.xz": {
+      "url": "https://deb.debian.org/debian/pool/main/s/sqlite3/sqlite3_3.46.1.orig-www.tar.xz",
+      "sha256": "648df41a8e532882b1905df45919aae4bafaf74c455f66bc86f1f52f45c8b8f0"
+    },
+    "sqlite3_3.46.1-7+deb13u2.debian.tar.xz": {
+      "url": "https://deb.debian.org/debian/pool/main/s/sqlite3/sqlite3_3.46.1-7+deb13u2.debian.tar.xz",
+      "sha256": "59d33bc436258603702bb051d645743ab03612b82f79e7c7d638c65127c21261"
+    }
+  },
+  "upstream_fixes": {
+    "CVE-2026-50812": "https://sqlite.org/src/info/e807d4e3798efd532b3d78d1dfe513ed4fbd3cb793dd0ae5c30cae6031422b10",
+    "CVE-2026-50813": "https://sqlite.org/src/info/869a51ae84dfaaf824c872e4b3024f35eea7fa67bb584759a2d42ebf8404ef6e"
+  },
+  "prerequisites": {
+    "source": "https://raw.githubusercontent.com/sqlite/sqlite/c597ed79d1bd03f57198d10d1f431adda293cf2e/ext/session/sqlite3session.c",
+    "detail": "Bounded varint helper + three call sites and complete upstream record-buffer/table-header guards required by old 3.46 tree; exact upstream concat fixture otherwise returns NOMEM. No new public API."
+  },
+  "residuals": {
+    "CVE-2021-45346": "Disputed, upstream unfixed; no clearance from rebuild."
+  },
+  "files": {
+    "patches/50812.patch": "83e97ad344086d13c5c49ed6d95ac5419e97a4ef10a85f5c50d1169b04a0abd3",
+    "patches/50813-prerequisite.patch": "129795d0746c2c25c705c998082439e2adcd1e546f1293599b88ce16e3d5b659",
+    "patches/50813.patch": "d7ad64c509f0848e449bb25cdd0febcc59675a21b9c61ee594d9490496336773",
+    "patches/regression-50812.tcl": "7a83a245e1d96455307cc4583bfbf3a6d88268f12d559db459067b0f4aa05448",
+    "patches/regression-50813.tcl": "3cadeafffa8e06bc8d902c564535d3d4f46a58c624481146561fa0a92eb09ecb"
+  }
+}

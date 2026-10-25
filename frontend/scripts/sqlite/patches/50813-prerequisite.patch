@@ -1,0 +1,102 @@
+--- a/ext/session/sqlite3session.c
++++ b/ext/session/sqlite3session.c
+@@ -343,6 +343,21 @@
+   int ret = getVarint32(aBuf, *piVal);
+   *piVal = (*piVal & 0x7FFFFFFF);
+   return ret;
++}
++
++/*
++** Read a varint value from buffer aBuf[], size nBuf bytes, into *piVal.
++** Return the number of bytes read.
++*/
++static int sessionVarintGetSafe(const u8 *aBuf, int nBuf, int *piVal){
++  u8 aCopy[9];
++  const u8 *aRead = aBuf;
++  memset(aCopy, 0, sizeof(aCopy));
++  if( nBuf<sizeof(aCopy) ){
++    memcpy(aCopy, aBuf, nBuf);
++    aRead = aCopy;
++  }
++  return sessionVarintGet(aRead, piVal);
+ }
+ 
+ /* Load an unaligned and unsigned 32-bit integer */
+@@ -3474,7 +3489,8 @@
+       u8 *aVal = &pIn->aData[pIn->iNext];
+       if( eType==SQLITE_TEXT || eType==SQLITE_BLOB ){
+         int nByte;
+-        pIn->iNext += sessionVarintGet(aVal, &nByte);
++        int nRem = pIn->nData - pIn->iNext;
++        pIn->iNext += sessionVarintGetSafe(aVal, nRem, &nByte);
+         rc = sessionInputBuffer(pIn, nByte);
+         if( rc==SQLITE_OK ){
+           if( nByte<0 || nByte>pIn->nData-pIn->iNext ){
+@@ -3527,7 +3543,8 @@
+ 
+   rc = sessionInputBuffer(pIn, 9);
+   if( rc==SQLITE_OK ){
+-    nRead += sessionVarintGet(&pIn->aData[pIn->iNext + nRead], &nCol);
++    int nBuf = pIn->nData - pIn->iNext;
++    nRead += sessionVarintGetSafe(&pIn->aData[pIn->iNext], nBuf, &nCol);
+     /* The hard upper limit for the number of columns in an SQLite
+     ** database table is, according to sqliteLimit.h, 32676. So 
+     ** consider any table-header that purports to have more than 65536 
+@@ -3547,8 +3564,15 @@
+     while( (pIn->iNext + nRead)<pIn->nData && pIn->aData[pIn->iNext + nRead] ){
+       nRead++;
+     }
++
++    /* Break out of the loop if if the nul-terminator byte has been found.
++    ** Otherwise, read some more input data and keep seeking. If there is
++    ** no more input data, consider the changeset corrupt.  */
+     if( (pIn->iNext + nRead)<pIn->nData ) break;
+     rc = sessionInputBuffer(pIn, nRead + 100);
++    if( rc==SQLITE_OK && (pIn->iNext + nRead)>=pIn->nData ){
++      rc = SQLITE_CORRUPT_BKPT;
++    }
+   }
+   *pnByte = nRead+1;
+   return rc;
+@@ -3569,21 +3593,31 @@
+   int *pnByte                     /* OUT: Size of record in bytes */
+ ){
+   int rc = SQLITE_OK;
+-  int nByte = 0;
++  i64 nByte = 0;
+   int i;
+   for(i=0; rc==SQLITE_OK && i<nCol; i++){
+     int eType;
+     rc = sessionInputBuffer(pIn, nByte + 10);
+     if( rc==SQLITE_OK ){
+-      eType = pIn->aData[pIn->iNext + nByte++];
+-      if( eType==SQLITE_TEXT || eType==SQLITE_BLOB ){
+-        int n;
+-        nByte += sessionVarintGet(&pIn->aData[pIn->iNext+nByte], &n);
+-        nByte += n;
+-        rc = sessionInputBuffer(pIn, nByte);
+-      }else if( eType==SQLITE_INTEGER || eType==SQLITE_FLOAT ){
+-        nByte += 8;
+-      }
++      if( pIn->iNext+nByte>=pIn->nData ){
++        rc = SQLITE_CORRUPT_BKPT;
++      }else{
++        eType = pIn->aData[pIn->iNext + nByte++];
++        if( eType==SQLITE_TEXT || eType==SQLITE_BLOB ){
++          int n;
++          int nRem = pIn->nData - (pIn->iNext + nByte);
++          nByte += sessionVarintGetSafe(&pIn->aData[pIn->iNext+nByte], nRem,&n);
++          nByte += n;
++          rc = sessionInputBuffer(pIn, nByte);
++        }else if( eType==SQLITE_INTEGER || eType==SQLITE_FLOAT ){
++          nByte += 8;
++        }else if( eType!=0 && eType!=SQLITE_NULL ){
++          rc = SQLITE_CORRUPT_BKPT;
++        }
++      }
++    }
++    if( rc==SQLITE_OK && (pIn->iNext+nByte)>pIn->nData ){
++      rc = SQLITE_CORRUPT_BKPT;
+     }
+   }
+   *pnByte = nByte;

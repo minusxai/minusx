@@ -10,7 +10,8 @@
     "patches": [
       "krb5-cred.patch",
       "krb5-seal-library-only.patch",
-      "krb5-test-diagnostic.patch"
+      "krb5-test-diagnostic.patch",
+      "krb5-test-keyring-capability.patch"
     ]
   },
   "p11-kit": {
