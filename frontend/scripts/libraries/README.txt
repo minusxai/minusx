@@ -54,3 +54,5 @@ Do not suppress raw scanner source-version rows or claim blanket clearance.
 
 Staged public-API fixtures also run against assembled replacement package library
 payloads before export; final-image check remains a separate mandatory gate.
+
+Krb5 test diagnostic-only prerequisite: preserve the already decoded keyctl stderr in Debian Python3 harness instead of concatenating bytes to str. No capability branch/test-selection changes; unexpected errno remains a failure. Strictpatchdryrun0 and six independent extracted-method branch tests passed; hosted real stderr/kernel capability coverage remains pending.
