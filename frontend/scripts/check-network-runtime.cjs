@@ -11,9 +11,12 @@ const execFile = promisify(require('node:child_process').execFile);
   assert.equal((await run('dpkg-query', ['-W', '-f=${Version}', 'libcurl4t64'])).trim(), '8.23.0-1+runtime1');
   const installed = async name => {
     try { return (await run('dpkg-query', ['-W', '-f=${db:Status-Status}', name])).trim() === 'installed'; }
-    catch { return false; }
+    catch (error) { if (error.code !== 1) throw error; return false; }
   };
-  for (const name of ['libcurl3t64-gnutls', 'openssh-client', 'openssh-server', 'slapd', 'libsasl2-modules', 'nghttp2-proxy', 'krb5-kdc', 'krb5-admin-server', 'krb5-kdc-ldap']) {
+  for (const name of ['libgssapi-krb5-2', 'libk5crypto3', 'libkrb5-3', 'libkrb5support0', 'libp11-kit0']) {
+    assert.equal(await installed(name), true, 'Required original client library: ' + name);
+  }
+  for (const name of ['libcurl3t64-gnutls', 'openssh-client', 'openssh-server', 'slapd', 'libsasl2-modules', 'nghttp2-proxy', 'krb5-kdc', 'krb5-admin-server', 'krb5-kdc-ldap', 'libelf1t64', 'libfreetype6']) {
     assert.equal(await installed(name), false, 'Unexpected component in scoped runtime: ' + name);
   }
   const files = (await run('dpkg-query', ['-L', 'libsasl2-2', 'libsasl2-modules-db'])).split('\n');

@@ -18,8 +18,15 @@ export RUNTIME_PROFILE_TSV=/network-work/runtime-profile.tsv
 apt-get update
 apt-get install -y --no-install-recommends python3 dpkg-dev binutils
 python3 "$here/package-network.py" snapshot /network-work/baseline.json
+python3 - <<'PYBASE'
+import json
+b=json.load(open("/network-work/baseline.json"))
+for name,item in b.items():
+ if item.get("curl_version"):print("Frozen original curl CLI:\n"+item["curl_version"],flush=True)
+ if item.get("library_capabilities"):print("Frozen original "+name+": "+json.dumps(item["library_capabilities"],sort_keys=True),flush=True)
+PYBASE
 apt-get update
-apt-get install -y --no-install-recommends build-essential dpkg-dev pkg-config autoconf automake libtool patchelf python3 perl ca-certificates gnupg libssl-dev libgnutls28-dev libssh2-1-dev libkrb5-dev libldap2-dev libnghttp2-dev libnghttp3-dev libngtcp2-dev libngtcp2-crypto-gnutls-dev libpsl-dev libidn2-dev libbrotli-dev libzstd-dev zlib1g-dev libfido2-dev libedit-dev patch openssl
+apt-get install -y --no-install-recommends build-essential dpkg-dev pkg-config autoconf automake libtool patchelf python3 perl ca-certificates gnupg libssl-dev libgnutls28-dev libssh2-1-dev libkrb5-dev libldap2-dev libnghttp2-dev libnghttp3-dev libpsl-dev libidn2-dev libbrotli-dev libzstd-dev zlib1g-dev libfido2-dev libedit-dev patch openssl
 server_args=''
 if python3 -c 'import json,sys;sys.exit("openssh-server" not in json.load(open("/network-work/baseline.json")))';then
  apt-get install -y --no-install-recommends libpam0g-dev libwrap0-dev libselinux1-dev libaudit-dev libwtmpdb-dev libcrypt-dev
@@ -34,6 +41,15 @@ export GNUPGHOME=/network-work/gnupg
 gpg --batch --import curl-release-key.asc openssh-release-key.asc
 gpg --batch --verify curl-8.23.0.tar.xz.asc curl-8.23.0.tar.xz
 gpg --batch --verify openssh-10.6p1.tar.gz.asc openssh-10.6p1.tar.gz
+# Native OpenSSL-QUIC was removed in curl8.19. Use the maintained backend.
+# Keep its PIC static archives private to the build; retain the original TLS ABI.
+mkdir ngtcp2; tar -xf ngtcp2-1.25.0.tar.xz -C ngtcp2 --strip-components=1
+cd ngtcp2
+./configure --prefix=/network-work/quic --libdir=/network-work/quic/lib --enable-lib-only --enable-static --disable-shared --with-pic --enable-cryptotest --with-openssl --with-gnutls
+make -j"$jobs"
+make check
+make install
+cd /network-work
 for tls in openssl gnutls; do
  mkdir -p "$tls"; tar -xf curl-8.23.0.tar.xz -C "$tls" --strip-components=1
  cd "$tls"
@@ -43,16 +59,24 @@ for tls in openssl gnutls; do
 from pathlib import Path
 p=Path('configure');s=p.read_text();old='CURL_LIBCURL_VERSIONED_SYMBOLS_SONAME="4"';assert s.count(old)==1;s=s.replace(old,'CURL_LIBCURL_VERSIONED_SYMBOLS_SONAME="3"');p.write_text(s)
 PY
-  tls_args='--with-gnutls --without-openssl --with-ngtcp2 --with-nghttp3'
+  tls_args='--with-gnutls --without-openssl --with-ngtcp2=/network-work/quic --with-nghttp3'
  else
-  tls_args='--with-openssl --with-openssl-quic --with-nghttp3'
+  tls_args='--with-openssl --with-ngtcp2=/network-work/quic --with-nghttp3'
  fi
  # Match Debian's supported protocol/auth/resolver/compression feature set.
- ./configure --prefix=/usr --libdir="/usr/lib/$triplet" --disable-static --disable-symbol-hiding --enable-versioned-symbols --enable-threaded-resolver --with-lber-lib=lber --with-gssapi=/usr --with-nghttp2 --with-libssh2 --without-libssh --with-ca-path=/etc/ssl/certs --with-ca-bundle=/etc/ssl/certs/ca-certificates.crt $tls_args
+ PKG_CONFIG_PATH=/network-work/quic/lib/pkgconfig ./configure --prefix=/usr --libdir="/usr/lib/$triplet" --disable-static --disable-symbol-hiding --enable-versioned-symbols --enable-threaded-resolver --with-lber-lib=lber --with-gssapi=/usr --with-nghttp2 --with-libssh2 --without-libssh --with-ca-path=/etc/ssl/certs --with-ca-bundle=/etc/ssl/certs/ca-certificates.crt $tls_args
  make -j"$jobs"
  # Official ordinary HTTP GET regression only; no adversarial input reproductions.
  make test TFLAGS='-n 1'
  make DESTDIR="/network-work/stage-$tls" install
+ # Static ngtcp2 must not leak an unresolved shared dependency or build RPATH.
+ python3 - "$tls" "$triplet" <<'PYLINK'
+import pathlib,subprocess,sys
+lib=pathlib.Path('/network-work/stage-'+sys.argv[1]+'/usr/lib/'+sys.argv[2]+'/libcurl.so.4')
+dynamic=subprocess.check_output(['readelf','-d',str(lib)],text=True)
+assert 'Shared library: [libngtcp2' not in dynamic,dynamic
+assert '(RPATH)' not in dynamic and '(RUNPATH)' not in dynamic,dynamic
+PYLINK
  cd /network-work
 done
 # Preserve Debian GnuTLS library SONAME and install name without changing application code.

@@ -38,5 +38,11 @@
     "file": "openssh-release-key.asc",
     "sha256": "c4a6f4692c9b8e75ec096add049fe0314b3ceff9410321f1e85907cf7a864269",
     "size": 22720
+  },
+  {
+    "url": "https://github.com/ngtcp2/ngtcp2/releases/download/v1.25.0/ngtcp2-1.25.0.tar.xz",
+    "file": "ngtcp2-1.25.0.tar.xz",
+    "sha256": "2a34d2484ba17847a5d11965704e9dd0fac4c6d8efc75ffe1ec7de66d8c6b6fb",
+    "verification": "Official GitHub release asset SHA256 digest independently retrieved from vendor API; archive checksum verified before extraction."
   }
 ]

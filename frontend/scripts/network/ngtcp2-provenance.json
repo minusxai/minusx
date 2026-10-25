@@ -1,0 +1,53 @@
+{
+  "version": "1.25.0",
+  "release_url": "https://github.com/ngtcp2/ngtcp2/releases/tag/v1.25.0",
+  "api_url": "https://api.github.com/repos/ngtcp2/ngtcp2/releases/latest",
+  "archive": {
+    "url": "https://github.com/ngtcp2/ngtcp2/releases/download/v1.25.0/ngtcp2-1.25.0.tar.xz",
+    "file": "ngtcp2-1.25.0.tar.xz",
+    "sha256": "2a34d2484ba17847a5d11965704e9dd0fac4c6d8efc75ffe1ec7de66d8c6b6fb",
+    "verification": "Official GitHub release asset SHA256 digest independently retrieved from vendor API; archive checksum verified before extraction."
+  },
+  "vendor_asset": {
+    "url": "https://api.github.com/repos/ngtcp2/ngtcp2/releases/assets/490189407",
+    "id": 490189407,
+    "node_id": "RA_kwDOBa7jps4dN7Jf",
+    "name": "ngtcp2-1.25.0.tar.xz",
+    "label": "",
+    "uploader": {
+      "login": "github-actions[bot]",
+      "id": 41898282,
+      "node_id": "MDM6Qm90NDE4OTgyODI=",
+      "avatar_url": "https://avatars.githubusercontent.com/in/15368?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/github-actions%5Bbot%5D",
+      "html_url": "https://github.com/apps/github-actions",
+      "followers_url": "https://api.github.com/users/github-actions%5Bbot%5D/followers",
+      "following_url": "https://api.github.com/users/github-actions%5Bbot%5D/following{/other_user}",
+      "gists_url": "https://api.github.com/users/github-actions%5Bbot%5D/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/github-actions%5Bbot%5D/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/github-actions%5Bbot%5D/subscriptions",
+      "organizations_url": "https://api.github.com/users/github-actions%5Bbot%5D/orgs",
+      "repos_url": "https://api.github.com/users/github-actions%5Bbot%5D/repos",
+      "events_url": "https://api.github.com/users/github-actions%5Bbot%5D/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/github-actions%5Bbot%5D/received_events",
+      "type": "Bot",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "content_type": "application/json; charset=utf-8",
+    "state": "uploaded",
+    "size": 709136,
+    "digest": "sha256:2a34d2484ba17847a5d11965704e9dd0fac4c6d8efc75ffe1ec7de66d8c6b6fb",
+    "download_count": 207808,
+    "created_at": "2026-07-26T08:29:04Z",
+    "updated_at": "2026-07-26T08:29:05Z",
+    "browser_download_url": "https://github.com/ngtcp2/ngtcp2/releases/download/v1.25.0/ngtcp2-1.25.0.tar.xz"
+  },
+  "compatibility_sources": [
+    "https://curl.se/docs/http3.html",
+    "https://curl.se/dev/deprecate.html"
+  ],
+  "integration": "Static PIC libngtcp2 and TLS crypto archives embedded in each libcurl. OpenSSL remains runtime TLS backend for OpenSSL variant; GnuTLS remains backend for GnuTLS variant. No ngtcp2 runtime package, shared library, RPATH or loader override is shipped.",
+  "validation": "Linux build, upstream check, ABI/feature and final-image gates are required in consumer hosted CI; not run locally."
+}
