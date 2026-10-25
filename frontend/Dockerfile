@@ -240,7 +240,10 @@ RUN grep -q "MX PATCH" /app/node_modules/@earendil-works/pi-ai/dist/api/anthropi
 COPY --from=networkbuilder /out/*.deb /tmp/network-debs/
 COPY --from=librarybuilder /out/*.deb /tmp/library-debs/
 RUN dpkg --path-include='/usr/share/doc/runtime-network/*' --path-include='/usr/share/doc/runtime-libraries/*' -i /tmp/network-debs/*.deb /tmp/library-debs/*.deb \
-    && ldconfig && rm -rf /tmp/network-debs /tmp/library-debs
+    && ldconfig && rm -rf /tmp/network-debs /tmp/library-debs \
+    && apt-get check \
+    && { audit="$(dpkg --audit 2>&1)"; audit_status=$?; \
+         if test "$audit_status" -ne 0 || test -n "$audit"; then printf '%s\n' "$audit"; exit 1; fi; }
 
 # Create data directories (docker-compose volumes mount over these; standalone runs use them directly)
 RUN mkdir -p /app/data/pglite /app/data/analytics
