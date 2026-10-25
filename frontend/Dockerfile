@@ -74,8 +74,11 @@ RUN mkdir -p /pkg/DEBIAN /pkg/usr/share/doc/libpcre2-8-0 /pkg/usr/lib/$(dpkg-arc
     dpkg-deb --build --root-owner-group /pkg /out/pcre2.deb
 
 FROM pcre2 AS archive
-RUN apt-get update && apt-get install -y --no-install-recommends autoconf automake gettext texinfo libacl1-dev libselinux1-dev attr acl xz-utils && rm -rf /var/lib/apt/lists/*
-ADD --checksum=sha256:4d62ff37342ec7aed748535323930c7cf94acf71c3591882b26a7ea50f3edc16 https://ftp.gnu.org/gnu/tar/tar-1.35.tar.xz /tmp/tar.tar.xz
+RUN apt-get update && apt-get install -y --no-install-recommends autoconf automake gettext texinfo libacl1-dev libselinux1-dev attr acl xz-utils curl ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
+      --connect-timeout 30 --max-time 180 --retry 3 --retry-all-errors --retry-max-time 600 \
+      https://ftp.gnu.org/gnu/tar/tar-1.35.tar.xz -o /tmp/tar.tar.xz \
+    && printf '%s  %s\n' 4d62ff37342ec7aed748535323930c7cf94acf71c3591882b26a7ea50f3edc16 /tmp/tar.tar.xz | sha256sum --check
 COPY scripts/tar-patches /patches
 RUN cd /patches && sha256sum -c SHA256SUMS
 RUN mkdir /tarbuild && tar -xJf /tmp/tar.tar.xz --strip-components=1 -C /tarbuild
