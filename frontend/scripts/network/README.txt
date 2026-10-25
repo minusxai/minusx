@@ -116,3 +116,12 @@ in older server inventories; authenticated fixture exercises their actual paths.
 HTTP/3 correction: curl8.19 removed native OpenSSL-QUIC. Build official ngtcp2 1.25.0 as PIC static core/crypto archives, embed in libcurl using the corresponding original OpenSSL/GnuTLS backend. Pinned official release asset digest, provenance and license are retained in each curl package receipt. No ngtcp2 shared library/package or build RPATH ships. Upstream make check and final feature/protocol/ABI/TLS gates remain required. Linux build gates for this correction have NOT yet run. Frozen original curl capabilities are printed before build dependencies.
 
 Required ordinary HTTP3 transfer gate: check-http3.py launches official same-source osslserver/gtlsserver on disposable loopback UDP ports. Each staged TLS variant must negotiate HTTP3-only with a local trusted certificate, report HTTP version3 and return byte-exact data. Fixture-only nghttp3 1.18 is separately pinned/static; it is built after runtime curl and does not enter shipped libraries. Source crypto flags are fail-closed via Autoconf fatal option checking and required backend archive files. Linux fixture execution remains UNRUN locally.
+
+Builder prerequisite correction after representative dda source-auth failure:
+gpgv is explicitly installed (gnupg --no-install-recommends does not guarantee it).
+All source preparation/configuration/package-tool executables are admitted as a
+group before use. build-essential supplies compiler/make; autoconf+automake+m4+
+libtool supply regeneration; git/gnupg/gpgv provide source application/authentication;
+dpkg-dev/binutils provide package/ABI tools; essential coreutils/sed/awk/grep/tar
+provide shell utilities. The exact admission shell is tested against controlled
+all-present and missing git/gpgv inventories. Actual Linux retry remains unrun.

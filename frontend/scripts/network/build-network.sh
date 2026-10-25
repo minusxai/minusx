@@ -26,7 +26,14 @@ for name,item in b.items():
  if item.get("library_capabilities"):print("Frozen original "+name+": "+json.dumps(item["library_capabilities"],sort_keys=True),flush=True)
 PYBASE
 apt-get update
-apt-get install -y --no-install-recommends build-essential dpkg-dev git pkg-config autoconf automake libtool patchelf python3 perl ca-certificates gnupg libssl-dev libgnutls28-dev libssh2-1-dev libkrb5-dev libldap2-dev libnghttp2-dev libnghttp3-dev libpsl-dev libidn2-dev libbrotli-dev libzstd-dev zlib1g-dev libfido2-dev libedit-dev libev-dev patch openssl librtmp-dev
+apt-get install -y --no-install-recommends build-essential dpkg-dev git pkg-config autoconf automake libtool patchelf python3 perl ca-certificates gnupg gpgv libssl-dev libgnutls28-dev libssh2-1-dev libkrb5-dev libldap2-dev libnghttp2-dev libnghttp3-dev libpsl-dev libidn2-dev libbrotli-dev libzstd-dev zlib1g-dev libfido2-dev libedit-dev libev-dev patch openssl librtmp-dev
+# BEGIN source-tool-admission
+missing_tools=''
+for tool in git gpg gpgv autoreconf autoconf autoheader automake aclocal libtoolize m4 make cc cpp pkg-config patch patchelf readelf objdump perl python3 tar openssl dpkg-buildflags dpkg-architecture dpkg-deb dpkg-query dpkg-shlibdeps ar ranlib nm ld install sed awk grep;do
+ if ! command -v "$tool" >/dev/null 2>&1;then missing_tools="$missing_tools $tool";fi
+done
+if [ -n "$missing_tools" ];then printf 'Missing source builder tools:%s\n' "$missing_tools" >&2;exit 1;fi
+# END source-tool-admission
 server_args=''
 if python3 -c 'import json,sys;sys.exit("openssh-server" not in json.load(open("/network-work/baseline.json")))';then
  apt-get install -y --no-install-recommends libpam0g-dev libwrap0-dev libselinux1-dev libaudit-dev libwtmpdb-dev libcrypt-dev
