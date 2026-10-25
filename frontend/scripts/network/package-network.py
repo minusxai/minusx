@@ -95,6 +95,7 @@ for package,original in baseline.items():
  if not package.startswith('openssh-'):
   copy(work/'ngtcp2/COPYING',doc/'COPYING.ngtcp2')
   copy(Path(__file__).parent/'ngtcp2-provenance.json',doc/'runtime-embedded-ngtcp2.json')
+  copy(work/'http3-ordinary-proof.json',doc/'runtime-build-http3-proof.json')
  (doc/'runtime-source.json').write_text(json.dumps({'source':'openssh' if package.startswith('openssh-') else 'curl','version':versions[package],'replaced':replaced,'upstream_url':'https://www.openssh.org/' if package.startswith('openssh-') else 'https://curl.se/','embedded_components':([] if package.startswith('openssh-') else [{'name':'ngtcp2','version':'1.25.0','sha256':'2a34d2484ba17847a5d11965704e9dd0fac4c6d8efc75ffe1ec7de66d8c6b6fb','linkage':'static PIC','crypto_backend':'gnutls' if package.endswith('gnutls') else 'ossl'}]),'source_archive_sha256':'a9dc9565dffe8640f64d863cd29a32bc4a3dbdec0566a7fc44c5d6ee767d5f39' if package.startswith('openssh-') else '8dadd7d2536a314f982ad05a651b713f426bf7d02cc2c76cffb9796f2218e6c5'},indent=2)+'\n')
  roots[package]=root
 # Stage exact local ABI mappings for dependency discovery, retaining original dependencies too.

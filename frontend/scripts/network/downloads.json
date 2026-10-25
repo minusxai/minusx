@@ -44,5 +44,11 @@
     "file": "ngtcp2-1.25.0.tar.xz",
     "sha256": "2a34d2484ba17847a5d11965704e9dd0fac4c6d8efc75ffe1ec7de66d8c6b6fb",
     "verification": "Official GitHub release asset SHA256 digest independently retrieved from vendor API; archive checksum verified before extraction."
+  },
+  {
+    "file": "nghttp3-1.18.0.tar.xz",
+    "url": "https://github.com/ngtcp2/nghttp3/releases/download/v1.18.0/nghttp3-1.18.0.tar.xz",
+    "sha256": "aad782c23d3f01bd4bb52c8bac7a553b631ef8115fd1612703df6183449fef19",
+    "scope": "Builder-only ordinary HTTP3 fixture server dependency; never used to build or ship replacement runtime curl."
   }
 ]

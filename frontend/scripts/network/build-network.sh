@@ -26,7 +26,7 @@ for name,item in b.items():
  if item.get("library_capabilities"):print("Frozen original "+name+": "+json.dumps(item["library_capabilities"],sort_keys=True),flush=True)
 PYBASE
 apt-get update
-apt-get install -y --no-install-recommends build-essential dpkg-dev pkg-config autoconf automake libtool patchelf python3 perl ca-certificates gnupg libssl-dev libgnutls28-dev libssh2-1-dev libkrb5-dev libldap2-dev libnghttp2-dev libnghttp3-dev libpsl-dev libidn2-dev libbrotli-dev libzstd-dev zlib1g-dev libfido2-dev libedit-dev patch openssl
+apt-get install -y --no-install-recommends build-essential dpkg-dev pkg-config autoconf automake libtool patchelf python3 perl ca-certificates gnupg libssl-dev libgnutls28-dev libssh2-1-dev libkrb5-dev libldap2-dev libnghttp2-dev libnghttp3-dev libpsl-dev libidn2-dev libbrotli-dev libzstd-dev zlib1g-dev libfido2-dev libedit-dev libev-dev patch openssl
 server_args=''
 if python3 -c 'import json,sys;sys.exit("openssh-server" not in json.load(open("/network-work/baseline.json")))';then
  apt-get install -y --no-install-recommends libpam0g-dev libwrap0-dev libselinux1-dev libaudit-dev libwtmpdb-dev libcrypt-dev
@@ -45,10 +45,14 @@ gpg --batch --verify openssh-10.6p1.tar.gz.asc openssh-10.6p1.tar.gz
 # Keep its PIC static archives private to the build; retain the original TLS ABI.
 mkdir ngtcp2; tar -xf ngtcp2-1.25.0.tar.xz -C ngtcp2 --strip-components=1
 cd ngtcp2
-./configure --prefix=/network-work/quic --libdir=/network-work/quic/lib --enable-lib-only --enable-static --disable-shared --with-pic --enable-cryptotest --with-openssl --with-gnutls
+./configure --enable-option-checking=fatal --prefix=/network-work/quic --libdir=/network-work/quic/lib --enable-lib-only --enable-static --disable-shared --with-pic --enable-cryptotest --with-openssl --with-gnutls
 make -j"$jobs"
 make check
 make install
+# Fail if crypto options were ignored or either requested backend was omitted.
+test -f /network-work/quic/lib/libngtcp2.a
+test -f /network-work/quic/lib/libngtcp2_crypto_ossl.a
+test -f /network-work/quic/lib/libngtcp2_crypto_gnutls.a
 cd /network-work
 for tls in openssl gnutls; do
  mkdir -p "$tls"; tar -xf curl-8.23.0.tar.xz -C "$tls" --strip-components=1
@@ -64,7 +68,7 @@ PY
   tls_args='--with-openssl --with-ngtcp2=/network-work/quic --with-nghttp3'
  fi
  # Match Debian's supported protocol/auth/resolver/compression feature set.
- PKG_CONFIG_PATH=/network-work/quic/lib/pkgconfig ./configure --prefix=/usr --libdir="/usr/lib/$triplet" --disable-static --disable-symbol-hiding --enable-versioned-symbols --enable-threaded-resolver --with-lber-lib=lber --with-gssapi=/usr --with-nghttp2 --with-libssh2 --without-libssh --with-ca-path=/etc/ssl/certs --with-ca-bundle=/etc/ssl/certs/ca-certificates.crt $tls_args
+ PKG_CONFIG_PATH=/network-work/quic/lib/pkgconfig ./configure --enable-option-checking=fatal --prefix=/usr --libdir="/usr/lib/$triplet" --disable-static --disable-symbol-hiding --enable-versioned-symbols --enable-threaded-resolver --with-lber-lib=lber --with-gssapi=/usr --with-nghttp2 --with-libssh2 --without-libssh --with-ca-path=/etc/ssl/certs --with-ca-bundle=/etc/ssl/certs/ca-certificates.crt $tls_args
  make -j"$jobs"
  # Official ordinary HTTP GET regression only; no adversarial input reproductions.
  make test TFLAGS='-n 1'
@@ -79,6 +83,23 @@ assert '(RPATH)' not in dynamic and '(RUNPATH)' not in dynamic,dynamic
 PYLINK
  cd /network-work
 done
+# Test-only matching official servers need a newer HTTP3 codec. This static
+# fixture dependency never participates in runtime curl configure/link/package.
+mkdir nghttp3-fixture; tar -xf nghttp3-1.18.0.tar.xz -C nghttp3-fixture --strip-components=1
+cd nghttp3-fixture
+./configure --enable-option-checking=fatal --prefix=/network-work/http3-fixture --libdir=/network-work/http3-fixture/lib --enable-lib-only --enable-static --disable-shared --with-pic
+make -j"$jobs"
+make check
+make install
+cd /network-work
+mkdir ngtcp2-fixture; tar -xf ngtcp2-1.25.0.tar.xz -C ngtcp2-fixture --strip-components=1
+cd ngtcp2-fixture
+PKG_CONFIG_PATH=/network-work/http3-fixture/lib/pkgconfig ./configure --enable-option-checking=fatal --prefix=/network-work/unused-fixture --enable-static --disable-shared --with-openssl --with-gnutls --with-libnghttp3 --with-libev
+make -j"$jobs" -C lib
+make -j"$jobs" -C crypto
+make -j"$jobs" -C examples osslserver gtlsserver
+cd /network-work
+python3 "$here/check-http3.py"
 # Preserve Debian GnuTLS library SONAME and install name without changing application code.
 python3 "$here/package-network.py" rename-gnutls /network-work/stage-gnutls
 mkdir openssh; tar -xf openssh-10.6p1.tar.gz -C openssh --strip-components=1
