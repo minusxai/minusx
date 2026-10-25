@@ -1,0 +1,42 @@
+[
+  {
+    "url": "https://curl.se/download/curl-8.23.0.tar.xz",
+    "file": "curl-8.23.0.tar.xz",
+    "sha256": "8dadd7d2536a314f982ad05a651b713f426bf7d02cc2c76cffb9796f2218e6c5",
+    "size": 2990916
+  },
+  {
+    "url": "https://curl.se/download/curl-8.23.0.tar.xz.asc",
+    "file": "curl-8.23.0.tar.xz.asc",
+    "sha256": "dba1562fec2bf698a1226054e6757940e4bf2ab87b3b222a5e7b91348f0b82e2",
+    "size": 488
+  },
+  {
+    "url": "https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-10.6p1.tar.gz",
+    "file": "openssh-10.6p1.tar.gz",
+    "sha256": "a9dc9565dffe8640f64d863cd29a32bc4a3dbdec0566a7fc44c5d6ee767d5f39",
+    "size": 2355244
+  },
+  {
+    "url": "https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-10.6p1.tar.gz.asc",
+    "file": "openssh-10.6p1.tar.gz.asc",
+    "sha256": "1f8fd46ddb5ec95f5bc9e0d7b0fc34ccea3ef8f94a8e3a5d3911434cce7027cf",
+    "size": 833
+  },
+  {
+    "url": "https://curl.se/download/curl-8.23.0.tar.xz.sha256",
+    "error": "HTTP Error 404: Not Found"
+  },
+  {
+    "url": "https://daniel.haxx.se/mykey.asc",
+    "file": "curl-release-key.asc",
+    "sha256": "64619d3c1a2b68da837014b2ab02a049ed2c69aaebfa10a20a4f29dab003ecb8",
+    "size": 4741
+  },
+  {
+    "url": "https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/RELEASE_KEY.asc",
+    "file": "openssh-release-key.asc",
+    "sha256": "c4a6f4692c9b8e75ec096add049fe0314b3ceff9410321f1e85907cf7a864269",
+    "size": 22720
+  }
+]

@@ -1,0 +1,190 @@
+From ab53e2bc3d9eaee437da927d42ccd27f260ee3c4 Mon Sep 17 00:00:00 2001
+From: Colin Watson <cjwatson@debian.org>
+Date: Sun, 9 Feb 2014 16:10:09 +0000
+Subject: Adjust various OpenBSD-specific references in manual pages
+
+No single bug reference for this patch, but history includes:
+ https://bugs.debian.org/154434 (login.conf(5))
+ https://bugs.debian.org/513417 (/etc/rc)
+ https://bugs.debian.org/998069, https://bugs.debian.org/1095686 (rdomain(4))
+
+Forwarded: not-needed
+Last-Update: 2025-04-15
+
+Patch-Name: openbsd-docs.patch
+---
+ moduli.5      |  4 ++--
+ ssh-keygen.1  | 12 ++++--------
+ sshd.8        |  5 ++---
+ sshd_config.5 | 27 ++++++---------------------
+ 4 files changed, 14 insertions(+), 34 deletions(-)
+
+diff --git a/moduli.5 b/moduli.5
+index 5086a6d42..6dffdc7e6 100644
+--- a/moduli.5
++++ b/moduli.5
+@@ -21,7 +21,7 @@
+ .Nd Diffie-Hellman moduli
+ .Sh DESCRIPTION
+ The
+-.Pa /etc/moduli
++.Pa /etc/ssh/moduli
+ file contains prime numbers and generators for use by
+ .Xr sshd 8
+ in the Diffie-Hellman Group Exchange key exchange method.
+@@ -110,7 +110,7 @@ first estimates the size of the modulus required to produce enough
+ Diffie-Hellman output to sufficiently key the selected symmetric cipher.
+ .Xr sshd 8
+ then randomly selects a modulus from
+-.Fa /etc/moduli
++.Fa /etc/ssh/moduli
+ that best meets the size requirement.
+ .Sh SEE ALSO
+ .Xr ssh-keygen 1 ,
+diff --git a/ssh-keygen.1 b/ssh-keygen.1
+index d4da3844c..ff663b191 100644
+--- a/ssh-keygen.1
++++ b/ssh-keygen.1
+@@ -212,9 +212,7 @@ key in
+ .Pa ~/.ssh/id_mldsa44_ed25519
+ or
+ .Pa ~/.ssh/id_rsa .
+-Additionally, the system administrator may use this to generate host keys,
+-as seen in
+-.Pa /etc/rc .
++Additionally, the system administrator may use this to generate host keys.
+ .Pp
+ Normally this program generates the key and asks for a file in which
+ to store the private key.
+@@ -279,9 +277,7 @@ If
+ .Fl f
+ has also been specified, its argument is used as a prefix to the
+ default path for the resulting host key files.
+-This is used by
+-.Pa /etc/rc
+-to generate new host keys.
++This is used by system administration scripts to generate new host keys.
+ .It Fl a Ar rounds
+ When saving a private key, this option specifies the number of KDF
+ (key derivation function, currently
+@@ -893,7 +889,7 @@ option.
+ Valid generator values are 2, 3, and 5.
+ .Pp
+ Screened DH groups may be installed in
+-.Pa /etc/moduli .
++.Pa /etc/ssh/moduli .
+ It is important that this file contains moduli of a range of bit lengths.
+ .Pp
+ A number of options are available for moduli generation and screening via the
+@@ -1360,7 +1356,7 @@ on all machines
+ where the user wishes to log in using public key authentication.
+ There is no need to keep the contents of this file secret.
+ .Pp
+-.It Pa /etc/moduli
++.It Pa /etc/ssh/moduli
+ Contains Diffie-Hellman groups used for DH-GEX.
+ The file format is described in
+ .Xr moduli 5 .
+diff --git a/sshd.8 b/sshd.8
+index ab7eacb1d..d84a5d109 100644
+--- a/sshd.8
++++ b/sshd.8
+@@ -64,7 +64,7 @@ over an insecure network.
+ .Nm
+ listens for connections from clients.
+ It is normally started at boot from
+-.Pa /etc/rc .
++.Pa /etc/init.d/ssh .
+ It forks a new
+ daemon for each incoming connection.
+ The forked daemons handle
+@@ -940,7 +940,7 @@ This file is for host-based authentication (see
+ .Xr ssh 1 ) .
+ It should only be writable by root.
+ .Pp
+-.It Pa /etc/moduli
++.It Pa /etc/ssh/moduli
+ Contains Diffie-Hellman groups used for the "Diffie-Hellman Group Exchange"
+ key exchange method.
+ The file format is described in
+@@ -1040,7 +1040,6 @@ The content of this file is not sensitive; it can be world-readable.
+ .Xr ssh-keyscan 1 ,
+ .Xr chroot 2 ,
+ .Xr hosts_access 5 ,
+-.Xr login.conf 5 ,
+ .Xr moduli 5 ,
+ .Xr sshd_config 5 ,
+ .Xr inetd 8 ,
+diff --git a/sshd_config.5 b/sshd_config.5
+index ab9688a8c..df4edbeca 100644
+--- a/sshd_config.5
++++ b/sshd_config.5
+@@ -1060,9 +1060,6 @@ for interactive sessions and
+ for non-interactive sessions.
+ .It Cm KbdInteractiveAuthentication
+ Specifies whether to allow keyboard-interactive authentication.
+-All authentication styles from
+-.Xr login.conf 5
+-are supported.
+ The default is
+ .Cm yes .
+ The argument to this keyword must be
+@@ -1212,8 +1209,10 @@ routing domain.
+ Multiple
+ .Cm ListenAddress
+ options are permitted.
+-For more information on routing domains, see
+-.Xr rdomain 4 .
++.Pp
++On Linux, routing domains are implemented using Virtual Routing and
++Forwarding domains (VRFs); for more information, see
++.Xr ip-vrf 8 .
+ .It Cm LoginGraceTime
+ The server disconnects after this time if the user has not
+ successfully logged in.
+@@ -1347,9 +1346,8 @@ and
+ .Cm Address
+ (with
+ .Cm RDomain
+-representing the
+-.Xr rdomain 4
+-on which the connection was received).
++representing the routing domain on which the connection was received; see
++.Xr ip-vrf 8 ) .
+ .Pp
+ The match patterns may consist of single entries or comma-separated
+ lists and may use the wildcard and negation operators described in the
+@@ -1430,7 +1428,6 @@ Available keywords are
+ .Cm RefuseConnection ,
+ .Cm RekeyLimit ,
+ .Cm RevokedKeys ,
+-.Cm RDomain ,
+ .Cm SetEnv ,
+ .Cm StreamLocalBindMask ,
+ .Cm StreamLocalBindUnlink ,
+@@ -1955,15 +1952,6 @@ and its contents must be consistent at all times, therefore it should only
+ be atomically replaced and never modified in place while the server is running.
+ For more information on KRLs, see the KEY REVOCATION LISTS section in
+ .Xr ssh-keygen 1 .
+-.It Cm RDomain
+-Specifies an explicit routing domain that is applied after authentication
+-has completed.
+-The user session, as well as any forwarded or listening IP sockets,
+-will be bound to this
+-.Xr rdomain 4 .
+-If the routing domain is set to
+-.Cm \&%D ,
+-then the domain in which the incoming connection was received will be applied.
+ .It Cm SecurityKeyProvider
+ Specifies a path to a library that will be used when loading
+ FIDO authenticator-hosted keys, overriding the default of using
+@@ -2374,9 +2362,6 @@ accepts the tokens %%, %h, %U, and %u.
+ .Pp
+ .Cm ChrootDirectory
+ accepts the tokens %%, %h, %U, and %u.
+-.Pp
+-.Cm RoutingDomain
+-accepts the token %D.
+ .Sh FILES
+ .Bl -tag -width Ds
+ .It Pa /etc/ssh/sshd_config

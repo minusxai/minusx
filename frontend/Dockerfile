@@ -22,6 +22,29 @@ COPY scripts/patch-npm.mjs /tmp/patch-npm.mjs
 RUN npm install --global --no-audit --no-fund npm@12.2.1 \
     && node /tmp/patch-npm.mjs && npm cache clean --force
 
+# Capture the actual runtime network profile before build dependencies or overlays.
+FROM base AS runtime-profile
+RUN apt-get update && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+FROM runtime-profile AS networkbuilder
+COPY scripts/network /runtime-build/network
+COPY scripts/curl-runtime-probe.c /runtime-build/curl-runtime-probe.c
+RUN sh /runtime-build/network/build-network.sh && mkdir -p /out/test-tools && cc -O2 -Wl,-z,relro,-z,now \
+    -I/network-work/stage-openssl/usr/include /runtime-build/curl-runtime-probe.c \
+    -L/network-work/stage-openssl/usr/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH) \
+    -lcurl -o /out/test-tools/curl-runtime-probe \
+    && rm -rf /network-work
+
+FROM runtime-profile AS librarybuilder
+COPY scripts/libraries /runtime-build/libraries
+RUN sh /runtime-build/libraries/build.sh && rm -rf /libraries-work
+
+FROM scratch AS network-test-tools
+COPY --from=networkbuilder /out/ /network/
+COPY --from=librarybuilder /out/ /libraries/
+
 FROM base AS pcre2
 ENV DEB_BUILD_MAINT_OPTIONS=hardening=+all
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends build-essential pkg-config && rm -rf /var/lib/apt/lists/*
@@ -151,7 +174,7 @@ RUN --mount=type=cache,target=/app/.next/cache \
 RUN npm run build:setup-cli
 
 # ===== RUNTIME STAGE ===== #
-FROM base AS runner
+FROM runtime-profile AS runner
 
 # Set working directory
 WORKDIR /app
@@ -161,13 +184,6 @@ ENV NODE_ENV=production
 ENV BASE_DUCKDB_DATA_PATH=/app
 ENV DB_TYPE=pglite
 ENV PGLITE_DATA_DIR=/app/data/pglite
-
-# Install curl and ca-certificates for downloading DuckDB files
-RUN apt-get update && apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends \
-    curl \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=pcre2 /out/pcre2.deb /tmp/pcre2.deb
 COPY --from=archive /out/tar.deb /tmp/tar.deb
@@ -219,6 +235,12 @@ RUN npx --yes patch-package@8.0.1 --error-on-fail \
     && rm -rf ./patches && npm cache clean --force
 RUN grep -q "MX PATCH" /app/node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js \
     || (echo "ERROR: pi-ai patch missing from runtime image" && exit 1)
+
+# Install only network packages captured in the original runtime profile.
+COPY --from=networkbuilder /out/*.deb /tmp/network-debs/
+COPY --from=librarybuilder /out/*.deb /tmp/library-debs/
+RUN dpkg --path-include='/usr/share/doc/runtime-network/*' --path-include='/usr/share/doc/runtime-libraries/*' -i /tmp/network-debs/*.deb /tmp/library-debs/*.deb \
+    && ldconfig && rm -rf /tmp/network-debs /tmp/library-debs
 
 # Create data directories (docker-compose volumes mount over these; standalone runs use them directly)
 RUN mkdir -p /app/data/pglite /app/data/analytics

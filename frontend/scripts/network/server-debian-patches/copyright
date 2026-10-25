@@ -1,0 +1,704 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: OpenSSH
+Upstream-Contact: openssh-unix-dev@mindrot.org
+Source: https://www.openssh.com/portable.html
+Comment:
+ The overall licence of the OpenSSH upstream code amounts to BSD-3-clause or
+ various less restrictive licences, with the additional restrictions that
+ derived versions must be clearly marked as such and that if derived works
+ are incompatible with the RFC-specified protocol then they must be called
+ by a name other than "ssh" or "Secure Shell".
+
+Files: *
+Copyright: 1995 Tatu Ylonen
+License: OpenSSH
+
+Files:
+ atomicio.*
+ audit-bsm.c
+ audit-linux.c
+ audit.*
+ auth-bsdauth.c
+ auth-krb5.c
+ auth-pam.h
+ auth-passwd.c
+ auth-shadow.c
+ auth-sia.*
+ auth.*
+ auth2-chall.c
+ auth2-gss.c
+ auth2-hostbased.c
+ auth2-kbdint.c
+ auth2-none.c
+ auth2-passwd.c
+ auth2-pubkey.c
+ auth2-pubkeyfile.c
+ auth2.c
+ authfd.c
+ authfile.*
+ channels.*
+ cipher-aes.c
+ cipher.*
+ clientloop.*
+ compat.*
+ contrib/gnome-ssh-askpass*.c
+ defines.h
+ dh.*
+ dispatch.*
+ dns.*
+ entropy.*
+ fatal.c
+ groupaccess.*
+ gss-genr.c
+ gss-serv*.c
+ hostfile.c
+ kex-names.c
+ kex.*
+ kexc25519.c
+ kexdh.c
+ kexecdh.c
+ kexgen*.c
+ kexgex*.c
+ kexgss*.c
+ kexmlkem768ecdh.c
+ kexmlkem768x25519.c
+ kexsntrup761x25519.c
+ log.c
+ loginrec.*
+ logintest.c
+ mac.*
+ match.c
+ moduli.c
+ monitor.*
+ monitor_fdpass.*
+ monitor_wrap.*
+ msg.*
+ myproposal.h
+ nchan.*
+ nchan2.ms
+ openbsd-compat/bindresvport.c
+ openbsd-compat/bsd-cygwin_util.*
+ openbsd-compat/bsd-flock.c
+ openbsd-compat/bsd-getline.c
+ openbsd-compat/bsd-nextstep.*
+ openbsd-compat/bsd-poll.h
+ openbsd-compat/bsd-pselect.c
+ openbsd-compat/bsd-waitpid.*
+ openbsd-compat/getopt.h
+ openbsd-compat/openbsd-compat.h
+ openbsd-compat/port-aix.*
+ openbsd-compat/port-irix.*
+ openbsd-compat/port-prngd.c
+ openbsd-compat/port-uw.*
+ openbsd-compat/strptime.c
+ openbsd-compat/sys-tree.h
+ openbsd-compat/xcrypt.c
+ packet.c
+ progressmeter.*
+ readpass.c
+ serverloop.c
+ session.*
+ sftp-common.*
+ sftp-server.8
+ sftp.1
+ sftp.h
+ ssh-add.*
+ ssh-agent.*
+ ssh-ecdsa*.c
+ ssh-gss.h
+ ssh-keygen.1
+ ssh-keysign.*
+ ssh.1
+ ssh.c
+ ssh2.h
+ ssh_config.5
+ sshconnect.h
+ sshconnect2.c
+ sshd-auth.c
+ sshd-session.c
+ sshd.8
+ sshd.c
+ sshd_config.5
+ sshkey.*
+ sshlogin.c
+ sshtty.c
+ ttymodes.*
+Copyright:
+ 1988-2002 Sun Microsystems, Inc.
+ 1994 Phil Karn
+ 1995 Tatu Ylonen
+ 1995-1999 Theo de Raadt
+ 1996 Jason Downs
+ 1996-2003 William Allen Simpson
+ 1997-2011 The NetBSD Foundation, Inc.
+ 1998 Todd C. Miller
+ 1999 Aaron Campbell
+ 1999 Dug Song
+ 1999-2002 Niels Provos
+ 1999-2011 Damien Miller
+ 1999-2025 Markus Friedl
+ 2000 Andre Lucas
+ 2000 Denis Parker
+ 2000 Michael Stone
+ 2000-2003 Ben Lindstrom
+ 2000-2013 Corinna Vinschen
+ 2001 Gert Doering
+ 2001 Kevin Steves
+ 2001 Per Allansson
+ 2001-2009 Simon Wilkinson
+ 2002 Chris Adams
+ 2002 Daniel Kouril
+ 2002-2003 Nils Nordman
+ 2002-2005 Tim Rice
+ 2003 Jakob Schlyter
+ 2003 Wesley Griffin
+ 2003-2021 Darren Tucker
+ 2005 Anil Madhavapeddy
+ 2005 The SCO Group
+ 2008 Alexander von Gernler
+ 2010 Red Hat, Inc.
+ 2013 Aris Adamantiadis
+ 2019 Google Inc.
+License: BSD-2-clause
+
+Files:
+ addr.*
+ addrmatch.c
+ auth-options.*
+ auth2-methods.c
+ bitmap.*
+ cipher-aesctr.*
+ cipher-chachapoly-libcrypto.c
+ cipher-chachapoly.*
+ cleanup.c
+ configure.ac
+ digest*.c
+ digest.h
+ ed25519-openssl.c
+ hmac.*
+ krl.*
+ libcrux-mlkem-mldsa.c
+ mdoc2man.awk
+ misc-agent.c
+ misc.c
+ moduli.5
+ mux.c
+ openbsd-compat/arc4random*.*
+ openbsd-compat/base64.*
+ openbsd-compat/basename.c
+ openbsd-compat/bcrypt_pbkdf.c
+ openbsd-compat/bsd-asprintf.c
+ openbsd-compat/bsd-closefrom.*
+ openbsd-compat/bsd-getentropy.c
+ openbsd-compat/bsd-getpeereid.c
+ openbsd-compat/bsd-malloc.c
+ openbsd-compat/bsd-misc.*
+ openbsd-compat/bsd-openpty.c
+ openbsd-compat/bsd-poll.c
+ openbsd-compat/bsd-setres_id.*
+ openbsd-compat/bsd-signal.*
+ openbsd-compat/bsd-statvfs.*
+ openbsd-compat/dirname.c
+ openbsd-compat/freezero.c
+ openbsd-compat/inet_ntop.c
+ openbsd-compat/libressl-api-compat.c
+ openbsd-compat/mktemp.c
+ openbsd-compat/openssl-compat.*
+ openbsd-compat/port-linux.*
+ openbsd-compat/port-net.*
+ openbsd-compat/port-solaris.*
+ openbsd-compat/readpassphrase.*
+ openbsd-compat/reallocarray.c
+ openbsd-compat/recallocarray.c
+ openbsd-compat/regress/*
+ openbsd-compat/strlcat.c
+ openbsd-compat/strlcpy.c
+ openbsd-compat/strndup.c
+ openbsd-compat/strnlen.c
+ openbsd-compat/strtonum.c
+ openbsd-compat/timingsafe_bcmp.c
+ openssh.xml.in
+ platform-*.c
+ platform.*
+ regress/*
+ sandbox-*.c
+ sftp-client.*
+ sftp-glob.c
+ sftp-server-main.c
+ sftp-server.c
+ sftp-usergroup.*
+ sftp.c
+ sk-api.h
+ sk-usbhid.c
+ srclimit.*
+ ssh-ed25519*.c
+ ssh-mldsa-eddsa.c
+ ssh-pkcs11*.c
+ ssh-pkcs11-helper.8
+ ssh-pkcs11.h
+ ssh-rsa.c
+ ssh-sandbox.h
+ ssh-sk*.c
+ ssh-sk-helper.8
+ ssh-sk.h
+ ssh_api.*
+ sshbuf*.c
+ sshbuf.h
+ ssherr*.c
+ ssherr.h
+ sshsig.*
+ survey.sh.in
+ utf8.*
+Copyright:
+ 1992-2021 Free Software Foundation, Inc.
+ 1995 International Business Machines, Inc.
+ 1995 Tatu Ylonen
+ 1996 David Mazieres
+ 1996 Internet Software Consortium
+ 1996-2014 Theo de Raadt
+ 1997-2010 Todd C. Miller
+ 1999-2026 Damien Miller
+ 2000-2019 Markus Friedl
+ 2003 Peter Stuge
+ 2004 Henning Brauer
+ 2004-2013 Ted Unangst
+ 2004-2017 Otto Moerbeek
+ 2004-2026 Darren Tucker
+ 2005 Daniel Walsh
+ 2005 Reyk Floeter
+ 2006 Chad Mynhier
+ 2011 Dag-Erling Smorgrav
+ 2012 Will Drewry
+ 2014-2020 Pedro Martelletto
+ 2015 Joyent, Inc
+ 2016 Ingo Schwarze
+ 2017 Colin Watson
+ 2019 Google LLC
+ 2025 OpenSSH
+License: ISC
+
+Files:
+ openbsd-compat/blf.h
+ openbsd-compat/blowfish.c
+ openbsd-compat/bsd-err.c
+ openbsd-compat/bsd-sha2.h
+ openbsd-compat/bsd-timegm.c
+ openbsd-compat/daemon.c
+ openbsd-compat/fake-rfc2553.*
+ openbsd-compat/fmt_scaled.c
+ openbsd-compat/fnmatch.h
+ openbsd-compat/getcwd.c
+ openbsd-compat/getgrouplist.c
+ openbsd-compat/glob.*
+ openbsd-compat/inet_aton.c
+ openbsd-compat/inet_ntoa.c
+ openbsd-compat/pwcache.c
+ openbsd-compat/rresvport.c
+ openbsd-compat/setenv.c
+ openbsd-compat/setproctitle.c
+ openbsd-compat/sha2.c
+ openbsd-compat/strcasestr.c
+ openbsd-compat/strmode.c
+ openbsd-compat/strsep.c
+ openbsd-compat/strtoll.c
+ openbsd-compat/strtoul*.c
+ openbsd-compat/sys-queue.h
+ openbsd-compat/vis.*
+ regress/netcat.c
+ sftp-realpath.c
+Copyright:
+ 1983-1994 The Regents of the University of California
+ 1983-1997 Eric P. Allman
+ 1993 Digital Equipment Corporation
+ 1993 WIDE Project
+ 1995-1998 Theo de Raadt
+ 1997 Kungliga Tekniska Högskolan
+ 1997 Niels Provos
+ 1999 Niklas Hallqvist
+ 2000-2001 Aaron D. Gifford
+ 2000-2005 Damien Miller
+ 2001 Eric Jackson
+ 2001-2003 Ian F. Darwin
+ 2003 Constantin S. Svintsoff
+ 2015 Tim Rice
+License: BSD-3-clause
+
+Files:
+ auth-pam.c
+ openbsd-compat/getopt_long.c
+ openbsd-compat/getrrsetbyname*.*
+Copyright:
+ 1999-2001 Internet Software Consortium
+ 2000 The NetBSD Foundation, Inc.
+ 2001 Jakob Schlyter
+ 2002 Networks Associates Technology, Inc.
+ 2002 Todd C. Miller
+ 2003-2004 Damien Miller
+ 2003-2004 Darren Tucker
+ 2007 Simon Vallet / Genoscope
+License: BSD-2-clause and ISC
+
+Files: openbsd-compat/fnmatch.c
+Copyright:
+ 2008-2016 Todd C. Miller
+ 2011 VMware, Inc.
+License: BSD-3-clause and ISC
+
+Files: scp.c
+Copyright:
+ 1983-1995 The Regents of the University of California
+ 1995 Tatu Ylonen
+ 1995 Timo Rinne
+ 1999 Aaron Campbell
+ 1999 Theo de Raadt
+License: BSD-2-clause and BSD-3-clause
+
+Files: contrib/ssh-copy-id*
+Copyright:
+ 1999-2025 Philip Hands
+ 2003 Colin Watson
+ 2004 Reini Urban
+ 2007 Justin Pryzby
+ 2009 Xr
+ 2010 Adeodato Simó
+ 2010 Eric Moret
+ 2013 Martin Kletzander
+ 2017 Sebastien Boyron
+ 2020 Matthias Blümel
+ 2021 Carlos Rodríguez Gili
+ 2024 Frank Fischer
+ 2025 Denis Ovsienko
+License: BSD-2-clause
+
+Files: openbsd-compat/bsd-snprintf.c
+Copyright: 1995 Patrick Powell
+License: Powell-BSD-style
+ This code is based on code written by Patrick Powell
+ (papowell@astart.com) It may be used for any purpose as long as this
+ notice remains intact on all source code distributions
+
+Files: ssh-keyscan.*
+Copyright: 1995, 1996 David Mazieres
+License: Mazieres-BSD-style
+ Modification and redistribution in source and binary forms is
+ permitted provided that due credit is given to the author and the
+ OpenBSD project by leaving this copyright notice intact.
+
+Files: pkcs11.h
+Copyright:
+ 2006, 2007 g10 Code GmbH
+ 2006 Andreas Jellinghaus
+License: FSFULLRWD
+ This file is free software; as a special exception the author gives
+ unlimited permission to copy and/or distribute it, with or without
+ modifications, as long as this notice is preserved.
+ .
+ This file is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY, to the extent permitted by law; without even
+ the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ PURPOSE.
+
+Files: umac.*
+Copyright: 1999-2006 Ted Krovetz
+License: Krovetz-BSD-style
+ Permission to use, copy, modify, and distribute this software and
+ its documentation for any purpose and with or without fee, is hereby
+ granted provided that the above copyright notice appears in all copies
+ and in supporting documentation, and that the name of the copyright
+ holder not be used in advertising or publicity pertaining to
+ distribution of the software without specific, written prior permission.
+
+Files:
+ libcrux_internal.h
+ openbsd-compat/memmem.c
+Copyright:
+ 2005-2020 Rich Felker, et al.
+ 2024 Cryspen
+License: Expat
+
+Files: openbsd-compat/sigact.*
+Copyright: 1998, 2000 Free Software Foundation, Inc.
+License: Expat-with-advertising-restriction
+ Permission is hereby granted, free of charge, to any person obtaining a
+ copy of this software and associated documentation files (the
+ "Software"), to deal in the Software without restriction, including
+ without limitation the rights to use, copy, modify, merge, publish,
+ distribute, distribute with modifications, sublicense, and/or sell
+ copies of the Software, and to permit persons to whom the Software is
+ furnished to do so, subject to the following conditions:
+ .
+ The above copyright notice and this permission notice shall be included
+ in all copies or substantial portions of the Software.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+ OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+ IN NO EVENT SHALL THE ABOVE COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
+ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ .
+ Except as contained in this notice, the name(s) of the above copyright
+ holders shall not be used in advertising or otherwise to promote the
+ sale, use or other dealings in this Software without prior written
+ authorization.
+
+Files:
+ contrib/cygwin/ssh-host-config
+ contrib/cygwin/ssh-user-config
+Copyright: 2000-2014 Red Hat Inc.
+License: curl
+ Permission to use, copy, modify, and distribute this software for any
+ purpose with or without fee is hereby granted, provided that the above
+ copyright notice and this permission notice appear in all copies.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+ OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+ IN NO EVENT SHALL THE ABOVE COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+ DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
+ THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+Files: install-sh
+Copyright: 1994 X Consortium
+License: X11
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to
+ deal in the Software without restriction, including without limitation the
+ rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ sell copies of the Software, and to permit persons to whom the Software is
+ furnished to do so, subject to the following conditions:
+ .
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
+ X CONSORTIUM BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
+ AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNEC-
+ TION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ .
+ Except as contained in this notice, the name of the X Consortium shall not
+ be used in advertising or otherwise to promote the sale, use or other deal-
+ ings in this Software without prior written authorization from the X Consor-
+ tium.
+
+Files: aclocal.m4
+Copyright: 1996-2021 Free Software Foundation, Inc.
+License: FSFULLR
+ This file is free software; the Free Software Foundation
+ gives unlimited permission to copy and/or distribute it,
+ with or without modifications, as long as this notice is preserved.
+ .
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY, to the extent permitted by law; without
+ even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+ PARTICULAR PURPOSE.
+
+Files: contrib/aix/buildbff.sh
+Copyright: none (public domain)
+License: public-domain
+ Author: Darren Tucker (dtucker at zip dot com dot au)
+ This file is placed in the public domain and comes with absolutely
+ no warranty.
+
+Files: contrib/aix/inventory.sh
+Copyright: none (public domain)
+License: public-domain
+ Originally written by Ben Lindstrom, modified by Darren Tucker to use perl
+ This file is placed into the public domain.
+
+Files: contrib/findssl.sh
+Copyright: none (public domain)
+License: public-domain
+ Written by Darren Tucker (dtucker at zip dot com dot au)
+ This file is placed in the public domain.
+
+Files: contrib/suse/rc.sshd
+Copyright: 1995-2000 SuSE GmbH Nuernberg, Germany
+License: OpenSSH
+
+Files: openbsd-compat/md5.*
+Copyright: none (public domain)
+License: public-domain
+ The algorithm is due to Ron Rivest.  This code was
+ written by Colin Plumb in 1993, no copyright is claimed.
+ This code is in the public domain; do with it what you wish.
+
+Files: openbsd-compat/sha1.*
+Copyright: none (public domain)
+License: public-domain
+ By Steve Reid <steve@edmweb.com>
+ 100% Public Domain
+
+Files: regress/unittests/utf8/tests.c
+Copyright: none (public domain)
+License: public-domain
+ Written by Ingo Schwarze <schwarze@openbsd.org> in 2016
+ and placed in the public domain.
+
+Files: rijndael.*
+Copyright: none (public domain)
+License: public-domain
+ This code is from a reference implementation of the Rijndael cipher which
+ has been dedicated to the public domain.
+ .
+ @version 3.0 (December 2000)
+ .
+ Optimised ANSI C code for the Rijndael cipher (now AES)
+ .
+ @author Vincent Rijmen <vincent.rijmen@esat.kuleuven.ac.be>
+ @author Antoon Bosselaers <antoon.bosselaers@esat.kuleuven.ac.be>
+ @author Paulo Barreto <paulo.barreto@terra.com.br>
+ .
+ This code is hereby placed in the public domain.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE AUTHORS ''AS IS'' AND ANY EXPRESS
+ OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHORS OR CONTRIBUTORS BE
+ LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+ BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+ WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+ OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+Files:
+ debian/*
+ ssh-null.c
+Copyright:
+ Colin Watson
+ Matthew Vernon
+License: BSD-2-clause
+
+Files:
+ debian/openssh-client-gssapi.apport
+ debian/openssh-server-gssapi.apport
+Copyright: 2010 Canonical Ltd.
+License: GPL-2+
+Comment:
+ These are separate system integration scripts.  While they are distributed
+ with the OpenSSH binaries, this is mere aggregation that does not bring the
+ OpenSSH binaries under the scope of the GPL.
+
+License: OpenSSH
+ Tatu Ylonen's original licence is as follows (excluding some terms about
+ third-party code which are no longer relevant; see the LICENCE file for
+ details):
+ .
+   As far as I am concerned, the code I have written for this software
+   can be used freely for any purpose.  Any derived versions of this
+   software must be clearly marked as such, and if the derived work is
+   incompatible with the protocol description in the RFC file, it must be
+   called by a name other than "ssh" or "Secure Shell".
+ .
+   Note that any information and cryptographic algorithms used in this
+   software are publicly available on the Internet and at any major
+   bookstore, scientific library, and patent office worldwide.  More
+   information can be found e.g. at "http://www.cs.hut.fi/crypto".
+ .
+   The legal status of this program is some combination of all these
+   permissions and restrictions.  Use only at your own responsibility.
+   You will be responsible for any legal consequences yourself; I am not
+   making any claims whether possessing or using this is legal or not in
+   your country, and I am not taking any responsibility on your behalf.
+
+License: BSD-2-clause
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions
+ are met:
+ 1. Redistributions of source code must retain the above copyright
+    notice, this list of conditions and the following disclaimer.
+ 2. Redistributions in binary form must reproduce the above copyright
+    notice, this list of conditions and the following disclaimer in the
+    documentation and/or other materials provided with the distribution.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+License: BSD-3-clause
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions
+ are met:
+ 1. Redistributions of source code must retain the above copyright
+    notice, this list of conditions and the following disclaimer.
+ 2. Redistributions in binary form must reproduce the above copyright
+    notice, this list of conditions and the following disclaimer in the
+    documentation and/or other materials provided with the distribution.
+ 3. Neither the name of the University nor the names of its contributors
+    may be used to endorse or promote products derived from this software
+    without specific prior written permission.
+ .
+ THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ SUCH DAMAGE.
+
+License: Expat
+ Permission is hereby granted, free of charge, to any person obtaining
+ a copy of this software and associated documentation files (the
+ "Software"), to deal in the Software without restriction, including
+ without limitation the rights to use, copy, modify, merge, publish,
+ distribute, sublicense, and/or sell copies of the Software, and to
+ permit persons to whom the Software is furnished to do so, subject to
+ the following conditions:
+ .
+ The above copyright notice and this permission notice shall be
+ included in all copies or substantial portions of the Software.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+ IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+ SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+License: GPL-2+
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License
+ as published by the Free Software Foundation; either version 2
+ of the License, or (at your option) any later version.
+ .
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ .
+ You should have received a copy of the GNU General Public License
+ along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ .
+ On Debian and Debian-based systems, a copy of the GNU General Public
+ License version 2 is available in /usr/share/common-licenses/GPL-2.
+
+License: ISC
+ Permission to use, copy, modify, and distribute this software for any
+ purpose with or without fee is hereby granted, provided that the above
+ copyright notice and this permission notice appear in all copies.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.

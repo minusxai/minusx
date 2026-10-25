@@ -1,0 +1,81 @@
+#!/bin/sh
+# Run in a disposable Debian trixie builder matching final runtime architecture/base.
+set -eu
+export DEBIAN_FRONTEND=noninteractive DEB_BUILD_MAINT_OPTIONS=hardening=+all
+here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+(cd "$here" && sha256sum -c SHA256SUMS)
+mkdir -p /out /network-work
+cd /network-work
+# Capture eligibility with dpkg-query before bootstrapping Python/build tools.
+: > /network-work/runtime-profile.tsv
+for package in curl libcurl4t64 libcurl3t64-gnutls openssh-client openssh-server openssh-sftp-server;do
+ if [ "$(dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null || true)" = installed ];then
+  dpkg-query -W -f='${Package}\t${Version}\n' "$package" >> /network-work/runtime-profile.tsv
+ fi
+done
+if [ ! -s /network-work/runtime-profile.tsv ];then echo 'No existing eligible runtime packages';exit 0;fi
+export RUNTIME_PROFILE_TSV=/network-work/runtime-profile.tsv
+apt-get update
+apt-get install -y --no-install-recommends python3 dpkg-dev binutils
+python3 "$here/package-network.py" snapshot /network-work/baseline.json
+apt-get update
+apt-get install -y --no-install-recommends build-essential dpkg-dev pkg-config autoconf automake libtool patchelf python3 perl ca-certificates gnupg libssl-dev libgnutls28-dev libssh2-1-dev libkrb5-dev libldap2-dev libnghttp2-dev libnghttp3-dev libngtcp2-dev libngtcp2-crypto-gnutls-dev libpsl-dev libidn2-dev libbrotli-dev libzstd-dev zlib1g-dev libfido2-dev libedit-dev patch openssl
+server_args=''
+if python3 -c 'import json,sys;sys.exit("openssh-server" not in json.load(open("/network-work/baseline.json")))';then
+ apt-get install -y --no-install-recommends libpam0g-dev libwrap0-dev libselinux1-dev libaudit-dev libwtmpdb-dev libcrypt-dev
+ server_args='--with-pam --with-tcp-wrappers --with-selinux --with-audit=linux --with-wtmpdb --with-4in6 --disable-strip --with-default-path=/usr/local/bin:/usr/bin:/bin:/usr/games --with-superuser-path=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin --with-libs=-lcrypt ac_cv_func_mkdtemp=no PATH_PASSWD_PROG=/usr/bin/passwd'
+fi
+export CFLAGS="$(dpkg-buildflags --get CFLAGS)" CPPFLAGS="$(dpkg-buildflags --get CPPFLAGS)" LDFLAGS="$(dpkg-buildflags --get LDFLAGS)"
+triplet=$(dpkg-architecture -qDEB_HOST_MULTIARCH)
+jobs=${NETWORK_JOBS:-2}
+python3 "$here/fetch-sources.py" "$here" /network-work
+mkdir -m 700 -p /network-work/gnupg
+export GNUPGHOME=/network-work/gnupg
+gpg --batch --import curl-release-key.asc openssh-release-key.asc
+gpg --batch --verify curl-8.23.0.tar.xz.asc curl-8.23.0.tar.xz
+gpg --batch --verify openssh-10.6p1.tar.gz.asc openssh-10.6p1.tar.gz
+for tls in openssl gnutls; do
+ mkdir -p "$tls"; tar -xf curl-8.23.0.tar.xz -C "$tls" --strip-components=1
+ cd "$tls"
+ if [ "$tls" = gnutls ]; then
+  # Debian's established GnuTLS symbol namespace is CURL_GNUTLS_3, not upstream4.
+  python3 - <<'PY'
+from pathlib import Path
+p=Path('configure');s=p.read_text();old='CURL_LIBCURL_VERSIONED_SYMBOLS_SONAME="4"';assert s.count(old)==1;s=s.replace(old,'CURL_LIBCURL_VERSIONED_SYMBOLS_SONAME="3"');p.write_text(s)
+PY
+  tls_args='--with-gnutls --without-openssl --with-ngtcp2 --with-nghttp3'
+ else
+  tls_args='--with-openssl --with-openssl-quic --with-nghttp3'
+ fi
+ # Match Debian's supported protocol/auth/resolver/compression feature set.
+ ./configure --prefix=/usr --libdir="/usr/lib/$triplet" --disable-static --disable-symbol-hiding --enable-versioned-symbols --enable-threaded-resolver --with-lber-lib=lber --with-gssapi=/usr --with-nghttp2 --with-libssh2 --without-libssh --with-ca-path=/etc/ssl/certs --with-ca-bundle=/etc/ssl/certs/ca-certificates.crt $tls_args
+ make -j"$jobs"
+ # Official ordinary HTTP GET regression only; no adversarial input reproductions.
+ make test TFLAGS='-n 1'
+ make DESTDIR="/network-work/stage-$tls" install
+ cd /network-work
+done
+# Preserve Debian GnuTLS library SONAME and install name without changing application code.
+python3 "$here/package-network.py" rename-gnutls /network-work/stage-gnutls
+mkdir openssh; tar -xf openssh-10.6p1.tar.gz -C openssh --strip-components=1
+cd openssh
+if [ -n "$server_args" ];then
+ # Official integrated distro series retains GSSAPI/SELinux monitor numbering.
+ while IFS= read -r name;do patch --batch --fuzz=0 -p1 -i "$here/server-debian-patches/$name";done < "$here/server-debian-patches/series"
+else
+ patch --batch --fuzz=0 -p1 -i "$here/gssapi.patch"
+ patch --batch --fuzz=0 -p1 -i "$here/ssh-agent-setgid.patch"
+ patch --batch --fuzz=0 -p1 -i "$here/ssh-argv0.patch"
+fi
+autoreconf -fi
+./configure --prefix=/usr --sysconfdir=/etc/ssh --libexecdir=/usr/lib/openssh --with-kerberos5=/usr --with-libedit --with-xauth=/usr/bin/xauth --with-ssl-engine --with-security-key-builtin --with-privsep-path=/run/sshd --with-pid-dir=/run $server_args
+make -j"$jobs"
+# Upstream ordinary SSH-agent regression. Server payload is packaged only if originally installed.
+mkdir -p /run/sshd
+getent passwd sshd >/dev/null || useradd --system --no-create-home --home-dir /run/sshd --shell /usr/sbin/nologin sshd
+make t-exec LTESTS=agent
+make DESTDIR=/network-work/stage-openssh install-nokeys
+cd /network-work
+python3 "$here/package-network.py" package /network-work/baseline.json
+python3 "$here/check-network.py" --staged /network-work
+# Final-image test must separately run after dpkg installation, proving loader resolution.

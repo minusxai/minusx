@@ -24,6 +24,10 @@ on:
       - 'frontend/scripts/check-system-runtime.cjs'
       - 'frontend/scripts/tar-patches/**'
       - 'frontend/scripts/runtime/**'
+      - 'frontend/scripts/network/**'
+      - 'frontend/scripts/libraries/**'
+      - 'frontend/scripts/curl-runtime-probe.c'
+      - 'frontend/scripts/check-network-runtime.cjs'
       - '.github/workflows/docker-build-check.yml'
 
 jobs:
@@ -59,6 +63,27 @@ jobs:
           -v "${{ github.workspace }}/frontend/scripts/check-runtime.cjs:/app/check-runtime.cjs:ro"
           app-validation /app/check-runtime.cjs
 
+      - name: Export network test probe
+        run: >-
+          docker buildx build --target network-test-tools --platform linux/amd64
+          --output type=local,dest=/tmp/network-test-tools frontend
+
+      - name: Check installed network runtime
+        run: >-
+          docker run --rm --entrypoint node
+          --mount type=bind,source=/tmp/network-test-tools,target=/test-tools,readonly
+          app-validation scripts/check-network-runtime.cjs /test-tools/network/test-tools/curl-runtime-probe /test-tools/libraries
+
+      - name: Retain rebuilt network packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: network-source-packages
+          path: |
+            /tmp/network-test-tools/network/*.deb
+            /tmp/network-test-tools/libraries/*.deb
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Release intermediate build cache
         run: docker builder prune --all --force
 
@@ -86,7 +111,7 @@ jobs:
           import hashlib, json, os
           from pathlib import Path
           raw = json.loads(Path('image-scan.raw.json').read_text())
-          files = ['frontend/Dockerfile', 'frontend/package.json', 'frontend/package-lock.json', 'frontend/scripts/patch-npm.mjs', 'frontend/scripts/patch-esbuild.mjs', 'frontend/scripts/check-runtime.cjs', 'frontend/scripts/check-system-runtime.cjs'] + [str(p) for p in sorted(Path('frontend/scripts/tar-patches').glob('*'))] + [str(p) for p in sorted(Path('frontend/scripts/runtime').glob('*'))]
+          files = ['frontend/Dockerfile', 'frontend/package.json', 'frontend/package-lock.json', 'frontend/scripts/patch-npm.mjs', 'frontend/scripts/patch-esbuild.mjs', 'frontend/scripts/check-runtime.cjs', 'frontend/scripts/check-system-runtime.cjs'] + [str(p) for p in sorted(Path('frontend/scripts/tar-patches').glob('*'))] + [str(p) for p in sorted(Path('frontend/scripts/runtime').glob('*'))] + ['frontend/scripts/curl-runtime-probe.c', 'frontend/scripts/check-network-runtime.cjs'] + [str(p) for p in sorted(Path('frontend/scripts/network').rglob('*')) if p.is_file()] + [str(p) for p in sorted(Path('frontend/scripts/libraries').rglob('*')) if p.is_file()]
           report = {
               'source_head': os.environ['SOURCE_HEAD'],
               'checkout_sha': os.environ['CHECKOUT_SHA'],
