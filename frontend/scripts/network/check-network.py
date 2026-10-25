@@ -20,6 +20,10 @@ else:
   # Validate the installed production server payload, not a mounted test server.
   args.ssh_server=Path('/usr/sbin/sshd');args.ssh_libexec=Path('/usr/lib/openssh')
  libs=[Path('/usr/lib')/triplet/family for pkg,family in [('libcurl4t64','libcurl.so.4'),('libcurl3t64-gnutls','libcurl-gnutls.so.4')] if pkg in baseline]
+if not args.staged:
+ import runpy
+ verify=runpy.run_path(str(Path(__file__).with_name('network-proof.py')))['verify']
+ for package in baseline:verify(Path('/'),Path('/usr/share/doc/runtime-network')/package,package)
 with tempfile.TemporaryDirectory(prefix='network-fixture-') as td:
  t=Path(td);(t/'payload').write_text('ordinary loopback transfer\n')
  cert=t/'cert.pem';key=t/'key.pem'

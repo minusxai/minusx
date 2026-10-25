@@ -33,6 +33,12 @@ const execFile = promisify(require('node:child_process').execFile);
   const receipt = JSON.parse(fs.readFileSync('/usr/share/doc/runtime-network/libcurl4t64/runtime-source.json', 'utf8'));
   assert.equal(receipt.version, '8.23.0-1+runtime1');
   assert.equal(receipt.source_archive_sha256, '8dadd7d2536a314f982ad05a651b713f426bf7d02cc2c76cffb9796f2218e6c5');
+  const { verifyNetworkProof } = require('./verify-network-proof.cjs');
+  for (const packageName of ['curl', 'libcurl4t64']) {
+    assert.equal(await installed(packageName), true, packageName);
+    verifyNetworkProof('/', '/usr/share/doc/runtime-network/' + packageName, packageName);
+  }
+  console.log('Installed curl payload hashes bind staged and post-transform HTTP3 transfer proofs');
   // Same final payload and public-API gates as the shared Python checker,
   // using the existing Node runtime rather than adding Python to the image.
   const crypto = require('node:crypto');

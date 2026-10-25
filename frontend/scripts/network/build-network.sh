@@ -102,6 +102,7 @@ cd /network-work
 python3 "$here/check-http3.py"
 # Preserve Debian GnuTLS library SONAME and install name without changing application code.
 python3 "$here/package-network.py" rename-gnutls /network-work/stage-gnutls
+python3 "$here/check-http3.py" --transformed
 mkdir openssh; tar -xf openssh-10.6p1.tar.gz -C openssh --strip-components=1
 cd openssh
 if [ -n "$server_args" ];then
