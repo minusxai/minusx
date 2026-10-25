@@ -17,6 +17,6 @@ const assert = require('node:assert/strict');
   const css = await require('@tailwindcss/node').compile('@tailwind utilities;', { base: process.cwd() });
   assert.match(css.build(['flex']), /display: flex/);
   require('node:child_process').execFileSync(process.execPath, ['node_modules/tsx/dist/cli.mjs', '-e', 'const n: number = 42; if(n !== 42) process.exit(1)']);
-  require('./scripts/check-system-runtime.cjs');
+  require(require('node:path').join(process.cwd(), 'scripts/check-system-runtime.cjs'));
   console.log('Native SQLite, DuckDB, Sharp, Tailwind oxide/compiler and tsx checks passed');
 })().catch(error => { console.error(error); process.exit(1); });
