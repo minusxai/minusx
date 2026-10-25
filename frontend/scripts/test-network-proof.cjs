@@ -60,3 +60,36 @@ test('wrong transfer phase fails', t => {
 test('native inventory cannot escape the runtime root', t => {
   const f = fixture(t); f.write('runtime-native.json', { '/usr/../outside': 'different' }); assert.throws(f.verify);
 });
+
+function sourceFixture(t, variant = 'openssl') {
+  const f = fixture(t, variant === 'gnutls');
+  const source = structuredClone(require('./network/curl-maintenance-source.json'));
+  const config = {
+    tls: variant,
+    config_sha256: 'a'.repeat(64),
+    required_defined: ['USE_LIBSSH2', 'USE_OPENLDAP', 'HAVE_GSSAPI', 'USE_LIBRTMP', 'USE_TLS_SRP', 'USE_NGTCP2', 'USE_NGHTTP3', variant === 'gnutls' ? 'USE_GNUTLS' : 'USE_OPENSSL'].sort(),
+    forbidden_undefined: ['USE_LIBSSH', 'USE_WOLFSSL', 'USE_OPENSSL_QUIC', 'CURL_DISABLE_IPFS', 'CURL_DISABLE_SMB', 'CURL_DISABLE_NTLM', variant === 'gnutls' ? 'USE_OPENSSL' : 'USE_GNUTLS'].sort(),
+  };
+  f.write('runtime-curl-maintenance-source.json', source);
+  f.write('runtime-curl-config.json', config);
+  return { ...f, source, config, verify: () => require('./verify-network-proof.cjs').verifyCurlSource(f.doc, variant) };
+}
+test('both TLS receipts bind the exact maintenance patch set and generated configuration', t => {
+  sourceFixture(t).verify(); sourceFixture(t, 'gnutls').verify();
+});
+test('changed source patch digest fails installed receipt admission', t => {
+  const f = sourceFixture(t); f.source.patches[Object.keys(f.source.patches)[0]] = 'b'.repeat(64);
+  f.write('runtime-curl-maintenance-source.json', f.source); assert.throws(f.verify);
+});
+test('missing native QUIC exclusion fails installed receipt admission', t => {
+  const f = sourceFixture(t); f.config.forbidden_undefined = f.config.forbidden_undefined.filter(name => name !== 'USE_OPENSSL_QUIC');
+  f.write('runtime-curl-config.json', f.config); assert.throws(f.verify);
+});
+test('lost original capability fails installed receipt admission', t => {
+  const f = sourceFixture(t); f.config.required_defined = f.config.required_defined.filter(name => name !== 'USE_TLS_SRP');
+  f.write('runtime-curl-config.json', f.config); assert.throws(f.verify);
+});
+test('wrong TLS family fails installed receipt admission', t => {
+  const f = sourceFixture(t); f.config.tls = 'gnutls';
+  f.write('runtime-curl-config.json', f.config); assert.throws(f.verify);
+});

@@ -47,7 +47,7 @@ if mode=='rename-gnutls':
  sys.exit()
 assert mode=='package'
 baseline=json.loads(Path(arg).read_text());Path('/out').mkdir(exist_ok=True)
-work=Path('/network-work');roots={};versions={p:('1:10.6p1-1+runtime1' if p.startswith('openssh-') else '8.23.0-1+runtime1') for p in baseline}
+work=Path('/network-work');roots={};versions={p:('1:10.6p1-1+runtime1' if p.startswith('openssh-') else '8.18.0-1+runtime1') for p in baseline}
 for package,original in baseline.items():
  root=work/'packages'/package;root.mkdir(parents=True,exist_ok=True);replaced=[]
  stage=work/('stage-openssh' if package.startswith('openssh-') else 'stage-gnutls' if package.endswith('gnutls') else 'stage-openssl')
@@ -97,12 +97,15 @@ for package,original in baseline.items():
   copy(Path(__file__).parent/'server-debian-patches/copyright',doc/'copyright.distro-source')
  copy(work/('openssh/LICENCE' if package.startswith('openssh-') else 'openssl/COPYING'),doc/'COPYING.upstream')
  if not package.startswith('openssh-'):
+  copy(work/'curl-maintenance-applied.json',doc/'runtime-curl-maintenance-source.json')
+  copy(work/'curl-maintenance-vendor/debian/copyright',doc/'COPYRIGHT.maintenance-source')
+  copy(work/('gnutls' if package.endswith('gnutls') else 'openssl')/'runtime-config.json',doc/'runtime-curl-config.json')
   copy(work/'ngtcp2/COPYING',doc/'COPYING.ngtcp2')
   copy(Path(__file__).parent/'ngtcp2-provenance.json',doc/'runtime-embedded-ngtcp2.json')
   copy(work/'http3-ordinary-proof.json',doc/'runtime-build-http3-proof.json')
   copy(work/'http3-transformed-proof.json',doc/'runtime-transformed-http3-proof.json')
   if package.endswith('gnutls'):copy(stage/'soname-transform.json',doc/'runtime-soname-transform.json')
- (doc/'runtime-source.json').write_text(json.dumps({'source':'openssh' if package.startswith('openssh-') else 'curl','version':versions[package],'replaced':replaced,'upstream_url':'https://www.openssh.org/' if package.startswith('openssh-') else 'https://curl.se/','embedded_components':([] if package.startswith('openssh-') else [{'name':'ngtcp2','version':'1.25.0','sha256':'2a34d2484ba17847a5d11965704e9dd0fac4c6d8efc75ffe1ec7de66d8c6b6fb','linkage':'static PIC','crypto_backend':'gnutls' if package.endswith('gnutls') else 'ossl'}]),'source_archive_sha256':'a9dc9565dffe8640f64d863cd29a32bc4a3dbdec0566a7fc44c5d6ee767d5f39' if package.startswith('openssh-') else '8dadd7d2536a314f982ad05a651b713f426bf7d02cc2c76cffb9796f2218e6c5'},indent=2)+'\n')
+ (doc/'runtime-source.json').write_text(json.dumps({'source':'openssh' if package.startswith('openssh-') else 'curl','version':versions[package],'replaced':replaced,'upstream_url':'https://www.openssh.org/' if package.startswith('openssh-') else 'https://curl.se/','embedded_components':([] if package.startswith('openssh-') else [{'name':'ngtcp2','version':'1.25.0','sha256':'2a34d2484ba17847a5d11965704e9dd0fac4c6d8efc75ffe1ec7de66d8c6b6fb','linkage':'static PIC','crypto_backend':'gnutls' if package.endswith('gnutls') else 'ossl'}]),'source_archive_sha256':'a9dc9565dffe8640f64d863cd29a32bc4a3dbdec0566a7fc44c5d6ee767d5f39' if package.startswith('openssh-') else 'e9274a5f8ab5271c0e0e6762d2fce194d5f98acc568e4ce816845b2dcc0cf88f'},indent=2)+'\n')
  native={('/'+str(p.relative_to(root))):hashlib.sha256(p.read_bytes()).hexdigest() for p in root.rglob('*') if p.is_file() and not p.is_symlink() and p.open('rb').read(4)==b'\x7fELF'}
  (doc/'runtime-native.json').write_text(json.dumps(native,indent=2)+'\n')
  import runpy

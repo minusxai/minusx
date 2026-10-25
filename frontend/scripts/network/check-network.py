@@ -34,7 +34,7 @@ with tempfile.TemporaryDirectory(prefix='network-fixture-') as td:
  thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start();url='https://localhost:'+str(server.server_port)+'/payload'
  try:
   for library in libs:
-   lib=ctypes.CDLL(str(library));lib.curl_version.restype=ctypes.c_char_p;version=lib.curl_version().decode();assert '8.23.0' in version,version
+   lib=ctypes.CDLL(str(library));lib.curl_version.restype=ctypes.c_char_p;version=lib.curl_version().decode();assert '8.18.0' in version,version
    assert ('GnuTLS' in version) == ('gnutls' in library.name),version
    if args.staged:
     from network_common import capabilities
@@ -58,7 +58,7 @@ with tempfile.TemporaryDirectory(prefix='network-fixture-') as td:
   if 'curl' in baseline:
    env=os.environ.copy()
    if args.staged:env['LD_LIBRARY_PATH']=str(args.staged/'stage-openssl/usr/lib'/triplet)
-   version=run([curl,'--version'],env=env);assert version.startswith('curl 8.23.0'),version
+   version=run([curl,'--version'],env=env);assert version.startswith('curl 8.18.0'),version
    if args.staged:
     old=baseline['curl']['curl_version'];oldlines=old.splitlines();newlines=version.splitlines()
     for prefix in ['Protocols:','Features:']:

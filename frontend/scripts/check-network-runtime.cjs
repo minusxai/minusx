@@ -7,8 +7,8 @@ const { promisify } = require('node:util');
 const execFile = promisify(require('node:child_process').execFile);
 (async () => {
   const run = async (command, args, options = {}) => (await execFile(command, args, { encoding: 'utf8', timeout: 15000, ...options })).stdout;
-  assert.equal((await run('dpkg-query', ['-W', '-f=${Version}', 'curl'])).trim(), '8.23.0-1+runtime1');
-  assert.equal((await run('dpkg-query', ['-W', '-f=${Version}', 'libcurl4t64'])).trim(), '8.23.0-1+runtime1');
+  assert.equal((await run('dpkg-query', ['-W', '-f=${Version}', 'curl'])).trim(), '8.18.0-1+runtime1');
+  assert.equal((await run('dpkg-query', ['-W', '-f=${Version}', 'libcurl4t64'])).trim(), '8.18.0-1+runtime1');
   const installed = async name => {
     try { return (await run('dpkg-query', ['-W', '-f=${db:Status-Status}', name])).trim() === 'installed'; }
     catch (error) { if (error.code !== 1) throw error; return false; }
@@ -31,12 +31,13 @@ const execFile = promisify(require('node:child_process').execFile);
   assert.doesNotMatch(dependencies, /libnss3\.so|not found/);
   assert.ok(['x64', 'arm64'].includes(process.arch), '32-bit p11-kit overflow exclusion requires a 64-bit runtime');
   const receipt = JSON.parse(fs.readFileSync('/usr/share/doc/runtime-network/libcurl4t64/runtime-source.json', 'utf8'));
-  assert.equal(receipt.version, '8.23.0-1+runtime1');
-  assert.equal(receipt.source_archive_sha256, '8dadd7d2536a314f982ad05a651b713f426bf7d02cc2c76cffb9796f2218e6c5');
-  const { verifyNetworkProof } = require('./verify-network-proof.cjs');
+  assert.equal(receipt.version, '8.18.0-1+runtime1');
+  assert.equal(receipt.source_archive_sha256, 'e9274a5f8ab5271c0e0e6762d2fce194d5f98acc568e4ce816845b2dcc0cf88f');
+  const { verifyNetworkProof, verifyCurlSource } = require('./verify-network-proof.cjs');
   for (const packageName of ['curl', 'libcurl4t64']) {
     assert.equal(await installed(packageName), true, packageName);
     verifyNetworkProof('/', '/usr/share/doc/runtime-network/' + packageName, packageName);
+    verifyCurlSource('/usr/share/doc/runtime-network/' + packageName, 'openssl');
   }
   console.log('Installed curl payload hashes bind staged and post-transform HTTP3 transfer proofs');
   // Same final payload and public-API gates as the shared Python checker,
@@ -73,7 +74,7 @@ const execFile = promisify(require('node:child_process').execFile);
     await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
     const url = 'https://127.0.0.1:' + server.address().port + '/payload';
     const version = await run('curl', ['--version']);
-    assert.match(version, /^curl 8\.23\.0 .*libcurl\/8\.23\.0 .*OpenSSL\//);
+    assert.match(version, /^curl 8\.18\.0 .*libcurl\/8\.18\.0 .*OpenSSL\//);
     assert.equal(await run('curl', ['--fail', '--silent', '--show-error', '--noproxy', '*', '--cacert', cert, url]), payload);
     assert.equal(await run(process.argv[2], [url, cert]), payload);
     console.log('Installed curl CLI and libcurl ABI perform CA-verified TLS transfers; scoped component inventory and loader checks passed');

@@ -41,4 +41,17 @@ function verifyNetworkProof(root, directory, packageName) {
   return native;
 }
 
-module.exports = { verifyNetworkProof };
+function verifyCurlSource(doc, variant) {
+  assert.ok(['openssl', 'gnutls'].includes(variant));
+  const read = name => JSON.parse(fs.readFileSync(path.join(doc, name), 'utf8'));
+  assert.deepEqual(read('runtime-curl-maintenance-source.json'), require('./network/curl-maintenance-source.json'));
+  const config = read('runtime-curl-config.json');
+  assert.equal(config.tls, variant);
+  assert.match(config.config_sha256, /^[a-f0-9]{64}$/);
+  const required = ['USE_LIBSSH2', 'USE_OPENLDAP', 'HAVE_GSSAPI', 'USE_LIBRTMP', 'USE_TLS_SRP', 'USE_NGTCP2', 'USE_NGHTTP3', variant === 'gnutls' ? 'USE_GNUTLS' : 'USE_OPENSSL'].sort();
+  const forbidden = ['USE_LIBSSH', 'USE_WOLFSSL', 'USE_OPENSSL_QUIC', 'CURL_DISABLE_IPFS', 'CURL_DISABLE_SMB', 'CURL_DISABLE_NTLM', variant === 'gnutls' ? 'USE_OPENSSL' : 'USE_GNUTLS'].sort();
+  assert.deepEqual(config.required_defined, required);
+  assert.deepEqual(config.forbidden_undefined, forbidden);
+}
+
+module.exports = { verifyNetworkProof, verifyCurlSource };

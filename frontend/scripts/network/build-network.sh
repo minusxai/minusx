@@ -26,7 +26,7 @@ for name,item in b.items():
  if item.get("library_capabilities"):print("Frozen original "+name+": "+json.dumps(item["library_capabilities"],sort_keys=True),flush=True)
 PYBASE
 apt-get update
-apt-get install -y --no-install-recommends build-essential dpkg-dev pkg-config autoconf automake libtool patchelf python3 perl ca-certificates gnupg libssl-dev libgnutls28-dev libssh2-1-dev libkrb5-dev libldap2-dev libnghttp2-dev libnghttp3-dev libpsl-dev libidn2-dev libbrotli-dev libzstd-dev zlib1g-dev libfido2-dev libedit-dev libev-dev patch openssl
+apt-get install -y --no-install-recommends build-essential dpkg-dev git pkg-config autoconf automake libtool patchelf python3 perl ca-certificates gnupg libssl-dev libgnutls28-dev libssh2-1-dev libkrb5-dev libldap2-dev libnghttp2-dev libnghttp3-dev libpsl-dev libidn2-dev libbrotli-dev libzstd-dev zlib1g-dev libfido2-dev libedit-dev libev-dev patch openssl librtmp-dev
 server_args=''
 if python3 -c 'import json,sys;sys.exit("openssh-server" not in json.load(open("/network-work/baseline.json")))';then
  apt-get install -y --no-install-recommends libpam0g-dev libwrap0-dev libselinux1-dev libaudit-dev libwtmpdb-dev libcrypt-dev
@@ -39,7 +39,7 @@ python3 "$here/fetch-sources.py" "$here" /network-work
 mkdir -m 700 -p /network-work/gnupg
 export GNUPGHOME=/network-work/gnupg
 gpg --batch --import curl-release-key.asc openssh-release-key.asc
-gpg --batch --verify curl-8.23.0.tar.xz.asc curl-8.23.0.tar.xz
+python3 "$here/prepare-curl-source.py" "$here" /network-work
 gpg --batch --verify openssh-10.6p1.tar.gz.asc openssh-10.6p1.tar.gz
 # Native OpenSSL-QUIC was removed in curl8.19. Use the maintained backend.
 # Keep its PIC static archives private to the build; retain the original TLS ABI.
@@ -55,7 +55,6 @@ test -f /network-work/quic/lib/libngtcp2_crypto_ossl.a
 test -f /network-work/quic/lib/libngtcp2_crypto_gnutls.a
 cd /network-work
 for tls in openssl gnutls; do
- mkdir -p "$tls"; tar -xf curl-8.23.0.tar.xz -C "$tls" --strip-components=1
  cd "$tls"
  if [ "$tls" = gnutls ]; then
   # Debian's established GnuTLS symbol namespace is CURL_GNUTLS_3, not upstream4.
@@ -68,7 +67,8 @@ PY
   tls_args='--with-openssl --with-ngtcp2=/network-work/quic --with-nghttp3'
  fi
  # Match Debian's supported protocol/auth/resolver/compression feature set.
- PKG_CONFIG_PATH=/network-work/quic/lib/pkgconfig ./configure --enable-option-checking=fatal --prefix=/usr --libdir="/usr/lib/$triplet" --disable-static --disable-symbol-hiding --enable-versioned-symbols --enable-threaded-resolver --with-lber-lib=lber --with-gssapi=/usr --with-nghttp2 --with-libssh2 --without-libssh --with-ca-path=/etc/ssl/certs --with-ca-bundle=/etc/ssl/certs/ca-certificates.crt $tls_args
+ PKG_CONFIG_PATH=/network-work/quic/lib/pkgconfig ./configure --enable-option-checking=fatal --prefix=/usr --libdir="/usr/lib/$triplet" --disable-static --disable-symbol-hiding --enable-versioned-symbols --enable-threaded-resolver --enable-ntlm --enable-tls-srp --enable-smb --enable-ipfs --with-librtmp --with-lber-lib=lber --with-gssapi=/usr --with-nghttp2 --with-libssh2 --without-libssh --with-ca-path=/etc/ssl/certs --with-ca-bundle=/etc/ssl/certs/ca-certificates.crt $tls_args
+ python3 "$here/check-curl-config.py" "$PWD" "$tls"
  make -j"$jobs"
  # Official ordinary HTTP GET regression only; no adversarial input reproductions.
  make test TFLAGS='-n 1'
