@@ -26,6 +26,7 @@ on:
       - 'frontend/scripts/runtime/**'
       - 'frontend/scripts/network/**'
       - 'frontend/scripts/libraries/**'
+      - 'frontend/scripts/sqlite/**'
       - 'frontend/scripts/curl-runtime-probe.c'
       - 'frontend/scripts/check-network-runtime.cjs'
       - '.github/workflows/docker-build-check.yml'
@@ -69,6 +70,7 @@ jobs:
           --output type=local,dest=/tmp/network-test-tools frontend
 
       - name: Check actual kernel keyring source coverage
+        shell: bash
         run: |
           docker buildx build --target library-source-proof --platform linux/amd64 --load --tag library-source-validation frontend
           sh frontend/scripts/libraries/run-keyring-hosted.sh library-source-validation /runtime-build/libraries/run-keyring-source-proof.sh 2>&1 | tee /tmp/keyring-source-proof.log
