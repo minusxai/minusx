@@ -60,6 +60,9 @@ make install
 test -f /network-work/quic/lib/libngtcp2.a
 test -f /network-work/quic/lib/libngtcp2_crypto_ossl.a
 test -f /network-work/quic/lib/libngtcp2_crypto_gnutls.a
+# A prefix-valued curl option hides system TLS .pc dependencies in curl8.18.
+# Select exact private modules via PATH precedence while preserving native paths.
+PKG_CONFIG_PATH=/network-work/quic/lib/pkgconfig python3 "$here/check-quic-pkgconfig.py" /network-work/quic
 cd /network-work
 for tls in openssl gnutls; do
  cd "$tls"
@@ -69,9 +72,9 @@ for tls in openssl gnutls; do
 from pathlib import Path
 p=Path('configure');s=p.read_text();old='CURL_LIBCURL_VERSIONED_SYMBOLS_SONAME="4"';assert s.count(old)==1;s=s.replace(old,'CURL_LIBCURL_VERSIONED_SYMBOLS_SONAME="3"');p.write_text(s)
 PY
-  tls_args='--with-gnutls --without-openssl --with-ngtcp2=/network-work/quic --with-nghttp3'
+  tls_args='--with-gnutls --without-openssl --with-ngtcp2 --with-nghttp3'
  else
-  tls_args='--with-openssl --with-ngtcp2=/network-work/quic --with-nghttp3'
+  tls_args='--with-openssl --with-ngtcp2 --with-nghttp3'
  fi
  # Match Debian's supported protocol/auth/resolver/compression feature set.
  PKG_CONFIG_PATH=/network-work/quic/lib/pkgconfig ./configure --enable-option-checking=fatal --prefix=/usr --libdir="/usr/lib/$triplet" --disable-static --disable-symbol-hiding --enable-versioned-symbols --enable-threaded-resolver --enable-ntlm --enable-tls-srp --enable-smb --enable-ipfs --with-librtmp --with-lber-lib=lber --with-gssapi=/usr --with-nghttp2 --with-libssh2 --without-libssh --with-ca-path=/etc/ssl/certs --with-ca-bundle=/etc/ssl/certs/ca-certificates.crt $tls_args

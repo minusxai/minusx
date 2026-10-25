@@ -125,3 +125,13 @@ libtool supply regeneration; git/gnupg/gpgv provide source application/authentic
 dpkg-dev/binutils provide package/ABI tools; essential coreutils/sed/awk/grep/tar
 provide shell utilities. The exact admission shell is tested against controlled
 all-present and missing git/gpgv inventories. Actual Linux retry remains unrun.
+
+QUIC metadata resolution (representative cd622 configure failure): curl8.18
+prefix-valued --with-ngtcp2 restricts PKG_CONFIG_LIBDIR and hides the native TLS
+Requires.private dependencies. Use pathless --with-ngtcp2 with private-first
+PKG_CONFIG_PATH. A mandatory resolver gate requires exact ngtcp2 1.25.0 private
+libdir for the core and both crypto modules. Actual native pkgconf3.0.10 controls
+using checksum-verified upstream .pc templates pass both TLS dependencies and
+reject hidden/missing TLS metadata, wrong version and wrong provider. These are
+metadata-resolution tests; Linux linking and all existing transfer gates remain
+required and unrun for this correction.
