@@ -115,7 +115,20 @@ for package in packages:
                 copy(library, root / 'usr/lib' / triplet / library.name)
                 replaced.append({'installed': str(old), 'upstream': str(library)})
     doc = root / 'usr/share/doc' / package
+    documentation = {'installed_lookup': '/usr/share/doc/' + package}
+    if doc.is_symlink():
+        # Keep Debian's installed documentation alias intact. Store this
+        # package's new receipts in a unique appendix beneath its original
+        # target, rather than following a dangling staging link or overwriting
+        # another package's license/receipt. No dpkg symlink migration needed.
+        original_doc = Path('/usr/share/doc') / package
+        assert original_doc.is_symlink() and os.readlink(doc) == os.readlink(original_doc)
+        original_target = original_doc.resolve()
+        assert original_target.is_dir() and original_target.is_relative_to(Path('/usr/share/doc'))
+        documentation['retained_alias'] = os.readlink(doc)
+        doc = root / original_target.relative_to('/') / ('runtime-' + package)
     doc.mkdir(parents=True, exist_ok=True)
+    documentation['payload_directory'] = '/' + str(doc.relative_to(root))
     license_file = Path({'coreutils': '/corebuild/COPYING', 'ncurses': '/cursesbuild/COPYING', 'dash': '/dashbuild/COPYING'}[mode])
     copy(license_file, doc / 'COPYING.upstream')
     source_receipt = {
@@ -123,7 +136,7 @@ for package in packages:
         'ncurses': {'url': 'https://invisible-island.net/archives/ncurses/ncurses-6.6.tar.gz', 'sha256': '355b4cbbed880b0381a04c46617b7656e362585d52e9cf84a67e2009b749ff11'},
         'dash': {'url': 'https://git.kernel.org/pub/scm/utils/dash/dash.git/snapshot/dash-0.5.12.tar.gz', 'sha256': '0d632f6b945058d84809cac7805326775bd60cb4a316907d0bd4228ff7107154', 'configuration': '--enable-fnmatch'},
     }[mode]
-    (doc / 'runtime-source.json').write_text(json.dumps({'source': mode, 'version': version, 'archive': source_receipt, 'replaced': replaced}, indent=2) + '\n')
+    (doc / 'runtime-source.json').write_text(json.dumps({'source': mode, 'version': version, 'archive': source_receipt, 'replaced': replaced, 'documentation': documentation}, indent=2) + '\n')
     roots[package] = root
 
 # Give dpkg-shlibdeps the exact replacement libraries and their honest package versions.
