@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
   const Database = require('better-sqlite3');
   const sqlite = new Database(':memory:');
   assert.equal(sqlite.prepare('select 42 as answer').get().answer, 42);
+  require(require('node:path').join(process.cwd(), 'scripts/check-embedded-sqlite.cjs')).checkEmbeddedSqlite(sqlite);
   sqlite.close();
   const { DuckDBInstance } = require('@duckdb/node-api');
   const instance = await DuckDBInstance.create(':memory:');

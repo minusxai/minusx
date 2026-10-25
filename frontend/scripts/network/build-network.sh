@@ -89,7 +89,12 @@ mkdir nghttp3-fixture; tar -xf nghttp3-1.18.0.tar.xz -C nghttp3-fixture --strip-
 cd nghttp3-fixture
 ./configure --enable-option-checking=fatal --prefix=/network-work/http3-fixture --libdir=/network-work/http3-fixture/lib --enable-lib-only --enable-static --disable-shared --with-pic
 make -j"$jobs"
-make check
+# Upstream tests link private symbols directly. Static-only libtool places these
+# objects beside .lo files, not in .libs (the upstream shared-build default).
+# Keep every upstream test; override only its object locations for this layout.
+test -n "$(find lib -maxdepth 1 -name '*.o' -print -quit)"
+test -n "$(find lib/sfparse -maxdepth 1 -name '*.o' -print -quit)"
+make check 'main_LDADD=../lib/*.o ../lib/sfparse/*.o' 'main_DEPENDENCIES=../lib/*.o ../lib/sfparse/*.o'
 make install
 cd /network-work
 mkdir ngtcp2-fixture; tar -xf ngtcp2-1.25.0.tar.xz -C ngtcp2-fixture --strip-components=1
