@@ -100,9 +100,13 @@ cd /network-work
 mkdir ngtcp2-fixture; tar -xf ngtcp2-1.25.0.tar.xz -C ngtcp2-fixture --strip-components=1
 cd ngtcp2-fixture
 PKG_CONFIG_PATH=/network-work/http3-fixture/lib/pkgconfig ./configure --enable-option-checking=fatal --prefix=/network-work/unused-fixture --enable-static --disable-shared --with-openssl --with-gnutls --with-libnghttp3 --with-libev
-make -j"$jobs" -C lib
-make -j"$jobs" -C crypto
-make -j"$jobs" -C examples osslserver gtlsserver
+# Follow upstream recursive ordering: lib/tests/doc, crypto, third-party,
+# examples. The example server links third-party/liburlparse.la as well as
+# libngtcp2 and crypto; manual subdirectory builds omit that prerequisite.
+make -j"$jobs"
+make check
+test -x examples/osslserver
+test -x examples/gtlsserver
 cd /network-work
 python3 "$here/check-http3.py"
 # Preserve Debian GnuTLS library SONAME and install name without changing application code.
