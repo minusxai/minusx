@@ -49,7 +49,12 @@ cc -DSQLITE_ENABLE_SESSION=1 -DSQLITE_ENABLE_PREUPDATE_HOOK=1 -I"$source" "$reci
 LD_LIBRARY_PATH=/build/sqlite/original /build/sqlite/check-baseline --options > /build/sqlite/baseline-options.raw
 sort /build/sqlite/baseline-options.raw > /out/sqlite-baseline-options
 # Debian does not run these session tests automatically. Execute them explicitly.
-(cd "$source" && make testfixture)
+# Debian disables amalgamation. Its TESTSRC and TESTSRC2 both include
+# fts3_term.c; deduplicate source inputs only, preserving every unique source
+# and keeping the static archive last for normal linker ordering.
+# Avoid mixing directly compiled SQLITE_TEST core with shared non-test core.
+test -f "$source/.libs/libsqlite3.a"
+(cd "$source" && make 'TESTFIXTURE_SRC=$(sort $(TESTSRC) $(TOP)/src/tclsqlite.c $(TESTSRC2)) .libs/libsqlite3.a' testfixture)
 for test in session9 sessionC session1; do
  (cd "$source" && ./testfixture "ext/session/$test.test") > "/out/sqlite-$test.log" 2>&1
  cat "/out/sqlite-$test.log"

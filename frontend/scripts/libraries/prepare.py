@@ -13,10 +13,8 @@ source=sys.argv[3];item=config[source];eligible=any(p in profile for p in item['
 if mode=='dsc':print(dsc if eligible else '');sys.exit()
 assert eligible
 if mode=='dependencies':
- fields={};key=None
- for line in dsc.read_text().splitlines():
-  if line.startswith((' ','\t')) and key:fields[key]+=' '+line.strip()
-  elif ': ' in line:key,value=line.split(': ',1);fields[key]=value
+ import runpy
+ fields=runpy.run_path(str(here/'dsc-fields.py'))['parse_dsc_fields'](dsc.read_text())
  print(', '.join(fields[k] for k in ['Build-Depends','Build-Depends-Arch'] if k in fields));sys.exit()
 assert mode=='prepare';root=work/('source-'+source);subprocess.run(['dpkg-source','--no-check','-x',str(dsc),str(root)],check=True)
 env=os.environ|{'QUILT_PATCHES':'debian/patches','QUILT_PATCH_OPTS':'--fuzz=0'}

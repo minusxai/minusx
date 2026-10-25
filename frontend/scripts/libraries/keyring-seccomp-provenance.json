@@ -5,5 +5,6 @@
   "change": "Append exactly one allow entry for add_key/keyctl/request_key, preserving all original default policy entries and default deny action.",
   "boundary": "Only disposable hosted source-test container on dedicated ephemeral CI runner, no daemon socket/host data/credentials mounts and network none. Never apply to shipped runtime or production. No privileged/unconfined container or added capability required by proposed interface.",
   "primary_reason": "https://docs.docker.com/engine/security/seccomp/ documents these three calls blocked because kernel keyrings are not namespaced.",
-  "status": "Static profile delta validated. Actual kernel support and source-keyring test execution NOT yet proved; hosted container required."
+  "status": "Static profile delta validated. Actual kernel support and source-keyring test execution NOT yet proved; hosted container required.",
+  "ownership": "Host helper creates a NEW container with remediation-team/task labels, verifies/records its ID+ownership before start, then starts only that ID. Cleanup removes only that newly created ID. No existing/other-agent container use. This source-test container is not a browser."
 }

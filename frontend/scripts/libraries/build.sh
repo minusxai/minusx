@@ -3,7 +3,8 @@ set -eu
 export DEBIAN_FRONTEND=noninteractive DEB_BUILD_MAINT_OPTIONS=hardening=+all
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 . /etc/os-release
-test "$ID" = debian && test "$VERSION_ID" = 13
+test "$ID" = debian
+test "$VERSION_ID" = 13
 (cd "$here" && sha256sum -c SHA256SUMS)
 mkdir -p /libraries-work/baseline /out;cd /libraries-work
 : > runtime-profile.tsv
