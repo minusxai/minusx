@@ -43,3 +43,10 @@ contains exactly `path-exclude /usr/share/lintian/overrides/*`. No other missing
 lintian content, runtime or configuration receives an exception. Original policy
 bytes and full/present/absent path lists are retained in /out; source receipts
 remain available there even when their documentation directory must stay absent.
+
+The idmap source-pinning caller also requires fileutils.h, which owns the portable
+RESOLVE_NO_SYMLINKS fallback. The explicit local header prerequisite preserves
+all capability guards. Its ordinary C check compiles the actual caller expression
+against the actual source header, without supplying resolver definitions, and
+requires the removed-header undeclared-constant negative control to fail. This
+covers the include integration that an isolated mock constant cannot test.

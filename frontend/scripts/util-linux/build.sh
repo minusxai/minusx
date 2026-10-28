@@ -76,6 +76,7 @@ apt-get build-dep -y --no-install-recommends util-linux=2.41.5-0+deb13u1
 python3 "$here/package.py" snapshot "$here" /util-linux-work
 cd /util-linux-work/source
 python3 "$here/check-source.py" "$PWD" /out/source-regression.json
+python3 "$here/check-idmap-header.py" "$PWD" /out/idmap-header-regression.json
 chown -R nobody:nogroup /util-linux-work /tmp/util-linux-home
 # Preserve the distro's complete build and test targets. No nocheck/profile skip.
 if runuser -u nobody -- env HOME=/tmp/util-linux-home \

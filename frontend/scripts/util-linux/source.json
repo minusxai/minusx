@@ -83,6 +83,15 @@
       "upstream_commit": "8b29aeb081e297e48c4c1ac53d88ae07e1331984",
       "url": "https://github.com/util-linux/util-linux/commit/8b29aeb081e297e48c4c1ac53d88ae07e1331984",
       "sha256": "6c2213341fe4dc23dc0182b8057605af54563ac434f4fa60430d7a483649112e"
+    },
+    {
+      "file": "patches/08-idmap-fileutils-header.patch",
+      "sha256": "646945ef07f965649aa1ca915150ca485539c97f06021a1ae9b8be842026c57c",
+      "provenance": "Local include prerequisite for upstream source-pinning caller; portable RESOLVE_NO_SYMLINKS definition is in source include/fileutils.h",
+      "upstream_context": [
+        "https://github.com/util-linux/util-linux/commit/9fcb98bf08d9119d07ba3a3c709b1a85e4a1bbcb",
+        "https://github.com/util-linux/util-linux/commit/4cccf4edc256507734e3484cfaedf5980945c2fa"
+      ]
     }
   ],
   "distribution": "Debian trixie",

@@ -5,3 +5,4 @@
 05-failed-helper-hooks.patch
 06-cgroup-close.patch
 07-login-fqdn.patch
+08-idmap-fileutils-header.patch
