@@ -119,8 +119,9 @@ for package,root in roots.items():
  for line in baseline[package]['status'].splitlines():
   if line.startswith((' ','\t')):
    if key in fields:fields[key]+='\n'+line
-  elif ': ' in line:
-   key,value=line.split(': ',1)
+  elif ':' in line:
+   # Empty headers such as Conffiles: must still end the previous field.
+   key,value=line.split(':',1);value=value.lstrip()
    if key in ['Package','Section','Priority','Essential','Multi-Arch','Provides','Breaks','Replaces','Pre-Depends','Depends','Conflicts','Recommends','Suggests','Enhances','Homepage']:fields[key]=value
  fields.update(Package=package,Source='openssh' if package.startswith('openssh-') else 'curl',Version=versions[package],Architecture=arch,Maintainer='Runtime Maintainers <maintainers@example.invalid>',Description='Verified upstream network runtime')
  elf=[p for p in root.rglob('*') if p.is_file() and not p.is_symlink() and p.open('rb').read(4)==b'\x7fELF']
