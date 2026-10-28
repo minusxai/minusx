@@ -1,0 +1,50 @@
+name: Qualify exact util package and native closure
+on:
+  push:
+    branches: [qualification/util-native-20261028]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Authenticate immutable successful source job and closed input bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 qualification/util-admission/fetch-util-compile.py qualification/util-admission/debian-compile.lock.json "$RUNNER_TEMP/compiled-util"
+      - name: Prepare minimal package-only context
+        run: |
+          set -eu
+          context="$RUNNER_TEMP/util-admission"
+          mkdir -p "$context"
+          cp -R qualification/util-context/debian-phase "$context/recipe"
+          cp -R qualification/util-admission "$context/checks"
+          cp -R frontend/scripts/perl/perl-consumer-tools "$context/tool-recipe"
+          cp frontend/scripts/patch-npm.mjs "$context/patch-npm.mjs"
+          cp qualification/util-admission/Dockerfile "$context/Dockerfile"
+      - name: Retain package-only candidate before fresh runtime qualification
+        run: |
+          set -eu
+          docker buildx build --progress=plain --build-context compiled-util="$RUNNER_TEMP/compiled-util" --target package-export --output type=local,dest=util-package-candidate "$RUNNER_TEMP/util-admission"
+      - name: Fresh native installation and complete resolver preservation gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker buildx build --progress=plain --no-cache-filter native --build-context compiled-util="$RUNNER_TEMP/compiled-util" --target native-export --output type=local,dest=util-native-proof "$RUNNER_TEMP/util-admission" 2>&1 | tee "$RUNNER_TEMP/util-native.log"
+      - name: Bind successful unadmitted native candidate receipts
+        run: python3 qualification/util-admission/record-native-candidate.py util-package-candidate util-native-proof qualification/util-admission/debian-compile.lock.json
+      - name: Retain unadmitted package candidate and technical native proof
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: util-package-native-candidate
+          path: |
+            util-package-candidate
+            util-native-proof
+          if-no-files-found: error
+          retention-days: 7
