@@ -83,9 +83,25 @@ probe='BEGIN { @INC = ('+','.join(json.dumps(str(root/s.lstrip('/'))) for s in i
 loaded=json.loads(run([str(root/elf['usr/bin/perl']['interpreter'].lstrip('/')),'--library-path',str(root/'usr/lib/x86_64-linux-gnu')+':'+str(root/'lib/x86_64-linux-gnu'),str(root/'usr/bin/perl'),'-e',probe]))
 assert loaded and all(pathlib.Path(p).resolve().is_relative_to(root.resolve()) for p in loaded.values()),loaded
 assert len({entry['interpreter'] for entry in elf.values()})==1,'Tool ELF interpreters differ'
-python_probe='import json,sys,email.parser,subprocess,tempfile,hashlib; print(json.dumps({name:module.__file__ for name,module in sys.modules.items() if getattr(module,"__file__",None)}))'
+python_probe='import json,sys,email.parser,subprocess,tempfile,hashlib; print(json.dumps({"modules":{name:{"file":module.__file__,"origin":getattr(getattr(module,"__spec__",None),"origin",None),"loader":getattr(getattr(module,"__loader__",None),"__name__",type(getattr(module,"__loader__",None)).__name__)} for name,module in sys.modules.items() if getattr(module,"__file__",None)},"interpreter":{name:getattr(sys,name,None) for name in ["prefix","base_prefix","_stdlib_dir","executable"]}}))'
 python_env={'LC_ALL':'C','PATH':'/usr/bin:/bin','PYTHONHOME':str(root/'usr'),'PYTHONNOUSERSITE':'1','PYTHONDONTWRITEBYTECODE':'1'}
-python_loaded=json.loads(run([str(root/elf[python_name]['interpreter'].lstrip('/')),'--library-path',str(root/'usr/lib/x86_64-linux-gnu')+':'+str(root/'lib/x86_64-linux-gnu'),str(root/python_name),'-s','-c',python_probe],env=python_env))
+python_observed=json.loads(run([str(root/elf[python_name]['interpreter'].lstrip('/')),'--library-path',str(root/'usr/lib/x86_64-linux-gnu')+':'+str(root/'lib/x86_64-linux-gnu'),str(root/python_name),'-s','-c',python_probe],env=python_env))
+def classified_tool_path(value):
+ if value is None:return {'kind':'absent'}
+ assert isinstance(value,str)
+ path=pathlib.Path(value)
+ owned=path.is_absolute() and path.resolve().is_relative_to(root.resolve())
+ standard=value.startswith('/usr/lib/python'+python_mm+'/') and '..' not in path.parts
+ kind='owned-root' if owned else 'system-python' if standard else 'frozen-label' if value=='frozen' else 'other-redacted'
+ result={'kind':kind,'sha256':hashlib.sha256(value.encode()).hexdigest()}
+ if owned or standard or value=='frozen':result['value']=value
+ return result
+python_loaded={name:entry['file'] for name,entry in python_observed['modules'].items()}
+python_diagnostic={'kind':'tool-python-origin-diagnostic','qualification':False,
+ 'modules':{name:{'file':classified_tool_path(entry['file']),'origin':classified_tool_path(entry['origin']),'loader_type':entry['loader']} for name,entry in python_observed['modules'].items()},
+ 'interpreter':{name:classified_tool_path(value) for name,value in python_observed['interpreter'].items()}}
+(out/'python-origin-diagnostic.json').write_text(json.dumps(python_diagnostic,sort_keys=True)+'\n')
+print('TOOL_PYTHON_ORIGIN_DIAGNOSTIC '+json.dumps(python_diagnostic,sort_keys=True),flush=True)
 assert python_loaded and all(pathlib.Path(path).resolve().is_relative_to(root.resolve()) for path in python_loaded.values()), 'Python module escaped authenticated tool root'
 
 (root/'tool-runtime.json').write_text(json.dumps(dict(loader=loader,library_path=libs,python='/qualification-tools/'+python_name,perl='/qualification-tools/usr/bin/perl',inc=mapped))+'\n')
