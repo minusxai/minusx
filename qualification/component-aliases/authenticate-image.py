@@ -34,11 +34,17 @@ def verify(lock, run, jobs, package, version, workflow, log):
     return 'ghcr.io/' + lock['repository'].split('/')[0] + '/' + lock['package'] + '@' + lock['image_digest']
 
 
+
+def response(endpoint, raw=False):
+    # Raw publisher logs are hashed in memory; their escape bytes never reach a terminal.
+    argv = ['gh','api',endpoint] + (['--allow-escape-sequences'] if raw else [])
+    data = subprocess.check_output(argv,timeout=90)
+    return data if raw else json.loads(data)
+
+
 def main(lock_path, output):
     lock = json.loads(pathlib.Path(lock_path).read_text())
-    def api(endpoint, raw=False):
-        data = subprocess.check_output(['gh','api',endpoint],timeout=90)
-        return data if raw else json.loads(data)
+    api = response
     repo = lock['repository']; owner = repo.split('/')[0]
     run = api(f'repos/{repo}/actions/runs/{lock["run_id"]}')
     jobs = api(f'repos/{repo}/actions/runs/{lock["run_id"]}/attempts/{lock["attempt"]}/jobs')
