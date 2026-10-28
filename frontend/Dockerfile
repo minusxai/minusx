@@ -56,8 +56,28 @@ RUN --mount=from=qualified-perl,target=/qualified,readonly \
     node /checks/runtime-os/prepare-qualified-perl.mjs /qualified /out
 
 FROM runtime-profile AS utilbuilder
-COPY scripts/util-linux /util-linux-recipe
-RUN sh /util-linux-recipe/build.sh
+COPY scripts/util-consumer /checks
+RUN chmod 0755 /checks/resolver
+RUN --mount=from=util-original,source=/util-original,target=/original,readonly \
+    --mount=from=qualified-util-source,target=/compiled-source,readonly \
+    --mount=from=qualified-util-native,target=/native-proof,readonly \
+    --mount=from=perl-tools,source=/perl-tools/root,target=/qualification-tools,readonly \
+    sh /checks/retain-prepare.sh /compiled-source /native-proof /original /out
+
+FROM runtime-profile AS util-qualified
+COPY scripts/util-consumer /checks
+RUN chmod 0755 /checks/resolver
+RUN --mount=from=utilbuilder,source=/out,target=/inputs,readonly \
+    --mount=from=perl-tools,source=/perl-tools/root,target=/qualification-tools,readonly \
+    sh /checks/retain-target.sh /checks /inputs /util-proof
+
+FROM util-qualified AS util-accepted
+RUN node /checks/check-transaction-status.mjs /util-proof
+
+FROM scratch AS util-linux-proof
+COPY --from=utilbuilder /out/ /
+COPY --from=util-qualified /util-proof/ /installed/
+COPY --from=util-original /util-original/ /original/
 
 FROM runtime-profile AS sqlitebuilder
 COPY scripts/sqlite /runtime-build/sqlite
@@ -85,6 +105,8 @@ FROM scratch AS network-test-tools
 COPY --from=perl-original-profile /out/ /perl-original/
 COPY --from=perl-prepared /out/ /perl/
 COPY --from=utilbuilder /out/ /util-linux/
+COPY --from=util-qualified /util-proof/ /util-linux/installed/
+COPY --from=util-original /util-original/ /util-linux/original/
 COPY --from=sqlitebuilder /out/ /sqlite/
 COPY --from=networkbuilder /out/ /network/
 COPY --from=librarybuilder /out/ /libraries/
@@ -221,7 +243,22 @@ RUN --mount=type=cache,target=/app/.next/cache \
 RUN npm run build:setup-cli
 
 # ===== RUNTIME STAGE ===== #
-FROM runtime-profile AS runner
+
+FROM sqlitebuilder AS sqlite-overlay-archive
+COPY scripts/util-consumer/prepare-sqlite-overlay.sh /prepare-sqlite-overlay.sh
+RUN sh /prepare-sqlite-overlay.sh /out /overlay
+
+FROM scratch AS runtime-overlay-archives
+COPY --from=perl-prepared /out/perl-base.deb /
+COPY --from=sqlite-overlay-archive /overlay/ /
+COPY --from=networkbuilder /out/*.deb /
+COPY --from=librarybuilder /out/*.deb /
+COPY --from=pcre2 /out/pcre2.deb /libpcre2-8-0.deb
+COPY --from=archive /out/tar.deb /
+COPY --from=shell /out/dash.deb /
+COPY --from=utilities /out/coreutils.deb /out/libtinfo6.deb /out/ncurses-bin.deb /out/ncurses-base.deb /
+
+FROM util-accepted AS runner
 
 # Set working directory
 WORKDIR /app
@@ -236,7 +273,6 @@ COPY --from=pcre2 /out/pcre2.deb /tmp/pcre2.deb
 COPY --from=archive /out/tar.deb /tmp/tar.deb
 COPY --from=shell /out/dash.deb /tmp/dash.deb
 COPY --from=perl-prepared /out/perl-base.deb /tmp/runtime-debs/
-COPY --from=utilbuilder /out/util-linux.deb /out/libmount1.deb /out/login.deb /tmp/runtime-debs/
 COPY --from=utilities /out/coreutils.deb /out/libtinfo6.deb /out/ncurses-bin.deb /out/ncurses-base.deb /tmp/runtime-debs/
 RUN dpkg --path-include='/usr/share/doc/runtime-perl/*' --path-include='/usr/share/doc/tar/*' --path-include='/usr/share/doc/dash/*' --path-include='/usr/share/doc/coreutils/*' --path-include='/usr/share/doc/libtinfo6/*' --path-include='/usr/share/doc/ncurses-bin/*' --path-include='/usr/share/doc/ncurses-base/*' -i /tmp/runtime-debs/*.deb /tmp/pcre2.deb /tmp/tar.deb /tmp/dash.deb && rm -rf /tmp/runtime-debs && ldconfig && rm -f /tmp/pcre2.deb /tmp/tar.deb /tmp/dash.deb
 
@@ -310,11 +346,14 @@ RUN --mount=from=perl-prepared,source=/out,target=/perl-proof,readonly \
 
 # Validate installed utility payload and ordinary namespace-entry behavior.
 RUN --mount=from=utilbuilder,source=/out,target=/util-linux-proof,readonly \
+    --mount=from=runtime-overlay-archives,target=/overlay-debs,readonly \
+    --mount=from=perl-tools,source=/perl-tools/root,target=/qualification-tools,readonly \
     sha256sum -c /util-linux-proof/runtime-payload.sha256 \
     && /util-linux-proof/check-absence.sh /util-linux-proof/runtime-absent.paths \
     && /util-linux-proof/check-util-linux \
-    && nsenter -- /usr/bin/true \
-    && test "$(nsenter --wd=/tmp -- /usr/bin/pwd)" = /tmp \
+    && /checks/resolver /checks/check-after-overlays.py /util-linux-proof /overlay-debs /util-final-proof.json \
     && apt-get check \
-    && { audit="$(dpkg --audit 2>&1)"; audit_status=$?; \
-         if test "$audit_status" -ne 0 || test -n "$audit"; then printf '%s\n' "$audit"; exit 1; fi; }
+    && { status=0; dpkg --audit > /tmp/util-audit.stdout 2> /tmp/util-audit.stderr || status=$?; \
+         test "$status" -eq 0 && test ! -s /tmp/util-audit.stdout && test ! -s /tmp/util-audit.stderr; } \
+    && rm -f /tmp/util-audit.stdout /tmp/util-audit.stderr \
+    && rm -rf /checks /util-proof

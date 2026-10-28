@@ -58,13 +58,23 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref_type == 'tag' }}
             type=raw,value=${{ inputs.version }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.version != '' }}
 
+      - name: Authenticate qualified utility source and isolated native evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 frontend/scripts/util-consumer/fetch-util-compile.py frontend/scripts/util-consumer/debian-compile.lock.json '${{ runner.temp }}/qualified-util-source'
+          python3 frontend/scripts/util-consumer/fetch-success-input.py frontend/scripts/util-consumer/native-candidate.lock.json '${{ runner.temp }}/qualified-util-native'
+
       - uses: docker/setup-buildx-action@v3
       - uses: docker/setup-qemu-action@v3
 
       - uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
-          build-contexts: qualified-perl=${{ runner.temp }}/qualified-perl
+          build-contexts: |
+            qualified-perl=${{ runner.temp }}/qualified-perl
+            qualified-util-source=${{ runner.temp }}/qualified-util-source
+            qualified-util-native=${{ runner.temp }}/qualified-util-native
           file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
           push: true
@@ -75,6 +85,6 @@ jobs:
             NEXT_PUBLIC_DEFAULT_ANALYTICS_CONFIG=${{ secrets.NEXT_PUBLIC_DEFAULT_ANALYTICS_CONFIG }}
           secrets: |
             sentry_auth_token=${{ secrets.SENTRY_AUTH_TOKEN }}
-          no-cache-filters: perl-prepared
+          no-cache-filters: runtime-profile,perl-prepared,util-original,utilbuilder,util-qualified
           cache-from: type=gha
           cache-to: type=gha,mode=max

@@ -1,0 +1,19 @@
+{
+  "repository": "minusxai/minusx",
+  "repository_id": 1155513729,
+  "run_id": 40712134943,
+  "attempt": 1,
+  "head": "53ee8ba60d481a908788df1e1e404382b7253f92",
+  "branch": "qualification/util-compile-20261028",
+  "workflow_path": ".github/workflows/util-compile-evidence.yml",
+  "workflow_sha256": "8f1db13f9a600e2e5f747deda2040481c3350c319fde4d4ddca57a5a6917ee52",
+  "job_id": 122899929833,
+  "job_name": "source (debian)",
+  "artifact_id": 12825853976,
+  "artifact_name": "util-compile-evidence-debian",
+  "zip_sha256": "a519ac1085f2d8fe2eb760ebaf7b2daef83c42767e9fc6245c671681d3c761c6",
+  "zip_size": 26777284,
+  "proof_sha256": "91e393d7960901098ebe89f48fb36445391779673cede66abc43fa9ca3737cb1",
+  "recipe_sha256": "f185a3c4cf22a00666a7cd72c7b6e52a5f6d4b3c9024d69b720a5b4d418f66de",
+  "whole_run_conclusion": "failure"
+}
