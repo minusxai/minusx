@@ -27,6 +27,7 @@ chosen,skipped=selection['select_members'](names,status,seeds)
 closure=selection['validate_closure'](chosen,run(['dpkg','--print-architecture']).strip())
 (out/'dependency-selection.json').write_text(json.dumps(dict(chosen=sorted(chosen),unselected_alternatives=skipped,closure=closure))+'\n')
 names=sorted(chosen)
+archive_auth=runpy.run_path(str(pathlib.Path(__file__).with_name('apt-archive-hashes.py')))
 records=[];seen=set()
 for name in names:
  fields=run(['dpkg-query','-W','-f=${Package}\t${Version}\t${Architecture}\t${source:Package}\t${source:Version}\t${db:Status-Status}',name]).split('\t')
@@ -34,12 +35,13 @@ for name in names:
  package,version,arch,source,sourceversion,_=fields
  if (package,version,arch) in seen:continue
  seen.add((package,version,arch))
- metadata=run(['apt-cache','show',package+'='+version]);sha=re.search(r'^SHA256: ([0-9a-f]{64})$',metadata,re.M);assert sha,(package,version)
+ metadata=run(['apt-cache','show',package+'='+version]);expected=archive_auth['expected_hashes'](metadata,package,version,arch)
  before=set(archives.iterdir());subprocess.run(['apt-get','download',package+'='+version],cwd=archives,check=True)
  added=set(archives.iterdir())-before;assert len(added)==1,(package,added)
- archive=added.pop();assert digest(archive)==sha[1],package
+ archive=added.pop();local_sha256=archive_auth['verify_archive'](archive,expected)
+ assert run(['dpkg-deb','-f',str(archive),'Package','Version','Architecture']).splitlines()==['Package: '+package,'Version: '+version,'Architecture: '+arch],package
  subprocess.run(['dpkg-deb','-x',str(archive),str(root)],check=True)
- records.append(dict(package=package,version=version,architecture=arch,source=source,source_version=sourceversion,archive=archive.name,sha256=sha[1]))
+ records.append(dict(package=package,version=version,architecture=arch,source=source,source_version=sourceversion,archive=archive.name,sha256=local_sha256,apt_archive=expected,apt_metadata_sha256=hashlib.sha256(metadata.encode()).hexdigest()))
 inc=json.loads(run(['perl','-MJSON::PP','-e','print encode_json([grep {-d $_ && m{^/usr/}} @INC])']))
 capture=runpy.run_path(str(pathlib.Path(__file__).with_name('empty-tsv-to-json.py')))
 original_profile=capture['parse_capture'](pathlib.Path('/perl-work/original-tool-empty-dirs.tsv').read_text())
@@ -95,5 +97,5 @@ for p in sorted(root.rglob('*')):
 apt=out/'apt-authentication';apt.mkdir()
 for p in pathlib.Path('/var/lib/apt/lists').iterdir():
  if p.is_file():shutil.copyfile(p,apt/p.name)
-receipt=dict(schema=2,platform='Ubuntu actual-version tool closure',perl_config_version=perl_config_version,python_major_minor=python_mm,original_preapt_capture=original_profile,original_preapt_capture_sha256=digest(pathlib.Path('/perl-work/original-tool-empty-dirs.tsv')),seeds=seeds,dependency_graph=graph,installed_tool_status=chosen,dependency_closure=closure,unselected_alternatives=skipped,packages=records,files=files,perl_inc=mapped,restored_original_empty_directories=restored_empty,original_empty_directories=original_empty,loaded_probe_modules=loaded,python_loaded_probe_modules=python_loaded,elf=elf,apt_indexes={p.name:digest(p) for p in apt.iterdir()},authentication='apt-get update authenticated indexes; apt-get download archive bytes independently matched exact-version APT SHA256; extracted tool root only',consumer_changes='none',qualification=False)
+receipt=dict(schema=2,platform='Ubuntu actual-version tool closure',perl_config_version=perl_config_version,python_major_minor=python_mm,original_preapt_capture=original_profile,original_preapt_capture_sha256=digest(pathlib.Path('/perl-work/original-tool-empty-dirs.tsv')),seeds=seeds,dependency_graph=graph,installed_tool_status=chosen,dependency_closure=closure,unselected_alternatives=skipped,packages=records,files=files,perl_inc=mapped,restored_original_empty_directories=restored_empty,original_empty_directories=original_empty,loaded_probe_modules=loaded,python_loaded_probe_modules=python_loaded,elf=elf,apt_indexes={p.name:digest(p) for p in apt.iterdir()},authentication='apt-get update authenticated indexes; apt-get download archive bytes independently matched exact-identity APT size and every supplied SHA256/SHA512 digest; local SHA256 inventory computed independently; extracted tool root only',consumer_changes='none',qualification=False)
 (out/'tool-closure.json').write_text(json.dumps(receipt,sort_keys=True)+'\n')
