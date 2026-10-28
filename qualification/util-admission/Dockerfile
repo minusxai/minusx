@@ -17,14 +17,14 @@ COPY --from=compiled-util / /out/
 COPY recipe /recipe
 COPY checks /checks
 RUN echo '91e393d7960901098ebe89f48fb36445391779673cede66abc43fa9ca3737cb1  /out/compile-proof.json' | sha256sum -c - && \
-    echo '9a8525e663fc9e998141a00121c8d3fec1235f99f1905b767b0765d0d0198317  /checks/package.py' | sha256sum -c - && \
+    echo 'fe8adfb969ba5f4df135ec1062681fb8d29e3abd4b49fa6c91322f80e4306ef9  /checks/package.py' | sha256sum -c - && \
     echo 'a3b2984bafc64c9643ebca237db85a0b86511b3559b331d7a431b6023478d75b  /checks/mount-metadata-only.py' | sha256sum -c -
 RUN mkdir /work && rm -rf /out/compile-inputs && mkdir /out/compile-inputs && \
     python3 /checks/restore-inputs.py /out /work && python3 /checks/restore-inputs.py /out /out/compile-inputs && \
     python3 /checks/restore-output-metadata.py /out && \
     python3 /checks/replace-package-implementation.py /recipe /checks/package.py /out/compile-proof.json
 RUN UTIL_LINUX_COMPILE_PROOF_SHA256=91e393d7960901098ebe89f48fb36445391779673cede66abc43fa9ca3737cb1 \
-    UTIL_LINUX_PACKAGE_IMPLEMENTATION_SHA256=9a8525e663fc9e998141a00121c8d3fec1235f99f1905b767b0765d0d0198317 \
+    UTIL_LINUX_PACKAGE_IMPLEMENTATION_SHA256=fe8adfb969ba5f4df135ec1062681fb8d29e3abd4b49fa6c91322f80e4306ef9 \
     python3 /recipe/phase-proof.py verify /recipe /work /out
 RUN UTIL_LINUX_COMPILE_PROOF_SHA256=91e393d7960901098ebe89f48fb36445391779673cede66abc43fa9ca3737cb1 \
     python3 /recipe/package.py package /recipe /work && \
