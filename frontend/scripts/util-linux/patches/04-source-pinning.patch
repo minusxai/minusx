@@ -1,0 +1,63 @@
+From 9fcb98bf08d9119d07ba3a3c709b1a85e4a1bbcb Mon Sep 17 00:00:00 2001
+From: Karel Zak <kzak@redhat.com>
+Date: Mon, 20 Jul 2026 14:59:21 +0200
+Subject: [PATCH] libmount: pin source path with openat2() for restricted users
+ [CVE-2026-78410]
+
+In restricted (non-root) mode, mnt_context_open_tree() resolves the
+source path via open_tree(AT_FDCWD, path, ...) which follows symlinks
+in intermediate path components.  A local attacker who can replace the
+fstab-authorized bind source path or an ancestor with a symlink can
+redirect the privileged mount operation to an arbitrary directory.
+
+When combined with X-mount.owner/group/mode the post-mount hook
+applies root-privileged chown/chmod to the bind source inode, giving
+a local ownership/permission modification primitive on paths not
+authorized by fstab.
+
+Fix by using mnt_open_tree() with RESOLVE_NO_SYMLINKS in restricted
+mode.  Also fix hook_idmap.c fallback open_tree() call to use the
+same pattern.  Unrestricted (root) callers pass resolve=0 and get
+the direct open_tree() path.
+
+Signed-off-by: Karel Zak <kzak@redhat.com>
+(cherry picked from commit fb8e2653553ce2ecd077a294d53a1422d7c6dbc0)
+(cherry picked from commit 9a8d0d60c55d3a55f89f6f75a17bae31bc5ee1c6)
+---
+ libmount/src/context.c    | 4 +++-
+ libmount/src/hook_idmap.c | 6 ++++--
+ 2 files changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/libmount/src/context.c b/libmount/src/context.c
+index 8418b2d64bf..158be96b875 100644
+--- a/libmount/src/context.c
++++ b/libmount/src/context.c
+@@ -1934,7 +1934,9 @@ int mnt_context_open_tree(struct libmnt_context *cxt, const char *path, unsigned
+ 	DBG(CXT, ul_debugobj(cxt, "open_tree(path=%s%s%s)", path,
+ 				oflg & OPEN_TREE_CLONE ? " clone" : "",
+ 				oflg & AT_RECURSIVE ? " recursive" : ""));
+-	fd = open_tree(AT_FDCWD, path, oflg);
++
++	fd = mnt_open_tree(AT_FDCWD, path, oflg,
++			mnt_context_is_restricted(cxt) ? RESOLVE_NO_SYMLINKS : 0);
+ 	mnt_context_syscall_save_status(cxt, "open_tree", fd >= 0);
+ 
+ 	return fd;
+diff --git a/libmount/src/hook_idmap.c b/libmount/src/hook_idmap.c
+index adaa9c63654..97d8e0d1ec2 100644
+--- a/libmount/src/hook_idmap.c
++++ b/libmount/src/hook_idmap.c
+@@ -328,9 +328,11 @@ static int hook_mount_post(
+ 	}
+ #endif
+ 	if (fd_tree < 0)
+-		fd_tree = open_tree(-1, target,
++		fd_tree = mnt_open_tree(AT_FDCWD, target,
+ 			    OPEN_TREE_CLONE | OPEN_TREE_CLOEXEC |
+-			    (recursive ? AT_RECURSIVE : 0));
++			    (recursive ? AT_RECURSIVE : 0),
++			    mnt_context_is_restricted(cxt) ?
++				RESOLVE_NO_SYMLINKS : 0);
+ 	if (fd_tree < 0) {
+ 		DBG(HOOK, ul_debugobj(hs, " failed to open tree"));
+ 		mnt_context_syscall_save_status(cxt, "open_tree", 0);

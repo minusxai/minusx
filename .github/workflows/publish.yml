@@ -30,9 +30,15 @@ jobs:
             dockerfile: frontend/Dockerfile
     permissions:
       contents: read
+      actions: read
       packages: write
     steps:
       - uses: actions/checkout@v4
+
+      - name: Authenticate public Perl runtime input
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node frontend/scripts/perl/fetch-promoted-perl.mjs '${{ runner.temp }}/qualified-perl'
 
       - uses: docker/login-action@v3
         with:
@@ -58,6 +64,7 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
+          build-contexts: qualified-perl=${{ runner.temp }}/qualified-perl
           file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
           push: true
@@ -68,5 +75,6 @@ jobs:
             NEXT_PUBLIC_DEFAULT_ANALYTICS_CONFIG=${{ secrets.NEXT_PUBLIC_DEFAULT_ANALYTICS_CONFIG }}
           secrets: |
             sentry_auth_token=${{ secrets.SENTRY_AUTH_TOKEN }}
+          no-cache-filters: perl-prepared
           cache-from: type=gha
           cache-to: type=gha,mode=max

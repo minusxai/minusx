@@ -28,6 +28,30 @@ RUN apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+FROM runtime-profile AS perl-original-profile
+COPY scripts/perl/runtime-os /perl-checks/runtime-os
+COPY scripts/perl/lib /perl-checks/lib
+RUN mkdir /out && node /perl-checks/runtime-os/capture-perl-profile.mjs /out/perl-original.json
+
+FROM runtime-profile AS perl-tools
+COPY scripts/perl/perl-consumer-tools /tool-recipe
+RUN mkdir /perl-work && node /tool-recipe/capture-tool-empty-directories.mjs /perl-work/original-tool-empty-dirs.json && \
+    apt-get update && apt-get install -y --no-install-recommends python3 dpkg-dev binutils && \
+    python3 /tool-recipe/prepare-tools.py /perl-tools
+
+FROM runtime-profile AS perl-prepared
+COPY scripts/perl/runtime-os /checks/runtime-os
+COPY scripts/perl/lib /checks/lib
+COPY scripts/perl/perl-consumer-tools/check-dependencies.py scripts/perl/perl-consumer-tools/dsc-fields.py scripts/perl/perl-consumer-tools/test-closure.py scripts/perl/runtime-os/hash-native.py /checks/
+COPY --from=perl-tools /perl-tools/tool-closure.json /tool-closure.json
+RUN --mount=from=qualified-perl,target=/qualified,readonly \
+    --mount=from=perl-tools,source=/perl-tools/root,target=/qualification-tools,readonly \
+    node /checks/runtime-os/prepare-qualified-perl.mjs /qualified /out
+
+FROM runtime-profile AS utilbuilder
+COPY scripts/util-linux /util-linux-recipe
+RUN sh /util-linux-recipe/build.sh
+
 FROM runtime-profile AS sqlitebuilder
 COPY scripts/sqlite /runtime-build/sqlite
 RUN dpkg-query -W -f='${binary:Package}\n' | sed 's/:.*//' | sort -u > /tmp/sqlite-runtime-package-names \
@@ -51,6 +75,9 @@ FROM library-source-proof AS librarybuilder
 RUN rm -rf /libraries-work
 
 FROM scratch AS network-test-tools
+COPY --from=perl-original-profile /out/ /perl-original/
+COPY --from=perl-prepared /out/ /perl/
+COPY --from=utilbuilder /out/ /util-linux/
 COPY --from=sqlitebuilder /out/ /sqlite/
 COPY --from=networkbuilder /out/ /network/
 COPY --from=librarybuilder /out/ /libraries/
@@ -201,8 +228,10 @@ ENV PGLITE_DATA_DIR=/app/data/pglite
 COPY --from=pcre2 /out/pcre2.deb /tmp/pcre2.deb
 COPY --from=archive /out/tar.deb /tmp/tar.deb
 COPY --from=shell /out/dash.deb /tmp/dash.deb
+COPY --from=perl-prepared /out/perl-base.deb /tmp/runtime-debs/
+COPY --from=utilbuilder /out/util-linux.deb /out/libmount1.deb /out/login.deb /tmp/runtime-debs/
 COPY --from=utilities /out/coreutils.deb /out/libtinfo6.deb /out/ncurses-bin.deb /out/ncurses-base.deb /tmp/runtime-debs/
-RUN dpkg --path-include='/usr/share/doc/tar/*' --path-include='/usr/share/doc/dash/*' --path-include='/usr/share/doc/coreutils/*' --path-include='/usr/share/doc/libtinfo6/*' --path-include='/usr/share/doc/ncurses-bin/*' --path-include='/usr/share/doc/ncurses-base/*' -i /tmp/runtime-debs/*.deb /tmp/pcre2.deb /tmp/tar.deb /tmp/dash.deb && rm -rf /tmp/runtime-debs && ldconfig && rm -f /tmp/pcre2.deb /tmp/tar.deb /tmp/dash.deb
+RUN dpkg --path-include='/usr/share/doc/runtime-perl/*' --path-include='/usr/share/doc/tar/*' --path-include='/usr/share/doc/dash/*' --path-include='/usr/share/doc/coreutils/*' --path-include='/usr/share/doc/libtinfo6/*' --path-include='/usr/share/doc/ncurses-bin/*' --path-include='/usr/share/doc/ncurses-base/*' -i /tmp/runtime-debs/*.deb /tmp/pcre2.deb /tmp/tar.deb /tmp/dash.deb && rm -rf /tmp/runtime-debs && ldconfig && rm -f /tmp/pcre2.deb /tmp/tar.deb /tmp/dash.deb
 
 # Copy standalone output (much smaller than node_modules - only runtime dependencies)
 COPY --from=builder /app/.next/standalone ./
@@ -266,3 +295,19 @@ RUN mkdir -p /app/data/pglite /app/data/analytics
 EXPOSE 3000
 
 CMD ["sh", "-c", "node server.js"]
+
+# Validate the actual final installed interpreter with disposable read-only proof.
+RUN --mount=from=perl-prepared,source=/out,target=/perl-proof,readonly \
+    --mount=from=perl-prepared,source=/checks,target=/perl-checks,readonly \
+    node /perl-checks/runtime-os/check-qualified-perl.mjs /perl-proof /perl-checks/runtime-os/check-normal.pl
+
+# Validate installed utility payload and ordinary namespace-entry behavior.
+RUN --mount=from=utilbuilder,source=/out,target=/util-linux-proof,readonly \
+    sha256sum -c /util-linux-proof/runtime-payload.sha256 \
+    && /util-linux-proof/check-absence.sh /util-linux-proof/runtime-absent.paths \
+    && /util-linux-proof/check-util-linux \
+    && nsenter -- /usr/bin/true \
+    && test "$(nsenter --wd=/tmp -- /usr/bin/pwd)" = /tmp \
+    && apt-get check \
+    && { audit="$(dpkg --audit 2>&1)"; audit_status=$?; \
+         if test "$audit_status" -ne 0 || test -n "$audit"; then printf '%s\n' "$audit"; exit 1; fi; }
