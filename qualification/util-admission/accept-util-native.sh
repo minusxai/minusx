@@ -14,6 +14,9 @@ debs=$4
 out=$5
 test -x "$resolver" && test -d "$checks" && test -d "$inputs" && test -d "$debs"
 mkdir -p "$out"
+# Sanitized PATH deliberately omits sbin; bind the administrative helper directly.
+test -x /usr/sbin/ldconfig
+for utility in dpkg-query apt-get sha256sum nsenter unshare; do command -v "$utility" >/dev/null; done
 # The qualified original profile is compared before any candidate install.
 # Exact status includes every original package, including reverse dependencies.
 dpkg-query --admindir=/var/lib/dpkg -W -f='${binary:Package}\t${Version}\t${Status}\n' > "$out/before-packages.tsv"
@@ -33,7 +36,7 @@ test ! -s "$out/apt-simulation.stderr"
 # the read-only resolver before this explicit four-package transaction.
 apt-get -y --no-download --no-remove --no-install-recommends install \
     "$debs/libmount1.deb" "$debs/util-linux.deb" "$debs/login.deb" "$debs/mount.deb"
-ldconfig
+/usr/sbin/ldconfig
 (cd / && sha256sum -c "$inputs/runtime-payload.sha256")
 "$inputs/check-absence.sh" "$inputs/runtime-absent.paths"
 "$inputs/check-util-linux"
