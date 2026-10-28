@@ -66,6 +66,20 @@ jobs:
           path: qualified-util
           if-no-files-found: error
           retention-days: 7
+      - name: Mark exported packages as unadmitted after failure
+        if: failure()
+        run: |
+          if test -d qualified-util; then
+            printf '{"status":"unadmitted","qualification_complete":false}\n' > qualified-util/unadmitted.json
+          fi
+      - name: Retain unadmitted source export
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: util-source-unadmitted-${{ matrix.os }}
+          path: qualified-util
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Retain source diagnostics
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

@@ -28,15 +28,15 @@ const configLimit = 16 * 1024 * 1024
 const personalityValue = 268173312
 
 var approvedRecipes = map[string]bool{
- "b3da1b9c4ac45edbcc292aa3bb742cf19cca6b6d6629cc3df225a4eea488b155": true,
- "531c0bf85fd7cada6cbed1eae728efcc892d4805c4e28d5f2e4f5636b6a47982": true,
+ "a3e99174686040364a196bd66bf8b1e991a9ac0d09f85744a49b4269b131d041": true,
+ "2fee7e8c9bb660064c8138a06bb2208bc19e5a67abb0a375c92b58284cf40421": true,
 }
 // Exact generated profile captured and independently reviewed; source-only worker.
 var approvedProfiles = map[string]bool{"30f3f34a8336b491b755c7ab67b475d558c50a85da18190f89b78a1d42e4bd31":true}
 
 const controlSHA256 = "a185d97c4e6d44113cfcb555ba73b324d1feabf3fbe91fcf65ac8a71d53aaf2b"
 var boundedControlArgs = []string{"/qualification-controls/personality-control","bounded"}
-var selectedArgs = []string{"/bin/sh", "-c", "sh /util-linux-recipe/build.sh"}
+var selectedArgs = []string{"/bin/sh", "-c", "sh /util-linux-recipe/build.sh compile"}
 var exactRule = map[string]any{
  "names": []any{"personality"}, "action": "SCMP_ACT_ALLOW",
  "args": []any{map[string]any{"index": json.Number("0"), "value": json.Number("268173312"), "op": "SCMP_CMP_EQ"}},

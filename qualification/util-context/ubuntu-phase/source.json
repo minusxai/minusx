@@ -1,0 +1,151 @@
+{
+  "source": "util-linux",
+  "source_version": "2.42.2-1ubuntu2",
+  "runtime_version": "2.42.2-1ubuntu2+security20261028",
+  "ubuntu_series": "stonking",
+  "publication_api": "https://api.launchpad.net/devel/ubuntu/+archive/primary/+sourcepub/18799376",
+  "source_files": [
+    {
+      "url": "https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/util-linux/2.42.2-1ubuntu2/util-linux_2.42.2-1ubuntu2.dsc",
+      "name": "util-linux_2.42.2-1ubuntu2.dsc",
+      "sha256": "ecc2b4f602f98faec43ef83ddc43a6c42f9b7758c4ad8000c4c14d2d36f4190b",
+      "bytes": 5431
+    },
+    {
+      "url": "https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/util-linux/2.42.2-1ubuntu2/util-linux_2.42.2-1ubuntu2.debian.tar.xz",
+      "name": "util-linux_2.42.2-1ubuntu2.debian.tar.xz",
+      "sha256": "5e5ae3e7b4601f05d4095211dd7f8c1f4e0fc044fccdd239414fd35c2093c1c5",
+      "bytes": 110976
+    },
+    {
+      "url": "https://launchpad.net/ubuntu/+archive/primary/+sourcefiles/util-linux/2.42.2-1ubuntu2/util-linux_2.42.2.orig.tar.xz",
+      "name": "util-linux_2.42.2.orig.tar.xz",
+      "sha256": "03a05d3adf9602ef128f2da05b84b3205ce60c351e5737c0370f74000679ce8a",
+      "bytes": 10658220
+    }
+  ],
+  "authentication": "Build downloads the exact source through APT deb-src signed Ubuntu archive metadata, then verifies every pinned SHA256 and byte count. The DSC is archive authenticated; no reliance on an unverified uploader signature.",
+  "patches": [
+    {
+      "file": "patches/01-nsenter-cloexec.patch",
+      "commit": "3d9e4d5ec49662570b32046e61a7c8deacfafd34",
+      "url": "https://github.com/util-linux/util-linux/commit/3d9e4d5ec49662570b32046e61a7c8deacfafd34.patch",
+      "upstream_sha256": "d65fce8b6987831b697f231dd13796d450f0f57148ea1573513c0c7aa4eba38c",
+      "sha256": "d65fce8b6987831b697f231dd13796d450f0f57148ea1573513c0c7aa4eba38c",
+      "adaptation": null
+    },
+    {
+      "file": "patches/02-nsenter-cgroup-close.patch",
+      "commit": "afe067c979b9ba2cbe856f7c6411210120ea62aa",
+      "url": "https://github.com/util-linux/util-linux/commit/afe067c979b9ba2cbe856f7c6411210120ea62aa.patch",
+      "upstream_sha256": "e7021e12c6b7059a18d2e2c19cfb413679220b5090f4ddbf344a0bf12ffd0424",
+      "sha256": "72a2307759c80cf980d619e5ee56b9d503c32645218b8cd39b3b1d84f10265af",
+      "adaptation": "Context-only backport: ul_read_all_alloc renamed to read_all_alloc to match2.42.2; all added/deleted lines are identical to upstream."
+    },
+    {
+      "file": "patches/03-openat2-wrapper.patch",
+      "commit": "1426aa06ff2f6a21cba9102c35e3577641b356ff",
+      "url": "https://github.com/util-linux/util-linux/commit/1426aa06ff2f6a21cba9102c35e3577641b356ff.patch",
+      "upstream_sha256": "f0f3893a0fe6c0de21230bc858286523fd8c24520a5c387e91c8ad085455f97c",
+      "sha256": "f0f3893a0fe6c0de21230bc858286523fd8c24520a5c387e91c8ad085455f97c",
+      "adaptation": null
+    },
+    {
+      "file": "patches/04-mount-tree-wrapper.patch",
+      "commit": "90a1f3b5b134b775dd30a46155064731ba40c519",
+      "url": "https://github.com/util-linux/util-linux/commit/90a1f3b5b134b775dd30a46155064731ba40c519.patch",
+      "upstream_sha256": "0b3c8feca4954a39bda86a27dafc6a7c32fc1c8fb88eea95e2fc1f0ae4c10cf8",
+      "sha256": "0b3c8feca4954a39bda86a27dafc6a7c32fc1c8fb88eea95e2fc1f0ae4c10cf8",
+      "adaptation": null
+    },
+    {
+      "file": "patches/05-subdir-resolution.patch",
+      "commit": "ce4e181aa967a06079851410d82ca4428341ba7b",
+      "url": "https://github.com/util-linux/util-linux/commit/ce4e181aa967a06079851410d82ca4428341ba7b.patch",
+      "upstream_sha256": "1a74eb6c8d21775dd846488ab4036311ed96c8027e31c105bc4590d536d53828",
+      "sha256": "1a74eb6c8d21775dd846488ab4036311ed96c8027e31c105bc4590d536d53828",
+      "adaptation": null
+    },
+    {
+      "file": "patches/06-source-canonicalization.patch",
+      "commit": "6051830a27a852fed92ebd8493e57aa3d5d9cf18",
+      "url": "https://github.com/util-linux/util-linux/commit/6051830a27a852fed92ebd8493e57aa3d5d9cf18.patch",
+      "upstream_sha256": "e1d18138a78206b04357c5db4241b1279ddef320f2b455777609ba5e1da54022",
+      "sha256": "e1d18138a78206b04357c5db4241b1279ddef320f2b455777609ba5e1da54022",
+      "adaptation": null
+    },
+    {
+      "file": "patches/07-source-pinning.patch",
+      "commit": "9a8d0d60c55d3a55f89f6f75a17bae31bc5ee1c6",
+      "url": "https://github.com/util-linux/util-linux/commit/9a8d0d60c55d3a55f89f6f75a17bae31bc5ee1c6.patch",
+      "upstream_sha256": "f6f90a5f720de72622ca2eb4bdb1784c00324f74c415fd6b724af9926b690eb4",
+      "sha256": "f6f90a5f720de72622ca2eb4bdb1784c00324f74c415fd6b724af9926b690eb4",
+      "adaptation": null
+    },
+    {
+      "file": "patches/08-failed-helper-hooks.patch",
+      "commit": "1d14676ea70003e9f5b2a6a76af0cadb1190411a",
+      "url": "https://github.com/util-linux/util-linux/commit/1d14676ea70003e9f5b2a6a76af0cadb1190411a.patch",
+      "upstream_sha256": "c23e2d109f0517b7939c8b4c8870fb1878dcf0dda7973d3c96c00675c1a414e3",
+      "sha256": "c23e2d109f0517b7939c8b4c8870fb1878dcf0dda7973d3c96c00675c1a414e3",
+      "adaptation": null
+    },
+    {
+      "file": "patches/09-idmap-wrapper-capability-guard.patch",
+      "sha256": "49eaa4b0697076f8e0c6dbdedf9d50f5d86e4c0dd7159e06631ee9c38f1e2856",
+      "provenance": "Local integration prerequisite; matches existing hook_idmap.c capability guard",
+      "upstream_context": [
+        "https://github.com/util-linux/util-linux/commit/90a1f3b5b134b775dd30a46155064731ba40c519",
+        "https://github.com/util-linux/util-linux/commit/9a8d0d60c55d3a55f89f6f75a17bae31bc5ee1c6"
+      ]
+    },
+    {
+      "file": "patches/10-idmap-fileutils-header.patch",
+      "sha256": "646945ef07f965649aa1ca915150ca485539c97f06021a1ae9b8be842026c57c",
+      "provenance": "Local include prerequisite for upstream source-pinning caller; portable RESOLVE_NO_SYMLINKS definition is in source include/fileutils.h",
+      "upstream_context": [
+        "https://github.com/util-linux/util-linux/commit/9a8d0d60c55d3a55f89f6f75a17bae31bc5ee1c6",
+        "https://github.com/util-linux/util-linux/commit/1426aa06ff2f6a21cba9102c35e3577641b356ff"
+      ]
+    }
+  ],
+  "runtime_packages": [
+    "util-linux",
+    "libmount1"
+  ],
+  "preserved_configuration": "Exact Ubuntu source packaging including --disable-libmount-mountfd-support; ordinary full distro source suite remains enabled.",
+  "upstream_78408_limit": "Upstreamv2.42.3 does not close cgroup.procs in nsenter. Include masterafe067c in addition to the incomplete stable CLOEXEC patch.",
+  "advisories": {
+    "CVE-2026-76642": {
+      "baseline": "unresolved helper failure guard",
+      "fix_commits": [
+        "1d14676ea70003e9f5b2a6a76af0cadb1190411a"
+      ]
+    },
+    "CVE-2026-78408": {
+      "baseline": "unresolved cgroup descriptor authority leak; upstream2.42.3 incomplete",
+      "fix_commits": [
+        "3d9e4d5ec49662570b32046e61a7c8deacfafd34",
+        "afe067c979b9ba2cbe856f7c6411210120ea62aa"
+      ]
+    },
+    "CVE-2026-78409": {
+      "baseline": "Ubuntu disables affected detached-tree mountfd feature",
+      "candidate": "upstream source fix also included; installed library must still exclude fd-based-mount",
+      "fix_commits": [
+        "1426aa06ff2f6a21cba9102c35e3577641b356ff",
+        "90a1f3b5b134b775dd30a46155064731ba40c519",
+        "ce4e181aa967a06079851410d82ca4428341ba7b"
+      ]
+    },
+    "CVE-2026-78410": {
+      "baseline": "source canonicalization remains unpatched outside mountfd feature guard",
+      "fix_commits": [
+        "1426aa06ff2f6a21cba9102c35e3577641b356ff",
+        "90a1f3b5b134b775dd30a46155064731ba40c519",
+        "6051830a27a852fed92ebd8493e57aa3d5d9cf18",
+        "9a8d0d60c55d3a55f89f6f75a17bae31bc5ee1c6"
+      ]
+    }
+  }
+}

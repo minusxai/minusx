@@ -30,8 +30,9 @@ for x in receipts:
  assert hashlib.sha256(canon(profile)).hexdigest()==profile_hash
  profile["syscalls"].append(rule)
  assert hashlib.sha256(canon(profile)).hexdigest()==x["result_profile_sha256"]
-for name in ["source-build.log","source-regression.json","wrapper-regression.json","idmap-header-regression.json","runtime-payload.sha256","runtime-absent.paths","check-absence.sh","check-util-linux","libmount1.deb","util-linux.deb"]:assert (root/name).is_file(),"Missing required source output"
+for name in ["source-build.log","source-regression.json","idmap-header-regression.json","runtime-payload.sha256","runtime-absent.paths","check-absence.sh","check-util-linux","libmount1.deb","util-linux.deb"]:assert (root/name).is_file(),"Missing required source output"
 if os.environ["QUALIFICATION_OS"]=="debian":assert (root/"login.deb").is_file()
+else:assert (root/"wrapper-regression.json").is_file()
 files={}
 for f in sorted(root.rglob("*")):
  assert not f.is_symlink(),"Unexpected output symlink"

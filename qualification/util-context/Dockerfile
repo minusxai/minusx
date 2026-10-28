@@ -2,6 +2,8 @@
 FROM golang:1.25.3-alpine@sha256:aee43c3ccbf24fdffb7295693b6e33b21e01baec1b2a55acc351fde345e9ec34 AS delegate
 WORKDIR /candidate
 COPY go.mod main.go main_test.go syscall-names.txt ./
+COPY debian-phase ./debian-phase
+COPY ubuntu-phase ./ubuntu-phase
 RUN go test ./... && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /delegate .
 COPY personality-probe /probe-source
 RUN cd /probe-source && go test ./... && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -buildvcs=false -trimpath -ldflags="-s -w -buildid=" -o /personality-probe .

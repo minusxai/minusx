@@ -1,0 +1,95 @@
+name: Retain util compilation evidence
+on:
+  push:
+    branches: [qualification/util-compile-20261028]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      QUALIFICATION_OS: ${{ matrix.os }}
+      SOURCE_HEAD: ${{ github.sha }}
+      RUN_ID: ${{ github.run_id }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+    strategy:
+      fail-fast: true
+      max-parallel: 1
+      matrix:
+        os: [debian, ubuntu]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Build isolated driver and run Linux fixtures
+        run: docker build --progress=plain -t util-source-driver qualification/util-context
+      - name: Prepare minimal authenticated context
+        env:
+          QUALIFICATION_OS: ${{ matrix.os }}
+        shell: bash
+        run: |
+          set -eu
+          context="$RUNNER_TEMP/util-source-context"
+          mkdir -p "$context"
+          docker create --name util-control-export util-source-driver >/dev/null
+          docker cp util-control-export:/usr/bin/util-personality-probe "$context/personality-probe"
+          docker rm util-control-export >/dev/null
+          echo 'a185d97c4e6d44113cfcb555ba73b324d1feabf3fbe91fcf65ac8a71d53aaf2b  '"$context/personality-probe" | sha256sum -c -
+          if test "$QUALIFICATION_OS" = debian; then
+            mkdir -p "$context/scripts"
+            cp -R qualification/util-context/debian-phase "$context/scripts/util-linux"
+            cp frontend/scripts/patch-npm.mjs "$context/scripts/patch-npm.mjs"
+          else
+            mkdir -p "$context/metabase/scripts"
+            cp -R qualification/util-context/ubuntu-phase "$context/metabase/scripts/util-linux"
+          fi
+          cp "qualification/util-context/Dockerfile.compile-$QUALIFICATION_OS" "$context/Dockerfile"
+          df -h /
+      - name: Register dedicated source-only worker
+        run: |
+          docker buildx create --name util-source --driver docker-container --driver-opt image=util-source-driver --buildkitd-flags '--oci-worker-binary /usr/bin/buildkit-runc' --use
+          docker buildx inspect --bootstrap
+          container=$(docker ps --filter name=buildx_buildkit_util-source --format '{{.ID}}')
+          test -n "$container"
+          test "$(docker inspect --format '{{.HostConfig.Privileged}}' "$container")" = true
+      - name: Baseline and bounded controls then full source compile
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker buildx build --builder util-source --no-cache --progress=plain --target util-compile-export --output type=local,dest=compile-evidence "$RUNNER_TEMP/util-source-context" 2>&1 | tee "$RUNNER_TEMP/util-source.log"
+          python3 qualification/util-context/record-compile-evidence.py compile-evidence "$RUNNER_TEMP/util-source.log"
+      - name: Retain compile-only unadmitted evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: util-compile-evidence-${{ matrix.os }}
+          path: compile-evidence
+          if-no-files-found: error
+          retention-days: 7
+      - name: Mark exported packages as unadmitted after failure
+        if: failure()
+        run: |
+          if test -d compile-evidence; then
+            printf '{"status":"unadmitted","qualification_complete":false}\n' > compile-evidence/unadmitted.json
+          fi
+      - name: Retain unadmitted source export
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: util-source-unadmitted-${{ matrix.os }}
+          path: compile-evidence
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Retain source diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: util-source-failure-${{ matrix.os }}
+          path: ${{ runner.temp }}/util-source.log
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Remove only owned containers and worker
+        if: always()
+        run: |
+          docker rm -f util-control-export >/dev/null 2>&1 || true
+          docker buildx rm util-source || true

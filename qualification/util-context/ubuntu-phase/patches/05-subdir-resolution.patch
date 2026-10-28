@@ -1,0 +1,72 @@
+From ce4e181aa967a06079851410d82ca4428341ba7b Mon Sep 17 00:00:00 2001
+From: Karel Zak <kzak@redhat.com>
+Date: Mon, 20 Jul 2026 14:45:35 +0200
+Subject: [PATCH] libmount: fix X-mount.subdir symlink following on detached
+ tree [CVE-2026-78409]
+
+The open_tree() call used to open a subdirectory on a detached mount
+(fsmount() result) follows symlinks in intermediate path components,
+allowing escape from the detached tree.
+
+Replace direct open_tree(fd, subdir, ...) with mnt_open_tree() that
+uses openat2(RESOLVE_NO_SYMLINKS | RESOLVE_BENEATH) to safely resolve
+the subdir path within the detached tree, then clone it with
+open_tree(AT_EMPTY_PATH).
+
+Also strip leading '/' from X-mount.subdir= value early in
+is_subdir_required() to ensure relative path resolution.
+
+Signed-off-by: Karel Zak <kzak@redhat.com>
+(cherry picked from commit ed072cf2297b68f86af8e08209907f605dd42e5d)
+---
+ libmount/src/hook_mount.c  | 14 ++++++++++----
+ libmount/src/hook_subdir.c |  8 ++++++++
+ 2 files changed, 18 insertions(+), 4 deletions(-)
+
+diff --git a/libmount/src/hook_mount.c b/libmount/src/hook_mount.c
+index e9d7682c6f7..eec40e88901 100644
+--- a/libmount/src/hook_mount.c
++++ b/libmount/src/hook_mount.c
+@@ -302,13 +302,19 @@ static int hook_create_mount(struct libmnt_context *cxt,
+ 
+ 		if (fd >= 0 && api->subdir) {
+ 			/*
+-			 * subdir for Linux >= 6.15, see hook_subdir.c for more details.
++			 * Subdir for Linux >= 6.15, see hook_subdir.c for
++			 * more details.
++			 *
++			 * Use mnt_open_tree() to safely resolve the subdir
++			 * path within the detached tree (no symlink following,
++			 * no escape via ".."), then clone with open_tree().
+ 			 */
+ 			DBG(HOOK, ul_debugobj(hs, "opening subdir (detached) '%s'", api->subdir));
+-			int sub_fd = open_tree(fd, api->subdir,
+-					AT_NO_AUTOMOUNT | AT_SYMLINK_NOFOLLOW |
++			int sub_fd = mnt_open_tree(fd, api->subdir,
++					AT_NO_AUTOMOUNT |
+ 					AT_RECURSIVE | OPEN_TREE_CLOEXEC |
+-					OPEN_TREE_CLONE);
++					OPEN_TREE_CLONE,
++					RESOLVE_NO_SYMLINKS | RESOLVE_BENEATH);
+ 			hookset_set_syscall_status(cxt, "open_tree", sub_fd >= 0);
+ 			close(fd);
+ 			fd = sub_fd;
+diff --git a/libmount/src/hook_subdir.c b/libmount/src/hook_subdir.c
+index 54af50159ac..f65529f1e2f 100644
+--- a/libmount/src/hook_subdir.c
++++ b/libmount/src/hook_subdir.c
+@@ -398,6 +398,14 @@ static int is_subdir_required(struct libmnt_context *cxt, int *rc, char **subdir
+ 		return 0;
+ 	}
+ 
++	/* use relative path; absolute would escape dirfd-based resolution */
++	while (*dir == '/')
++		dir++;
++	if (!*dir) {
++		DBG(HOOK, ul_debug("X-mount.subdir is root, ignoring"));
++		return 0;
++	}
++
+ 	*rc = mnt_optlist_get_flags(ol, &flags, cxt->map_linux, 0);
+ 	if (*rc)
+ 		return 0;

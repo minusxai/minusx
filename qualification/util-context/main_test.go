@@ -93,3 +93,15 @@ func TestControlBinaryBinding(t *testing.T){
  _,_,_,err=mutate(canonical(c),bundle,recipes,profiles);if err==nil{t.Fatal("tampered control accepted")}
  process["args"]=[]any{boundedControlArgs[0],"baseline"};raw:=canonical(c);got,_,selected,err:=mutate(raw,bundle,recipes,profiles);if err!=nil||selected||!reflect.DeepEqual(raw,got){t.Fatal("baseline controls changed")}
 }
+
+func TestActualCompileRecipesClosedAndPinned(t *testing.T){
+ for _,name:=range []string{"debian-phase","ubuntu-phase"}{
+  root:=t.TempDir();destination:=filepath.Join(root,"util-linux-recipe");os.Mkdir(destination,0700)
+  err:=filepath.WalkDir(name,func(path string,entry os.DirEntry,walkErr error)error{
+   if walkErr!=nil{return walkErr};relative,e:=filepath.Rel(name,path);if e!=nil{return e};if relative=="."{return nil}
+   if entry.Type()&os.ModeSymlink!=0{t.Fatal("recipe source symlink")};target:=filepath.Join(destination,relative)
+   if entry.IsDir(){return os.MkdirAll(target,0700)};data,e:=os.ReadFile(path);if e!=nil{return e};return os.WriteFile(target,data,0600)
+  });if err!=nil{t.Fatal("actual recipe unavailable")}
+  if _,err:=verifyRecipe(root,approvedRecipes);err!=nil{t.Fatal("actual compile recipe failed closed manifest validation")}
+ }
+}
