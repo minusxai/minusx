@@ -57,6 +57,9 @@ jobs:
       - name: Test public Perl admission boundaries
         run: node --test frontend/scripts/perl/runtime-os/test-promotion-binding.mjs
 
+      - name: Test host-only utility resolver isolation
+        run: node frontend/scripts/util-consumer/resolver-launch-controls.mjs
+
       - name: Authenticate public Perl runtime input
         env:
           GH_TOKEN: ${{ github.token }}

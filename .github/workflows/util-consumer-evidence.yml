@@ -46,7 +46,7 @@ jobs:
       - name: Test bounded documentation policy and resolver isolation
         run: |
           python3 scripts/util-consumer/test-provenance-directories.py /tmp/util-target-proof/provenance-directories.json /tmp/util-target-proof/original/dpkg-docker.cfg > /tmp/util-target-proof/directory-policy-tests.json
-          node scripts/util-consumer/test-resolver.mjs
+          node scripts/util-consumer/resolver-launch-controls.mjs
           node --test scripts/util-consumer/test-transaction-status.mjs
       - name: Load unchanged original runtime
         run: docker buildx build --load --target runtime-profile --tag util-original-validation .
