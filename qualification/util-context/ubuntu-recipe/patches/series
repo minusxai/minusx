@@ -1,0 +1,10 @@
+01-nsenter-cloexec.patch
+02-nsenter-cgroup-close.patch
+03-openat2-wrapper.patch
+04-mount-tree-wrapper.patch
+05-subdir-resolution.patch
+06-source-canonicalization.patch
+07-source-pinning.patch
+08-failed-helper-hooks.patch
+09-idmap-wrapper-capability-guard.patch
+10-idmap-fileutils-header.patch

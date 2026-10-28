@@ -1,4 +1,4 @@
-// Audit-only candidate. The production profile lock is deliberately empty.
+// Source-only qualification candidate. Do not execute until final review.
 package main
 
 import (
@@ -31,10 +31,11 @@ var approvedRecipes = map[string]bool{
  "b3da1b9c4ac45edbcc292aa3bb742cf19cca6b6d6629cc3df225a4eea488b155": true,
  "531c0bf85fd7cada6cbed1eae728efcc892d4805c4e28d5f2e4f5636b6a47982": true,
 }
-// Filled only after root reviews the exact generated OCI default profile.
-// An empty set means selected bundles can never be mutated or executed.
-var approvedProfiles = map[string]bool{}
+// Exact generated profile captured and independently reviewed; source-only worker.
+var approvedProfiles = map[string]bool{"30f3f34a8336b491b755c7ab67b475d558c50a85da18190f89b78a1d42e4bd31":true}
 
+const controlSHA256 = "a185d97c4e6d44113cfcb555ba73b324d1feabf3fbe91fcf65ac8a71d53aaf2b"
+var boundedControlArgs = []string{"/qualification-controls/personality-control","bounded"}
 var selectedArgs = []string{"/bin/sh", "-c", "sh /util-linux-recipe/build.sh"}
 var exactRule = map[string]any{
  "names": []any{"personality"}, "action": "SCMP_ACT_ALLOW",
@@ -84,11 +85,12 @@ func decode(data []byte) (map[string]any, error) {
  var value map[string]any; if err := decoder.Decode(&value); err != nil { return nil, err }; return value, nil
 }
 func object(value any) (map[string]any, bool) { result, ok := value.(map[string]any); return result, ok }
-func exactSelection(config map[string]any) bool {
+func matchesSelection(config map[string]any, expected []string) bool {
  process, ok := object(config["process"]); if !ok { return false }
- args, ok := process["args"].([]any); if !ok || len(args) != len(selectedArgs) { return false }
- for index, value := range args { if value != selectedArgs[index] { return false } }; return true
+ args, ok := process["args"].([]any); if !ok || len(args) != len(expected) { return false }
+ for index, value := range args { if value != expected[index] { return false } }; return true
 }
+func exactSelection(config map[string]any) bool { return matchesSelection(config,selectedArgs)||matchesSelection(config,boundedControlArgs) }
 func readLimited(path string, maximum int64) ([]byte, error) {
  file, err := os.Open(path); if err != nil { return nil, err }; defer file.Close()
  info, err := file.Stat(); if err != nil || !info.Mode().IsRegular() || info.Size() > maximum { return nil, errors.New("invalid regular file") }
@@ -182,6 +184,11 @@ func mutate(data []byte, bundle string, recipes, profiles map[string]bool) ([]by
  path, ok := root["path"].(string); if !ok || path == "" { return nil, receipt, true, errors.New("invalid bundle root") }
  if !filepath.IsAbs(path) { path = filepath.Join(bundle, path) }
  receipt.RecipeManifestSHA256, err = verifyRecipe(path, recipes); if err != nil { return nil, receipt, true, err }
+ if matchesSelection(config,boundedControlArgs) {
+  root, e:=filepath.EvalSymlinks(path);if e!=nil{return nil,receipt,true,errors.New("control root unavailable")}
+  control,e:=noSymlinkPath(root,"qualification-controls/personality-control");if e!=nil{return nil,receipt,true,e}
+  binary,e:=readLimited(control,configLimit);if e!=nil||digest(binary)!=controlSHA256{return nil,receipt,true,errors.New("control binary not approved")}
+ }
  linux, ok := object(config["linux"]); if !ok { return nil, receipt, true, errors.New("missing OCI Linux settings") }
  profile, ok := object(linux["seccomp"]); if !ok { return nil, receipt, true, errors.New("missing OCI seccomp profile") }
  before := canonical(profile); receipt.OriginalProfileSHA256 = digest(before)

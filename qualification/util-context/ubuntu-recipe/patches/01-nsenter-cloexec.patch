@@ -1,0 +1,115 @@
+From 3d9e4d5ec49662570b32046e61a7c8deacfafd34 Mon Sep 17 00:00:00 2001
+From: Karel Zak <kzak@redhat.com>
+Date: Tue, 28 Jul 2026 12:41:12 +0200
+Subject: [PATCH] nsenter, unshare: add O_CLOEXEC to all open() calls
+ [CVE-2026-78408]
+
+Add O_CLOEXEC (and EFD_CLOEXEC for eventfd) as defense in depth to
+all file descriptor creation sites in nsenter and unshare. All these
+descriptors are already explicitly closed before exec, but O_CLOEXEC
+provides a safety net against future code changes that might
+accidentally introduce a leak path.
+
+No functional change.
+
+Signed-off-by: Karel Zak <kzak@redhat.com>
+(cherry picked from commit 003c622428f09fc6544ed06b533d278dc14f88e0)
+---
+ sys-utils/nsenter.c |  8 ++++----
+ sys-utils/unshare.c | 12 ++++++------
+ 2 files changed, 10 insertions(+), 10 deletions(-)
+
+diff --git a/sys-utils/nsenter.c b/sys-utils/nsenter.c
+index 0fc1d765cae..62ef366d430 100644
+--- a/sys-utils/nsenter.c
++++ b/sys-utils/nsenter.c
+@@ -179,7 +179,7 @@ static void open_target_fd(int *fd, const char *type, const char *path)
+ 	if (*fd >= 0)
+ 		close(*fd);
+ 
+-	*fd = open(path, O_RDONLY);
++	*fd = open(path, O_RDONLY | O_CLOEXEC);
+ 	if (*fd < 0)
+ 		err(EXIT_FAILURE, _("cannot open %s"), path);
+ }
+@@ -250,7 +250,7 @@ static void open_target_fd_by_nsid(int *fd, const char *idstr)
+ 	if (*fd >= 0)
+ 		close(*fd);
+ 
+-	*fd = open_by_handle_at(nsfs_fd, fh, O_RDONLY);
++	*fd = open_by_handle_at(nsfs_fd, fh, O_RDONLY | O_CLOEXEC);
+ 	if (*fd < 0)
+ 		err(EXIT_FAILURE, _("cannot open namespace of id %"PRIu64),
+ 		    ns_id);
+@@ -869,7 +869,7 @@ int main(int argc, char *argv[])
+ 
+ 	/* Remember the current working directory if I'm not changing it */
+ 	if (root_fd >= 0 && wd_fd < 0 && wdns == NULL) {
+-		wd_fd = open(".", O_RDONLY);
++		wd_fd = open(".", O_RDONLY | O_CLOEXEC);
+ 		if (wd_fd < 0)
+ 			err(EXIT_FAILURE,
+ 			    _("cannot open current working directory"));
+@@ -892,7 +892,7 @@ int main(int argc, char *argv[])
+ 
+ 	/* working directory specified as in-namespace path */
+ 	if (wdns) {
+-		wd_fd = open(wdns, O_RDONLY);
++		wd_fd = open(wdns, O_RDONLY | O_CLOEXEC);
+ 		if (wd_fd < 0)
+ 			err(EXIT_FAILURE,
+ 			    _("cannot open current working directory"));
+diff --git a/sys-utils/unshare.c b/sys-utils/unshare.c
+index 8c388e9a892..5d851e78673 100644
+--- a/sys-utils/unshare.c
++++ b/sys-utils/unshare.c
+@@ -110,7 +110,7 @@ static void setgroups_control(int action)
+ 		return;
+ 	cmd = setgroups_strings[action];
+ 
+-	fd = open(file, O_WRONLY);
++	fd = open(file, O_WRONLY | O_CLOEXEC);
+ 	if (fd < 0) {
+ 		if (errno == ENOENT)
+ 			return;
+@@ -127,7 +127,7 @@ static void map_id(const char *file, uint32_t from, uint32_t to)
+ 	char *buf;
+ 	int fd;
+ 
+-	fd = open(file, O_WRONLY);
++	fd = open(file, O_WRONLY | O_CLOEXEC);
+ 	if (fd < 0)
+ 		 err(EXIT_FAILURE, _("cannot open %s"), file);
+ 
+@@ -222,7 +222,7 @@ static void settime(int64_t offset, clockid_t clk_id)
+ 
+ 	len = snprintf(buf, sizeof(buf), "%d %" PRId64 " 0", clk_id, offset);
+ 
+-	fd = open("/proc/self/timens_offsets", O_WRONLY);
++	fd = open("/proc/self/timens_offsets", O_WRONLY | O_CLOEXEC);
+ 	if (fd < 0)
+ 		err(EXIT_FAILURE, _("failed to open /proc/self/timens_offsets"));
+ 
+@@ -292,7 +292,7 @@ static pid_t fork_and_wait(int *fd)
+ 	pid_t pid;
+ 	uint64_t ch;
+ 
+-	*fd = eventfd(0, 0);
++	*fd = eventfd(0, EFD_CLOEXEC);
+ 	if (*fd < 0)
+ 		err(EXIT_FAILURE, _("eventfd failed"));
+ 
+@@ -720,11 +720,11 @@ static void load_interp(const char *binfmt_mnt, const char *interp)
+ {
+ 	int dirfd, fd;
+ 
+-	dirfd = open(binfmt_mnt, O_PATH | O_DIRECTORY);
++	dirfd = open(binfmt_mnt, O_PATH | O_DIRECTORY | O_CLOEXEC);
+ 	if (dirfd < 0)
+ 		err(EXIT_FAILURE, _("cannot open %s"), binfmt_mnt);
+ 
+-	fd = openat(dirfd, "register", O_WRONLY);
++	fd = openat(dirfd, "register", O_WRONLY | O_CLOEXEC);
+ 	if (fd < 0)
+ 		err(EXIT_FAILURE, _("cannot open %s/register"), binfmt_mnt);
+ 

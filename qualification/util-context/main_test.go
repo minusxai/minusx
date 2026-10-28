@@ -60,7 +60,7 @@ func TestUnknownProfileSchemaRejected(t *testing.T){
  _,_,_,err:=mutate(canonical(config),bundle,recipes,map[string]bool{digest(canonical(profile)):true});if err==nil{t.Fatal("unknown seccomp schema accepted")}
 }
 func TestDuplicateKeysRejected(t *testing.T){if _,err:=decode([]byte(`{"process":{},"process":{}}`));err==nil{t.Fatal("duplicate key accepted")}}
-func TestProductionLockFailsClosed(t *testing.T){if len(approvedProfiles)!=0{t.Fatal("audit candidate unexpectedly enables production profile")}}
+func TestProductionProfileExactCapture(t *testing.T){if len(approvedProfiles)!=1||!approvedProfiles["30f3f34a8336b491b755c7ab67b475d558c50a85da18190f89b78a1d42e4bd31"]{t.Fatal("source profile not exactly captured")}}
 func TestBundleArgumentPassThroughSelection(t *testing.T){
  if _,ok:=bundleArgument([]string{"--version"});ok{t.Fatal("ordinary call selected")}
  if path,ok:=bundleArgument([]string{"--log","fixture","run","--bundle","fixture-bundle","id"});!ok||path!="fixture-bundle"{t.Fatal("run bundle not identified")}
@@ -83,4 +83,13 @@ func TestPinnedDefaultProfileNames(t *testing.T){
  data,_,_,_:=fixture(t);c,_:=decode(data);l,_:=object(c["linux"]);p,_:=object(l["seccomp"]);r,_:=object(p["syscalls"].([]any)[0]);r["names"]=[]any{"cachestat","clone3","fchmodat2","mseal","futex_wait","statmount"}
  if safeProfile(p)!=nil{t.Fatal("exact pinned BuildKit technical names rejected")}
  r["names"]=[]any{"private_company"};if safeProfile(p)==nil{t.Fatal("private string accepted")}
+}
+
+func TestControlBinaryBinding(t *testing.T){
+ data,bundle,recipes,profiles:=fixture(t);c,_:=decode(data);process,_:=object(c["process"]);process["args"]=[]any{boundedControlArgs[0],boundedControlArgs[1]}
+ if !exactSelection(c){t.Fatal("bounded control not selected")}
+ _,_,_,err:=mutate(canonical(c),bundle,recipes,profiles);if err==nil{t.Fatal("missing control accepted")}
+ root:=filepath.Join(bundle,"rootfs/qualification-controls");os.Mkdir(root,0700);os.WriteFile(filepath.Join(root,"personality-control"),[]byte("tampered"),0500)
+ _,_,_,err=mutate(canonical(c),bundle,recipes,profiles);if err==nil{t.Fatal("tampered control accepted")}
+ process["args"]=[]any{boundedControlArgs[0],"baseline"};raw:=canonical(c);got,_,selected,err:=mutate(raw,bundle,recipes,profiles);if err!=nil||selected||!reflect.DeepEqual(raw,got){t.Fatal("baseline controls changed")}
 }

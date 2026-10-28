@@ -1,0 +1,27 @@
+# Dedicated source qualification; exact PCRE2 predecessor and source recipe.
+FROM ubuntu:26.10@sha256:93e29beff5257b2cdf1c024d831f6d2997e53655a653ff76a811fc9e6564a719 AS pcre2
+ENV DEB_BUILD_MAINT_OPTIONS=hardening=+all
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends build-essential pkg-config && rm -rf /var/lib/apt/lists/*
+ADD --checksum=sha256:929f0b20e62879252a15886b06c89f1edef61a363cbd5826fb041080a5e557ae https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.49/pcre2-10.49.tar.gz /tmp/pcre2.tar.gz
+RUN mkdir /build && tar -xzf /tmp/pcre2.tar.gz --strip-components=1 -C /build
+WORKDIR /build
+RUN eval "$(dpkg-buildflags --export=sh)" && ./configure --prefix=/usr --libdir=/usr/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH) --enable-jit --disable-static && make -j2 && make check && make DESTDIR=/stage install
+RUN mkdir -p /pkg/DEBIAN /pkg/usr/share/doc/libpcre2-8-0 /pkg/usr/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH) /out && \
+    cp -a /stage/usr/lib/*/libpcre2-8.so.* /pkg/usr/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH)/ && \
+    cp LICENCE.md /pkg/usr/share/doc/libpcre2-8-0/copyright && \
+    for control in preinst postinst prerm postrm triggers conffiles; do original="$(dpkg-query --control-path libpcre2-8-0 "$control" 2>/dev/null || true)"; if test -n "$original"; then cp -a "$original" /pkg/DEBIAN/"$control"; fi; done && \
+    mkdir -p debian && printf 'Source: pcre2\nMaintainer: Runtime Maintainers <maintainers@example.invalid>\n\nPackage: libpcre2-8-0\nArchitecture: any\nDescription: PCRE2 runtime\n' > debian/control && \
+    dependencies="$(dpkg-shlibdeps -O -e$(find /pkg/usr/lib -type f -name 'libpcre2-8.so.*') | sed -n 's/^shlibs:Depends=//p')" && test -n "$dependencies" && \
+    original_dependencies="$(dpkg-query -W -f='${Depends}' libpcre2-8-0)" && if test -n "$original_dependencies"; then dependencies="$original_dependencies, $dependencies"; fi && \
+    printf 'Package: libpcre2-8-0\nSource: pcre2\nVersion: 10.49-1+runtime1\nArchitecture: %s\nMulti-Arch: same\nSection: libs\nPriority: optional\nMaintainer: Runtime Maintainers <maintainers@example.invalid>\nDepends: %s\nDescription: PCRE2 8-bit runtime built from verified upstream 10.49\n' "$(dpkg --print-architecture)" "$dependencies" > /pkg/DEBIAN/control && \
+    original_predepends="$(dpkg-query -W -f='${Pre-Depends}' libpcre2-8-0)" && if test -n "$original_predepends"; then printf 'Pre-Depends: %s\n' "$original_predepends" >> /pkg/DEBIAN/control; fi && dpkg-deb --build --root-owner-group /pkg /out/pcre2.deb
+
+FROM pcre2 AS util-linux
+COPY metabase/scripts/util-linux /util-linux-recipe
+COPY personality-probe /qualification-controls/personality-control
+RUN ["/qualification-controls/personality-control", "baseline"]
+RUN ["/qualification-controls/personality-control", "bounded"]
+RUN sh /util-linux-recipe/build.sh
+
+FROM scratch AS util-source-export
+COPY --from=util-linux /out /

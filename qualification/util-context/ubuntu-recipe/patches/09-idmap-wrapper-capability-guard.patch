@@ -1,0 +1,47 @@
+Subject: [PATCH] libmount: scope internal tree wrapper to its idmap capability guard
+
+Local backport integration prerequisite for upstream 90a1f3b5b134b775dd30a46155064731ba40c519
+and 9a8d0d60c55d3a55f89f6f75a17bae31bc5ee1c6. The existing idmap hook is built
+with HAVE_MOUNTFD_API && HAVE_LINUX_MOUNT_H, including when the configurable
+libmount mountfd backend is disabled. Keep backend state/context declarations
+under their original option and make only the internal wrapper available to
+that existing idmap capability. No public API or configure option is changed.
+Upstream master retains the narrow wrapper guard; this is an explicit local
+integration adjustment, not a claimed upstream commit.
+
+--- a/libmount/src/mountP.h
++++ b/libmount/src/mountP.h
+@@ -771,9 +771,12 @@
+ }
+ 
+ int mnt_context_open_tree(struct libmnt_context *cxt, const char *path, unsigned long mflg);
++
++#endif
++
++#if defined(HAVE_MOUNTFD_API) && defined(HAVE_LINUX_MOUNT_H)
+ int mnt_open_tree(int dirfd, const char *path, unsigned long flags,
+ 		  unsigned long long resolve);
+-
+ #endif
+ 
+ #endif /* _LIBMOUNT_PRIVATE_H */
+--- a/libmount/src/utils.c
++++ b/libmount/src/utils.c
+@@ -1360,7 +1360,7 @@
+ 	return 1;
+ }
+ 
+-#ifdef USE_LIBMOUNT_MOUNTFD_SUPPORT
++#if defined(HAVE_MOUNTFD_API) && defined(HAVE_LINUX_MOUNT_H)
+ /*
+  * Open a mount tree, optionally pinning the path with openat2() first.
+  *
+@@ -1386,7 +1386,7 @@
+ 
+ 	return open_tree(dirfd, path, flags);
+ }
+-#endif /* USE_LIBMOUNT_MOUNTFD_SUPPORT */
++#endif /* HAVE_MOUNTFD_API && HAVE_LINUX_MOUNT_H */
+ 
+ #ifdef TEST_PROGRAM
+ static int test_match_fstype(struct libmnt_test *ts __attribute__((unused)),

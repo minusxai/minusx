@@ -1,0 +1,21 @@
+# Dedicated source qualification; exact runtime-profile and source recipe.
+FROM node:22.23.4-trixie-slim@sha256:8eb619e402eaede1748a3c8173bffab391592812e85136452f781741c7242ddf AS base
+COPY scripts/patch-npm.mjs /tmp/patch-npm.mjs
+RUN npm install --global --no-audit --no-fund npm@12.2.1 \
+    && node /tmp/patch-npm.mjs && npm cache clean --force
+
+# Capture the actual runtime network profile before build dependencies or overlays.
+FROM base AS runtime-profile
+RUN apt-get update && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+FROM runtime-profile AS utilbuilder
+COPY scripts/util-linux /util-linux-recipe
+COPY personality-probe /qualification-controls/personality-control
+RUN ["/qualification-controls/personality-control", "baseline"]
+RUN ["/qualification-controls/personality-control", "bounded"]
+RUN sh /util-linux-recipe/build.sh
+
+FROM scratch AS util-source-export
+COPY --from=utilbuilder /out /
