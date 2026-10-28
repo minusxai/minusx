@@ -1,0 +1,30 @@
+name: Diagnose util compiler and resolver contracts
+on:
+  push:
+    branches: [qualification/util-diagnostics-20261028]
+permissions:
+  contents: read
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Prepare source-only diagnostic context
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/util-diagnostic"
+          cp -R qualification/util-context/ubuntu-phase "$RUNNER_TEMP/util-diagnostic/recipe"
+          cp -R qualification/util-context/diagnostics "$RUNNER_TEMP/util-diagnostic/diagnostics"
+          cp qualification/util-context/diagnostics/Dockerfile "$RUNNER_TEMP/util-diagnostic/Dockerfile"
+      - name: Run cheap actual Linux compiler and resolver controls
+        run: docker buildx build --progress=plain --target export --output type=local,dest=util-diagnostic "$RUNNER_TEMP/util-diagnostic"
+      - name: Retain diagnostic-only technical receipts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: util-cheap-diagnostic
+          path: util-diagnostic
+          if-no-files-found: error
+          retention-days: 7
