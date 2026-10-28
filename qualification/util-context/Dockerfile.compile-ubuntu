@@ -17,6 +17,8 @@ RUN mkdir -p /pkg/DEBIAN /pkg/usr/share/doc/libpcre2-8-0 /pkg/usr/lib/$(dpkg-arc
     original_predepends="$(dpkg-query -W -f='${Pre-Depends}' libpcre2-8-0)" && if test -n "$original_predepends"; then printf 'Pre-Depends: %s\n' "$original_predepends" >> /pkg/DEBIAN/control; fi && dpkg-deb --build --root-owner-group /pkg /out/pcre2.deb
 
 FROM pcre2 AS util-linux
+# Keep the predecessor artifact in its own stage; export util evidence only.
+RUN rm /out/pcre2.deb
 COPY metabase/scripts/util-linux /util-linux-recipe
 COPY personality-probe /qualification-controls/personality-control
 RUN ["/qualification-controls/personality-control", "baseline"]
@@ -28,6 +30,8 @@ COPY --from=util-linux /out /
 
 # Actual pristine metadata only; no util source or native acceptance.
 FROM pcre2 AS util-pristine
+# Keep the predecessor artifact in its own stage; export util evidence only.
+RUN rm /out/pcre2.deb
 COPY metabase/scripts/util-linux /util-linux-recipe
 RUN sh /util-linux-recipe/build.sh snapshot
 
