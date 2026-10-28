@@ -50,3 +50,9 @@ all capability guards. Its ordinary C check compiles the actual caller expressio
 against the actual source header, without supplying resolver definitions, and
 requires the removed-header undeclared-constant negative control to fail. This
 covers the include integration that an isolated mock constant cannot test.
+
+The real-header fixture runs only after the complete source build, using the
+saved regular runtime config.h with compiler -include. It does not guess or
+supply configure feature macros; libc declarations and source fallback functions
+therefore use the same configuration as the actual runtime translation units.
+The removed-header negative control and -Werror remain enabled.

@@ -11,16 +11,13 @@ import subprocess
 import sys
 import tempfile
 
-root, output = map(Path, sys.argv[1:])
+root, output, configuration = map(Path, sys.argv[1:])
+assert configuration.is_file(), "Actual generated runtime configuration required"
 idmap = (root / 'libmount/src/hook_idmap.c').read_text()
 include = '#include "fileutils.h"'
 assert include in idmap[:idmap.index('static int hook_mount_post(')]
 caller = re.search(r'fd_tree = mnt_open_tree\(AT_FDCWD, target,.*?;', idmap, re.S).group()
 prelude = r'''
-#define _GNU_SOURCE
-#define HAVE_ERR_H 1
-#define HAVE_LOFF_T 1
-#define HAVE_NANOSLEEP 1
 #include <assert.h>
 #include <fcntl.h>
 #include <string.h>
@@ -57,14 +54,15 @@ int main(void) {
 with tempfile.TemporaryDirectory(prefix='idmap-real-header-') as temp:
     directory = Path(temp)
     unit, binary = directory / 'caller.c', directory / 'caller'
-    command = ['cc', '-O2', '-Wall', '-Wextra', '-Werror', '-I', str(root / 'include')]
+    command = ['cc', '-O2', '-Wall', '-Wextra', '-Werror', '-include', str(configuration.resolve()), '-I', str(root), '-I', str(root / 'include')]
     unit.write_text(prelude + include + '\n' + body)
     subprocess.run(command + [str(unit), '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True, timeout=10)
     unit.write_text(prelude + body)
     failure = subprocess.run(command + [str(unit), '-o', str(binary)], capture_output=True, text=True)
     assert failure.returncode != 0 and 'RESOLVE_NO_SYMLINKS' in failure.stderr, failure.stderr
-report = {'actual_private_header': 'include/fileutils.h', 'fixture_defines_resolve_flags': False,
+report = {'generated_config_sha256': hashlib.sha256(configuration.read_bytes()).hexdigest(),
+          'fixture_supplies_configure_feature_macros': False, 'actual_private_header': 'include/fileutils.h', 'fixture_defines_resolve_flags': False,
           'actual_idmap_caller_compile_and_execution': True,
           'removed_header_undeclared_resolve_negative_control': True,
           'restricted_recursive_unrestricted_checks': True, 'mount_syscalls_mocked': True,
