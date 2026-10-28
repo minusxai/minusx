@@ -31,6 +31,8 @@ jobs:
         run: |
           set -eu
           docker buildx build --progress=plain --build-context compiled-util="$RUNNER_TEMP/compiled-util" --target package-export --output type=local,dest=util-package-candidate "$RUNNER_TEMP/util-admission"
+      - name: Require complete typed package gates before native transaction
+        run: python3 qualification/util-admission/check-package-status.py util-package-candidate/package-status.json
       - name: Fresh native installation and complete resolver preservation gates
         shell: bash
         run: |

@@ -14,6 +14,41 @@ def statuses(path):
     answer={r['Package']:r for r in rows}
     assert len(answer)==len(rows)
     return answer
+def verify_control_file(path, member, content):
+    info=path.lstat()
+    assert stat.S_ISREG(info.st_mode) and not path.is_symlink()
+    assert path.read_bytes()==content, 'Stored control bytes changed'
+    assert (stat.S_IMODE(info.st_mode),info.st_uid,info.st_gid)==(member.mode,member.uid,member.gid)
+
+def payload_pathset(data):
+    paths=set()
+    with tarfile.open(fileobj=io.BytesIO(data)) as archive:
+        for member in archive:
+            assert member.isfile() or member.isdir() or member.issym() or member.islnk()
+            name=member.name.rstrip('/')
+            if name.startswith('./'):name=name[2:]
+            if name in ('','.'):path='/.'
+            else:
+                assert not name.startswith('/') and all(part not in ('','.','..') for part in name.split('/'))
+                path='/'+name
+            assert path not in paths, 'Duplicate candidate payload path'
+            paths.add(path)
+    return paths
+
+def stored_info_closure(prefix, expected_controls, expected_paths, alternatives=()):
+    for alternate in alternatives:
+        assert alternate.parent==prefix.parent and alternate!=prefix
+        assert not any(p.name.startswith(alternate.name+'.') for p in prefix.parent.iterdir()), 'Stale alternate package info prefix'
+    actual={p.name[len(prefix.name)+1:] for p in prefix.parent.iterdir() if p.name.startswith(prefix.name+'.')}
+    assert actual==set(expected_controls)|{'list'}, 'Unexpected/missing stored package control'
+    path=prefix.with_name(prefix.name+'.list');info=path.lstat()
+    assert stat.S_ISREG(info.st_mode) and not path.is_symlink()
+    assert (stat.S_IMODE(info.st_mode),info.st_uid,info.st_gid)==(0o644,0,0)
+    listed=path.read_text().splitlines()
+    normalized=['/.' if name=='/' else name for name in listed]
+    assert len(normalized)==len(set(normalized)), 'Duplicate generated package path'
+    assert set(normalized)==expected_paths, 'Generated package path set differs from candidate'
+
 def check(plan,before,inputs,out,debs=None):
     names={'util-linux','libmount1','login','mount'}
     assert set(plan['packages'])==names
@@ -40,20 +75,35 @@ def check(plan,before,inputs,out,debs=None):
         # Database-only conffile state must remain exactly original.
         assert new.get('Conffiles','')==old.get('Conffiles','')
         control_bytes=subprocess.check_output(['dpkg-deb','--ctrl-tarfile',str(debs/(name+'.deb'))])
-        expected_control_names=set()
+        expected_control_names=set();control_prefixes=set();internal_controls=[]
         with tarfile.open(fileobj=io.BytesIO(control_bytes)) as archive:
             for member in archive:
                 control_name=member.name.removeprefix('./')
                 if member.isdir() or control_name=='control':continue
                 assert member.isfile() and '/' not in control_name
                 expected_control_names.add(control_name)
+                content=archive.extractfile(member).read()
+                if control_name=='conffiles':
+                    internal_controls.append((member,content));continue
                 actual_path=subprocess.check_output(['dpkg-query','--control-path',name,control_name],text=True).strip()
                 actual=Path(actual_path); info=actual.lstat()
-                assert stat.S_ISREG(info.st_mode) and not actual.is_symlink()
-                assert actual.read_bytes()==archive.extractfile(member).read(), ('Final control bytes changed',name,control_name)
-                assert (stat.S_IMODE(info.st_mode),info.st_uid,info.st_gid)==(member.mode,member.uid,member.gid)
+                assert actual.name.endswith('.'+control_name)
+                prefix=actual.name[:-len('.'+control_name)]
+                assert prefix in (name,name+':'+new['Architecture'])
+                control_prefixes.add(actual.with_name(prefix))
+                verify_control_file(actual,member,content)
         actual_control_names=set(subprocess.check_output(['dpkg-query','--control-list',name],text=True).splitlines())
-        assert actual_control_names==expected_control_names|{'list'}, ('Unexpected final stored control',name)
+        assert actual_control_names==expected_control_names-{'conffiles'}, ('Unexpected final queried control',name)
+        assert 'md5sums' in expected_control_names and len(control_prefixes)==1
+        data_archive=subprocess.check_output(['dpkg-deb','--fsys-tarfile',str(debs/(name+'.deb'))])
+        prefix=next(iter(control_prefixes))
+        for member,content in internal_controls:
+            # dpkg 1.22.22 treats .conffiles and .list as internal database
+            # files and deliberately omits both from --control-list/path.
+            path=prefix.with_name(prefix.name+'.conffiles')
+            verify_control_file(path,member,content)
+        alternatives=[prefix.with_name(other) for other in (name,name+':'+new['Architecture']) if other!=prefix.name]
+        stored_info_closure(prefix,expected_control_names,payload_pathset(data_archive),alternatives)
         for flag in ('Essential','Protected'):
 
             assert new.get(flag,'no')==old.get(flag,'no'), ('Changed protection flag',name,flag)

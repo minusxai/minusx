@@ -17,37 +17,31 @@ COPY --from=compiled-util / /out/
 COPY recipe /recipe
 COPY checks /checks
 RUN echo '91e393d7960901098ebe89f48fb36445391779673cede66abc43fa9ca3737cb1  /out/compile-proof.json' | sha256sum -c - && \
-    echo 'fe8adfb969ba5f4df135ec1062681fb8d29e3abd4b49fa6c91322f80e4306ef9  /checks/package.py' | sha256sum -c - && \
-    echo 'a3b2984bafc64c9643ebca237db85a0b86511b3559b331d7a431b6023478d75b  /checks/mount-metadata-only.py' | sha256sum -c -
+    echo '53a0675a42823a9fd32f54ef17691e63fba22422f1df5731560e4d8a230ca9f0  /checks/package.py' | sha256sum -c - && \
+    echo '69d3f5695d7da07416c9935524c9880fe851ef57a083f0bc2dfed32ad71f93bf  /checks/mount-metadata-only.py' | sha256sum -c -
 RUN mkdir /work && rm -rf /out/compile-inputs && mkdir /out/compile-inputs && \
     python3 /checks/restore-inputs.py /out /work && python3 /checks/restore-inputs.py /out /out/compile-inputs && \
     python3 /checks/restore-output-metadata.py /out && \
     python3 /checks/replace-package-implementation.py /recipe /checks/package.py /out/compile-proof.json
 RUN UTIL_LINUX_COMPILE_PROOF_SHA256=91e393d7960901098ebe89f48fb36445391779673cede66abc43fa9ca3737cb1 \
-    UTIL_LINUX_PACKAGE_IMPLEMENTATION_SHA256=fe8adfb969ba5f4df135ec1062681fb8d29e3abd4b49fa6c91322f80e4306ef9 \
+    UTIL_LINUX_PACKAGE_IMPLEMENTATION_SHA256=53a0675a42823a9fd32f54ef17691e63fba22422f1df5731560e4d8a230ca9f0 \
     python3 /recipe/phase-proof.py verify /recipe /work /out
 RUN UTIL_LINUX_COMPILE_PROOF_SHA256=91e393d7960901098ebe89f48fb36445391779673cede66abc43fa9ca3737cb1 \
-    python3 /recipe/package.py package /recipe /work && \
-    python3 /checks/mount-metadata-only.py /work/original/mount /out/mount.deb > /out/mount-postprocess.json && \
-    python3 /checks/prepare-plan.py /checks /work /out /acceptance-inputs
+    python3 /checks/package-stage.py /checks /recipe /work /out
 
 FROM runtime-profile AS native
 COPY checks /checks
 COPY --from=packaged /acceptance-inputs /inputs
 COPY --from=tools /resolver-tools/tool-closure.json /tool-closure.json
-RUN chmod 0755 /checks/resolver /checks/accept-util-native.sh
+COPY --from=packaged /package-status.json /package-status.json
+RUN node -e 'const r=JSON.parse(require("fs").readFileSync("/package-status.json")); require("assert").deepStrictEqual(r,{kind:"util-package-transport",status:"package-only-unadmitted",source_compiled:false,native_admitted:false,exit_codes:{source:0,mount:0,plan:0}});' && chmod 0755 /checks/resolver /checks/accept-util-native.sh
 # Only this explicit target executes the separately reviewed four-package plan.
 RUN --mount=from=packaged,source=/out,target=/candidate-debs,readonly \
     --mount=from=tools,source=/resolver-tools/root,target=/qualification-tools,readonly \
     sh /checks/accept-util-native.sh /checks/resolver /checks /inputs /candidate-debs /qualification-result
 
 FROM scratch AS package-export
-COPY --from=packaged /acceptance-inputs /
-COPY --from=packaged /out/libmount1.deb /packages/libmount1.deb
-COPY --from=packaged /out/util-linux.deb /packages/util-linux.deb
-COPY --from=packaged /out/login.deb /packages/login.deb
-COPY --from=packaged /out/mount.deb /packages/mount.deb
-COPY --from=packaged /out/mount-postprocess.json /
+COPY --from=packaged /package-export/ /
 FROM scratch AS native-export
 COPY --from=native /qualification-result/dependency-closure.json /
 COPY --from=native /qualification-result/apt-plan.json /

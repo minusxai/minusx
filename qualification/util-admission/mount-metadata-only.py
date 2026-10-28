@@ -8,10 +8,9 @@ from email.parser import Parser
 OLD='2.41.5-0+deb13u1'
 NEW=OLD+'+security20261028'
 METADATA_VERSION=OLD+'+metadata20261028.1'
-PINNED_FILES={'present-paths': 'c5b2114b2c90951a7df0ae6d9a3156a44a3303d44fe26dcb1db3fea3dc62d67b', 'absent-documentation': 'a6d6c8c0577fd75d17f98d7c8d8aef4f00cee26a2d893b4089658e82becaa8c5', 'paths': 'cdc1c09309d782173f6e875b1cf92d9deeee4fc8920494ba348fe3324bf3be4e', 'payload.tar': '7741c3e8e72ef08f336d26354f0132c9b33054fee9b1b37148feb387e2c959ee', 'status': 'd409e63d42f481e3e90a638f71558d06b6cf93da7160cfe0846f19f910714682', 'control-list': '9758202a2249d7ffba917393336c059a72640d65144f11ea2c31f9d490b23556', 'controls/md5sums': '17f78ade623b07a1e53e92d64b4148f0b758736b4a58586a3db2d1fb22d7b7a2'}
+PINNED_FILES={'present-paths': 'c5b2114b2c90951a7df0ae6d9a3156a44a3303d44fe26dcb1db3fea3dc62d67b', 'absent-documentation': 'a6d6c8c0577fd75d17f98d7c8d8aef4f00cee26a2d893b4089658e82becaa8c5', 'paths': 'cdc1c09309d782173f6e875b1cf92d9deeee4fc8920494ba348fe3324bf3be4e', 'payload.tar': '7ea2b343d4e283ea8de7e726c9def5f5480d4227aa8a642fc077b3e6cb17ad16', 'status': 'd409e63d42f481e3e90a638f71558d06b6cf93da7160cfe0846f19f910714682', 'control-list': '9758202a2249d7ffba917393336c059a72640d65144f11ea2c31f9d490b23556', 'controls/md5sums': '17f78ade623b07a1e53e92d64b4148f0b758736b4a58586a3db2d1fb22d7b7a2'}
 
 PINNED_METADATA={'paths': {'mode': 420, 'uid': 0, 'gid': 0, 'kind': 'file'}, 'status': {'mode': 420, 'uid': 0, 'gid': 0, 'kind': 'file'}, 'absent-documentation': {'mode': 420, 'uid': 0, 'gid': 0, 'kind': 'file'}, 'controls': {'mode': 493, 'uid': 0, 'gid': 0, 'kind': 'directory'}, 'controls/md5sums': {'mode': 420, 'uid': 0, 'gid': 0, 'kind': 'file'}, 'payload.tar': {'mode': 420, 'uid': 0, 'gid': 0, 'kind': 'file'}, 'control-list': {'mode': 420, 'uid': 0, 'gid': 0, 'kind': 'file'}, 'present-paths': {'mode': 420, 'uid': 0, 'gid': 0, 'kind': 'file'}}
-AUTHENTICATED_RAW_ARCHIVE_SHA256='adbdbf5dbec81a52e27d5ddf962a28e18c1922ecf36135523bfa098a87413218'
 
 def sha(data): return hashlib.sha256(data).hexdigest()
 

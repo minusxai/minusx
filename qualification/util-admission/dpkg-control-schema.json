@@ -1,0 +1,17 @@
+{
+  "package": "dpkg",
+  "version": "1.22.22",
+  "primary_source": [
+    {
+      "url": "https://sources.debian.org/data/main/d/dpkg/1.22.22/src/query/main.c",
+      "sha256": "d0b0c87410642bf591251374e060972cf6b45ac8745d876ccd3df70883f0c939",
+      "evidence": "pkg_infodb_is_internal excludes LISTFILE and CONFFILESFILE from query control-list/control-path output"
+    },
+    {
+      "url": "https://sources.debian.org/data/main/d/dpkg/1.22.22/src/main/unpack.c",
+      "sha256": "abf791bda21fbf3cdc88857c8f4e0bdc854b74f009f368f99f938877cc02e81f",
+      "evidence": "pkg_infodb_update renames control files into the info database; generated LISTFILE handled separately"
+    }
+  ],
+  "validation": "Archive maintainer controls excluding conffiles match query names exactly. All archive controls, internal conffiles bytes, and generated list are independently checked in one legal architecture prefix; stale alternate prefix fails."
+}

@@ -219,6 +219,14 @@ for package in proof['runtime_packages']:
     original = Parser().parsestr(baseline[package]['relationships'])
     rebuilt = Parser().parsestr(control_text)
     assert rebuilt.get('Version') == proof['package_versions'][package]['rebuilt']
+    expected_controls = set(baseline[package]['controls']) | {'control', 'md5sums'}
+    if original.get('Conffiles'):
+        expected_controls.add('conffiles')
+        declared = (control / 'conffiles').read_text().splitlines()
+        assert len(declared) == len(set(declared)) and all(len(line.split()) == 1 for line in declared)
+        assert set(declared) == {line.split()[0] for line in original['Conffiles'].splitlines() if line.strip()}
+    assert {path.name for path in control.iterdir()} == expected_controls, 'Unreviewed control-name change'
+    assert all(path.is_file() and not path.is_symlink() for path in control.iterdir())
     def normalized(value):
         return re.sub(r'\s+', ' ', value or '').strip()
     # All technical fields were exact-guarded together before any mutation.
