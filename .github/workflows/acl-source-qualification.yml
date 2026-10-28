@@ -1,0 +1,44 @@
+name: Qualify ACL library and descriptor-bound archive caller
+on:
+  push:
+    branches: [proof/acl-callers-20261029]
+permissions:
+  contents: read
+jobs:
+  qualify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Build authenticated source and run full suites and native controls
+        shell: bash
+        run: |
+          mkdir -p acl-evidence
+          set +e
+          set -o pipefail
+          docker buildx build --progress=plain --platform linux/amd64 --file frontend/scripts/acl/Dockerfile --target acl-qualification-output --output type=local,dest=acl-evidence/output frontend 2>&1 | tee acl-evidence/build.log
+          statuses=("${PIPESTATUS[@]}")
+          result=${statuses[0]}
+          if [[ "$result" == 0 && "${statuses[1]}" != 0 ]]; then result=${statuses[1]}; fi
+          printf '{"schema":1,"producer_exit_code":%s,"log_exit_code":%s,"aggregate_exit_code":%s}\n' "${statuses[0]}" "${statuses[1]}" "$result" > acl-evidence/outcome.json
+          exit "$result"
+      - name: Bind exact candidate files and retained evidence
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib
+          root=pathlib.Path('acl-evidence'); root.mkdir(exist_ok=True)
+          files=[pathlib.Path('.github/workflows/acl-source-qualification.yml'),*pathlib.Path('frontend/scripts/acl').glob('*'),*pathlib.Path('frontend/scripts/tar-patches').glob('*')]
+          binding={'schema':1,'head':os.environ['GITHUB_SHA'],'run_id':os.environ['GITHUB_RUN_ID'],'attempt':os.environ['GITHUB_RUN_ATTEMPT'],'source_sha256':{str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in files if p.is_file()},'evidence_sha256':{str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in root.rglob('*') if p.is_file()}}
+          (root/'source-binding.json').write_text(json.dumps(binding,sort_keys=True,indent=2)+'\n')
+          PY
+      - name: Retain success or failure source qualification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: acl-source-qualification
+          path: acl-evidence
+          if-no-files-found: error
+          retention-days: 7

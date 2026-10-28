@@ -1,0 +1,39 @@
+{
+  "kind": "acl-source-inputs",
+  "source_version": "2.4.0-1",
+  "runtime_package": "libacl1",
+  "original_version": "2.3.2-2+b1",
+  "output_version": "2.4.0-1+runtime1",
+  "files": [
+    {
+      "name": "acl_2.4.0-1.dsc",
+      "url": "https://deb.debian.org/debian/pool/main/a/acl/acl_2.4.0-1.dsc",
+      "bytes": 2624,
+      "sha256": "b987ebbeb3d498794bad29cd65301b77384978493d8765c94dba8bad8fa325b6"
+    },
+    {
+      "name": "acl_2.4.0.orig.tar.xz",
+      "url": "https://deb.debian.org/debian/pool/main/a/acl/acl_2.4.0.orig.tar.xz",
+      "bytes": 384828,
+      "sha256": "e661131456d2708a01c614a0f400e11d7d1bfaeb6f3e74b75bb980b72f0161a3"
+    },
+    {
+      "name": "acl_2.4.0-1.debian.tar.xz",
+      "url": "https://deb.debian.org/debian/pool/main/a/acl/acl_2.4.0-1.debian.tar.xz",
+      "bytes": 47932,
+      "sha256": "65931c2fb3e821bda67f8d8d72d77e99ac61502748dcdf38b6805fe89339085e"
+    },
+    {
+      "name": "acl_2.4.0.orig.tar.xz.asc",
+      "url": "https://deb.debian.org/debian/pool/main/a/acl/acl_2.4.0.orig.tar.xz.asc",
+      "bytes": 833,
+      "sha256": "5f4f0b9b78821764fe6b88e32aef6ec519628522c211c36706bcb78d6f3f036b"
+    }
+  ],
+  "upstream_api_commits": [
+    "5906d2868ec8d3b08be556153696e6b1122eeeda",
+    "0071c6d1fea0a8a6270333baa85fb609be325c26",
+    "170dbd3beff9bd5bdab3f72db1a04bf282f6087c"
+  ],
+  "caller_requirement": "Old pathname APIs retain their compatibility semantics; migrate affected consumers to descriptor-bound new APIs."
+}
