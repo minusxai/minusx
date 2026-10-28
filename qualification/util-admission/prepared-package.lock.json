@@ -1,0 +1,128 @@
+{
+  "repository": "minusxai/minusx",
+  "repository_id": 1155513729,
+  "run_id": 40726948039,
+  "attempt": 1,
+  "head": "90cd427acd02c45246636307be5fdb7a170e3a12",
+  "branch": "qualification/util-native-20261028",
+  "workflow_path": ".github/workflows/util-native-admission.yml",
+  "workflow_sha256": "d3f94ac8482f40d26ffc67f1489020acff6319aa28922178e54d332716064ff4",
+  "job_id": 122952655789,
+  "job_name": "native",
+  "artifact_id": 12833476347,
+  "artifact_name": "util-package-native-candidate",
+  "zip_sha256": "73c340de1c0d12b00414ec9761ff24c8bca07ac693cc74afcbf214574cd0eb2b",
+  "zip_size": 1416497,
+  "whole_run_conclusion": "failure",
+  "files": {
+    "util-package-candidate/check-absence.sh": {
+      "sha256": "60ed617d2135e738ce9bfb36ba72a8e3586583fbc6dadda399dc186c23ae9644",
+      "size": 238
+    },
+    "util-package-candidate/check-util-linux": {
+      "sha256": "87c8a848e99302a782f91a62104d7ed0d364dc251d7f8befb03083e346fff6da",
+      "size": 16872
+    },
+    "util-package-candidate/final-native-manifest.json": {
+      "sha256": "2b9f876720eb58b43b103c54960e548fc65a74ebf4f8d1c1e504ff6e6835c670",
+      "size": 36149
+    },
+    "util-package-candidate/mount-roundtrip.json": {
+      "sha256": "5848f9ebc67b4ac267bf179d1c83b08f6ff9a3fe5df0f3ba7f3380c78d4d8631",
+      "size": 321
+    },
+    "util-package-candidate/mount.stderr": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "util-package-candidate/mount.stdout": {
+      "sha256": "52eec827996b3278a1846577f4c40ba457f06de221a10a3654f88afae1a36247",
+      "size": 529
+    },
+    "util-package-candidate/package-relationship-diagnostics.json": {
+      "sha256": "3ca5ad64402f539c492010f961ebbb01745fed81875c151f615da697b5ca642c",
+      "size": 4104
+    },
+    "util-package-candidate/package-status.json": {
+      "sha256": "f10dda96db0ff2ffa6dbf96089faae49051089c8ac0c05b5d61a7c7662b53bca",
+      "size": 204
+    },
+    "util-package-candidate/packages/libmount1.deb": {
+      "sha256": "b7ec3818c499ab03a003fcdda4a2b3c11f0d8a06b5f4400c776a65ccb0b6002f",
+      "size": 213784
+    },
+    "util-package-candidate/packages/login.deb": {
+      "sha256": "acad107a937fe83829cd3dc29571b83db66ee354c57648048ffb7cd8673ddeed",
+      "size": 65148
+    },
+    "util-package-candidate/packages/mount.deb": {
+      "sha256": "cc771f5b87a3a1fe59035e524e04ae53202db89afe4ee579c82b018586878743",
+      "size": 440512
+    },
+    "util-package-candidate/packages/util-linux.deb": {
+      "sha256": "1ad6928869489d6511dc3748d547f6ed3fe6838dbbb417818d5215ec665962bf",
+      "size": 694164
+    },
+    "util-package-candidate/plan.json": {
+      "sha256": "241d06ea308d4ccd04afa1ef16c243d8b76e5232504d180511b8ebbc45adfbb2",
+      "size": 1439
+    },
+    "util-package-candidate/plan.stderr": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "util-package-candidate/plan.stdout": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "util-package-candidate/runtime-absent.paths": {
+      "sha256": "382b9521393e14e132b7b5a07ba873a9614114e66cc7228660a362c98278fc45",
+      "size": 6937
+    },
+    "util-package-candidate/runtime-payload.sha256": {
+      "sha256": "68ae282e7676d771e2e6b151e490eaedec18c0293c7bd148da77025cd9e47da1",
+      "size": 5492
+    },
+    "util-package-candidate/source.stderr": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "util-package-candidate/source.stdout": {
+      "sha256": "c1acb967b5258768df68febf679f48eb22e7663f2a0daa5a4ac729b6fb2ba195",
+      "size": 186
+    },
+    "util-native-proof/apt-plan.json": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "util-native-proof/apt-simulation.stderr": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "util-native-proof/apt-simulation.txt": {
+      "sha256": "74c1cdae156f85b555bf0ecf03f7d5f299e5ee5167c6af8ae354fcc289b1e7d7",
+      "size": 1088
+    },
+    "util-native-proof/before-packages.tsv": {
+      "sha256": "86e510cc020ffa2ad39c86fc2c38dd6eb1fedeaeca47df50431955c5b8007dfc",
+      "size": 5043
+    },
+    "util-native-proof/dependency-closure.json": {
+      "sha256": "00e83d0b93b2f46e986fc6d48c9ac32156461c5767723abe4a45c35ef12c645b",
+      "size": 902
+    },
+    "util-native-proof/native-status.json": {
+      "sha256": "c4ef5f8627d00d53e7d9088ada37beb11e907e1b02d4bfeb48f432393c84c038",
+      "size": 101
+    },
+    "util-native-proof/plan.json": {
+      "sha256": "241d06ea308d4ccd04afa1ef16c243d8b76e5232504d180511b8ebbc45adfbb2",
+      "size": 1439
+    },
+    "util-native-proof/tool-closure.json": {
+      "sha256": "58a82bb2ac42826da9605f885116cc67eecc7b8408f72988d70c9ac262213a17",
+      "size": 815557
+    }
+  },
+  "source_compile_lock_sha256": "766ad2db349571b64938e3b8b79bf3b0a7ec6d50630586d613cc323e50db3b9c"
+}

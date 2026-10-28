@@ -1,0 +1,11 @@
+{
+  "source": "https://sources.debian.org/data/main/a/apt/3.0.3/apt-pkg/algorithms.cc",
+  "sha256": "c786391ece1e7da8b6e3c5b917fe38c880c3d5eed836930cb7f937abdcbd42c7",
+  "version": "3.0.3",
+  "functions": [
+    "pkgSimulate::RealInstall",
+    "pkgSimulate::RealConfigure",
+    "pkgSimulate::ShortBreaks"
+  ],
+  "scope": "Only four observed annotations for selected old consumers of the updated libmount provider; all package action/version/count/closure checks unchanged. These intermediate simulator annotations do not waive final dependency/native qualification."
+}

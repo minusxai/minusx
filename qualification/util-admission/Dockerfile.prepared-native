@@ -1,0 +1,25 @@
+# Package-only and clean-runtime qualification; no C source rebuild or application.
+FROM node:22.23.4-trixie-slim@sha256:8eb619e402eaede1748a3c8173bffab391592812e85136452f781741c7242ddf AS base
+COPY patch-npm.mjs /tmp/patch-npm.mjs
+RUN npm install --global --no-audit --no-fund npm@12.2.1 && node /tmp/patch-npm.mjs && npm cache clean --force
+FROM base AS runtime-profile
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*
+
+FROM runtime-profile AS tools
+COPY tool-recipe /tool-recipe
+RUN mkdir /perl-work && node /tool-recipe/capture-tool-empty-directories.mjs /perl-work/original-tool-empty-dirs.json && \
+    apt-get update && apt-get install -y --no-install-recommends python3 dpkg-dev binutils && python3 /tool-recipe/prepare-tools.py /resolver-tools
+
+FROM runtime-profile AS native
+COPY checks /checks
+COPY --from=prepared-util / /inputs
+COPY --from=tools /resolver-tools/tool-closure.json /tool-closure.json
+COPY --from=prepared-util /package-status.json /package-status.json
+RUN node -e 'const r=JSON.parse(require("fs").readFileSync("/package-status.json")); require("assert").deepStrictEqual(r,{kind:"util-package-transport",status:"package-only-unadmitted",source_compiled:false,native_admitted:false,exit_codes:{source:0,mount:0,plan:0}});' && chmod 0755 /checks/resolver /checks/accept-util-native.sh /inputs/check-util-linux /inputs/check-absence.sh
+# Only this explicit target executes the separately reviewed four-package plan.
+RUN --mount=from=prepared-util,source=/packages,target=/candidate-debs,readonly \
+    --mount=from=tools,source=/resolver-tools/root,target=/qualification-tools,readonly \
+    sh /checks/retain-native.sh /checks/resolver /checks /inputs /candidate-debs /qualification-result
+
+FROM scratch AS native-export
+COPY --from=native /native-export/ /

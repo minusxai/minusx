@@ -8,10 +8,19 @@ def validate(text, plan):
     names={'util-linux','libmount1','login','mount'}
     assert set(plan['packages'])==names
     found={'Inst':{},'Conf':{}}
+    # APT3.0.3 pkgSimulate::RealInstall/ShortBreaks emits transient
+    # old-consumer Pre-Depends annotations during this exact reviewed plan.
+    allowed_annotations={'util-linux:amd64 on libmount1:amd64','mount:amd64 on libmount1:amd64','util-linux:amd64 mount:amd64 ','mount:amd64 '}
     for line in text.splitlines():
         if line.startswith(('Remv ','Purg ','E:','W:')): raise AssertionError('Unreviewed removal/error/warning')
         if not line.startswith(('Inst ','Conf ')): continue
-        match=re.fullmatch(r'(Inst|Conf) ([a-z0-9][a-z0-9+.-]*)(?: \[([^\]]+)\])? \(([^ ()]+)(?: [^()]*)?\)',line)
+        action_line,separator,suffix=line.partition(') [')
+        if separator:
+            action_line+=')'
+            annotations=re.findall(r'\[([^\[\]]+)\]', '['+suffix)
+            assert annotations and ' '.join('['+a+']' for a in annotations)=='['+suffix, 'Unsupported APT annotation grammar'
+            assert all(a in allowed_annotations for a in annotations), 'Unreviewed transient relationship annotation'
+        match=re.fullmatch(r'(Inst|Conf) ([a-z0-9][a-z0-9+.-]*)(?: \[([^\]]+)\])? \(([^ ()]+)(?: [^()]*)?\)',action_line)
         assert match, 'Unsupported APT action grammar: '+repr(line)
         action,name,old,new=match.groups()
         assert name in names and name not in found[action]

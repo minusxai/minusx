@@ -8,6 +8,9 @@ native_status=json.loads((native/'native-status.json').read_text())
 assert native_status=={'kind':'util-native-transport','status':'native-unadmitted','native_qualified':False,'exit_code':0}
 assert native_status['native_qualified'] is False and type(native_status['exit_code']) is int
 lock=json.loads(lock_path.read_text())
+origin=json.loads((packages/'authenticated-prepared-origin.json').read_text())
+assert origin['kind']=='util-authenticated-prepared-packages' and origin['status']=='package-only-unadmitted' and origin['native_qualified'] is False
+assert origin['source_compile_lock_sha256']==hashlib.sha256(lock_path.read_bytes()).hexdigest()
 plan=json.loads((packages/'plan.json').read_text());assert set(plan['packages'])=={'libmount1','util-linux','login','mount'}
 assert (native/'plan.json').read_bytes()==(packages/'plan.json').read_bytes()
 for name,spec in plan['packages'].items():assert hashlib.sha256((packages/'packages'/(name+'.deb')).read_bytes()).hexdigest()==spec['sha256']
