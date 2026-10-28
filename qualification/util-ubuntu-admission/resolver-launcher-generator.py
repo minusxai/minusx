@@ -18,9 +18,10 @@ def render(runtime):
     assert libraries==['/qualification-tools/usr/lib/x86_64-linux-gnu','/qualification-tools/lib/x86_64-linux-gnu']
     assert isinstance(runtime['inc'],list) and runtime['inc'] and len(runtime['inc'])==len(set(runtime['inc']))
     assert all(checked_path(path).startswith('/qualification-tools/usr/') for path in runtime['inc'])
-    # -s excludes user site; clean env excludes PYTHONPATH/PERL*/LD_*/DYLD_*.
+    # -S excludes all site initialization and ambient sitecustomize; the clean
+    # environment excludes PYTHONPATH/PERL*/LD_*/DYLD_*.
     # PYTHONHOME remains enabled to bind stdlib to extracted tool closure.
-    command=['/usr/bin/env','-i','LC_ALL=C','PATH=/usr/bin:/bin','PYTHONHOME=/qualification-tools/usr','PYTHONNOUSERSITE=1','PYTHONDONTWRITEBYTECODE=1','DPKG_DATADIR=/qualification-tools/usr/share/dpkg',loader,'--library-path',runtime['library_path'],python,'-s']
+    command=['/usr/bin/env','-i','LC_ALL=C','PATH=/usr/bin:/bin','PYTHONHOME=/qualification-tools/usr','PYTHONNOUSERSITE=1','PYTHONDONTWRITEBYTECODE=1','DPKG_DATADIR=/qualification-tools/usr/share/dpkg',loader,'--library-path',runtime['library_path'],python,'-S']
     return '#!/bin/sh\nexec '+shlex.join(command)+' "$@"\n'
 
 if __name__=='__main__':

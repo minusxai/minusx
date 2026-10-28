@@ -85,7 +85,7 @@ assert loaded and all(pathlib.Path(p).resolve().is_relative_to(root.resolve()) f
 assert len({entry['interpreter'] for entry in elf.values()})==1,'Tool ELF interpreters differ'
 python_probe='import json,sys,email.parser,subprocess,tempfile,hashlib; print(json.dumps({"modules":{name:{"file":module.__file__,"origin":getattr(getattr(module,"__spec__",None),"origin",None),"loader":getattr(getattr(module,"__loader__",None),"__name__",type(getattr(module,"__loader__",None)).__name__)} for name,module in sys.modules.items() if getattr(module,"__file__",None)},"interpreter":{name:getattr(sys,name,None) for name in ["prefix","base_prefix","_stdlib_dir","executable"]}}))'
 python_env={'LC_ALL':'C','PATH':'/usr/bin:/bin','PYTHONHOME':str(root/'usr'),'PYTHONNOUSERSITE':'1','PYTHONDONTWRITEBYTECODE':'1'}
-python_observed=json.loads(run([str(root/elf[python_name]['interpreter'].lstrip('/')),'--library-path',str(root/'usr/lib/x86_64-linux-gnu')+':'+str(root/'lib/x86_64-linux-gnu'),str(root/python_name),'-s','-c',python_probe],env=python_env))
+python_observed=json.loads(run([str(root/elf[python_name]['interpreter'].lstrip('/')),'--library-path',str(root/'usr/lib/x86_64-linux-gnu')+':'+str(root/'lib/x86_64-linux-gnu'),str(root/python_name),'-S','-c',python_probe],env=python_env))
 def classified_tool_path(value):
  if value is None:return {'kind':'absent'}
  assert isinstance(value,str)
