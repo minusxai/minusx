@@ -1,0 +1,4 @@
+{
+  "moby/buildkit:v0.25.1": "sha256:79cc6476ab1a3371c9afd8b44e7c55610057c43e18d9b39b68e2b0c2475cc1b6",
+  "library/golang:1.25.3-alpine": "sha256:aee43c3ccbf24fdffb7295693b6e33b21e01baec1b2a55acc351fde345e9ec34"
+}

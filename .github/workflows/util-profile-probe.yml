@@ -1,0 +1,47 @@
+name: Inspect source worker profile
+on:
+  push:
+    branches: [qualification/util-profile-20261028]
+permissions:
+  contents: read
+jobs:
+  profile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Build isolated audit driver and run Linux fixtures
+        run: docker build --progress=plain -t util-profile-driver qualification/util-context
+      - name: Register dedicated source worker
+        run: |
+          docker buildx create --name util-profile --driver docker-container --driver-opt image=util-profile-driver --buildkitd-flags '--oci-worker-binary /usr/bin/buildkit-runc' --use
+          docker buildx inspect --bootstrap
+          container=$(docker ps --filter name=buildx_buildkit_util-profile --format '{{.ID}}')
+          test -n "$container"
+          test "$(docker inspect --format '{{.HostConfig.Privileged}}' "$container")" = true
+          printf '{"dedicated_worker_privileged":true,"inner_mode":"sandbox","insecure_entitlement_requested":false}\n' > worker-boundary.json
+      - name: Capture only reviewed rejection receipt
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/util-profile-context/frontend/scripts"
+          cp -R frontend/scripts/util-linux "$RUNNER_TEMP/util-profile-context/frontend/scripts/util-linux"
+          cp qualification/util-context/Dockerfile.profile-probe "$RUNNER_TEMP/util-profile-context/Dockerfile"
+          set +e
+          docker buildx build --builder util-profile --no-cache --progress=plain -f "$RUNNER_TEMP/util-profile-context/Dockerfile" "$RUNNER_TEMP/util-profile-context" > "$RUNNER_TEMP/profile-private.log" 2>&1
+          status=$?
+          set -e
+          test "$status" -ne 0
+          python3 qualification/util-context/extract-profile-receipt.py "$RUNNER_TEMP/profile-private.log" profile-receipt.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: util-profile-receipt
+          path: |
+            profile-receipt.json
+            worker-boundary.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Remove only this worker
+        if: always()
+        run: docker buildx rm util-profile || true
