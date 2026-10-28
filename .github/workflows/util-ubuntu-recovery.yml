@@ -1,0 +1,36 @@
+name: Replay retained Ubuntu util postcompile gates
+on:
+  push:
+    branches: [qualification/util-ubuntu-recovery-20261028]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Authenticate failed source job and immutable retained inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 qualification/util-ubuntu-recovery/fetch-failed-source.py qualification/util-ubuntu-recovery/ubuntu-failed-source.lock.json "$RUNNER_TEMP/failed-source"
+      - name: Prepare bounded replay context
+        run: |
+          set -eu
+          context="$RUNNER_TEMP/ubuntu-util-recovery"
+          mkdir "$context"
+          cp -R qualification/util-context/ubuntu-phase "$context/recipe"
+          cp -R qualification/util-ubuntu-recovery "$context/checks"
+          cp qualification/util-ubuntu-recovery/Dockerfile "$context/Dockerfile"
+      - name: Replay missing gates without rebuilding util sources or installing packages
+        run: docker buildx build --progress=plain --build-context failed-source="$RUNNER_TEMP/failed-source" --target export --output type=local,dest=ubuntu-util-recovery "$RUNNER_TEMP/ubuntu-util-recovery"
+      - name: Retain native-unadmitted postgate evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ubuntu-util-postgates-unadmitted
+          path: ubuntu-util-recovery
+          if-no-files-found: error
+          retention-days: 7

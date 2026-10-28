@@ -1,0 +1,25 @@
+{
+  "source_inputs": {
+    "sys-utils/nsenter.c": "db0c619b03479b611f6d0d863f52b03ae0084d71e5698554889759576e007ff0",
+    "libmount/src/context.c": "7e000b81da9a860ec9626a116b9d169523b7079314c61d187efc7f23b386a989",
+    "libmount/src/context_mount.c": "6b86cf3f9128ef31c07a3398f4076bde90fc527e1c72807257c7064de353f438",
+    "debian/rules": "2613d7eaea49467a469a5275029ecd4547af2a713f3d342247d097f91adafc21",
+    "libmount/src/hook_idmap.c": "a4b9746b95e3468a0f59fa9a837deb8bcc9940fd01096224b42def52a7521d1a",
+    "include/fileutils.h": "763461f3f3a2f22ad9778653934acc01ee74cffce1a3105cca67f85eb93d536a",
+    "include/c.h": "c0bd9e54007f4f76d59351a198ab6c2ac0c554867769a6e8025cca4565718e8c",
+    "lib/fileutils.c": "5040b516edaef3ff7d44c2a3f8773b77bb4472d105af2041e16ef231ca1a8307",
+    "libmount/src/libmount.h.in": "f2ef91390d9601fc8460c33a2edc37d0ba4f416f6ad62f1a637f7d61ad6a5e4b",
+    "configure.ac": "e98826ea9f6b3d13af0b6e2bab9c0bdbb26b3df680612a3b1e319db9b2de9ee8"
+  },
+  "retained_inputs": {
+    "runtime-config.h": "339b3d2b35c2ed97b24d81642deac2da23d422f5f2e6b8cc51b0842eac5a2f3e",
+    "original-features.h": "c77d3975004ba10f4996557457f380da343749e3900f5d7bd5bfc5a2d94fefe4"
+  },
+  "header_substitutions": {
+    "LIBMOUNT_VERSION": "2.42.2",
+    "LIBMOUNT_MAJOR_VERSION": "2",
+    "LIBMOUNT_MINOR_VERSION": "42",
+    "LIBMOUNT_PATCH_VERSION": "2"
+  },
+  "generated_header_sha256": "ff95dfbca6bf822d269199b65c53795d5ec640d8546761d85bf472200b9f7aca"
+}
