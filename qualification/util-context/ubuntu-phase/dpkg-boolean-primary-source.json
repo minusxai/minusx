@@ -1,0 +1,5 @@
+{
+  "url": "https://deb.debian.org/debian/pool/main/d/dpkg/dpkg_1.22.22.tar.xz",
+  "sha256": "d5ea9f132deec8030b50ab2a02ade2b49f0c7a195805a302c8301156fe833a57",
+  "scope": "Official Debian source archive HTTPS; exact failed image dpkg version and signed index not yet bound"
+}

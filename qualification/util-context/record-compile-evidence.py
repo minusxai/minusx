@@ -1,6 +1,9 @@
 import hashlib,json,os,re,sys,stat,tarfile
 from pathlib import Path
+sys.dont_write_bytecode=True
+from validate_transport import validate_transport
 root,log=Path(sys.argv[1]),Path(sys.argv[2])
+validate_transport(root,"compile")
 objects=[]
 for line in log.read_text().splitlines():
  for marker in ['{"status":"approved-delta"','{"mode":"baseline"','{"mode":"bounded"']:
@@ -20,7 +23,7 @@ receipts=[x for x in objects if "status" in x]
 assert len(receipts)==2
 profile_hash="30f3f34a8336b491b755c7ab67b475d558c50a85da18190f89b78a1d42e4bd31"
 rule={"names":["personality"],"action":"SCMP_ACT_ALLOW","args":[{"index":0,"value":268173312,"op":"SCMP_CMP_EQ"}]}
-recipe={"debian":"ae243c028f66d19f22eac6114917269c3774ddc787373142484ba6d6ad2e5ee0","ubuntu":"50996f7087150828dcae8de4850776edb1d46030193ab7b6905af7d0d214234a"}[os.environ["QUALIFICATION_OS"]]
+recipe={"debian":"f185a3c4cf22a00666a7cd72c7b6e52a5f6d4b3c9024d69b720a5b4d418f66de","ubuntu":"df138a238ded0dd74bb61132c5288ab5f37c3787a5e206b58e819194e9194114"}[os.environ["QUALIFICATION_OS"]]
 canon=lambda x:json.dumps(x,sort_keys=True,separators=(",",":"),ensure_ascii=False).encode()
 for x in receipts:
  assert x["status"]=="approved-delta" and x["recipe_manifest_sha256"]==recipe
@@ -72,7 +75,17 @@ assert seen==proof["export"]
 assert all(proof["export"][name]==item for name,item in proof["work"].items())
 expected_paths=set(proof["output"])|{"compile-inputs","compile-inputs.tar","compile-proof.json","compile-proof.sha256"}|{"compile-inputs/"+n for n in proof["export"]}
 actual_paths={str(f.relative_to(root)) for f in root.rglob("*")}
+expected_paths|={"build-execution.json","raw-work-inputs.paths","raw-work-inputs.tar","raw-work-inputs.sha256","raw-input-inventory.json","pristine-original"}
+expected_paths|={"pristine-original/"+name.removeprefix("original/") for name in proof["work"] if name.startswith("original/")}
 assert actual_paths==expected_paths,"Unexpected or missing compilation output"
+stage=json.loads((root/"source-stage-observation.json").read_text())
+assert type(stage["source_build_exit_code"]) is int and stage["installed_native_qualification"] is False
+assert stage=={"kind":"util-source-stage-observation","status":"source-tests-completed-unadmitted","source_build_exit_code":0,"installed_native_qualification":False}
+pristine=json.loads((root/"pristine-validation.json").read_text())
+assert pristine["status"]=="pristine-technical-profile-matched" and pristine["metadata_accepted"] is False and pristine["native_qualified"] is False
+sys.path.insert(0,str(Path(__file__).parent/(os.environ["QUALIFICATION_OS"]+"-phase")))
+from compare_pristine import compare_pristine
+assert compare_pristine(root/"pristine-original")==pristine, "Pristine revalidation differs"
 suite=json.loads((root/"source-suite-summary.json").read_text())
 assert suite["kind"]=="util-source-distro-suite-summary"
 assert suite["observed_suite_count"]==suite["expected_suite_count"]==({"debian":337,"ubuntu":367}[os.environ["QUALIFICATION_OS"]])

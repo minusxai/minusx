@@ -3,9 +3,15 @@
 set -eu
 phase=${1:-all}
 test "$#" -le 1 || { printf 'Expected zero or one phase argument\n' >&2; exit 2; }
-case "$phase" in compile|package|all) ;; *) printf 'Unknown build phase\n' >&2; exit 2;; esac
+case "$phase" in compile|snapshot|compile-body|snapshot-body|package|all) ;; *) printf 'Unknown build phase\n' >&2; exit 2;; esac
 export DEBIAN_FRONTEND=noninteractive LC_ALL=C.UTF-8
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+case "$phase" in
+    compile|snapshot) exec sh "$here/retain-execution.sh" "$phase";;
+    compile-body) phase=compile;;
+    snapshot-body) phase=snapshot;;
+esac
+export PYTHONDONTWRITEBYTECODE=1
 . /etc/os-release
 test "$ID" = debian && test "$VERSION_ID" = 13
 (cd "$here" && sha256sum -c SHA256SUMS)
@@ -75,19 +81,25 @@ for package in $(cat original/resolver/installed-util-family); do
         cp -p "$location" "original/$package/controls/$control"
     done < "original/$package/control-list"
 done
+if test "$phase" = snapshot; then
+    exit 0
+fi
 # Retain Debian's Signed-By trust configuration for the source index too.
 find /etc/apt/sources.list.d -name '*.sources' -exec sed -i -E \
     's/^(Types:[[:space:]]+deb)([[:space:]]*)$/\1 deb-src\2/' {} +
 grep -Rqs '^Types:.*deb-src' /etc/apt/sources.list.d
 apt-get update
 apt-get install -y --no-install-recommends python3 dpkg-dev quilt binutils
+python3 "$here/compare_pristine.py" /util-linux-work/original /out/pristine-validation.json
 apt-get source --download-only util-linux=2.41.5-0+deb13u1
 python3 "$here/prepare.py" "$here" /util-linux-work
 apt-get build-dep -y --no-install-recommends util-linux=2.41.5-0+deb13u1
 python3 "$here/package.py" snapshot "$here" /util-linux-work
 cd /util-linux-work/source
 python3 "$here/check-source.py" "$PWD" /out/source-regression.json
-chown -R nobody:nogroup /util-linux-work /tmp/util-linux-home
+# Preserve pristine control-copy ownership; only source/output work needs writes.
+chown nobody:nogroup /util-linux-work
+chown -R nobody:nogroup /util-linux-work/source /tmp/util-linux-home
 # Preserve the distro's complete build and test targets. No nocheck/profile skip.
 if runuser -u nobody -- env HOME=/tmp/util-linux-home \
     DEB_BUILD_PROFILES= DEB_BUILD_OPTIONS=parallel=2 \
@@ -106,6 +118,7 @@ grep -Eq '^#define USE_LIBMOUNT_MOUNTFD_SUPPORT 1$' ../runtime-config.h
 python3 "$here/check-source.py" "$PWD" /out/source-regression.json --fixtures
 cc -O2 -Wall -Wextra -Werror -Ilibmount/src -I/util-linux-work \
     "$here/check-util-linux.c" -L.libs -lmount -o /out/check-util-linux
+printf '{"kind":"util-source-stage-observation","status":"source-tests-completed-unadmitted","source_build_exit_code":0,"installed_native_qualification":false}\n' > /out/source-stage-observation.json
 # A successful compile proof is written only after every original test/gate.
 python3 "$here/phase-proof.py" freeze "$here" /util-linux-work /out
 if test "$phase" = compile; then

@@ -19,3 +19,11 @@ RUN sh /util-linux-recipe/build.sh compile
 
 FROM scratch AS util-compile-export
 COPY --from=utilbuilder /out /
+
+# Actual pristine metadata only; no util source or native acceptance.
+FROM runtime-profile AS util-pristine
+COPY scripts/util-linux /util-linux-recipe
+RUN sh /util-linux-recipe/build.sh snapshot
+
+FROM scratch AS util-pristine-export
+COPY --from=util-pristine /out /

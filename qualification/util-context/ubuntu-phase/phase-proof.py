@@ -15,6 +15,9 @@ import subprocess
 import sys
 import tarfile
 
+sys.dont_write_bytecode = True
+from compare_pristine import compare_pristine
+
 
 def versions(specification, package):
     assert package in specification['runtime_packages'], 'Unselected runtime package'
@@ -56,39 +59,9 @@ def descendants(path):
 
 
 def available_packages(work):
-    original = work / 'original'
-    resolver = original / 'resolver'
-    required = {'raw-status.sha256', 'resolver-status', 'package-source-map',
-                'architecture', 'foreign-architectures', 'installed-util-family'}
-    assert {p.name for p in resolver.iterdir()} == required, 'Incomplete pristine resolver profile'
-    assert re.fullmatch('[0-9a-f]{64}\n', (resolver / 'raw-status.sha256').read_text())
-    architecture = (resolver / 'architecture').read_text().strip()
-    rows = [line.split('\t') for line in (resolver / 'package-source-map').read_text().splitlines()]
-    assert rows and all(len(row) == 6 for row in rows)
-    graph = [Parser().parsestr(block) for block in
-             (resolver / 'resolver-status').read_text().strip().split('\n\n')]
-    graph_map = {(item['Package'], item['Architecture']): item for item in graph}
-    assert len(graph_map) == len(graph) == len(rows), 'Incomplete whole installed resolver graph'
-    for package, source, source_version, version, status, arch in rows:
-        item = graph_map[(package, arch)]
-        assert item['Version'] == version and item['Status'].split()[-1] == status
-    expected = [row[0] for row in rows if row[1] == 'util-linux' and row[4] == 'installed']
-    assert all(row[5] in (architecture, 'all') for row in rows if row[0] in expected)
-    family = (resolver / 'installed-util-family').read_text().splitlines()
-    assert family == expected and family and len(set(family)) == len(family), 'Source-family graph mismatch'
-    assert {p.name for p in original.iterdir()} == set(family) | {'resolver'}
-    for package in family:
-        assert re.fullmatch('[a-z0-9][a-z0-9+.-]*', package)
-        snapshot = original / package
-        for name in ['status', 'paths', 'present-paths', 'absent-documentation', 'control-list', 'payload.tar']:
-            assert (snapshot / name).is_file(), ('Missing pristine family input', package, name)
-        controls = set((snapshot / 'control-list').read_text().splitlines()) - {'list'}
-        assert {p.name for p in (snapshot / 'controls').iterdir()} == controls, 'Incomplete original controls'
-        control = Parser().parsestr((snapshot / 'status').read_text())
-        assert control['Package'] == package and control['Architecture'] in (architecture, 'all')
-        graph_control = graph_map[(package, control['Architecture'])]
-        for field in graph_control.keys():
-            assert re.sub(r'\s+', ' ', control.get(field, '')).strip() == re.sub(r'\s+', ' ', graph_control[field]).strip(), ('Pristine graph/control mismatch', package, field)
+    profile = compare_pristine(work / 'original')
+    family = profile['family_packages']
+    architecture = (work / 'original/resolver/architecture').read_text().strip()
     found = {}
     for archive in sorted(work.glob('*.deb')):
         control = Parser().parsestr(subprocess.check_output(['dpkg-deb', '-f', str(archive)], text=True))
@@ -119,7 +92,7 @@ def collect(recipe, work, output, specification):
     output_paths = []
     for name in ['source-build.log', 'source-suite-summary.json', 'source-regression.json',
                  'idmap-header-regression.json', 'openat-resolve-regression.json', 'check-util-linux', 'check-features',
-                 'pristine-package-profile', 'compiled-package-controls.json', 'available-package-controls.json']:
+                 'pristine-package-profile', 'pristine-validation.json', 'source-stage-observation.json', 'compiled-package-controls.json', 'available-package-controls.json']:
         output_paths.extend(descendants(output / name))
     if (recipe / 'check-idmap-wrapper.py').is_file():
         output_paths.extend(descendants(output / 'wrapper-regression.json'))
