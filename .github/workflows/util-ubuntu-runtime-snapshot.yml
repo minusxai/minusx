@@ -1,0 +1,39 @@
+name: Capture actual Ubuntu runtime util baseline
+on:
+  push:
+    branches: [qualification/util-ubuntu-runtime-20261028]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      QUALIFICATION_OS: ubuntu
+      SOURCE_HEAD: ${{ github.sha }}
+      RUN_ID: ${{ github.run_id }}
+      RUN_ATTEMPT: ${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Prepare exact pre-overlay runtime context
+        run: |
+          set -eu
+          context="$RUNNER_TEMP/ubuntu-runtime-snapshot"
+          mkdir "$context"
+          cp -R qualification/util-context/ubuntu-phase "$context/recipe"
+          cp qualification/util-ubuntu-recovery/Dockerfile.runtime-snapshot "$context/Dockerfile"
+      - name: Capture pristine package graph without source build or security overlays
+        run: |
+          set -eu
+          docker buildx build --progress=plain --target export --output type=local,dest=ubuntu-runtime-snapshot "$RUNNER_TEMP/ubuntu-runtime-snapshot"
+          python3 qualification/util-context/record-pristine-evidence.py ubuntu-runtime-snapshot
+      - name: Retain raw snapshot and typed comparison even on validation failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ubuntu-runtime-pristine-unadmitted
+          path: ubuntu-runtime-snapshot
+          if-no-files-found: error
+          retention-days: 7

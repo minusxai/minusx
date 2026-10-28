@@ -1,0 +1,8 @@
+# Exact pre-overlay application runtime baseline; package profile capture only.
+FROM ubuntu:26.10@sha256:93e29beff5257b2cdf1c024d831f6d2997e53655a653ff76a811fc9e6564a719 AS runtime-base
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends ca-certificates fontconfig fonts-dejavu-core libstdc++6 tzdata zlib1g && rm -rf /var/lib/apt/lists/*
+COPY recipe /recipe
+RUN echo 'df138a238ded0dd74bb61132c5288ab5f37c3787a5e206b58e819194e9194114  /recipe/SHA256SUMS' | sha256sum -c - && cd /recipe && sha256sum -c SHA256SUMS
+RUN --network=none sh /recipe/build.sh snapshot
+FROM scratch AS export
+COPY --from=runtime-base /out /
