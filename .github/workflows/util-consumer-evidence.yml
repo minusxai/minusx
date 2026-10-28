@@ -1,0 +1,87 @@
+name: Validate utility target transaction
+on:
+  push:
+    branches: [qualification/util-consumer-20261029]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  target:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Authenticate immutable source and isolated native evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/util-consumer/fetch-util-compile.py scripts/util-consumer/debian-compile.lock.json /tmp/qualified-util-source
+          python3 scripts/util-consumer/fetch-success-input.py scripts/util-consumer/native-candidate.lock.json /tmp/qualified-util-native
+      - name: Prepare and validate fresh target transaction without source compilation
+        run: >-
+          docker buildx build --load --platform linux/amd64
+          --no-cache-filter runtime-profile,util-original,utilbuilder,util-qualified
+          --build-context qualified-util-source=/tmp/qualified-util-source
+          --build-context qualified-util-native=/tmp/qualified-util-native
+          --target util-qualified --tag util-target-validation .
+      - name: Export the current transaction proof
+        run: >-
+          docker buildx build
+          --build-context qualified-util-source=/tmp/qualified-util-source
+          --build-context qualified-util-native=/tmp/qualified-util-native
+          --target util-linux-proof --output type=local,dest=/tmp/util-target-proof .
+      - name: Require complete typed target transaction
+        run: node scripts/util-consumer/check-transaction-status.mjs /tmp/util-target-proof/installed
+      - name: Exercise constructor and family comparison controls
+        run: |
+          python3 scripts/util-consumer/test-target-mount.py /tmp/util-target-proof/original > /tmp/util-target-proof/constructor-tests.json
+          python3 scripts/util-consumer/test-compare-original.py /tmp/qualified-util-source /tmp/util-target-proof/original > /tmp/util-target-proof/family-tests.json
+      - name: Test bounded documentation policy and resolver isolation
+        run: |
+          python3 scripts/util-consumer/test-provenance-directories.py /tmp/util-target-proof/provenance-directories.json /tmp/util-target-proof/original/dpkg-docker.cfg > /tmp/util-target-proof/directory-policy-tests.json
+          node scripts/util-consumer/resolver-launch-controls.mjs
+          node --test scripts/util-consumer/test-transaction-status.mjs
+      - name: Load unchanged original runtime
+        run: docker buildx build --load --target runtime-profile --tag util-original-validation .
+      - name: Bind immutable original and candidate image bytes
+        run: |
+          original=$(docker image inspect --format '{{.Id}}' util-original-validation)
+          candidate=$(docker image inspect --format '{{.Id}}' util-target-validation)
+          python3 scripts/util-consumer/bind-target-images.py "$original" "$candidate" /tmp/util-target-proof /tmp/util-target-proof/target-image-binding.json
+          python3 scripts/util-consumer/check-namespace-containers.py "$original" "$candidate" /tmp/util-target-proof/target-namespace-proof.json
+      - name: Bind current source and transaction
+        if: always()
+        working-directory: ${{ github.workspace }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, subprocess
+          from pathlib import Path
+          root = Path('/tmp/util-target-proof')
+          root.mkdir(exist_ok=True)
+          files = [Path('frontend/Dockerfile'), Path('frontend/scripts/patch-npm.mjs'),
+                   Path('.github/workflows/util-consumer-evidence.yml')]
+          tracked = subprocess.check_output(['git', 'ls-files', '-z', 'frontend/scripts/util-consumer']).decode().split('\0')
+          files += [Path(name) for name in tracked if name]
+          assert all(p.is_file() and not p.is_symlink() and '__pycache__' not in p.parts and p.suffix != '.pyc' for p in files)
+          Path('/tmp/util-target-proof/source-binding.json').write_text(json.dumps({
+              'kind': 'utility-target-transaction-source-binding',
+              'status': 'target-evidence-unadmitted',
+              'head': os.environ['GITHUB_SHA'], 'run_id': os.environ['GITHUB_RUN_ID'],
+              'attempt': os.environ['GITHUB_RUN_ATTEMPT'],
+              'source_hashes': {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in files}
+          }, sort_keys=True, indent=2) + '\n')
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: util-target-proof
+          path: /tmp/util-target-proof/
+          if-no-files-found: error
+          retention-days: 7

@@ -1,0 +1,39 @@
+From 728ceccd723e4d488f08ff8204e11084dcd2ee66 Mon Sep 17 00:00:00 2001
+From: Colin Watson <cjwatson@debian.org>
+Date: Sun, 9 Feb 2014 16:10:00 +0000
+Subject: Look for $SHELL on the path for ProxyCommand/LocalCommand
+
+There's some debate on the upstream bug about whether POSIX requires this.
+I (Colin Watson) agree with Vincent and think it does.
+
+Bug: https://bugzilla.mindrot.org/show_bug.cgi?id=1494
+Bug-Debian: http://bugs.debian.org/492728
+Last-Update: 2020-02-21
+
+Patch-Name: shell-path.patch
+---
+ sshconnect.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/sshconnect.c b/sshconnect.c
+index 3349d8e39..804616437 100644
+--- a/sshconnect.c
++++ b/sshconnect.c
+@@ -277,7 +277,7 @@ ssh_proxy_connect(struct ssh *ssh, const char *host, const char *host_arg,
+ 		 * extra privileges above.
+ 		 */
+ 		ssh_signal(SIGPIPE, SIG_DFL);
+-		execv(argv[0], argv);
++		execvp(argv[0], argv);
+ 		perror(argv[0]);
+ 		exit(1);
+ 	}
+@@ -1758,7 +1758,7 @@ ssh_local_cmd(const char *args)
+ 	if (pid == 0) {
+ 		ssh_signal(SIGPIPE, SIG_DFL);
+ 		debug3("Executing %s -c \"%s\"", shell, args);
+-		execl(shell, shell, "-c", args, (char *)NULL);
++		execlp(shell, shell, "-c", args, (char *)NULL);
+ 		error("Couldn't execute %s -c \"%s\": %s",
+ 		    shell, args, strerror(errno));
+ 		_exit(1);

@@ -1,0 +1,62 @@
+[
+  {
+    "url": "https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-10.6p1.tar.gz",
+    "file": "openssh-10.6p1.tar.gz",
+    "sha256": "a9dc9565dffe8640f64d863cd29a32bc4a3dbdec0566a7fc44c5d6ee767d5f39",
+    "size": 2355244
+  },
+  {
+    "url": "https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-10.6p1.tar.gz.asc",
+    "file": "openssh-10.6p1.tar.gz.asc",
+    "sha256": "1f8fd46ddb5ec95f5bc9e0d7b0fc34ccea3ef8f94a8e3a5d3911434cce7027cf",
+    "size": 833
+  },
+  {
+    "url": "https://daniel.haxx.se/mykey.asc",
+    "file": "curl-release-key.asc",
+    "sha256": "64619d3c1a2b68da837014b2ab02a049ed2c69aaebfa10a20a4f29dab003ecb8",
+    "size": 4741
+  },
+  {
+    "url": "https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/RELEASE_KEY.asc",
+    "file": "openssh-release-key.asc",
+    "sha256": "c4a6f4692c9b8e75ec096add049fe0314b3ceff9410321f1e85907cf7a864269",
+    "size": 22720
+  },
+  {
+    "url": "https://github.com/ngtcp2/ngtcp2/releases/download/v1.25.0/ngtcp2-1.25.0.tar.xz",
+    "file": "ngtcp2-1.25.0.tar.xz",
+    "sha256": "2a34d2484ba17847a5d11965704e9dd0fac4c6d8efc75ffe1ec7de66d8c6b6fb",
+    "verification": "Official GitHub release asset SHA256 digest independently retrieved from vendor API; archive checksum verified before extraction."
+  },
+  {
+    "file": "nghttp3-1.18.0.tar.xz",
+    "url": "https://github.com/ngtcp2/nghttp3/releases/download/v1.18.0/nghttp3-1.18.0.tar.xz",
+    "sha256": "aad782c23d3f01bd4bb52c8bac7a553b631ef8115fd1612703df6183449fef19",
+    "scope": "Builder-only ordinary HTTP3 fixture server dependency; never used to build or ship replacement runtime curl."
+  },
+  {
+    "url": "https://security.ubuntu.com/ubuntu/pool/main/c/curl/curl_8.18.0.orig.tar.gz",
+    "file": "curl_8.18.0.orig.tar.gz",
+    "sha256": "e9274a5f8ab5271c0e0e6762d2fce194d5f98acc568e4ce816845b2dcc0cf88f",
+    "size": 4182005
+  },
+  {
+    "url": "https://security.ubuntu.com/ubuntu/pool/main/c/curl/curl_8.18.0.orig.tar.gz.asc",
+    "file": "curl_8.18.0.orig.tar.gz.asc",
+    "sha256": "449692ee6cbadc99762d1daa86b3faf95d60f82b1d45ea1a33e37adda4bd194b",
+    "size": 488
+  },
+  {
+    "url": "https://security.ubuntu.com/ubuntu/pool/main/c/curl/curl_8.18.0-1ubuntu2.8.debian.tar.xz",
+    "file": "curl_8.18.0-1ubuntu2.8.debian.tar.xz",
+    "sha256": "3241e51764a9bbbb6ad336865f2d77d632538fb566146c36076ef04347b7c048",
+    "size": 112048
+  },
+  {
+    "url": "https://security.ubuntu.com/ubuntu/pool/main/c/curl/curl_8.18.0-1ubuntu2.8.dsc",
+    "file": "curl_8.18.0-1ubuntu2.8.dsc",
+    "sha256": "121f5e78544934edf761b50277c97c21e69159e29420acc7b64b9fee56ea7208",
+    "size": 3270
+  }
+]

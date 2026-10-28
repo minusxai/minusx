@@ -1,0 +1,9 @@
+--- a/ext/session/sqlite3session.c
++++ b/ext/session/sqlite3session.c
+@@ -161,3 +161,5 @@
+ static int sessionVarintGet(const u8 *aBuf, int *piVal){
+-  return getVarint32(aBuf, *piVal);
++  int ret = getVarint32(aBuf, *piVal);
++  *piVal = (*piVal & 0x7FFFFFFF);
++  return ret;
+ }

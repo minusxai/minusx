@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "manifest_sha256": "ff24b8639ad967271bc7cda0e5f0be6fea8a1bed6fa85fa2afa5d1410bf29c3b",
+  "original_profile_sha256": "ca52f4b5f0880571742c11d59ce2b625e03199a20ef2f31310a36a26992ce6f3",
+  "base_index": "node:22.23.4-trixie-slim@sha256:8eb619e402eaede1748a3c8173bffab391592812e85136452f781741c7242ddf",
+  "base_child": "sha256:93c4ef18bd9f668c013e8800677f6709fe426db3f29fe758d34dd72600018a7e",
+  "source_recipe_sha256": "1a2b3d0bb80c9edd4a302ada5bc0efef05d8a246e69f96bfa04460d5d4251021",
+  "platform": "linux/amd64",
+  "promotion_scope": "Reviewed re-attestation of prior authenticated source evidence; no source compilation or source-suite rerun in promotion."
+}

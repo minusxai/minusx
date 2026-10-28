@@ -1,0 +1,29 @@
+name: Validate documentation
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: docs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.4
+      - name: Prepare package manager
+        run: |
+          npm install --global --no-audit --no-fund npm@12.2.1
+          node scripts/patch-npm.mjs
+      - run: npm ci
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.3'
+          cache: false
+      - run: bash scripts/rebuild-esbuild.sh
+      - run: node scripts/check-math.mjs
+      - run: npm run build

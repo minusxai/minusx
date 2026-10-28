@@ -11,35 +11,297 @@ on:
   pull_request:
     paths:
       - 'frontend/Dockerfile'
+      - 'frontend/.dockerignore'
       - 'frontend/patches/**'
       - 'frontend/package.json'
       - 'frontend/package-lock.json'
       - 'frontend/.npmrc'
       - 'frontend/next.config.ts'
       - 'frontend/scripts/copy-duckdb-wasm.mjs'
+      - 'frontend/scripts/patch-npm.mjs'
+      - 'frontend/scripts/patch-esbuild.mjs'
+      - 'frontend/scripts/check-runtime.cjs'
+      - 'frontend/scripts/check-embedded-sqlite.cjs'
+      - 'frontend/scripts/check-embedded-sqlite-exports.py'
+      - 'frontend/scripts/run-native-proof.sh'
+      - 'frontend/scripts/test-embedded-sqlite.cjs'
+      - 'frontend/scripts/test-embedded-sqlite-exports.py'
+      - 'frontend/scripts/check-system-runtime.cjs'
+      - 'frontend/scripts/capture-pam-applicability.cjs'
+      - 'frontend/scripts/capture-glibc-applicability.cjs'
+      - 'frontend/scripts/tar-patches/**'
+      - 'frontend/scripts/runtime/**'
+      - 'frontend/scripts/util-linux/**'
+      - 'frontend/scripts/util-consumer/**'
+      - 'frontend/scripts/perl/**'
+      - 'frontend/scripts/network/**'
+      - 'frontend/scripts/libraries/**'
+      - 'frontend/scripts/sqlite/**'
+      - 'frontend/scripts/curl-runtime-probe.c'
+      - 'frontend/scripts/check-network-runtime.cjs'
+      - 'frontend/scripts/verify-network-proof.cjs'
+      - 'frontend/scripts/test-network-proof.cjs'
       - '.github/workflows/docker-build-check.yml'
 
 jobs:
   build-check:
     runs-on: ubuntu-latest
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
     permissions:
       contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v4
+
+      - name: Test public Perl admission boundaries
+        run: node --test frontend/scripts/perl/runtime-os/test-promotion-binding.mjs
+
+      - name: Test aggregate diagnostic privacy and fail-closed scan errors
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 python3 frontend/scripts/test-component-evidence.py
+          node frontend/scripts/test-glibc-error-kinds.cjs
+          PYTHONDONTWRITEBYTECODE=1 python3 frontend/scripts/test-glibc-inventory.py
+
+      - name: Test host-only utility resolver isolation
+        run: node frontend/scripts/util-consumer/resolver-launch-controls.mjs
+
+      - name: Authenticate public Perl runtime input
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node frontend/scripts/perl/fetch-promoted-perl.mjs '${{ runner.temp }}/qualified-perl'
+
+      - name: Authenticate qualified utility source and isolated native evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 frontend/scripts/util-consumer/fetch-util-compile.py frontend/scripts/util-consumer/debian-compile.lock.json '${{ runner.temp }}/qualified-util-source'
+          python3 frontend/scripts/util-consumer/fetch-success-input.py frontend/scripts/util-consumer/native-candidate.lock.json '${{ runner.temp }}/qualified-util-native'
 
       - uses: docker/setup-buildx-action@v3
 
       # Mirrors the publish job's build (same context, args, secrets) with
       # push: false — build validation only, nothing leaves the runner.
       - uses: docker/build-push-action@v6
+        id: build-runtime-image
         with:
           context: frontend
+          build-contexts: |
+            qualified-perl=${{ runner.temp }}/qualified-perl
+            qualified-util-source=${{ runner.temp }}/qualified-util-source
+            qualified-util-native=${{ runner.temp }}/qualified-util-native
           file: frontend/Dockerfile
           platforms: linux/amd64
           push: false
+          load: true
+          tags: app-validation
           build-args: |
             GIT_COMMIT_SHA=${{ github.sha }}
             NEXT_PUBLIC_DEFAULT_ANALYTICS_CONFIG=${{ secrets.NEXT_PUBLIC_DEFAULT_ANALYTICS_CONFIG }}
           secrets: |
             sentry_auth_token=${{ secrets.SENTRY_AUTH_TOKEN }}
+          no-cache-filters: runtime-profile,perl-prepared,util-original,utilbuilder,util-qualified
           cache-from: type=gha
+
+      - name: Test network proof failure boundaries
+        run: |
+          python3 frontend/scripts/network/test-network-proof.py
+          python3 frontend/scripts/test-embedded-sqlite-exports.py
+          node --test frontend/scripts/test-network-proof.cjs frontend/scripts/test-embedded-sqlite.cjs
+
+      - name: Check native runtime modules
+        run: sh frontend/scripts/run-native-proof.sh app-validation /tmp/native-runtime-proof
+
+      - name: Retain loaded native applicability proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: loaded-native-applicability-proof
+          path: /tmp/native-runtime-proof/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Export network test probe
+        run: >-
+          docker buildx build --target network-test-tools --platform linux/amd64
+          --no-cache-filter perl-prepared --build-context qualified-perl=${{ runner.temp }}/qualified-perl
+          --build-context qualified-util-source=${{ runner.temp }}/qualified-util-source
+          --build-context qualified-util-native=${{ runner.temp }}/qualified-util-native
+          --output type=local,dest=/tmp/network-test-tools frontend
+
+      - name: Check actual kernel keyring source coverage
+        shell: bash
+        run: |
+          docker buildx build --target library-source-proof --platform linux/amd64 --load --tag library-source-validation frontend
+          sh frontend/scripts/libraries/run-keyring-hosted.sh library-source-validation /runtime-build/libraries/run-keyring-source-proof.sh 2>&1 | tee /tmp/keyring-source-proof.log
+          docker image rm library-source-validation
+
+      - name: Retain actual kernel keyring proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-keyring-source-proof
+          path: /tmp/keyring-source-proof.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Check installed network runtime
+        run: >-
+          docker run --rm --entrypoint node
+          --mount type=bind,source=/tmp/network-test-tools,target=/test-tools,readonly
+          app-validation scripts/check-network-runtime.cjs /test-tools/network/test-tools/curl-runtime-probe /test-tools/libraries
+
+      - name: Require isolated utility transaction and bind final installed payload
+        run: |
+          node frontend/scripts/util-consumer/check-transaction-status.mjs /tmp/network-test-tools/util-linux/installed
+          docker run --rm --read-only --network none --cap-drop ALL --security-opt no-new-privileges \
+            --entrypoint /bin/cat app-validation /util-final-proof.json > /tmp/network-test-tools/util-linux/final-overlay-state.json
+          docker buildx build --load --target runtime-profile --tag util-original-validation frontend
+          original=$(docker image inspect --format '{{.Id}}' util-original-validation)
+          candidate=$(docker image inspect --format '{{.Id}}' app-validation)
+          python3 frontend/scripts/util-consumer/bind-target-images.py "$original" "$candidate" /tmp/network-test-tools/util-linux /tmp/network-test-tools/util-linux/final-image-binding.json /tmp/network-test-tools/util-linux/final-overlay-state.json
+          python3 frontend/scripts/util-consumer/check-namespace-containers.py "$original" "$candidate" /tmp/network-test-tools/util-linux/final-namespace-proof.json
+
+      - name: Retain original Perl and util-linux proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: perl-original-and-util-linux-proof
+          path: |
+            /tmp/network-test-tools/perl-original/
+            /tmp/network-test-tools/perl/
+            /tmp/network-test-tools/util-linux/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Check actual installed Perl profile and native modules
+        run: >-
+          docker run --rm --entrypoint node
+          --mount type=bind,source=/tmp/network-test-tools/perl,target=/perl-proof,readonly
+          --mount type=bind,source=${{ github.workspace }}/frontend/scripts/perl,target=/perl-checks,readonly
+          app-validation /perl-checks/runtime-os/check-qualified-perl.mjs /perl-proof /perl-checks/runtime-os/check-normal.pl
+
+      - name: Check installed SQLite runtime
+        run: >-
+          docker run --rm --entrypoint sh
+          --mount type=bind,source=/tmp/network-test-tools/sqlite,target=/sqlite-proof,readonly
+          app-validation /sqlite-proof/verify-sqlite.sh /sqlite-proof
+
+      - name: Retain SQLite validation proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: sqlite-runtime-proof
+          path: /tmp/network-test-tools/sqlite/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Retain rebuilt network packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: network-source-packages
+          path: |
+            /tmp/network-test-tools/network/*.deb
+            /tmp/network-test-tools/libraries/*.deb
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Release intermediate build cache
+        run: docker builder prune --all --force
+
+      - name: Record actual PAM configuration applicability
+        run: >-
+          docker run --rm --entrypoint node
+          --mount type=bind,source=${{ github.workspace }}/frontend/scripts/capture-pam-applicability.cjs,target=/capture-pam.cjs,readonly
+          app-validation /capture-pam.cjs > pam-applicability.json
+
+      - name: Record read-only component evidence
+        env:
+          SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          CHECKOUT_SHA: ${{ github.sha }}
+        run: |
+          python3 frontend/scripts/run-component-evidence.py app-validation \
+            frontend/scripts/capture-component-evidence.cjs component-evidence.json \
+            "$SOURCE_HEAD" "$CHECKOUT_SHA"
+      - name: Retain image-bound component evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: component-runtime-evidence
+          path: component-evidence.json
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Record actual glibc payload and loader conditions
+        env:
+          SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          CHECKOUT_SHA: ${{ github.sha }}
+        run: |
+          python3 frontend/scripts/run-glibc-inventory.py app-validation \
+            frontend/scripts/capture-glibc-applicability.cjs glibc-applicability.json \
+            "$SOURCE_HEAD" "$CHECKOUT_SHA"
+      - name: Retain aggregate glibc applicability proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: glibc-runtime-applicability
+          path: glibc-applicability.json
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Record all image dependencies
+        id: scan-runtime-image
+        if: ${{ !cancelled() && steps.build-runtime-image.outcome == 'success' }}
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: 'v0.76.1'
+          image-ref: app-validation
+          scan-type: image
+          scanners: vuln
+          format: json
+          output: image-scan.raw.json
+          list-all-pkgs: 'true'
+          ignore-unfixed: 'false'
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          exit-code: '0'
+          timeout: 10m
+      - name: Prepare dependency report
+        id: prepare-image-report
+        if: ${{ !cancelled() && steps.scan-runtime-image.outcome == 'success' }}
+        working-directory: ${{ github.workspace }}
+        env:
+          SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          CHECKOUT_SHA: ${{ github.sha }}
+        run: |
+          python3 - <<'PY_REPORT'
+          import hashlib, json, os
+          from pathlib import Path
+          raw = json.loads(Path('image-scan.raw.json').read_text())
+          glibc = json.loads(Path('glibc-applicability.json').read_text())
+          assert glibc['image_id'] == glibc['container_image_id'] == raw['Metadata']['ImageID']
+          assert glibc['source_head'] == os.environ['SOURCE_HEAD'] and glibc['checkout_sha'] == os.environ['CHECKOUT_SHA']
+          assert glibc['probe_sha256'] == hashlib.sha256(Path('frontend/scripts/capture-glibc-applicability.cjs').read_bytes()).hexdigest()
+          assert glibc['runner_sha256'] == hashlib.sha256(Path('frontend/scripts/run-glibc-inventory.py').read_bytes()).hexdigest()
+          files = ['frontend/scripts/capture-component-evidence.cjs', 'frontend/scripts/run-component-evidence.py', 'frontend/scripts/test-component-evidence.py', 'frontend/scripts/run-glibc-inventory.py', 'frontend/scripts/test-glibc-inventory.py', 'frontend/scripts/rebuild-esbuild.sh', '.github/workflows/docker-build-check.yml', '.github/workflows/publish.yml', 'frontend/Dockerfile', 'frontend/package.json', 'frontend/package-lock.json', 'frontend/scripts/patch-npm.mjs', 'frontend/scripts/patch-esbuild.mjs', 'frontend/scripts/check-runtime.cjs', 'frontend/scripts/check-embedded-sqlite.cjs', 'frontend/scripts/check-embedded-sqlite-exports.py', 'frontend/scripts/run-native-proof.sh', 'frontend/scripts/test-embedded-sqlite.cjs', 'frontend/scripts/test-embedded-sqlite-exports.py', 'frontend/scripts/check-system-runtime.cjs', 'frontend/scripts/capture-pam-applicability.cjs', 'frontend/scripts/capture-glibc-applicability.cjs'] + [str(p) for p in sorted(Path('frontend/scripts/tar-patches').glob('*'))] + [str(p) for p in sorted(Path('frontend/scripts/runtime').glob('*'))] + ['frontend/scripts/curl-runtime-probe.c', 'frontend/scripts/check-network-runtime.cjs', 'frontend/scripts/verify-network-proof.cjs', 'frontend/scripts/test-network-proof.cjs'] + [str(p) for p in sorted(Path('frontend/scripts/network').rglob('*')) if p.is_file() and '__pycache__' not in p.parts and p.suffix != '.pyc'] + [str(p) for p in sorted(Path('frontend/scripts/libraries').rglob('*')) if p.is_file() and '__pycache__' not in p.parts and p.suffix != '.pyc'] + [str(p) for directory in ('sqlite', 'util-linux', 'perl', 'util-consumer') for p in sorted(Path('frontend/scripts', directory).rglob('*')) if p.is_file() and '__pycache__' not in p.parts and p.suffix != '.pyc']
+          report = {
+              'source_head': os.environ['SOURCE_HEAD'],
+              'checkout_sha': os.environ['CHECKOUT_SHA'],
+              'source_hashes': {p: hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in files},
+              'workflow_admission': 'unadmitted-diagnostic-report',
+              'glibc_scan_complete': glibc['probe']['scanComplete'],
+              'SchemaVersion': raw['SchemaVersion'],
+              'ArtifactName': 'app-validation',
+              'ArtifactType': raw.get('ArtifactType'),
+              'Metadata': {k: raw.get('Metadata', {}).get(k) for k in ('ImageID', 'DiffIDs', 'OS')},
+              'Results': raw.get('Results', []),
+              'pam_configuration_applicability': json.loads(Path('pam-applicability.json').read_text()),
+              'glibc_applicability': glibc,
+              'coverage_limits': 'Reports recognized installed components. Stripped binaries and downloaded extensions may be absent; matching esbuild source/toolchain rebuilds and native runtime checks provide separate evidence.'
+          }
+          Path('image-report.json').write_text(json.dumps(report, indent=2) + '\n')
+          PY_REPORT
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.prepare-image-report.outcome == 'success' }}
+        with:
+          name: image-dependencies
+          path: image-report.json
+          if-no-files-found: error
+          retention-days: 7

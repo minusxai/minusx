@@ -1,0 +1,57 @@
+name: Promote reviewed Perl runtime
+
+on:
+  push:
+    paths:
+      - 'runtime-inputs/perl/**'
+      - '.github/scripts/verify-perl-promotion.mjs'
+      - '.github/workflows/promote-perl-runtime.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  promote:
+    name: Verify reviewed Perl input
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Verify reviewed manifest and complete inventory
+        run: node .github/scripts/verify-perl-promotion.mjs
+      - name: Record current public promotion identity
+        env:
+          PUBLIC_REPOSITORY: ${{ github.repository }}
+          SOURCE_HEAD: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          node --input-type=module <<'JS'
+          import {readFileSync, writeFileSync} from 'node:fs';
+          import {createHash} from 'node:crypto';
+          const hash = path => createHash('sha256').update(readFileSync(path)).digest('hex');
+          writeFileSync('runtime-inputs/perl/promotion-identity.json', JSON.stringify({
+            schema: 1, repository: process.env.PUBLIC_REPOSITORY,
+            source_head: process.env.SOURCE_HEAD, run_id: Number(process.env.RUN_ID),
+            run_attempt: Number(process.env.RUN_ATTEMPT), job_name: 'Verify reviewed Perl input',
+            workflow_path: '.github/workflows/promote-perl-runtime.yml',
+            workflow_sha256: hash('.github/workflows/promote-perl-runtime.yml'),
+            verifier_sha256: hash('.github/scripts/verify-perl-promotion.mjs'),
+            lock_sha256: hash('runtime-inputs/perl/qualification.lock.json'),
+            source_compiled_in_promotion: false, source_tests_rerun_in_promotion: false
+          }, null, 2) + '\n');
+          JS
+      - name: Retain verified neutral input
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: reviewed-perl-runtime
+          path: |
+            runtime-inputs/perl/qualified-input/
+            runtime-inputs/perl/qualification.lock.json
+            runtime-inputs/perl/promotion-verification.json
+            runtime-inputs/perl/promotion-identity.json
+          if-no-files-found: error
+          retention-days: 30

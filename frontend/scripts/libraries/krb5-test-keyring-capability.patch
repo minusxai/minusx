@@ -1,0 +1,30 @@
+--- a/src/util/k5test.py
++++ b/src/util/k5test.py
+@@ -1183,16 +1183,26 @@
+         '''
+         Confirm that keyctl is available, keyring caches are built in, and adding keys is not masked by seccomp filters.
+         '''
++        require_keyring = os.environ.get('KRB5_REQUIRE_KEYRING_TESTS') == '1'
+         keyctl = which('keyctl')
+         out = self.run([klist, '-c', 'KEYRING:process:abcd'], expected_code=1)
+         if (keyctl is None or
+             'Unknown credential cache type' in out):
++            if require_keyring:
++                fail('Kernel-keyring coverage required but tool/cache support unavailable')
+             return False
+-        try: subprocess.check_output(['keyctl', 'add', 'user', 'some_key', 'data', '@p'], stderr=subprocess.STDOUT)
++        probe_env = os.environ.copy()
++        probe_env['LC_ALL'] = 'C'
++        try: subprocess.check_output(['keyctl', 'add', 'user', 'some_key', 'data', '@p'], stderr=subprocess.STDOUT, env=probe_env)
+         except subprocess.CalledProcessError as e:
+             out = str(e.output, 'utf-8')
+             if 'Function not implemented' in out and e.returncode == 1:
++                if require_keyring:
++                    fail('Kernel-keyring coverage required but syscall unavailable')
+                 return False # masked by seccomp
++            if e.returncode == 1 and out == 'add_key: Operation not permitted\n' and not require_keyring:
++                print('KEYRING_COVERAGE unavailable: C-locale add_key EPERM; kernel-keyring cases did not run', flush=True)
++                return False
+             fail('Unexpected output from keyctl: '+out)
+             raise
+         return True

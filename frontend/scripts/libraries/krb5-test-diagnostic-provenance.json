@@ -1,0 +1,7 @@
+{
+  "purpose": "Preserve unexpected keyctl error diagnostic from distro test-harness capability probe, avoiding Python3 bytes+str TypeError.",
+  "source": "Debian krb5 1.21.3-5+deb13u1 patch0012 test harness is_keyring_available",
+  "change": "Concatenate already decoded local out string instead of original e.output bytes. No branch/return/test-selection changes. Unexpected errno still fails.",
+  "validation": "Strict fuzz0 dryrun on exact fully patched distro source passes. Independent review extracted actual method and exercised six success/ENOSYS/EPERM/other branches; parent replay passed. Hosted diagnostic remains required to reveal actual kernel errno.",
+  "coverage_limit": "No keyring tests skipped/claimed passed by this patch. An unavailable kernel feature remains explicit coverage gap; EPERM is not mapped to success or skip."
+}

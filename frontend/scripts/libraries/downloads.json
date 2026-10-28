@@ -1,0 +1,117 @@
+[
+  {
+    "name": "krb5_1.21.3-5+deb13u1.dsc",
+    "url": "https://deb.debian.org/debian/pool/main/k/krb5/krb5_1.21.3-5+deb13u1.dsc",
+    "sha256": "d17d2840bc97fea2c2375245569ca67838a2b557ee083c6cbe42b129a317212c"
+  },
+  {
+    "name": "krb5_1.21.3.orig.tar.gz",
+    "url": "https://deb.debian.org/debian/pool/main/k/krb5/krb5_1.21.3.orig.tar.gz",
+    "sha256": "b7a4cd5ead67fb08b980b21abd150ff7217e85ea320c9ed0c6dadd304840ad35"
+  },
+  {
+    "name": "krb5_1.21.3.orig.tar.gz.asc",
+    "url": "https://deb.debian.org/debian/pool/main/k/krb5/krb5_1.21.3.orig.tar.gz.asc",
+    "sha256": "85047c935fe949ef2e275885451b168557b923dd13a5aab0ef8fe6acd27b94d7"
+  },
+  {
+    "name": "krb5_1.21.3-5+deb13u1.debian.tar.xz",
+    "url": "https://deb.debian.org/debian/pool/main/k/krb5/krb5_1.21.3-5+deb13u1.debian.tar.xz",
+    "sha256": "02b873b239fbe7ddf016dfe44deba4130673f4606c18c93da0622e2bc8500fb4"
+  },
+  {
+    "name": "p11-kit_0.25.5-3.dsc",
+    "url": "https://deb.debian.org/debian/pool/main/p/p11-kit/p11-kit_0.25.5-3.dsc",
+    "sha256": "65e21a68dd942741bba82f5bf20901f616b64de91a976d92a54a0cb314896544"
+  },
+  {
+    "name": "p11-kit_0.25.5.orig.tar.xz",
+    "url": "https://deb.debian.org/debian/pool/main/p/p11-kit/p11-kit_0.25.5.orig.tar.xz",
+    "sha256": "04d0a86450cdb1be018f26af6699857171a188ac6d5b8c90786a60854e1198e5"
+  },
+  {
+    "name": "p11-kit_0.25.5.orig.tar.xz.asc",
+    "url": "https://deb.debian.org/debian/pool/main/p/p11-kit/p11-kit_0.25.5.orig.tar.xz.asc",
+    "sha256": "066c92b9d2accb2fda6a2f71e676fb6526fcc153051b1f04ee7d7c8c96a09989"
+  },
+  {
+    "name": "p11-kit_0.25.5-3.debian.tar.xz",
+    "url": "https://deb.debian.org/debian/pool/main/p/p11-kit/p11-kit_0.25.5-3.debian.tar.xz",
+    "sha256": "3800ea81e4615898813f533834ad37ec270f6f7d4c9413c84e712075a197849c"
+  },
+  {
+    "name": "elfutils_0.192-4.dsc",
+    "url": "https://deb.debian.org/debian/pool/main/e/elfutils/elfutils_0.192-4.dsc",
+    "sha256": "37d101658c45a25afc15d2053a1378df2381dadbb368e262ede2cea79241779f"
+  },
+  {
+    "name": "elfutils_0.192.orig.tar.bz2",
+    "url": "https://deb.debian.org/debian/pool/main/e/elfutils/elfutils_0.192.orig.tar.bz2",
+    "sha256": "616099beae24aba11f9b63d86ca6cc8d566d968b802391334c91df54eab416b4"
+  },
+  {
+    "name": "elfutils_0.192-4.debian.tar.xz",
+    "url": "https://deb.debian.org/debian/pool/main/e/elfutils/elfutils_0.192-4.debian.tar.xz",
+    "sha256": "a18efee3ae99ea25e10a0b8c4b731a28dee685361ae89ea8136e9065c86c8942"
+  },
+  {
+    "name": "freetype_2.13.3+dfsg-1+deb13u1.dsc",
+    "url": "https://deb.debian.org/debian/pool/main/f/freetype/freetype_2.13.3+dfsg-1+deb13u1.dsc",
+    "sha256": "8aa6e936f4b8ce5b1ac530d3c1bc7c5c36e6432ef81385c29ce649a3ed79e8cd"
+  },
+  {
+    "name": "freetype_2.13.3+dfsg.orig-ft2demos.tar.xz",
+    "url": "https://deb.debian.org/debian/pool/main/f/freetype/freetype_2.13.3+dfsg.orig-ft2demos.tar.xz",
+    "sha256": "8775e5ffded1a885ba2ccb3ea0e82c73306a03b764080c3e4c79da15b5c9a28a"
+  },
+  {
+    "name": "freetype_2.13.3+dfsg.orig-ft2demos.tar.xz.asc",
+    "url": "https://deb.debian.org/debian/pool/main/f/freetype/freetype_2.13.3+dfsg.orig-ft2demos.tar.xz.asc",
+    "sha256": "931bfa17e59c0ec7db391160f43977e0907f36ea3c39d7e6063731cd4612dd51"
+  },
+  {
+    "name": "freetype_2.13.3+dfsg.orig-ft2docs.tar.xz",
+    "url": "https://deb.debian.org/debian/pool/main/f/freetype/freetype_2.13.3+dfsg.orig-ft2docs.tar.xz",
+    "sha256": "b7b66149bea769e226fd3d6d1eee6160e5b6beb4249b088071434fbe85fd1070"
+  },
+  {
+    "name": "freetype_2.13.3+dfsg.orig-ft2docs.tar.xz.asc",
+    "url": "https://deb.debian.org/debian/pool/main/f/freetype/freetype_2.13.3+dfsg.orig-ft2docs.tar.xz.asc",
+    "sha256": "65c66aec6244d247540430b21d3e80b677f1361906347a5be7fad371d46655da"
+  },
+  {
+    "name": "freetype_2.13.3+dfsg.orig.tar.xz",
+    "url": "https://deb.debian.org/debian/pool/main/f/freetype/freetype_2.13.3+dfsg.orig.tar.xz",
+    "sha256": "686ec73cbf6783b245dd068a09ce807b729ac0f8a46dd70f7867923c32fdf4de"
+  },
+  {
+    "name": "freetype_2.13.3+dfsg-1+deb13u1.debian.tar.xz",
+    "url": "https://deb.debian.org/debian/pool/main/f/freetype/freetype_2.13.3+dfsg-1+deb13u1.debian.tar.xz",
+    "sha256": "e7a07cad1b9c803457ec310bc87132429f52171c89f9126c09eb62e203c8c84b"
+  },
+  {
+    "name": "krb5-cred.patch",
+    "url": "https://github.com/krb5/krb5/commit/62196e2b269159a5465f5b8d0ed7cf6f29c3282a.patch",
+    "sha256": "5cacda3418777f7d3c890b302a09678dc3c7fdca2ecadfa362f28ad7f59954e8"
+  },
+  {
+    "name": "krb5-seal.patch",
+    "url": "https://github.com/krb5/krb5/commit/c5f9c816107f70139de11b38aa02db2f1774ee0d.patch",
+    "sha256": "b5eee831d921683b15a3bfe890a59580a407a51819143aa7e59ff7dd5a45155d"
+  },
+  {
+    "name": "p11-recursion.patch",
+    "url": "https://github.com/p11-glue/p11-kit/commit/0eedd4ddd7c924f9cbb4ac496b3fda699435c3cf.patch",
+    "sha256": "24ad6541730f21f81b1afa203c6d85944975de3f3a0c96379d16e9b2a20b9039"
+  },
+  {
+    "name": "elf-strptr.patch",
+    "url": "https://sourceware.org/git/?p=elfutils.git;a=patch;h=b16f441cca0a4841050e3215a9f120a6d8aea918",
+    "sha256": "638a1aa6698551cf4532383a041e1500e2f37cd4a13410aa7a928f60f6555f21"
+  },
+  {
+    "name": "freetype-cid.patch",
+    "url": "https://gitlab.freedesktop.org/freetype/freetype/-/commit/f3ca71c9900fe860849b3163a6e2c1e765b291d9.patch",
+    "sha256": "42ca9cdf2da27ac0f5054bc96bf08b122e96f25116372712b0e37bd3ec350d89"
+  }
+]

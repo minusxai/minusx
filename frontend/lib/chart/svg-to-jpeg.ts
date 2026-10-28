@@ -80,7 +80,7 @@ export async function composeSvgToJpeg(svg: string, options: ComposeJpegOptions 
   const totalHeight = topPad + height + bottomPad;
   const bgColor = BG_COLORS[colorMode];
 
-  const layers: sharp.OverlayOptions[] = [
+  const layers = [
     { input: chartPng, top: topPad, left: 0 },
   ];
 

@@ -56,3 +56,8 @@ atlas_documents.db
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
+
+.next/
+Dockerfile
+
+scripts/check-runtime.cjs
