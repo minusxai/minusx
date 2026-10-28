@@ -1,0 +1,439 @@
+{
+  "applied_patches": [
+    "debian/cpan_definstalldirs.diff",
+    "debian/db_file_ver.diff",
+    "debian/doc_info.diff",
+    "debian/enc2xs_inc.diff",
+    "debian/errno_ver.diff",
+    "debian/libperl_embed_doc.diff",
+    "fixes/respect_umask.diff",
+    "debian/writable_site_dirs.diff",
+    "debian/extutils_set_libperl_path.diff",
+    "debian/no_packlist_perllocal.diff",
+    "debian/fakeroot.diff",
+    "debian/instmodsh_doc.diff",
+    "debian/ld_run_path.diff",
+    "debian/libnet_config_path.diff",
+    "debian/perlivp.diff",
+    "debian/squelch-locale-warnings.diff",
+    "debian/patchlevel.diff",
+    "fixes/document_makemaker_ccflags.diff",
+    "debian/find_html2text.diff",
+    "debian/perl5db-x-terminal-emulator.patch",
+    "debian/cpan-missing-site-dirs.diff",
+    "debian/makemaker-pasthru.diff",
+    "debian/makemaker-manext.diff",
+    "debian/kfreebsd-softupdates.diff",
+    "debian/hurd-softupdates.diff",
+    "fixes/math_complex_doc_great_circle.diff",
+    "fixes/math_complex_doc_angle_units.diff",
+    "fixes/cpan_web_link.diff",
+    "debian/installman-utf8.diff",
+    "debian/perldoc-pager.diff",
+    "debian/prune_libs.diff",
+    "debian/mod_paths.diff",
+    "debian/deprecate-with-apt.diff",
+    "debian/perlbug-editor.diff",
+    "debian/eu-mm-perl-base.diff",
+    "fixes/io_socket_ip_ipv6.diff",
+    "debian/usrmerge-lib64.diff",
+    "debian/usrmerge-realpath.diff",
+    "fixes/x32-io-msg-skip.diff",
+    "debian/configure-regen.diff",
+    "fixes/json-pp-options.diff",
+    "fixes/test-harness-bailout.diff",
+    "fixes/CVE-2024-56406.diff",
+    "fixes/CVE-2025-40909-metaconfig.diff",
+    "fixes/CVE-2025-40909-1.diff",
+    "fixes/CVE-2025-40909-2.diff",
+    "fixes/CVE-2025-40909-3.diff",
+    "fixes/CVE-2025-40909-metaconfig-reorder.diff",
+    "fixes/CVE-2026-8376-tests.diff",
+    "fixes/CVE-2026-8376.diff",
+    "fixes/CVE-2026-57432-1.diff",
+    "fixes/CVE-2026-57432-2.diff",
+    "fixes/CVE-2026-57433.diff",
+    "fixes/CVE-2026-7010.diff",
+    "fixes/CVE-2026-7010-tests.diff",
+    "fixes/CVE-2025-15649.diff",
+    "fixes/CVE-2025-15649-tests.diff",
+    "fixes/CVE-2026-48959.diff",
+    "fixes/CVE-2026-48961.diff",
+    "fixes/CVE-2026-48962.diff",
+    "fixes/CVE-2026-7017-1.diff",
+    "fixes/CVE-2026-7017-2.diff",
+    "fixes/CVE-2026-7017-3.diff",
+    "fixes/CVE-2026-7017-4.diff",
+    "fixes/CVE-2026-7017-5.diff",
+    "fixes/CVE-2026-42496-1.diff",
+    "fixes/CVE-2026-42496-2.diff",
+    "fixes/CVE-2026-13221.diff",
+    "fixes/CVE-2026-19487.diff",
+    "fixes/CVE-2026-12087.diff",
+    "perl-568e6fd2.patch",
+    "perl-54cf3d44.patch"
+  ],
+  "ordered_series": [
+    {
+      "name": "debian/cpan_definstalldirs.diff",
+      "options": [],
+      "sha256": "34c4181e68af118ed357bb4d6323562802074e3f99da65cd96c8461a363558a3"
+    },
+    {
+      "name": "debian/db_file_ver.diff",
+      "options": [],
+      "sha256": "27e3b22bcdb663bdcc918527ce0b7b93f6c0b083de01cde3a1d2376ad065cf7c"
+    },
+    {
+      "name": "debian/doc_info.diff",
+      "options": [],
+      "sha256": "1ce6b7b2e46194c4667591e78b6d15e34d44ff14be4110f46a366fdda4262ee6"
+    },
+    {
+      "name": "debian/enc2xs_inc.diff",
+      "options": [],
+      "sha256": "1cf425d10b3549baec53032a1d28a359e2a7902071a0a92e71804f0dd57309af"
+    },
+    {
+      "name": "debian/errno_ver.diff",
+      "options": [],
+      "sha256": "6f5c5060a78ef70789983a579303cfe70af3885db38699611b78db2afaa2abbf"
+    },
+    {
+      "name": "debian/libperl_embed_doc.diff",
+      "options": [],
+      "sha256": "bca913857973309583dcb53ae23720093d7174ee6f96f0b3a431184bbdeba5f8"
+    },
+    {
+      "name": "fixes/respect_umask.diff",
+      "options": [],
+      "sha256": "84599e4327f6f5e5ae9bb06d19e086b1c38f84588d269a4bd80b434f9b9e5c77"
+    },
+    {
+      "name": "debian/writable_site_dirs.diff",
+      "options": [],
+      "sha256": "a6c73d4027a14c26eaa1c1dbf2436faa5f0ba74ecdc3dc9d5eb6f4b068ef39ec"
+    },
+    {
+      "name": "debian/extutils_set_libperl_path.diff",
+      "options": [],
+      "sha256": "7d24d8a9e7c174016f8a5e404ddcaea102efbb672ec9a973ade30873904ad6db"
+    },
+    {
+      "name": "debian/no_packlist_perllocal.diff",
+      "options": [],
+      "sha256": "9d14d54dfcb2fdc478c4e28d77c52861d84f21ffb6118d61e6429184e61969c9"
+    },
+    {
+      "name": "debian/fakeroot.diff",
+      "options": [],
+      "sha256": "680f5ed685260f3bb07e0f9065b2ba76d63bcd9a80d59c110b3496f86937094e"
+    },
+    {
+      "name": "debian/instmodsh_doc.diff",
+      "options": [],
+      "sha256": "9acbff271d7fa322dab81de05b043b1bf8e9f68ed2b6cdb300a0d434031476c0"
+    },
+    {
+      "name": "debian/ld_run_path.diff",
+      "options": [],
+      "sha256": "bd06f22bc1d975e467b22d5c38ba4515be25dda6c3e425734c6557f901a649ce"
+    },
+    {
+      "name": "debian/libnet_config_path.diff",
+      "options": [],
+      "sha256": "f3b788797be989dc99d93478a58b0515b6e846bc2ac6ba3e1409603f7fce7e54"
+    },
+    {
+      "name": "debian/perlivp.diff",
+      "options": [],
+      "sha256": "41e47553f78cc241cd4d13cd054f911c81f505d1b7c2a50c9339cc1ea6c88bc4"
+    },
+    {
+      "name": "debian/squelch-locale-warnings.diff",
+      "options": [],
+      "sha256": "135b5f8f882ca8f50c2e5ecfaaa662ac2240a1c181a5ef97da06f346e1d0ee90"
+    },
+    {
+      "name": "debian/patchlevel.diff",
+      "options": [],
+      "sha256": "e3ba89a0395a541805e0063003aa6275323980020b99a7ad67d67c6c2751efbe"
+    },
+    {
+      "name": "fixes/document_makemaker_ccflags.diff",
+      "options": [],
+      "sha256": "756b520c14acba545ff866f3ff0203c83e1859e5261c451a9367a39e56dd9ab8"
+    },
+    {
+      "name": "debian/find_html2text.diff",
+      "options": [],
+      "sha256": "f7992c388a9309b7a8123fe2018fac25c3bced4ac722a5d34a9feda3e69bc62a"
+    },
+    {
+      "name": "debian/perl5db-x-terminal-emulator.patch",
+      "options": [],
+      "sha256": "913a18caf8592471039ad47573a4b85161873545118ca9abcae09d34aefcfdb2"
+    },
+    {
+      "name": "debian/cpan-missing-site-dirs.diff",
+      "options": [],
+      "sha256": "6597c10a1fca26c4261825147628b192b8846c7b7d8c4961dbb6df5eb5ea3fe6"
+    },
+    {
+      "name": "debian/makemaker-pasthru.diff",
+      "options": [],
+      "sha256": "0d172282deb0e90282ed75a953c17829a4e0cb17f5ca7d442670163355fbb09e"
+    },
+    {
+      "name": "debian/makemaker-manext.diff",
+      "options": [],
+      "sha256": "a543523bfdbf29ac49878310ccb1016185e23616cadaf3d43a662ddfdf1d2494"
+    },
+    {
+      "name": "debian/kfreebsd-softupdates.diff",
+      "options": [],
+      "sha256": "80bb75fae60d3acbbeac35ff35ff51b982b0524bab2e5eca079e81d5e9f7f38a"
+    },
+    {
+      "name": "debian/hurd-softupdates.diff",
+      "options": [],
+      "sha256": "d122ee64e63f14c6d9341823f27e9e63d20373ecc780d238d3ed9437e46de256"
+    },
+    {
+      "name": "fixes/math_complex_doc_great_circle.diff",
+      "options": [],
+      "sha256": "b9139aa4362f105c295a097d4dc58f7f0d9f0745a729d0db6efe81a3fb13e865"
+    },
+    {
+      "name": "fixes/math_complex_doc_angle_units.diff",
+      "options": [],
+      "sha256": "32ab7f944f275467d2a27dd75a5abd9a1eab377963901d71ef225b1496788c5a"
+    },
+    {
+      "name": "fixes/cpan_web_link.diff",
+      "options": [],
+      "sha256": "ea804edca9ad3eb7910c7ee36a7af59c193b4f28ab6063c823249ce3952d9a2e"
+    },
+    {
+      "name": "debian/installman-utf8.diff",
+      "options": [],
+      "sha256": "e1b02f58898e38935286be4ef63ba32c341aa11079bba0b1045a7920c966a9d2"
+    },
+    {
+      "name": "debian/perldoc-pager.diff",
+      "options": [],
+      "sha256": "623bba426e2cd8b4efb53b747df9543f3da89ce0d593debc6e583bd5aa4e5f22"
+    },
+    {
+      "name": "debian/prune_libs.diff",
+      "options": [],
+      "sha256": "9ee24bb7b69cf414e78c2d059bc137ee6cf602bf1535c9792d86a849e0c866a7"
+    },
+    {
+      "name": "debian/mod_paths.diff",
+      "options": [],
+      "sha256": "bac2335d6df140a663143d0c3eac2dfa4ad587e3eed88eb0be809adf094f0e41"
+    },
+    {
+      "name": "debian/deprecate-with-apt.diff",
+      "options": [],
+      "sha256": "0c549af5d0fab106b6e7a5907f72184cdc3f9925f517c3727db5ae9b625c159d"
+    },
+    {
+      "name": "debian/perlbug-editor.diff",
+      "options": [],
+      "sha256": "16be19e2f8aed5a1d23853814b4b765e4e70b04b88636d7236083a180db9e946"
+    },
+    {
+      "name": "debian/eu-mm-perl-base.diff",
+      "options": [],
+      "sha256": "bd08212b935976d4a4f0ed4d5c0aa6a41e743ada023b9852ec8941d0fc9a3619"
+    },
+    {
+      "name": "fixes/io_socket_ip_ipv6.diff",
+      "options": [],
+      "sha256": "9813f7c1a956aaedd39db7fdef36999d8481c115004f9da07314df27c4ca7270"
+    },
+    {
+      "name": "debian/usrmerge-lib64.diff",
+      "options": [],
+      "sha256": "5e273a268d1d10d6362aae5c9ada0b692902f3cf0e24aac945ad8e19fba9020e"
+    },
+    {
+      "name": "debian/usrmerge-realpath.diff",
+      "options": [],
+      "sha256": "d68d80fe9311a834990d7e3a04c937af5a93a223ef3a5e090120fca6430651ce"
+    },
+    {
+      "name": "fixes/x32-io-msg-skip.diff",
+      "options": [],
+      "sha256": "4fa956b120ef8d70be606c2823c09e427c26b3c9220b05d3ec494d2535ae3362"
+    },
+    {
+      "name": "debian/configure-regen.diff",
+      "options": [],
+      "sha256": "8890650213f9a1a075134c15c9bc18d893075a8972ca17970b247623bc11209b"
+    },
+    {
+      "name": "fixes/json-pp-options.diff",
+      "options": [],
+      "sha256": "33281c4572fc2f01ec0db249f4fc4f21272225d906a7e79f34abf62fa00a9ea4"
+    },
+    {
+      "name": "fixes/test-harness-bailout.diff",
+      "options": [],
+      "sha256": "acbddb2ead8904aece7fc5cb9eef6b46c601bff99ff3c5f32f652fe504aee380"
+    },
+    {
+      "name": "fixes/CVE-2024-56406.diff",
+      "options": [],
+      "sha256": "a2774611ec9388d9859fc31fc71374d28396bc5fb36b38adcefaf6f46a1191f4"
+    },
+    {
+      "name": "fixes/CVE-2025-40909-metaconfig.diff",
+      "options": [],
+      "sha256": "57da4a90e38b46ddc78c8a5b0f8f68e41538339495ef311d6c3f6e36dacab09c"
+    },
+    {
+      "name": "fixes/CVE-2025-40909-1.diff",
+      "options": [],
+      "sha256": "9a4fd6743face39eb985dfd06d819a0fa1ad8be5db2bec9a18687d1714e11ce2"
+    },
+    {
+      "name": "fixes/CVE-2025-40909-2.diff",
+      "options": [],
+      "sha256": "788b286569bd43352c056727da6db4a55f1248e8d4feb1be0a6b9116508118e1"
+    },
+    {
+      "name": "fixes/CVE-2025-40909-3.diff",
+      "options": [],
+      "sha256": "e3af00b9b7ca99cbef1ef57c66bb3d4b29974f42b7b2f88bde457cd2e11927e7"
+    },
+    {
+      "name": "fixes/CVE-2025-40909-metaconfig-reorder.diff",
+      "options": [],
+      "sha256": "ec0ec14d7a892a259ae491b1be489e0895758e7b3ef1406168353c2470448deb"
+    },
+    {
+      "name": "fixes/CVE-2026-8376-tests.diff",
+      "options": [],
+      "sha256": "f86f50eccdc2c15bd0de1cbf211e447102262027c69bdd7caa16bc9a2bd8d98b"
+    },
+    {
+      "name": "fixes/CVE-2026-8376.diff",
+      "options": [],
+      "sha256": "a0663a9ea42929c394841dd822ba2e2115556760ed4c07f66eaacf3c4173a4e2"
+    },
+    {
+      "name": "fixes/CVE-2026-57432-1.diff",
+      "options": [],
+      "sha256": "a8ccfd0caa087bcf7572b6ae385718161167068382a21795aa4f4ff88f7a2ab9"
+    },
+    {
+      "name": "fixes/CVE-2026-57432-2.diff",
+      "options": [],
+      "sha256": "7351683260ab3781be3b957e4a29887f2c993a4810c080170aa4cbbe533edd7e"
+    },
+    {
+      "name": "fixes/CVE-2026-57433.diff",
+      "options": [],
+      "sha256": "7c4787fb26e6faea49964940c1f22792dfacd1fb3a09722ba1c6eac7183112ba"
+    },
+    {
+      "name": "fixes/CVE-2026-7010.diff",
+      "options": [],
+      "sha256": "95f72187c9e59e40012c30ffe2d1ec600c70c40a5e736b9a5b1c9de47c31ce73"
+    },
+    {
+      "name": "fixes/CVE-2026-7010-tests.diff",
+      "options": [],
+      "sha256": "6c3486695f6b947621f7432d4845e41a7b14849981be924d0c08aa59595fbd55"
+    },
+    {
+      "name": "fixes/CVE-2025-15649.diff",
+      "options": [],
+      "sha256": "2d35b882bb89713c0c2027d893f19ac0d8378e599946d2d3d7c570f96d17201b"
+    },
+    {
+      "name": "fixes/CVE-2025-15649-tests.diff",
+      "options": [],
+      "sha256": "bc9883674858ee53b5f29dccc6cb1ce54d9c27b4a5950311fc6cfd4f6862699f"
+    },
+    {
+      "name": "fixes/CVE-2026-48959.diff",
+      "options": [],
+      "sha256": "1932e6571a429d6b35d154a8b0e67f0fcba325d7409a72191dc0d60dad2b1565"
+    },
+    {
+      "name": "fixes/CVE-2026-48961.diff",
+      "options": [],
+      "sha256": "a6fc53c26b719e5b2a1d214baa7b5c1c21e537ab21a14782ef345197d241180c"
+    },
+    {
+      "name": "fixes/CVE-2026-48962.diff",
+      "options": [],
+      "sha256": "edd5d328cc183ee8791d2ed5248e7a905af67775195365cbeaa57db90be72d67"
+    },
+    {
+      "name": "fixes/CVE-2026-7017-1.diff",
+      "options": [],
+      "sha256": "d3ef4723327370107527a8afbe6cef9e9550901567b9458b0a5ad130188fac4a"
+    },
+    {
+      "name": "fixes/CVE-2026-7017-2.diff",
+      "options": [],
+      "sha256": "f6f01af1a7ba0ebcc90615bcd9a63cfaae5b777cd5403d493b6cac1d88ce277c"
+    },
+    {
+      "name": "fixes/CVE-2026-7017-3.diff",
+      "options": [],
+      "sha256": "cdeecaf06e3278266ebcaaba15a17a8970625924e8f34da05763635642f643df"
+    },
+    {
+      "name": "fixes/CVE-2026-7017-4.diff",
+      "options": [],
+      "sha256": "b7afad7325b092c4bee0c6d17f2e0e9a113b6764be1d9c3b1c01165b858417e4"
+    },
+    {
+      "name": "fixes/CVE-2026-7017-5.diff",
+      "options": [],
+      "sha256": "8ed32531172e1ceef51af1d69532f0354e3983bbd780c419dd5e9f312abd18a5"
+    },
+    {
+      "name": "fixes/CVE-2026-42496-1.diff",
+      "options": [],
+      "sha256": "0ef4d0ad8e8f56e8f3690d4fc04711d80b8a51bb602e0a1faf23ccbf4e510e2e"
+    },
+    {
+      "name": "fixes/CVE-2026-42496-2.diff",
+      "options": [],
+      "sha256": "05c070a294ee37b912b32a0fe226b609da65cdd46ac1f6f296060c8c8c207a95"
+    },
+    {
+      "name": "fixes/CVE-2026-13221.diff",
+      "options": [],
+      "sha256": "229a17332478f3377c038932c8edac518c41267fb14cc92d3d11c61d0fc7e62f"
+    },
+    {
+      "name": "fixes/CVE-2026-19487.diff",
+      "options": [],
+      "sha256": "d3eff348791dbb494ef3a14b1e40e664a94cf43b1738dff5736a7298dfbcfacb"
+    },
+    {
+      "name": "fixes/CVE-2026-12087.diff",
+      "options": [],
+      "sha256": "5e442b51d7248eb9e70162157c9c2a9764cdc481b82b34917dfa07f2619f1f2c"
+    },
+    {
+      "name": "perl-568e6fd2.patch",
+      "options": [],
+      "sha256": "b763455236629383cf720ae6e60cfa42ce01e23728693a779abb8275f90a9e40"
+    },
+    {
+      "name": "perl-54cf3d44.patch",
+      "options": [],
+      "sha256": "c7cc877ae64338c3a91398116d34ae9bb76c8835632f3259aa205eb70ded920a"
+    }
+  ],
+  "signed_dsc_sha256": "92d1cfb32167d77fada7284f1c291de72f93eb896f5cfd58247d020182b403a8"
+}
