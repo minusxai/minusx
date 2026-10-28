@@ -27,8 +27,12 @@ const execFile = promisify(require('node:child_process').execFile);
   const ldap = ldapFiles.find(file => /\/libldap\.so\.\d/.test(file) && fs.existsSync(file) && !fs.lstatSync(file).isSymbolicLink());
   assert.ok(ldap, 'Installed LDAP library is required');
   const dependencies = await run('ldd', [ldap]);
-  assert.match(dependencies, /libgnutls\.so/);
-  assert.doesNotMatch(dependencies, /libnss3\.so|not found/);
+  // Debian trixie openldap 2.6.10+dfsg-1 configures --with-tls=openssl.
+  // Bind this check to that original distro provider, rather than a GnuTLS assumption.
+  assert.equal((await run('dpkg-query', ['-W', '-f=${Version}', 'libldap2'])).trim(), '2.6.10+dfsg-1');
+  assert.match(dependencies, /libssl\.so\.3/);
+  assert.match(dependencies, /libcrypto\.so\.3/);
+  assert.doesNotMatch(dependencies, /libgnutls\.so|libnss3\.so|not found/);
   assert.ok(['x64', 'arm64'].includes(process.arch), '32-bit p11-kit overflow exclusion requires a 64-bit runtime');
   const receipt = JSON.parse(fs.readFileSync('/usr/share/doc/runtime-network/libcurl4t64/runtime-source.json', 'utf8'));
   assert.equal(receipt.version, '8.18.0-1+runtime1');
