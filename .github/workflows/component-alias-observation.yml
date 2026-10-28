@@ -1,0 +1,50 @@
+name: Observe existing published image aliases
+on:
+  push:
+    branches: [qualification/component-aliases-20261029]
+permissions:
+  contents: read
+  actions: read
+  packages: read
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Check origin and isolated observer failure boundaries
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 python3 qualification/component-aliases/test-authenticate-image.py
+          PYTHONDONTWRITEBYTECODE=1 python3 qualification/component-aliases/test-run-observation.py
+          node --test qualification/component-aliases/test-alias-probe.cjs
+      - name: Authenticate existing public publisher output
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          PYTHONDONTWRITEBYTECODE=1 python3 qualification/component-aliases/authenticate-image.py
+          qualification/component-aliases/published-image.lock.json image-origin.json
+      - name: Observe aliases in isolated immutable published image
+        run: >-
+          PYTHONDONTWRITEBYTECODE=1 python3 qualification/component-aliases/run-observation.py
+          qualification/component-aliases/published-image.lock.json image-origin.json
+          qualification/component-aliases/alias-probe.cjs alias-observation.json
+      - name: Bind observation source to this execution
+        run: |
+          python3 - <<'PYBIND'
+          import hashlib,json,os,pathlib
+          files=['qualification/component-aliases/'+n for n in ('authenticate-image.py','test-authenticate-image.py','run-observation.py','test-run-observation.py','alias-probe.cjs','test-alias-probe.cjs','published-image.lock.json')]+['.github/workflows/component-alias-observation.yml']
+          assert all(not p.endswith('.pyc') for p in files)
+          pathlib.Path('observation-source.json').write_text(json.dumps({'schema':1,'head':os.environ['GITHUB_SHA'],'run_id':os.environ['GITHUB_RUN_ID'],'attempt':os.environ['GITHUB_RUN_ATTEMPT'],'source_hashes':{p:hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest() for p in files}},sort_keys=True)+'\n')
+          PYBIND
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: published-image-alias-observation
+          path: |
+            image-origin.json
+            alias-observation.json
+            observation-source.json
+          if-no-files-found: warn
+          retention-days: 7

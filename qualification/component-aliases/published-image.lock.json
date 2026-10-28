@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "repository": "minusxai/minusx",
+  "repository_id": 1155513729,
+  "source_head": "644ca1dc74d47e36e7a50f5c1d89c52b89f5ba2f",
+  "run_id": 40776189811,
+  "attempt": 1,
+  "job_id": 123125997462,
+  "package": "minusx-frontend-canary",
+  "package_version_id": 1464007732,
+  "image_digest": "sha256:20e181d42c5d3bcc4428391044d1e53efef3cfc3501f93d477ae401fd352c52f",
+  "workflow_sha256": "c8679bf8998dab12e03252e6ee242bbfbfe4b56c4d2f96b106366afd97aa78a1",
+  "publisher_log_sha256": "93ada87304ae57bc340782dab87c188431de4185cfeb3cee05b9d8b826370150"
+}
