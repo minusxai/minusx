@@ -28,6 +28,7 @@ on:
       - 'frontend/scripts/test-embedded-sqlite-exports.py'
       - 'frontend/scripts/check-system-runtime.cjs'
       - 'frontend/scripts/capture-pam-applicability.cjs'
+      - 'frontend/scripts/capture-glibc-applicability.cjs'
       - 'frontend/scripts/tar-patches/**'
       - 'frontend/scripts/runtime/**'
       - 'frontend/scripts/util-linux/**'
@@ -182,6 +183,37 @@ jobs:
           --mount type=bind,source=${{ github.workspace }}/frontend/scripts/capture-pam-applicability.cjs,target=/capture-pam.cjs,readonly
           app-validation /capture-pam.cjs > pam-applicability.json
 
+      - name: Record actual glibc payload and loader conditions
+        env:
+          SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          CHECKOUT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          probe_image_id=$(docker image inspect --format '{{.Id}}' app-validation)
+          probe_container_id=$(docker create --network none --read-only --cpus 1 --memory 1g --cap-drop ALL --security-opt no-new-privileges --entrypoint node --env PROBE_EXPECTED_IMAGE_ID="$probe_image_id" --mount type=bind,source="$PWD/frontend/scripts/capture-glibc-applicability.cjs",target=/capture-glibc.cjs,readonly app-validation /capture-glibc.cjs)
+          trap 'docker rm -f "$probe_container_id" >/dev/null 2>&1 || true' EXIT
+          probe_actual_id=$(docker inspect --format '{{.Image}}' "$probe_container_id")
+          test "$probe_actual_id" = "$probe_image_id"
+          export PROBE_IMAGE_ID="$probe_image_id" PROBE_ACTUAL_IMAGE_ID="$probe_actual_id"
+          export PROBE_SCRIPT_SHA256=$(sha256sum frontend/scripts/capture-glibc-applicability.cjs | cut -d ' ' -f 1)
+          probe_status=0
+          docker start --attach "$probe_container_id" > glibc-probe.aggregate.json || probe_status=$?
+          node - <<'NODE_BIND'
+          const fs = require('node:fs');
+          const probe = JSON.parse(fs.readFileSync('glibc-probe.aggregate.json'));
+          if (probe.expectedImageId !== process.env.PROBE_IMAGE_ID || process.env.PROBE_ACTUAL_IMAGE_ID !== process.env.PROBE_IMAGE_ID) throw new Error('Image binding mismatch');
+          fs.writeFileSync('glibc-applicability.json', JSON.stringify({source_head: process.env.SOURCE_HEAD, checkout_sha: process.env.CHECKOUT_SHA, image_id: process.env.PROBE_IMAGE_ID, container_image_id: process.env.PROBE_ACTUAL_IMAGE_ID, probe_sha256: process.env.PROBE_SCRIPT_SHA256, probe}, null, 2) + '\n');
+          NODE_BIND
+          test "$probe_status" = 0
+      - name: Retain aggregate glibc applicability proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: glibc-runtime-applicability
+          path: glibc-applicability.json
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Record all image dependencies
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -206,7 +238,11 @@ jobs:
           import hashlib, json, os
           from pathlib import Path
           raw = json.loads(Path('image-scan.raw.json').read_text())
-          files = ['.github/workflows/docker-build-check.yml', '.github/workflows/publish.yml', 'frontend/Dockerfile', 'frontend/package.json', 'frontend/package-lock.json', 'frontend/scripts/patch-npm.mjs', 'frontend/scripts/patch-esbuild.mjs', 'frontend/scripts/check-runtime.cjs', 'frontend/scripts/check-embedded-sqlite.cjs', 'frontend/scripts/check-embedded-sqlite-exports.py', 'frontend/scripts/run-native-proof.sh', 'frontend/scripts/test-embedded-sqlite.cjs', 'frontend/scripts/test-embedded-sqlite-exports.py', 'frontend/scripts/check-system-runtime.cjs', 'frontend/scripts/capture-pam-applicability.cjs'] + [str(p) for p in sorted(Path('frontend/scripts/tar-patches').glob('*'))] + [str(p) for p in sorted(Path('frontend/scripts/runtime').glob('*'))] + ['frontend/scripts/curl-runtime-probe.c', 'frontend/scripts/check-network-runtime.cjs', 'frontend/scripts/verify-network-proof.cjs', 'frontend/scripts/test-network-proof.cjs'] + [str(p) for p in sorted(Path('frontend/scripts/network').rglob('*')) if p.is_file()] + [str(p) for p in sorted(Path('frontend/scripts/libraries').rglob('*')) if p.is_file()] + [str(p) for directory in ('sqlite', 'util-linux', 'perl') for p in sorted(Path('frontend/scripts', directory).rglob('*')) if p.is_file()]
+          glibc = json.loads(Path('glibc-applicability.json').read_text())
+          assert glibc['image_id'] == glibc['container_image_id'] == raw['Metadata']['ImageID']
+          assert glibc['source_head'] == os.environ['SOURCE_HEAD'] and glibc['checkout_sha'] == os.environ['CHECKOUT_SHA']
+          assert glibc['probe_sha256'] == hashlib.sha256(Path('frontend/scripts/capture-glibc-applicability.cjs').read_bytes()).hexdigest()
+          files = ['.github/workflows/docker-build-check.yml', '.github/workflows/publish.yml', 'frontend/Dockerfile', 'frontend/package.json', 'frontend/package-lock.json', 'frontend/scripts/patch-npm.mjs', 'frontend/scripts/patch-esbuild.mjs', 'frontend/scripts/check-runtime.cjs', 'frontend/scripts/check-embedded-sqlite.cjs', 'frontend/scripts/check-embedded-sqlite-exports.py', 'frontend/scripts/run-native-proof.sh', 'frontend/scripts/test-embedded-sqlite.cjs', 'frontend/scripts/test-embedded-sqlite-exports.py', 'frontend/scripts/check-system-runtime.cjs', 'frontend/scripts/capture-pam-applicability.cjs', 'frontend/scripts/capture-glibc-applicability.cjs'] + [str(p) for p in sorted(Path('frontend/scripts/tar-patches').glob('*'))] + [str(p) for p in sorted(Path('frontend/scripts/runtime').glob('*'))] + ['frontend/scripts/curl-runtime-probe.c', 'frontend/scripts/check-network-runtime.cjs', 'frontend/scripts/verify-network-proof.cjs', 'frontend/scripts/test-network-proof.cjs'] + [str(p) for p in sorted(Path('frontend/scripts/network').rglob('*')) if p.is_file()] + [str(p) for p in sorted(Path('frontend/scripts/libraries').rglob('*')) if p.is_file()] + [str(p) for directory in ('sqlite', 'util-linux', 'perl') for p in sorted(Path('frontend/scripts', directory).rglob('*')) if p.is_file()]
           report = {
               'source_head': os.environ['SOURCE_HEAD'],
               'checkout_sha': os.environ['CHECKOUT_SHA'],
@@ -217,6 +253,7 @@ jobs:
               'Metadata': {k: raw.get('Metadata', {}).get(k) for k in ('ImageID', 'DiffIDs', 'OS')},
               'Results': raw.get('Results', []),
               'pam_configuration_applicability': json.loads(Path('pam-applicability.json').read_text()),
+              'glibc_applicability': glibc,
               'coverage_limits': 'Reports recognized installed components. Stripped binaries and downloaded extensions may be absent; matching esbuild source/toolchain rebuilds and native runtime checks provide separate evidence.'
           }
           Path('image-report.json').write_text(json.dumps(report, indent=2) + '\n')
