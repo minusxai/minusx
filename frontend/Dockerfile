@@ -28,6 +28,13 @@ RUN apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+FROM runtime-profile AS util-original
+COPY scripts/util-consumer/capture-original.mjs /util-capture.mjs
+RUN --network=none node /util-capture.mjs /util-original
+
+FROM scratch AS util-original-proof
+COPY --from=util-original /util-original/ /
+
 FROM runtime-profile AS perl-original-profile
 COPY scripts/perl/runtime-os /perl-checks/runtime-os
 COPY scripts/perl/lib /perl-checks/lib
