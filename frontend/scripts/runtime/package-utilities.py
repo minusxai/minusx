@@ -161,9 +161,14 @@ for package, root in roots.items():
     control.mkdir()
     original = subprocess.check_output(['dpkg-query', '-s', package], text=True)
     fields = {}
+    key = None
     for line in original.splitlines():
-        if ': ' in line and not line.startswith(' '):
-            key, value = line.split(': ', 1)
+        if line.startswith((' ', '\t')):
+            if key in fields:
+                fields[key] += '\n' + line
+        elif ':' in line:
+            key, value = line.split(':', 1)
+            value = value.lstrip()
             if key in ('Section', 'Priority', 'Essential', 'Multi-Arch', 'Provides', 'Breaks', 'Replaces', 'Pre-Depends', 'Depends', 'Conflicts', 'Recommends', 'Suggests', 'Enhances'):
                 fields[key] = value
     fields.update({'Package': package, 'Source': mode, 'Version': version, 'Architecture': 'all' if package == 'ncurses-base' else arch,

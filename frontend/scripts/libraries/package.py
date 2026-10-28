@@ -25,8 +25,9 @@ for package,version in profile.items():
  for line in (frozen/'status').read_text().splitlines():
   if line.startswith((' ','\t')):
    if key in fields:fields[key]+='\n'+line
-  elif ': ' in line:
-   key,value=line.split(': ',1)
+  elif ':' in line:
+   # Empty headers still terminate the previous field's continuation lines.
+   key,value=line.split(':',1);value=value.lstrip()
    if key not in ['Status','Conffiles','Installed-Size','Version','Source']:fields[key]=value
  fields.update(Version=version+'+runtime1',Source=source)
  generated=run('dpkg-deb','-f',str(candidates[0]),'Depends');fields['Depends']=', '.join(dict.fromkeys(x.strip() for x in (fields.get('Depends','')+','+generated).split(',') if x.strip()))
