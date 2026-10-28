@@ -1,6 +1,6 @@
 /** Admission-marker controls only; these fixtures do not assert native success. */
 import assert from 'node:assert/strict';
-import {mkdtempSync, writeFileSync, rmSync, unlinkSync} from 'node:fs';
+import {mkdtempSync, writeFileSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
