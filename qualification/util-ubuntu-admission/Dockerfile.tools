@@ -1,0 +1,9 @@
+# Disposable resolver closure only; never installs packages in the native target.
+FROM ubuntu:26.10@sha256:93e29beff5257b2cdf1c024d831f6d2997e53655a653ff76a811fc9e6564a719 AS runtime-profile
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends ca-certificates fontconfig fonts-dejavu-core libstdc++6 tzdata zlib1g && rm -rf /var/lib/apt/lists/*
+FROM runtime-profile AS tools
+COPY tool-recipe /tool-recipe
+COPY resolver-launcher-generator.py /resolver-launcher-generator.py
+RUN mkdir /perl-work && /usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C /usr/bin/perl -T /tool-recipe/capture-tool-empty-directories.pl /perl-work/original-tool-empty-dirs.tsv && \
+    apt-get update && apt-get install -y --no-install-recommends perl python3 dpkg-dev binutils && \
+    python3 /tool-recipe/prepare-tools.py /resolver-tools

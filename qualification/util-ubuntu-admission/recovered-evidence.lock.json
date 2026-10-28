@@ -1,0 +1,47 @@
+{
+  "artifact_id": 12834955648,
+  "artifact_name": "ubuntu-util-postgates-unadmitted",
+  "attempt": 1,
+  "branch": "qualification/util-ubuntu-recovery-20261028",
+  "files": {
+    "check-util-linux": {
+      "sha256": "550d524fac9b11568ebc6c51a38dcd9714c514c5ad439a18e8bdfd61c5135700",
+      "size": 16816
+    },
+    "idmap-header-regression.json": {
+      "sha256": "fdf8d7c98d4abe521c4f7e2cee0e55a5fe26fb629b2a98f61ea5d8922da45c4b",
+      "size": 6234
+    },
+    "openat-resolve-regression.json": {
+      "sha256": "80d355cecbf07b17bb8163e20eb528d0944a4e52863d0aff1b230e9058f53457",
+      "size": 767
+    },
+    "pristine-replay.json": {
+      "sha256": "86e12ad066d6fd9da03298370f87a2d942782db735c2795e42c40cb5408b5b70",
+      "size": 8699
+    },
+    "recovery-postgates.json": {
+      "sha256": "4e876f75e965ee463e4db06f176ffea027c7766218e12df3ebc706177793e0ef",
+      "size": 2333
+    },
+    "retained-source-suite-summary.json": {
+      "sha256": "60434f9e2c009480b3ed540d42fa6bd6d8fe2734ff65975811925e377a9a3ac2",
+      "size": 351
+    },
+    "source-regression.json": {
+      "sha256": "799628398493a31eb2f0804dd486724a61c9ef237c18900acbd8605f7da84e83",
+      "size": 849
+    }
+  },
+  "head": "889968a5f30060525e7840e5ba67f1f83c3c730a",
+  "job_id": 122961091142,
+  "job_name": "recovery",
+  "repository": "minusxai/minusx",
+  "repository_id": 1155513729,
+  "run_id": 40729344780,
+  "whole_run_conclusion": "success",
+  "workflow_path": ".github/workflows/util-ubuntu-recovery.yml",
+  "workflow_sha256": "d43d5b743798c2e49a296017439cf1c1550881662a01281d5058e4c6241931a5",
+  "zip_sha256": "3020ff8efec41c332a0744e7561928c7f86242ccabd861baea2aad0782603eb5",
+  "zip_size": 11796
+}

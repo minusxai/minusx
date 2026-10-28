@@ -1,0 +1,15 @@
+# Candidate packaging only; candidate archives are never installed in this stage.
+FROM ubuntu:26.10@sha256:93e29beff5257b2cdf1c024d831f6d2997e53655a653ff76a811fc9e6564a719 AS packaged
+ENV LC_ALL=C PYTHONDONTWRITEBYTECODE=1 DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends python3 dpkg-dev binutils
+COPY recipe /recipe
+COPY checks /checks
+RUN echo 'df138a238ded0dd74bb61132c5288ab5f37c3787a5e206b58e819194e9194114  /recipe/SHA256SUMS' | sha256sum -c - && cd /recipe && sha256sum -c SHA256SUMS
+ARG PREPARATION_REVIEW_SHA256
+RUN --network=none --mount=from=failed-source,source=/,target=/failed,readonly \
+    --mount=from=recovered-evidence,source=/,target=/recovered,readonly \
+    --mount=from=target-evidence,source=/,target=/target,readonly \
+    --mount=from=reviewed-preparation,source=/,target=/review,readonly \
+    sh /checks/retain-preparation.sh "$PREPARATION_REVIEW_SHA256"
+FROM scratch AS package-export
+COPY --from=packaged /candidate/ /

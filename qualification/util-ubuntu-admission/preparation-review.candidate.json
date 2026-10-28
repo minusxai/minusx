@@ -1,0 +1,13 @@
+{
+  "input_pins_sha256": "7a91a5b7c057e7b4e669caf9ee8b25c1e41dae623a5ef512b5267a2dca2b6d06",
+  "installation_authorized": false,
+  "kind": "ubuntu-three-package-preparation-review",
+  "native_execution_authorized": false,
+  "root_reviewed_preparation": true,
+  "scope": "metadata-package-preparation-only",
+  "updated_names": [
+    "util-linux",
+    "libmount1",
+    "mount"
+  ]
+}

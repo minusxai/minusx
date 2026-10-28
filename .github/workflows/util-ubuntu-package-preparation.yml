@@ -1,0 +1,47 @@
+name: Prepare authenticated Ubuntu util package candidate
+on:
+  push:
+    branches: [qualification/util-ubuntu-packages-20261028]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  packages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Authenticate failed source and successful recovery plus actual runtime evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          python3 qualification/util-ubuntu-recovery/fetch-failed-source.py qualification/util-ubuntu-recovery/ubuntu-failed-source.lock.json "$RUNNER_TEMP/failed-source"
+          python3 qualification/util-ubuntu-admission/fetch-success-input.py qualification/util-ubuntu-admission/recovered-evidence.lock.json "$RUNNER_TEMP/recovered-evidence"
+          python3 qualification/util-ubuntu-admission/fetch-success-input.py qualification/util-ubuntu-admission/target-evidence.lock.json "$RUNNER_TEMP/target-evidence"
+      - name: Prepare exact closed recipe and separately reviewed package helpers
+        run: |
+          set -eu
+          context="$RUNNER_TEMP/ubuntu-packages"
+          mkdir "$context" "$RUNNER_TEMP/reviewed-preparation"
+          cp -R qualification/util-context/ubuntu-phase "$context/recipe"
+          cp -R qualification/util-ubuntu-admission "$context/checks"
+          cp qualification/util-ubuntu-admission/Dockerfile.prepare "$context/Dockerfile"
+          cp qualification/util-ubuntu-admission/preparation-review.candidate.json "$RUNNER_TEMP/reviewed-preparation/preparation-review.json"
+      - name: Prepare only three package archives without installing them
+        run: |
+          set -eu
+          review_sha=$(sha256sum qualification/util-ubuntu-admission/preparation-review.candidate.json | cut -d' ' -f1)
+          docker buildx build --progress=plain --no-cache-filter packaged --build-arg PREPARATION_REVIEW_SHA256="$review_sha" --build-context failed-source="$RUNNER_TEMP/failed-source" --build-context recovered-evidence="$RUNNER_TEMP/recovered-evidence" --build-context target-evidence="$RUNNER_TEMP/target-evidence" --build-context reviewed-preparation="$RUNNER_TEMP/reviewed-preparation" --target package-export --output type=local,dest=ubuntu-package-candidate "$RUNNER_TEMP/ubuntu-packages"
+      - name: Require successful unadmitted package preparation
+        run: python3 qualification/util-ubuntu-admission/record-prepared.py ubuntu-package-candidate
+      - name: Retain unadmitted technical package evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ubuntu-util-packages-unadmitted
+          path: ubuntu-package-candidate
+          if-no-files-found: error
+          retention-days: 7

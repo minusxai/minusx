@@ -1,0 +1,463 @@
+{
+  "artifact_id": 12834694610,
+  "artifact_name": "ubuntu-runtime-pristine-unadmitted",
+  "attempt": 1,
+  "branch": "qualification/util-ubuntu-runtime-20261028",
+  "files": {
+    "build-execution.json": {
+      "sha256": "8c00f4241a52444b8bb522913af4ce542b6c64c1f1dee7407257c4e241daf316",
+      "size": 172
+    },
+    "pristine-comparison.json": {
+      "sha256": "309beedf689d9ca8557f892c8675c1d89f5947d88b935098d4f867f0dfd77bf9",
+      "size": 8698
+    },
+    "pristine-evidence.json": {
+      "sha256": "18c1f1cb355cf98ed3d80f9717431db85769458daeb0695c66726897b7da1d9d",
+      "size": 27202
+    },
+    "pristine-original/bsdutils/absent-documentation": {
+      "sha256": "7129d46f7f252656a932c74a78635ec250aa511fa86f516bffb02bc9d4da4561",
+      "size": 207
+    },
+    "pristine-original/bsdutils/control-list": {
+      "sha256": "9758202a2249d7ffba917393336c059a72640d65144f11ea2c31f9d490b23556",
+      "size": 8
+    },
+    "pristine-original/bsdutils/controls/md5sums": {
+      "sha256": "50e317a7e8d5f0bf4c50230020379f52cd311f31f5ee709ddd13ea17e011f83d",
+      "size": 1276
+    },
+    "pristine-original/bsdutils/paths": {
+      "sha256": "606cedd9a5a00e3cbf91e1fb31acf2e20340d0e2c2b7f1ed0a71db3aa034d24b",
+      "size": 865
+    },
+    "pristine-original/bsdutils/payload.tar": {
+      "sha256": "bd428663cfc73a484e790ee2aeaf93232078f0fbdf4421dba8a4e3dcb2e0c822",
+      "size": 245760
+    },
+    "pristine-original/bsdutils/present-paths": {
+      "sha256": "0e365c957b09b8e3f0b880e63a5dcf926afd57841eba30f807a50121387a84d6",
+      "size": 658
+    },
+    "pristine-original/bsdutils/status": {
+      "sha256": "5b226be2c1889525e3bb6e16a21ae9181fadaafd4596d3db8c16e8162d5af170",
+      "size": 766
+    },
+    "pristine-original/libblkid1/absent-documentation": {
+      "sha256": "a4442c6aa03792f648c9f31986d6630c158cd466160a01024641da1d108861bc",
+      "size": 40
+    },
+    "pristine-original/libblkid1/control-list": {
+      "sha256": "8904997e109de927b01a975e7e2281432863a0b6eef94aaf36336c2823ef237d",
+      "size": 32
+    },
+    "pristine-original/libblkid1/controls/md5sums": {
+      "sha256": "2c79958c1ae2c58e34f9f42861891529c821af43322434a9afdd1349a4200dd8",
+      "size": 368
+    },
+    "pristine-original/libblkid1/controls/shlibs": {
+      "sha256": "d57b22cfdf34da13b9f2bb4e475095d73569c124388614a56693d12ebfe3e64e",
+      "size": 73
+    },
+    "pristine-original/libblkid1/controls/symbols": {
+      "sha256": "946c55c96514e37474f56d203999dd308fad34952c2028ace2919815d52e2b87",
+      "size": 5212
+    },
+    "pristine-original/libblkid1/controls/triggers": {
+      "sha256": "3d57060ede47cb5d81d1d17f79eb0ef12929e29b333dfd8bf3e2a3c60aeeb811",
+      "size": 72
+    },
+    "pristine-original/libblkid1/paths": {
+      "sha256": "3e51fce29b56edcc718636e16737ebc1f5c6d53cab9bb99e66d655ac441323c7",
+      "size": 385
+    },
+    "pristine-original/libblkid1/payload.tar": {
+      "sha256": "2d456d20a3ddefc2ae8f62ff251e0737776c4c6f1bc432ee387c5873fb907dba",
+      "size": 307200
+    },
+    "pristine-original/libblkid1/present-paths": {
+      "sha256": "606abd94ccba99f277774d9c1080e2711f126f9cde7b707a0def78749a47b649",
+      "size": 345
+    },
+    "pristine-original/libblkid1/status": {
+      "sha256": "68255bfb0620098022a0ae17712cefd2fcb1416340ec6c579ee772530ecc2047",
+      "size": 695
+    },
+    "pristine-original/libmount1/absent-documentation": {
+      "sha256": "9c79a288b5e73949848526d5b0138e4e96d6bfe8f28b09a24aa63da8dbfb3990",
+      "size": 40
+    },
+    "pristine-original/libmount1/control-list": {
+      "sha256": "4841444a116abadb1621caf75b0529874a89d5504b4e3b485644f4cb5590b675",
+      "size": 32
+    },
+    "pristine-original/libmount1/controls/md5sums": {
+      "sha256": "682a8df99b80beabec5e0df78609e4a437432270bd6f0af6ce66c4946c0e4653",
+      "size": 368
+    },
+    "pristine-original/libmount1/controls/shlibs": {
+      "sha256": "e80f884f534da52064e7603bdefd6c5549950a79808f6cd74d455d424797add6",
+      "size": 73
+    },
+    "pristine-original/libmount1/controls/symbols": {
+      "sha256": "57f70bb5b9ceba1d180fc95db4ca722bb436e3d46d3599b8dbcd239c597cdb3f",
+      "size": 14435
+    },
+    "pristine-original/libmount1/controls/triggers": {
+      "sha256": "3d57060ede47cb5d81d1d17f79eb0ef12929e29b333dfd8bf3e2a3c60aeeb811",
+      "size": 72
+    },
+    "pristine-original/libmount1/paths": {
+      "sha256": "3622a574abe77854e9f1b4f416d3cd9231c067d725e3ce1ada6df8f2ee3c5ea2",
+      "size": 385
+    },
+    "pristine-original/libmount1/payload.tar": {
+      "sha256": "057f9dfeef1d81280b43e1f7fd2b1111f85f0d3e850a1e9ce75b469711a324dd",
+      "size": 399360
+    },
+    "pristine-original/libmount1/present-paths": {
+      "sha256": "0114def22accf266452d86f66d340732e6bd0cbd5d97f1270ac70f01e9b963cb",
+      "size": 345
+    },
+    "pristine-original/libmount1/status": {
+      "sha256": "edde08ccd59c1ef6d3dfa665fcbaababe747d412a661a971fbeb581c11be8cee",
+      "size": 591
+    },
+    "pristine-original/libsmartcols1/absent-documentation": {
+      "sha256": "92cbe405fda5bd8939135f60a12a77cb4fd7b9051d081f5ac8be49c7eb579ed9",
+      "size": 44
+    },
+    "pristine-original/libsmartcols1/control-list": {
+      "sha256": "930b8bb2969fbcba1826837e86dd983e144acd7b3abc7c4bd8e29ce14bf4bc6e",
+      "size": 32
+    },
+    "pristine-original/libsmartcols1/controls/md5sums": {
+      "sha256": "5dd0360e537e57e42e6d81dae7cf63070e08edf0b700478d242caa8e339ce7dd",
+      "size": 388
+    },
+    "pristine-original/libsmartcols1/controls/shlibs": {
+      "sha256": "bab39b1097a8fd40d5acecf6dc40b792bc625d2b23510be4c2c24f2ea6b3472a",
+      "size": 89
+    },
+    "pristine-original/libsmartcols1/controls/symbols": {
+      "sha256": "a545a7e7b5417f52b790706a5296716fedfcc507f7d7937f28b070935ce91ab5",
+      "size": 10098
+    },
+    "pristine-original/libsmartcols1/controls/triggers": {
+      "sha256": "3d57060ede47cb5d81d1d17f79eb0ef12929e29b333dfd8bf3e2a3c60aeeb811",
+      "size": 72
+    },
+    "pristine-original/libsmartcols1/paths": {
+      "sha256": "09c4817ea9abdc4f41ba56c981d538766cc87909ebed5a52019f84706673fd77",
+      "size": 413
+    },
+    "pristine-original/libsmartcols1/payload.tar": {
+      "sha256": "7706fc6976f07dfc261ead72c935e17035a64dafd6957cb94c622235958a1cbe",
+      "size": 215040
+    },
+    "pristine-original/libsmartcols1/present-paths": {
+      "sha256": "da73759e17a9fd597fc65d840c600fa815aece4e83dda10da3bcf65bb9de8236",
+      "size": 369
+    },
+    "pristine-original/libsmartcols1/status": {
+      "sha256": "3708e039831de5d68c1007ceaec7371e4d65b480d9e69fe01bbc0b2544882241",
+      "size": 513
+    },
+    "pristine-original/libuuid1/absent-documentation": {
+      "sha256": "0ac38e900cfdc9b4ca7d82dad5f3a227f179909940e13720ef78ff872e26dd52",
+      "size": 39
+    },
+    "pristine-original/libuuid1/control-list": {
+      "sha256": "00fc9ec83757d4529573a0f75acb716ad09ec502347060a81d2ac92b8ef7c981",
+      "size": 32
+    },
+    "pristine-original/libuuid1/controls/md5sums": {
+      "sha256": "432db445a4e1c829c1d06bf116abbadaaa017d97973ad15c96868205b48a11c5",
+      "size": 292
+    },
+    "pristine-original/libuuid1/controls/shlibs": {
+      "sha256": "40369661b5f36e35364402a3edb54aee2adf400c733e233beb466ff267588b60",
+      "size": 69
+    },
+    "pristine-original/libuuid1/controls/symbols": {
+      "sha256": "22541fe321bcb715004571433e6dedc029832201a697a08f7be3d9cfb11f046b",
+      "size": 1087
+    },
+    "pristine-original/libuuid1/controls/triggers": {
+      "sha256": "3d57060ede47cb5d81d1d17f79eb0ef12929e29b333dfd8bf3e2a3c60aeeb811",
+      "size": 72
+    },
+    "pristine-original/libuuid1/paths": {
+      "sha256": "ab9ec825c2dd9831294e49f9f49c4d34408709e6e3b45b17bdb7ab0006d2a839",
+      "size": 292
+    },
+    "pristine-original/libuuid1/payload.tar": {
+      "sha256": "67d463e3959ec451c6eba28e46154d19a12358210ab8e6ca920016f137414feb",
+      "size": 92160
+    },
+    "pristine-original/libuuid1/present-paths": {
+      "sha256": "f8367b321dc38fea15f3e2e84d72634026c94b89bdfc9e89637719cb33d0314c",
+      "size": 253
+    },
+    "pristine-original/libuuid1/status": {
+      "sha256": "91f0beb5e54c602bccfff0eea8c86aaebb48cbcfa68871880028b085d3844099",
+      "size": 946
+    },
+    "pristine-original/login/absent-documentation": {
+      "sha256": "98c4c9290cbe0dff154d1e6c57da4faf5ddc8e1d59209efab0df5648700f11e8",
+      "size": 752
+    },
+    "pristine-original/login/control-list": {
+      "sha256": "a66182ebae26b888bc981bf148f2a0004f84114bb1e767871f9334c7cf0f5e84",
+      "size": 38
+    },
+    "pristine-original/login/controls/md5sums": {
+      "sha256": "cc93b9e120c9fceb9617a288fd495824e6d5c63c93a9759e0c79881ca8fbc972",
+      "size": 1523
+    },
+    "pristine-original/login/controls/postinst": {
+      "sha256": "0a2533c1b773ad856ee13b74c8329788617d87dc2ea74702d3cef640cb065c0f",
+      "size": 244
+    },
+    "pristine-original/login/controls/postrm": {
+      "sha256": "0a2533c1b773ad856ee13b74c8329788617d87dc2ea74702d3cef640cb065c0f",
+      "size": 244
+    },
+    "pristine-original/login/controls/preinst": {
+      "sha256": "0a2533c1b773ad856ee13b74c8329788617d87dc2ea74702d3cef640cb065c0f",
+      "size": 244
+    },
+    "pristine-original/login/controls/prerm": {
+      "sha256": "0a2533c1b773ad856ee13b74c8329788617d87dc2ea74702d3cef640cb065c0f",
+      "size": 244
+    },
+    "pristine-original/login/paths": {
+      "sha256": "03d53b2ca3d9dcc1f947a74a61aa845d1c22e2c3b2ca1a30500acb8f9c0d8e0c",
+      "size": 1481
+    },
+    "pristine-original/login/payload.tar": {
+      "sha256": "2cd443e871e13100bda4d3684d40bdc3a2e5c3a2e1daf9584051533682b030d8",
+      "size": 143360
+    },
+    "pristine-original/login/present-paths": {
+      "sha256": "799baa5cb948788e5a1821633d13abaebe6c0ba6133072298e17f2b115b46d5f",
+      "size": 729
+    },
+    "pristine-original/login/status": {
+      "sha256": "c16fa998571fbb688fec645151539d78c95fc17d308107f8c35fa8e24d37db94",
+      "size": 983
+    },
+    "pristine-original/mount/absent-documentation": {
+      "sha256": "9f4486c4844aef4b3acb108189ff10847e9fd2fc88ef0eeaa9c6e27388f29016",
+      "size": 379
+    },
+    "pristine-original/mount/control-list": {
+      "sha256": "9758202a2249d7ffba917393336c059a72640d65144f11ea2c31f9d490b23556",
+      "size": 8
+    },
+    "pristine-original/mount/controls/md5sums": {
+      "sha256": "b9aa72e33795ab858266eed37b218af86f9b7fca2542eb7a5559d989406ecfc9",
+      "size": 1527
+    },
+    "pristine-original/mount/paths": {
+      "sha256": "f71d68627085fc6cdd5c7f2df74d8fd1624f043fddc580811d836cdf27a72bcb",
+      "size": 1074
+    },
+    "pristine-original/mount/payload.tar": {
+      "sha256": "8540b121b1a71df0d62923ddda89a1733676bc7adb66a502ae59049ca44d10d3",
+      "size": 307200
+    },
+    "pristine-original/mount/present-paths": {
+      "sha256": "a692102f47c5c92939073078d6a56cc4876157b998fad22805dc1fab115ed8e4",
+      "size": 695
+    },
+    "pristine-original/mount/status": {
+      "sha256": "6736f4b00504a19897d87cd9df43a550fed59fa2907b71815e1cfdaaebd2a418",
+      "size": 739
+    },
+    "pristine-original/resolver/architecture": {
+      "sha256": "d54d20eadbec9c9cc5ac6e0e371abc96d64a0d724d1cf45297fab6098026a69d",
+      "size": 6
+    },
+    "pristine-original/resolver/foreign-architectures": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size": 0
+    },
+    "pristine-original/resolver/installed-util-family": {
+      "sha256": "8caaa3a3c8c9488590677dd558ff62276e522ad4444b6c83570be45983ccc556",
+      "size": 75
+    },
+    "pristine-original/resolver/package-source-map": {
+      "sha256": "98db90b3b06f4781f8b8fe17038f6460c1af42aa0d722dfc09a595fe651cb0e0",
+      "size": 6059
+    },
+    "pristine-original/resolver/raw-status.sha256": {
+      "sha256": "b45c8e435f6bd56ba4dcbfb3a2760538eaa4c5ca849d66aef1a4020eea058083",
+      "size": 65
+    },
+    "pristine-original/resolver/resolver-status": {
+      "sha256": "8c9d79bce573dd1e5d552d228962dd4f0464674a205507a21ee9d1d030d5d72d",
+      "size": 36142
+    },
+    "pristine-original/util-linux/absent-documentation": {
+      "sha256": "6efe53bf9e451837cdb496d793c5c3f8229b3039e84eeb9acd9b80da199a12aa",
+      "size": 4916
+    },
+    "pristine-original/util-linux/control-list": {
+      "sha256": "7dce7b256c9b222f3779470dbdec63f48b6bc95883d08f1ec069b8c5f6b8533a",
+      "size": 30
+    },
+    "pristine-original/util-linux/controls/md5sums": {
+      "sha256": "387ad0b11d825cfd0d921068b5ad99d62efce42eeacd6b5e1400b6f86996c07e",
+      "size": 15345
+    },
+    "pristine-original/util-linux/controls/postinst": {
+      "sha256": "306c812b4cbdca94057f55e0e8c45a2bf80d7ab86d0e60a915b1f2ac6901a6df",
+      "size": 2155
+    },
+    "pristine-original/util-linux/controls/postrm": {
+      "sha256": "00697d936e26fcfa1d812ad65607c758d8580fa9b9f66d4cc60df99d4af88f92",
+      "size": 683
+    },
+    "pristine-original/util-linux/controls/prerm": {
+      "sha256": "1174ac81e7899682a6517f372ac739d0cf77706d1d7e03e11fc9480d012fc010",
+      "size": 673
+    },
+    "pristine-original/util-linux/paths": {
+      "sha256": "2728a073bb59f57e393ccbcd92d12c218a1f2843bba17d05b939f67459cd2503",
+      "size": 9015
+    },
+    "pristine-original/util-linux/payload.tar": {
+      "sha256": "181d679e63cb602638df4156843a5cf49053870be763cea488bbc359a5477ef2",
+      "size": 2406400
+    },
+    "pristine-original/util-linux/present-paths": {
+      "sha256": "d9efe0b1ea4fe13438fe5672bb91bffcb2ac2f5007446f4d2070264ef522bf14",
+      "size": 4099
+    },
+    "pristine-original/util-linux/status": {
+      "sha256": "7394f03eacb3737f854f8b11478b73d51fb0090314e8bf21b89e7c29f0104d6c",
+      "size": 1948
+    },
+    "pristine-package-profile/bsdutils/absent-documentation": {
+      "sha256": "7129d46f7f252656a932c74a78635ec250aa511fa86f516bffb02bc9d4da4561",
+      "size": 207
+    },
+    "pristine-package-profile/bsdutils/paths": {
+      "sha256": "606cedd9a5a00e3cbf91e1fb31acf2e20340d0e2c2b7f1ed0a71db3aa034d24b",
+      "size": 865
+    },
+    "pristine-package-profile/bsdutils/present-paths": {
+      "sha256": "0e365c957b09b8e3f0b880e63a5dcf926afd57841eba30f807a50121387a84d6",
+      "size": 658
+    },
+    "pristine-package-profile/libblkid1/absent-documentation": {
+      "sha256": "a4442c6aa03792f648c9f31986d6630c158cd466160a01024641da1d108861bc",
+      "size": 40
+    },
+    "pristine-package-profile/libblkid1/paths": {
+      "sha256": "3e51fce29b56edcc718636e16737ebc1f5c6d53cab9bb99e66d655ac441323c7",
+      "size": 385
+    },
+    "pristine-package-profile/libblkid1/present-paths": {
+      "sha256": "606abd94ccba99f277774d9c1080e2711f126f9cde7b707a0def78749a47b649",
+      "size": 345
+    },
+    "pristine-package-profile/libmount1/absent-documentation": {
+      "sha256": "9c79a288b5e73949848526d5b0138e4e96d6bfe8f28b09a24aa63da8dbfb3990",
+      "size": 40
+    },
+    "pristine-package-profile/libmount1/paths": {
+      "sha256": "3622a574abe77854e9f1b4f416d3cd9231c067d725e3ce1ada6df8f2ee3c5ea2",
+      "size": 385
+    },
+    "pristine-package-profile/libmount1/present-paths": {
+      "sha256": "0114def22accf266452d86f66d340732e6bd0cbd5d97f1270ac70f01e9b963cb",
+      "size": 345
+    },
+    "pristine-package-profile/libsmartcols1/absent-documentation": {
+      "sha256": "92cbe405fda5bd8939135f60a12a77cb4fd7b9051d081f5ac8be49c7eb579ed9",
+      "size": 44
+    },
+    "pristine-package-profile/libsmartcols1/paths": {
+      "sha256": "09c4817ea9abdc4f41ba56c981d538766cc87909ebed5a52019f84706673fd77",
+      "size": 413
+    },
+    "pristine-package-profile/libsmartcols1/present-paths": {
+      "sha256": "da73759e17a9fd597fc65d840c600fa815aece4e83dda10da3bcf65bb9de8236",
+      "size": 369
+    },
+    "pristine-package-profile/libuuid1/absent-documentation": {
+      "sha256": "0ac38e900cfdc9b4ca7d82dad5f3a227f179909940e13720ef78ff872e26dd52",
+      "size": 39
+    },
+    "pristine-package-profile/libuuid1/paths": {
+      "sha256": "ab9ec825c2dd9831294e49f9f49c4d34408709e6e3b45b17bdb7ab0006d2a839",
+      "size": 292
+    },
+    "pristine-package-profile/libuuid1/present-paths": {
+      "sha256": "f8367b321dc38fea15f3e2e84d72634026c94b89bdfc9e89637719cb33d0314c",
+      "size": 253
+    },
+    "pristine-package-profile/login/absent-documentation": {
+      "sha256": "98c4c9290cbe0dff154d1e6c57da4faf5ddc8e1d59209efab0df5648700f11e8",
+      "size": 752
+    },
+    "pristine-package-profile/login/paths": {
+      "sha256": "03d53b2ca3d9dcc1f947a74a61aa845d1c22e2c3b2ca1a30500acb8f9c0d8e0c",
+      "size": 1481
+    },
+    "pristine-package-profile/login/present-paths": {
+      "sha256": "799baa5cb948788e5a1821633d13abaebe6c0ba6133072298e17f2b115b46d5f",
+      "size": 729
+    },
+    "pristine-package-profile/mount/absent-documentation": {
+      "sha256": "9f4486c4844aef4b3acb108189ff10847e9fd2fc88ef0eeaa9c6e27388f29016",
+      "size": 379
+    },
+    "pristine-package-profile/mount/paths": {
+      "sha256": "f71d68627085fc6cdd5c7f2df74d8fd1624f043fddc580811d836cdf27a72bcb",
+      "size": 1074
+    },
+    "pristine-package-profile/mount/present-paths": {
+      "sha256": "a692102f47c5c92939073078d6a56cc4876157b998fad22805dc1fab115ed8e4",
+      "size": 695
+    },
+    "pristine-package-profile/util-linux/absent-documentation": {
+      "sha256": "6efe53bf9e451837cdb496d793c5c3f8229b3039e84eeb9acd9b80da199a12aa",
+      "size": 4916
+    },
+    "pristine-package-profile/util-linux/paths": {
+      "sha256": "2728a073bb59f57e393ccbcd92d12c218a1f2843bba17d05b939f67459cd2503",
+      "size": 9015
+    },
+    "pristine-package-profile/util-linux/present-paths": {
+      "sha256": "d9efe0b1ea4fe13438fe5672bb91bffcb2ac2f5007446f4d2070264ef522bf14",
+      "size": 4099
+    },
+    "raw-work-inputs.paths": {
+      "sha256": "105ae3c7f6425da7e89e74013c5fec1353270e5085621840a2f95039a5d6448b",
+      "size": 9
+    },
+    "raw-work-inputs.sha256": {
+      "sha256": "55bee964984a65ff7e99620e68f885fa8ae37c88ce54912009909a18df3d5fd9",
+      "size": 91
+    },
+    "raw-work-inputs.tar": {
+      "sha256": "8420a323a285d6729fbac557a8429b9fe54cc28b28138b739ba395e70932ed5c",
+      "size": 4331520
+    }
+  },
+  "head": "0d797b5373958c743d8e43addd6770b06b745f64",
+  "job_id": 122968374194,
+  "job_name": "snapshot",
+  "repository": "minusxai/minusx",
+  "repository_id": 1155513729,
+  "run_id": 40731394568,
+  "whole_run_conclusion": "success",
+  "workflow_path": ".github/workflows/util-ubuntu-runtime-snapshot.yml",
+  "workflow_sha256": "750af144e71ea4889adf910fe792878b53199f41ecbc34dc8d275972886f6c75",
+  "zip_sha256": "90712b8a40562e14e8f623d2758ef23dda6d1b65d1d84d9bb9f02775146402a4",
+  "zip_size": 3139544
+}
