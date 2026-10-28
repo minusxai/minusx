@@ -3,11 +3,23 @@
 import hashlib
 import json
 import pathlib
+import re
 import subprocess
 
 
 def run(*args, **kwargs):
     return subprocess.check_output(args, text=True, **kwargs)
+
+
+def valid_signers(status):
+    fingerprints = []
+    for line in status.splitlines():
+        if line.startswith(b'[GNUPG:] VALIDSIG '):
+            fingerprint = line.split()[2].decode('ascii')
+            assert re.fullmatch(r'(?:[0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})', fingerprint)
+            fingerprints.append(fingerprint)
+    assert fingerprints
+    return fingerprints
 
 
 root = pathlib.Path('/acl-source')
@@ -21,9 +33,10 @@ for item in manifest['files']:
     assert path.stat().st_size == item['bytes']
     assert hashlib.sha256(path.read_bytes()).hexdigest() == item['sha256']
 keyring = '/usr/share/keyrings/debian-keyring.gpg'
-authentication = run('gpgv', '--status-fd', '1', '--keyring', keyring, str(root / 'acl_2.4.0-1.dsc'))
-fingerprints = [line.split()[2] for line in authentication.splitlines() if line.startswith('[GNUPG:] VALIDSIG ')]
-assert fingerprints
+authentication = subprocess.check_output(['gpgv', '--status-fd', '1', '--keyring', keyring, str(root / 'acl_2.4.0-1.dsc')])
+# GnuPG can include non-UTF-8 key metadata in other status records. Parse only
+# the ASCII fingerprint in VALIDSIG after successful signature verification.
+fingerprints = valid_signers(authentication)
 run('dpkg-source', '--extract', str(root / 'acl_2.4.0-1.dsc'), str(root / 'build'))
 source = root / 'build'
 changelog = source / 'debian/changelog'

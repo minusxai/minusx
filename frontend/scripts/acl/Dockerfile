@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends build-essential
     python3 curl ca-certificates xz-utils attr acl texinfo libselinux1-dev && rm -rf /var/lib/apt/lists/*
 RUN cp /usr/bin/tar /original-tar && cp -L /usr/lib/x86_64-linux-gnu/libacl.so.1 /original-libacl.so
 COPY scripts/acl /acl-checks
-RUN python3 /acl-checks/build-acl.py
+RUN python3 /acl-checks/check-source-status.py && python3 /acl-checks/build-acl.py
 RUN dpkg -i /acl-out/libacl1.deb /acl-out/libacl1-dev.deb
 RUN python3 - <<'PY'
 import subprocess
