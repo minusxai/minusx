@@ -57,6 +57,9 @@ jobs:
       - name: Test public Perl admission boundaries
         run: node --test frontend/scripts/perl/runtime-os/test-promotion-binding.mjs
 
+      - name: Test aggregate diagnostic privacy and fail-closed scan errors
+        run: node frontend/scripts/test-glibc-error-kinds.cjs
+
       - name: Test host-only utility resolver isolation
         run: node frontend/scripts/util-consumer/resolver-launch-controls.mjs
 
@@ -77,6 +80,7 @@ jobs:
       # Mirrors the publish job's build (same context, args, secrets) with
       # push: false — build validation only, nothing leaves the runner.
       - uses: docker/build-push-action@v6
+        id: build-runtime-image
         with:
           context: frontend
           build-contexts: |
@@ -238,6 +242,8 @@ jobs:
           retention-days: 7
 
       - name: Record all image dependencies
+        id: scan-runtime-image
+        if: ${{ !cancelled() && steps.build-runtime-image.outcome == 'success' }}
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           version: 'v0.76.1'
@@ -252,6 +258,8 @@ jobs:
           exit-code: '0'
           timeout: 10m
       - name: Prepare dependency report
+        id: prepare-image-report
+        if: ${{ !cancelled() && steps.scan-runtime-image.outcome == 'success' }}
         working-directory: ${{ github.workspace }}
         env:
           SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -270,6 +278,8 @@ jobs:
               'source_head': os.environ['SOURCE_HEAD'],
               'checkout_sha': os.environ['CHECKOUT_SHA'],
               'source_hashes': {p: hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in files},
+              'workflow_admission': 'unadmitted-diagnostic-report',
+              'glibc_scan_complete': glibc['probe']['scanComplete'],
               'SchemaVersion': raw['SchemaVersion'],
               'ArtifactName': 'app-validation',
               'ArtifactType': raw.get('ArtifactType'),
@@ -282,6 +292,7 @@ jobs:
           Path('image-report.json').write_text(json.dumps(report, indent=2) + '\n')
           PY_REPORT
       - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.prepare-image-report.outcome == 'success' }}
         with:
           name: image-dependencies
           path: image-report.json
