@@ -1,0 +1,18 @@
+{
+  "version": "3.0.3",
+  "sources": [
+    {
+      "url": "https://sources.debian.org/data/main/a/apt/3.0.3/apt-pkg/acquire-item.cc",
+      "sha256": "a567649e6d8611e7733f34b570f561959f7fdfaa1c888377395e88d3752cc82c"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/Debian/apt/3.0.3/apt-pkg/contrib/strutl.cc",
+      "sha256": "ac2c9b2fa071f7f00c1cf45fab54e3feb049a538e5e0680ece59a67020f39000"
+    },
+    {
+      "url": "https://sources.debian.org/data/main/a/apt/3.0.3/apt-pkg/deb/dpkgpm.cc",
+      "sha256": "c117a5c0767cf979e28829829641eea78dc2c88b13794939e73c227d52494acf"
+    }
+  ],
+  "scope": "pkgAcqArchive uses canonical package/version/architecture cache filenames and sets absolute StoreFilename when the cached archive has the expected size. QuoteString encodes epoch colon with lowercase hex. The dpkg backend rejects nonabsolute install paths. We independently hash every copied candidate, preserve all resolver/plan checks and retain --no-download/--no-remove for both simulation and transaction."
+}

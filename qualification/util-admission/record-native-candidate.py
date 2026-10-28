@@ -14,6 +14,9 @@ assert origin['source_compile_lock_sha256']==hashlib.sha256(lock_path.read_bytes
 plan=json.loads((packages/'plan.json').read_text());assert set(plan['packages'])=={'libmount1','util-linux','login','mount'}
 assert (native/'plan.json').read_bytes()==(packages/'plan.json').read_bytes()
 for name,spec in plan['packages'].items():assert hashlib.sha256((packages/'packages'/(name+'.deb')).read_bytes()).hexdigest()==spec['sha256']
+cache=json.loads((native/'apt-cache-priming.json').read_text());assert cache['status']=='cache-only-unadmitted' and cache['native_qualified'] is False and type(cache['network_fetches'])is int and cache['network_fetches']==0
+assert set(cache['packages'])==set(plan['packages'])
+for name,spec in plan['packages'].items():assert cache['packages'][name]['sha256']==spec['sha256']
 closure=json.loads((native/'dependency-closure.json').read_text());final=json.loads((native/'final-native.json').read_text());apt=json.loads((native/'apt-plan.json').read_text())
 assert closure['status']=='closure-only-unadmitted' and closure['native_qualified'] is False
 assert closure['baseline_sha256']==plan['status_sha256']

@@ -20,6 +20,9 @@ dpkg-query --admindir=/var/lib/dpkg -W -f='${binary:Package}\t${Version}\t${Stat
 cp /var/lib/dpkg/status "$out/before-status"
 # Closure gate requires raw status SHA from the authenticated pre-APT capture.
 "$resolver" "$checks/check-util-closure.py" "$out/before-status" "$inputs/plan.json" "$debs" "$out/dependency-closure.json"
+# APT3.0.3 --no-download requires canonical archives already in its cache.
+# Copy only these four hash-bound bytes; retain no-download and no-remove.
+"$resolver" "$checks/prime-util-apt-cache.py" "$inputs/plan.json" "$debs" /var/cache/apt/archives "$out/apt-cache-priming.json"
 # APT sees the actual unmodified runtime state and only these four local files.
 apt-get -s --no-download --no-remove --no-install-recommends install \
     "$debs/libmount1.deb" "$debs/util-linux.deb" "$debs/login.deb" "$debs/mount.deb" \
