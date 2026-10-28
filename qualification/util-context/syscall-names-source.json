@@ -1,8 +1,8 @@
 {
-  "source": "https://go.dev/dl/go1.25.3.darwin-arm64.tar.gz",
-  "archive_sha256": "7c083e3d2c00debfeb2f77d9a4c00a1aac97113b89b9ccc42a90487af3437382",
-  "members": "go/src/syscall/zsysnum_linux_*.go",
-  "extraction": "SYS_ identifiers converted to lowercase; sorted unique",
-  "count": 469,
-  "output_sha256": "2ec655fb4565d1979798ceae5b77a27dd50a3c565df59777143049149155d281"
+  "source": "https://raw.githubusercontent.com/moby/buildkit/v0.25.1/vendor/github.com/moby/profiles/seccomp/default_linux.go",
+  "source_sha256": "9fcf5ac6798c0639a8460d55a332dce76b835d60ec45cbf984c30794f9f5a50b",
+  "source_binding": "Exact moby/buildkit v0.25.1 vendor default profile imported by executor/oci/spec_linux.go",
+  "extraction": "Quoted Names []string entries only; sorted unique",
+  "count": 426,
+  "output_sha256": "c3f4672156ea04c904ee927c021529bdaa48f7c3bd3864160307fe8270100133"
 }

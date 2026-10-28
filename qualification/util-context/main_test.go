@@ -78,3 +78,9 @@ func TestProfileExportRejectsNonTechnicalFields(t *testing.T){
   if safeProfile(p)==nil{t.Fatal("nontechnical profile accepted: "+kind)}
  }
 }
+
+func TestPinnedDefaultProfileNames(t *testing.T){
+ data,_,_,_:=fixture(t);c,_:=decode(data);l,_:=object(c["linux"]);p,_:=object(l["seccomp"]);r,_:=object(p["syscalls"].([]any)[0]);r["names"]=[]any{"cachestat","clone3","fchmodat2","mseal","futex_wait","statmount"}
+ if safeProfile(p)!=nil{t.Fatal("exact pinned BuildKit technical names rejected")}
+ r["names"]=[]any{"private_company"};if safeProfile(p)==nil{t.Fatal("private string accepted")}
+}
