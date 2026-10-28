@@ -10,5 +10,17 @@
     "CAP_SYS_ADMIN",
     "CAP_SYS_CHROOT"
   ],
-  "scope": "Current mount namespace entry only; no policy override or application deployment"
+  "scope": "Current mount namespace entry only; no policy override or application deployment",
+  "docker_capability_normalization": {
+    "source": "https://raw.githubusercontent.com/moby/moby/refs/tags/v28.5.1/oci/caps/utils.go",
+    "sha256": "756dc0d7b287d9b7606a0032c7a5512e2c46a06365ae4a12f79adaacb4a04277",
+    "function": "NormalizeLegacyCapabilities",
+    "api_cap_add": [
+      "CAP_SYS_ADMIN",
+      "CAP_SYS_CHROOT"
+    ],
+    "api_cap_drop": [
+      "ALL"
+    ]
+  }
 }

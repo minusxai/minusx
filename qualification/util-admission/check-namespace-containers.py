@@ -26,7 +26,7 @@ def probe(images,output):
                     '--entrypoint','/usr/bin/nsenter',image,*command)
                 inspect=json.loads(docker('inspect',name))[0];host=inspect['HostConfig'];config=inspect['Config']
                 assert inspect['Image']==image and not host['Privileged']
-                assert host['CapDrop']==['ALL'] and set(host['CapAdd'])=={'SYS_ADMIN','SYS_CHROOT'}
+                assert host['CapDrop']==['ALL'] and len(host['CapAdd'])==2 and set(host['CapAdd'])=={'CAP_SYS_ADMIN','CAP_SYS_CHROOT'}, ('Unexpected capabilities',host['CapDrop'],host['CapAdd'])
                 assert host['ReadonlyRootfs'] and host['NetworkMode']=='none'
                 assert not host['Binds']
                 assert all(m['Type']=='tmpfs' and m['Destination']=='/tmp' for m in inspect['Mounts'])
