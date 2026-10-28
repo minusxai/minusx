@@ -47,6 +47,8 @@ apt-get -y --no-download --no-remove --no-install-recommends install \
 namespace_status=0
 "$resolver" "$checks/check-nsenter-behavior.py" "$out/nsenter-candidate.json" candidate || namespace_status=$?
 # Metadata-only mount and unchanged providers must retain native bytes+mode+IDs.
+observation_status=0
+"$resolver" "$checks/capture-util-controls.py" "$inputs/plan.json" "$debs" "$out/control-observation.json" || observation_status=$?
 final_status=0
 "$resolver" "$checks/check-util-final.py" "$inputs/plan.json" "$out/before-status" "$inputs" "$out/final-native.json" "$debs" || final_status=$?
 apt_status=0
@@ -56,6 +58,7 @@ dpkg --audit > "$out/dpkg-audit.stdout" 2> "$out/dpkg-audit.stderr" || audit_sta
 test "$audit_status" = 0
 test ! -s "$out/dpkg-audit.stdout"
 test ! -s "$out/dpkg-audit.stderr"
+test "$observation_status" = 0
 test "$namespace_status" = 0
 test "$final_status" = 0
 test "$apt_status" = 0

@@ -40,7 +40,7 @@ def stored_info_closure(prefix, expected_controls, expected_paths, alternatives=
         assert alternate.parent==prefix.parent and alternate!=prefix
         assert not any(p.name.startswith(alternate.name+'.') for p in prefix.parent.iterdir()), 'Stale alternate package info prefix'
     actual={p.name[len(prefix.name)+1:] for p in prefix.parent.iterdir() if p.name.startswith(prefix.name+'.')}
-    assert actual==set(expected_controls)|{'list'}, 'Unexpected/missing stored package control'
+    assert actual==set(expected_controls)|{'list'}, ('Unexpected/missing stored package control',prefix.name,sorted(actual),sorted(set(expected_controls)|{'list'}))
     path=prefix.with_name(prefix.name+'.list');info=path.lstat()
     assert stat.S_ISREG(info.st_mode) and not path.is_symlink()
     assert (stat.S_IMODE(info.st_mode),info.st_uid,info.st_gid)==(0o644,0,0)
