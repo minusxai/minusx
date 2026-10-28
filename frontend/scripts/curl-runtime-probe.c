@@ -10,7 +10,7 @@ static size_t receive(char *data, size_t size, size_t count, void *unused) {
 int main(int argc, char **argv) {
   if (argc != 3) return 2;
   const curl_version_info_data *info = curl_version_info(CURLVERSION_NOW);
-  if (!info || strcmp(info->version, "8.23.0") != 0 || !info->ssl_version ||
+  if (!info || strcmp(info->version, "8.18.0") != 0 || !info->ssl_version ||
       strncmp(info->ssl_version, "OpenSSL/", 8) != 0) return 3;
   if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) return 4;
   CURL *handle = curl_easy_init();
