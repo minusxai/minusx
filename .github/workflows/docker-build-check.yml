@@ -59,6 +59,7 @@ jobs:
 
       - name: Test aggregate diagnostic privacy and fail-closed scan errors
         run: |
+          PYTHONDONTWRITEBYTECODE=1 python3 frontend/scripts/test-component-evidence.py
           node frontend/scripts/test-glibc-error-kinds.cjs
           PYTHONDONTWRITEBYTECODE=1 python3 frontend/scripts/test-glibc-inventory.py
 
@@ -212,6 +213,23 @@ jobs:
           --mount type=bind,source=${{ github.workspace }}/frontend/scripts/capture-pam-applicability.cjs,target=/capture-pam.cjs,readonly
           app-validation /capture-pam.cjs > pam-applicability.json
 
+      - name: Record read-only component evidence
+        env:
+          SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          CHECKOUT_SHA: ${{ github.sha }}
+        run: |
+          python3 frontend/scripts/run-component-evidence.py app-validation \
+            frontend/scripts/capture-component-evidence.cjs component-evidence.json \
+            "$SOURCE_HEAD" "$CHECKOUT_SHA"
+      - name: Retain image-bound component evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: component-runtime-evidence
+          path: component-evidence.json
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Record actual glibc payload and loader conditions
         env:
           SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -262,7 +280,7 @@ jobs:
           assert glibc['source_head'] == os.environ['SOURCE_HEAD'] and glibc['checkout_sha'] == os.environ['CHECKOUT_SHA']
           assert glibc['probe_sha256'] == hashlib.sha256(Path('frontend/scripts/capture-glibc-applicability.cjs').read_bytes()).hexdigest()
           assert glibc['runner_sha256'] == hashlib.sha256(Path('frontend/scripts/run-glibc-inventory.py').read_bytes()).hexdigest()
-          files = ['frontend/scripts/run-glibc-inventory.py', 'frontend/scripts/test-glibc-inventory.py', 'frontend/scripts/rebuild-esbuild.sh', '.github/workflows/docker-build-check.yml', '.github/workflows/publish.yml', 'frontend/Dockerfile', 'frontend/package.json', 'frontend/package-lock.json', 'frontend/scripts/patch-npm.mjs', 'frontend/scripts/patch-esbuild.mjs', 'frontend/scripts/check-runtime.cjs', 'frontend/scripts/check-embedded-sqlite.cjs', 'frontend/scripts/check-embedded-sqlite-exports.py', 'frontend/scripts/run-native-proof.sh', 'frontend/scripts/test-embedded-sqlite.cjs', 'frontend/scripts/test-embedded-sqlite-exports.py', 'frontend/scripts/check-system-runtime.cjs', 'frontend/scripts/capture-pam-applicability.cjs', 'frontend/scripts/capture-glibc-applicability.cjs'] + [str(p) for p in sorted(Path('frontend/scripts/tar-patches').glob('*'))] + [str(p) for p in sorted(Path('frontend/scripts/runtime').glob('*'))] + ['frontend/scripts/curl-runtime-probe.c', 'frontend/scripts/check-network-runtime.cjs', 'frontend/scripts/verify-network-proof.cjs', 'frontend/scripts/test-network-proof.cjs'] + [str(p) for p in sorted(Path('frontend/scripts/network').rglob('*')) if p.is_file() and '__pycache__' not in p.parts and p.suffix != '.pyc'] + [str(p) for p in sorted(Path('frontend/scripts/libraries').rglob('*')) if p.is_file() and '__pycache__' not in p.parts and p.suffix != '.pyc'] + [str(p) for directory in ('sqlite', 'util-linux', 'perl', 'util-consumer') for p in sorted(Path('frontend/scripts', directory).rglob('*')) if p.is_file() and '__pycache__' not in p.parts and p.suffix != '.pyc']
+          files = ['frontend/scripts/capture-component-evidence.cjs', 'frontend/scripts/run-component-evidence.py', 'frontend/scripts/test-component-evidence.py', 'frontend/scripts/run-glibc-inventory.py', 'frontend/scripts/test-glibc-inventory.py', 'frontend/scripts/rebuild-esbuild.sh', '.github/workflows/docker-build-check.yml', '.github/workflows/publish.yml', 'frontend/Dockerfile', 'frontend/package.json', 'frontend/package-lock.json', 'frontend/scripts/patch-npm.mjs', 'frontend/scripts/patch-esbuild.mjs', 'frontend/scripts/check-runtime.cjs', 'frontend/scripts/check-embedded-sqlite.cjs', 'frontend/scripts/check-embedded-sqlite-exports.py', 'frontend/scripts/run-native-proof.sh', 'frontend/scripts/test-embedded-sqlite.cjs', 'frontend/scripts/test-embedded-sqlite-exports.py', 'frontend/scripts/check-system-runtime.cjs', 'frontend/scripts/capture-pam-applicability.cjs', 'frontend/scripts/capture-glibc-applicability.cjs'] + [str(p) for p in sorted(Path('frontend/scripts/tar-patches').glob('*'))] + [str(p) for p in sorted(Path('frontend/scripts/runtime').glob('*'))] + ['frontend/scripts/curl-runtime-probe.c', 'frontend/scripts/check-network-runtime.cjs', 'frontend/scripts/verify-network-proof.cjs', 'frontend/scripts/test-network-proof.cjs'] + [str(p) for p in sorted(Path('frontend/scripts/network').rglob('*')) if p.is_file() and '__pycache__' not in p.parts and p.suffix != '.pyc'] + [str(p) for p in sorted(Path('frontend/scripts/libraries').rglob('*')) if p.is_file() and '__pycache__' not in p.parts and p.suffix != '.pyc'] + [str(p) for directory in ('sqlite', 'util-linux', 'perl', 'util-consumer') for p in sorted(Path('frontend/scripts', directory).rglob('*')) if p.is_file() and '__pycache__' not in p.parts and p.suffix != '.pyc']
           report = {
               'source_head': os.environ['SOURCE_HEAD'],
               'checkout_sha': os.environ['CHECKOUT_SHA'],
