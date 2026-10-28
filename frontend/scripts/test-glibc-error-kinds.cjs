@@ -15,5 +15,6 @@ const fake={
  readSync(fd,b){Buffer.from('7f454c46','hex').copy(b)},closeSync(){},readFileSync(){return Buffer.from('7f454c46','hex')}
 };
 const full={require:n=>n==='node:fs'?fake:crypto,Buffer,module:{exports:{}},console:{log:s=>output=s},process:{env:{PROBE_EXPECTED_IMAGE_ID:'sha256:'+'a'.repeat(64)},getuid:()=>0,set exitCode(n){exit=n}}};vm.runInNewContext(source,full);
-const r=JSON.parse(output);assert.equal(r.errorCount,2);assert.equal(r.errorKinds.EACCES,1);assert.equal(r.errorKinds.ELF_HEADER_TRUNCATED,1);assert.equal(r.scanComplete,false);assert.equal(exit,1);assert(!output.includes('private-secret'));assert(!output.includes('/private'));
-console.log('6 finite-reason/full-walk/privacy/failclosed controls PASS');
+const r=JSON.parse(output);assert.equal(r.errorCount,2);assert.equal(r.errorKinds.EACCES,1);assert.equal(r.errorKinds.ELF_HEADER_TRUNCATED,1);assert.equal(r.scanComplete,false);assert.equal(exit,1);assert.equal(r.probeUid,0);assert.equal(r.permissionErrors['regular:644:same'],1);assert(!output.includes('private-secret'));assert(!output.includes('/private'));
+const wrongUid={...full,process:{env:{PROBE_REQUIRE_UID_ZERO:'1'},getuid:()=>1001}};assert.throws(()=>vm.runInNewContext(source,wrongUid),/Inventory requires uid zero/);
+console.log('8 finite-reason/permission-metadata/uid/privacy/failclosed controls PASS');
