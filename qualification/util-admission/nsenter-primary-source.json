@@ -1,0 +1,14 @@
+{
+  "version": "2.41.5",
+  "sources": [
+    {
+      "url": "https://raw.githubusercontent.com/util-linux/util-linux/v2.41.5/sys-utils/nsenter.c",
+      "sha256": "f4a8e083b556c90ce1f9b2b5f4678b6036558b12d0bd62a6fcd194ed9c6b647b"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/util-linux/util-linux/v2.41.5/sys-utils/nsenter.1.adoc",
+      "sha256": "49de905911335f4be28d2d9a86ee0bf409f923451382d09d2993b44645e52ed7"
+    }
+  ],
+  "scope": "The original upstream implementation requires a selected namespace; specifying only cwd does not satisfy that requirement. The probes explicitly select the current mount namespace and separately test command execution and cwd. Both actual baseline and candidate outcomes are retained; candidate kernel-entry failure remains qualification failure without changing policy."
+}

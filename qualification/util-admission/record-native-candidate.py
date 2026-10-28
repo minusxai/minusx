@@ -17,6 +17,8 @@ for name,spec in plan['packages'].items():assert hashlib.sha256((packages/'packa
 cache=json.loads((native/'apt-cache-priming.json').read_text());assert cache['status']=='cache-only-unadmitted' and cache['native_qualified'] is False and type(cache['network_fetches'])is int and cache['network_fetches']==0
 assert set(cache['packages'])==set(plan['packages'])
 for name,spec in plan['packages'].items():assert cache['packages'][name]['sha256']==spec['sha256']
+behavior=json.loads((native/'nsenter-candidate.json').read_text());assert behavior['status']=='behavior-passed-unadmitted' and behavior['native_qualified'] is False and behavior['phase']=='candidate' and behavior['kernel_namespace_entry_required'] is True
+assert all(type(result['exit_code'])is int and result['exit_code']==0 for result in behavior['results'])
 closure=json.loads((native/'dependency-closure.json').read_text());final=json.loads((native/'final-native.json').read_text());apt=json.loads((native/'apt-plan.json').read_text())
 assert closure['status']=='closure-only-unadmitted' and closure['native_qualified'] is False
 assert closure['baseline_sha256']==plan['status_sha256']

@@ -23,6 +23,7 @@ dpkg-query --admindir=/var/lib/dpkg -W -f='${binary:Package}\t${Version}\t${Stat
 cp /var/lib/dpkg/status "$out/before-status"
 # Closure gate requires raw status SHA from the authenticated pre-APT capture.
 "$resolver" "$checks/check-util-closure.py" "$out/before-status" "$inputs/plan.json" "$debs" "$out/dependency-closure.json"
+"$resolver" "$checks/check-nsenter-behavior.py" "$out/nsenter-baseline.json" baseline
 # APT3.0.3 --no-download requires canonical archives already in its cache.
 # Copy only these four hash-bound bytes; retain no-download and no-remove.
 "$resolver" "$checks/prime-util-apt-cache.py" "$inputs/plan.json" "$debs" /var/cache/apt/archives "$out/apt-cache-priming.json"
@@ -40,16 +41,23 @@ apt-get -y --no-download --no-remove --no-install-recommends install \
 (cd / && sha256sum -c "$inputs/runtime-payload.sha256")
 "$inputs/check-absence.sh" "$inputs/runtime-absent.paths"
 "$inputs/check-util-linux"
-nsenter -- /usr/bin/true
-test "$(nsenter --wd=/tmp -- /usr/bin/pwd)" = /tmp
-case "$(unshare --version)" in *'util-linux 2.41.5'*) ;; *) exit 1;; esac
+# Valid documented namespace+cwd operations, not the invalid no-namespace call.
+# Collect remaining independent final gates even if kernel entry is unavailable;
+# aggregate failure still blocks qualification.
+namespace_status=0
+"$resolver" "$checks/check-nsenter-behavior.py" "$out/nsenter-candidate.json" candidate || namespace_status=$?
 # Metadata-only mount and unchanged providers must retain native bytes+mode+IDs.
-"$resolver" "$checks/check-util-final.py" "$inputs/plan.json" "$out/before-status" "$inputs" "$out/final-native.json" "$debs"
-apt-get check
+final_status=0
+"$resolver" "$checks/check-util-final.py" "$inputs/plan.json" "$out/before-status" "$inputs" "$out/final-native.json" "$debs" || final_status=$?
+apt_status=0
+apt-get check || apt_status=$?
 audit_status=0
 dpkg --audit > "$out/dpkg-audit.stdout" 2> "$out/dpkg-audit.stderr" || audit_status=$?
 test "$audit_status" = 0
 test ! -s "$out/dpkg-audit.stdout"
 test ! -s "$out/dpkg-audit.stderr"
+test "$namespace_status" = 0
+test "$final_status" = 0
+test "$apt_status" = 0
 # This script intentionally does not emit an admitted result. The external
 # qualification recorder authenticates job, input hashes and every final gate.
