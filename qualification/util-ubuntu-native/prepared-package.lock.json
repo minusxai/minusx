@@ -1,0 +1,91 @@
+{
+  "artifact_id": 12839971926,
+  "artifact_name": "ubuntu-util-packages-unadmitted",
+  "attempt": 1,
+  "branch": "qualification/util-ubuntu-packages-20261028",
+  "files": {
+    "check-absence.sh": {
+      "sha256": "60ed617d2135e738ce9bfb36ba72a8e3586583fbc6dadda399dc186c23ae9644",
+      "size": 238
+    },
+    "check-util-linux": {
+      "sha256": "550d524fac9b11568ebc6c51a38dcd9714c514c5ad439a18e8bdfd61c5135700",
+      "size": 16816
+    },
+    "evidence-binding.json": {
+      "sha256": "1f4817f9e6ce69046cd4042e6ea5bb21cdd147171b129ee3433e47d8c4203b48",
+      "size": 2658
+    },
+    "external-preparation-review.json": {
+      "sha256": "f7c66ef4e50fcf8049735495eb2029634e83628405c755f84f06408240465b4d",
+      "size": 381
+    },
+    "final-native-manifest.json": {
+      "sha256": "4f416cca2be2fb74fbdc57ed5caabda22ca30e49982413bb7f6445a467a69613",
+      "size": 41267
+    },
+    "mount-preparation.json": {
+      "sha256": "cc78ce7b0936a57c5413282a55219b88e3d05cef7eefa7d53c33085b329d81ec",
+      "size": 581
+    },
+    "mount-roundtrip.json": {
+      "sha256": "0edda2a3bb1d255145d480c47b8203d1c90116a8ee0ebb58d561a744dc1ed95a",
+      "size": 320
+    },
+    "package-status.json": {
+      "sha256": "a1386df84bdbd1c946940375a96342e4c8b9385a195867c6f5eafe8df34f64c5",
+      "size": 168
+    },
+    "packages/libmount1.deb": {
+      "sha256": "88a9b6d4acdcfba9a83fd61f634fa3c3c3cc1b65d65be37046b5dbfcb87b779b",
+      "size": 189284
+    },
+    "packages/mount.deb": {
+      "sha256": "60f81332a748b8bb113a0d9eeadbf7639daac9d6f9d02f15c3835f15e47c3d9d",
+      "size": 317632
+    },
+    "packages/util-linux.deb": {
+      "sha256": "d54ec48782d39f2f2ccc20eb76c6c69b55f45bea6eac4b97050a4d854fda2421",
+      "size": 586364
+    },
+    "plan.json": {
+      "sha256": "80579cf6ce4a2285903c5be7222609ee22079baebe414e274de4adead6b44578",
+      "size": 1288
+    },
+    "prepared-candidate.json": {
+      "sha256": "4d7ca5d55a987d4f0fa4bb312bc6a8841c8b7761ee8714e8e44ff49a3488a110",
+      "size": 2569
+    },
+    "runtime-absent.paths": {
+      "sha256": "6786b12fdab7f345551d759809a433dca2c311737df86082621dabe7fea1ba88",
+      "size": 4956
+    },
+    "runtime-payload.sha256": {
+      "sha256": "c25cbf27c2f122d63776df0cb79bf9889c334c74c89565fb2837db9c06d3d944",
+      "size": 4325
+    },
+    "target-binding.json": {
+      "sha256": "2ff3d552da508cfe47a035eba4713f0dfcac4e657c3691cf2006c477220becc6",
+      "size": 515
+    },
+    "transport-status.json": {
+      "sha256": "b505a54ab0f272e43189768e415791c30f45c022470fcc1ecb103794743e58d2",
+      "size": 130
+    },
+    "ubuntu-recovery-authorization.json": {
+      "sha256": "386efa4363c2d2eb515b2983051ec031afbcdf91a2ff8d74d06d2fe72d4b1540",
+      "size": 3037
+    }
+  },
+  "head": "b8bedfd6b9e27bfe76d06290dac6dfdc34639a03",
+  "job_id": 123006691282,
+  "job_name": "packages",
+  "repository": "minusxai/minusx",
+  "repository_id": 1155513729,
+  "run_id": 40742265169,
+  "whole_run_conclusion": "success",
+  "workflow_path": ".github/workflows/util-ubuntu-package-preparation.yml",
+  "workflow_sha256": "ce6cd9057bf4a390aad69fedb201fea8688c5d9c082401af47720d3588c7f6ca",
+  "zip_sha256": "f548d7b514fdadbd40c4915bde942982310aaca99785550f0395694130cbed32",
+  "zip_size": 908774
+}

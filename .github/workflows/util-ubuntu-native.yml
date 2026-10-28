@@ -1,0 +1,57 @@
+name: Qualify prepared Ubuntu utility runtime candidate
+on:
+  push:
+    branches: [qualification/util-ubuntu-native-20261028]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Authenticate prepared three archives and exact original target evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          python3 qualification/util-ubuntu-admission/fetch-success-input.py qualification/util-ubuntu-native/prepared-package.lock.json "$GITHUB_WORKSPACE/ubuntu-package-candidate"
+          python3 qualification/util-ubuntu-admission/fetch-success-input.py qualification/util-ubuntu-admission/target-evidence.lock.json "$RUNNER_TEMP/target-evidence"
+      - name: Prepare minimal runtime and owned resolver tool context
+        run: |
+          set -eu
+          context="$RUNNER_TEMP/ubuntu-util-native"
+          mkdir "$context"
+          cp -R qualification/util-ubuntu-native "$context/checks"
+          cp -R qualification/util-ubuntu-admission/tool-recipe "$context/tool-recipe"
+          cp qualification/util-ubuntu-admission/resolver-launcher-generator.py "$context/resolver-launcher-generator.py"
+          cp qualification/util-ubuntu-native/Dockerfile "$context/Dockerfile"
+      - name: Execute exact offline three-package transaction and complete native gates
+        run: |
+          set -eu
+          context="$RUNNER_TEMP/ubuntu-util-native"
+          docker buildx build --progress=plain --build-context prepared-util="$GITHUB_WORKSPACE/ubuntu-package-candidate" --build-context target-evidence="$RUNNER_TEMP/target-evidence" --target runtime-profile --load -t ubuntu-util-original:proof "$context"
+          docker buildx build --progress=plain --no-cache-filter native --build-context prepared-util="$GITHUB_WORKSPACE/ubuntu-package-candidate" --build-context target-evidence="$RUNNER_TEMP/target-evidence" --target native --load -t ubuntu-util-candidate:proof "$context"
+          docker buildx build --progress=plain --build-context prepared-util="$GITHUB_WORKSPACE/ubuntu-package-candidate" --build-context target-evidence="$RUNNER_TEMP/target-evidence" --target native-export --output type=local,dest=ubuntu-native-proof "$context"
+      - name: Bind immutable original and candidate images and require actual namespace operations
+        run: |
+          set -eu
+          original=$(docker image inspect --format '{{.Id}}' ubuntu-util-original:proof)
+          candidate=$(docker image inspect --format '{{.Id}}' ubuntu-util-candidate:proof)
+          python3 qualification/util-ubuntu-native/bind-namespace-images.py "$original" "$candidate" ubuntu-package-candidate ubuntu-native-proof ubuntu-native-proof/namespace-image-provenance.json
+          python3 qualification/util-ubuntu-native/check-namespace-containers.py "$original" "$candidate" ubuntu-native-proof/namespace-kernel-proof.json
+      - name: Bind all native and preservation gates without final admission
+        run: python3 qualification/util-ubuntu-native/record-native-candidate.py ubuntu-package-candidate ubuntu-native-proof qualification/util-ubuntu-native/prepared-package.lock.json
+      - name: Retain unadmitted technical native proof
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ubuntu-util-native-candidate
+          path: |
+            ubuntu-package-candidate
+            ubuntu-native-proof
+          if-no-files-found: error
+          retention-days: 7
