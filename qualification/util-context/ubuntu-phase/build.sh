@@ -13,6 +13,7 @@ mkdir -p /out /util-linux-work /tmp/util-linux-home
 cd /util-linux-work
 if test "$phase" != package; then
 # Freeze the original package-manager omission policy before APT changes.
+sh "$here/capture-pristine-status.sh" original/resolver
 mkdir -p /out/pristine-package-profile
 rm -f /out/pristine-package-profile/dpkg-docker.cfg
 if test -f /etc/dpkg/dpkg.cfg.d/docker; then
@@ -23,8 +24,14 @@ if test -f /out/pristine-package-profile/dpkg-docker.cfg \
     && grep -Fxq 'path-exclude /usr/share/lintian/overrides/*' /out/pristine-package-profile/dpkg-docker.cfg; then
     lintian_excluded=true
 fi
-for package in util-linux libmount1; do
-    test "$(dpkg-query -W -f='${Version}' "$package")" = 2.42.2-1ubuntu2
+for selected in util-linux libmount1; do
+    grep -Fxq "$selected" original/resolver/installed-util-family
+done
+for package in $(cat original/resolver/installed-util-family); do
+    test "$(dpkg-query -W -f='${source:Version}' "$package")" = 2.42.2-1ubuntu2
+    case "$package" in
+        util-linux|libmount1) test "$(dpkg-query -W -f='${Version}' "$package")" = 2.42.2-1ubuntu2;;
+    esac
     mkdir -p "original/$package/controls"
     dpkg-query -s "$package" > "original/$package/status"
     dpkg-query -L "$package" > "original/$package/paths"
@@ -90,8 +97,10 @@ else
     cat /out/source-build.log
     exit 1
 fi
+python3 "$here/check-source-suite.py" /out/source-build.log /out/source-suite-summary.json 367
 test -f ../runtime-config.h
 python3 "$here/check-idmap-header.py" "$PWD" /out/idmap-header-regression.json ../runtime-config.h
+python3 "$here/check-openat-resolve.py" "$PWD" /out/openat-resolve-regression.json ../runtime-config.h
 ! grep -Eq '^#define USE_LIBMOUNT_MOUNTFD_SUPPORT 1$' ../runtime-config.h
 grep -F -- '--disable-libmount-mountfd-support' debian/rules
 python3 "$here/check-source.py" "$PWD" /out/source-regression.json --fixtures

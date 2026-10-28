@@ -8,3 +8,4 @@
 08-failed-helper-hooks.patch
 09-idmap-wrapper-capability-guard.patch
 10-idmap-fileutils-header.patch
+11-openat-resolve-fallback.patch

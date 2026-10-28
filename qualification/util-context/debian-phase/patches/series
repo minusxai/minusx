@@ -6,3 +6,4 @@
 06-cgroup-close.patch
 07-login-fqdn.patch
 08-idmap-fileutils-header.patch
+09-openat-resolve-fallback.patch

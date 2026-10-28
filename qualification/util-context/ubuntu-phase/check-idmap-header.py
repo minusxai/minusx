@@ -34,7 +34,7 @@ static int mnt_open_tree(int dirfd, const char *path, unsigned long flags, unsig
     assert(dirfd == AT_FDCWD && strcmp(path, "/tmp/ordinary") == 0);
     assert(flags & OPEN_TREE_CLONE); assert(flags & OPEN_TREE_CLOEXEC);
     /* The expected Linux ABI value is checked; no definition is injected. */
-    assert(resolve == 0 || resolve == 0x02);
+    assert(resolve == 0 || resolve == 0x04);
     return resolve ? 23 : 24;
 }
 static int evaluate(struct libmnt_context *cxt, int recursive) {

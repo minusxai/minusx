@@ -92,6 +92,12 @@
         "https://github.com/util-linux/util-linux/commit/9fcb98bf08d9119d07ba3a3c709b1a85e4a1bbcb",
         "https://github.com/util-linux/util-linux/commit/4cccf4edc256507734e3484cfaedf5980945c2fa"
       ]
+    },
+    {
+      "file": "patches/09-openat-resolve-fallback.patch",
+      "sha256": "aaeb0bf6556a521059fab6af0e7cdb04788a7c7fdee32acad4669dda86093d7c",
+      "upstream_commit": "20361d66df4d3f32d5e137fe61a55cdf156c91f0",
+      "purpose": "Use Linux ABI no-symlink resolve flag and expose kernel constants consistently to resolver callers"
     }
   ],
   "distribution": "Debian trixie",

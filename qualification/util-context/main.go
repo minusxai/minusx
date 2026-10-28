@@ -28,8 +28,8 @@ const configLimit = 16 * 1024 * 1024
 const personalityValue = 268173312
 
 var approvedRecipes = map[string]bool{
- "a3e99174686040364a196bd66bf8b1e991a9ac0d09f85744a49b4269b131d041": true,
- "2fee7e8c9bb660064c8138a06bb2208bc19e5a67abb0a375c92b58284cf40421": true,
+ "ae243c028f66d19f22eac6114917269c3774ddc787373142484ba6d6ad2e5ee0": true,
+ "50996f7087150828dcae8de4850776edb1d46030193ab7b6905af7d0d214234a": true,
 }
 // Exact generated profile captured and independently reviewed; source-only worker.
 var approvedProfiles = map[string]bool{"30f3f34a8336b491b755c7ab67b475d558c50a85da18190f89b78a1d42e4bd31":true}

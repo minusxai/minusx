@@ -177,6 +177,7 @@ for package in proof['runtime_packages']:
     shutil.copytree(recipe / 'patches', doc / 'patches')
     shutil.copy2('/out/source-regression.json', doc / 'source-regression.json')
     shutil.copy2('/out/idmap-header-regression.json', doc / 'idmap-header-regression.json')
+    shutil.copy2('/out/openat-resolve-regression.json', doc / 'openat-resolve-regression.json')
     configuration = work / 'runtime-config.h'
     shutil.copy2(configuration, doc / 'runtime-config.h')
     (doc / 'receipt.json').write_text(json.dumps({

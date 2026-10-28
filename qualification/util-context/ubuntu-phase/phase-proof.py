@@ -55,29 +55,78 @@ def descendants(path):
     return [path, *path.rglob('*')] if path.is_dir() else [path]
 
 
+def available_packages(work):
+    original = work / 'original'
+    resolver = original / 'resolver'
+    required = {'raw-status.sha256', 'resolver-status', 'package-source-map',
+                'architecture', 'foreign-architectures', 'installed-util-family'}
+    assert {p.name for p in resolver.iterdir()} == required, 'Incomplete pristine resolver profile'
+    assert re.fullmatch('[0-9a-f]{64}\n', (resolver / 'raw-status.sha256').read_text())
+    architecture = (resolver / 'architecture').read_text().strip()
+    rows = [line.split('\t') for line in (resolver / 'package-source-map').read_text().splitlines()]
+    assert rows and all(len(row) == 6 for row in rows)
+    graph = [Parser().parsestr(block) for block in
+             (resolver / 'resolver-status').read_text().strip().split('\n\n')]
+    graph_map = {(item['Package'], item['Architecture']): item for item in graph}
+    assert len(graph_map) == len(graph) == len(rows), 'Incomplete whole installed resolver graph'
+    for package, source, source_version, version, status, arch in rows:
+        item = graph_map[(package, arch)]
+        assert item['Version'] == version and item['Status'].split()[-1] == status
+    expected = [row[0] for row in rows if row[1] == 'util-linux' and row[4] == 'installed']
+    assert all(row[5] in (architecture, 'all') for row in rows if row[0] in expected)
+    family = (resolver / 'installed-util-family').read_text().splitlines()
+    assert family == expected and family and len(set(family)) == len(family), 'Source-family graph mismatch'
+    assert {p.name for p in original.iterdir()} == set(family) | {'resolver'}
+    for package in family:
+        assert re.fullmatch('[a-z0-9][a-z0-9+.-]*', package)
+        snapshot = original / package
+        for name in ['status', 'paths', 'present-paths', 'absent-documentation', 'control-list', 'payload.tar']:
+            assert (snapshot / name).is_file(), ('Missing pristine family input', package, name)
+        controls = set((snapshot / 'control-list').read_text().splitlines()) - {'list'}
+        assert {p.name for p in (snapshot / 'controls').iterdir()} == controls, 'Incomplete original controls'
+        control = Parser().parsestr((snapshot / 'status').read_text())
+        assert control['Package'] == package and control['Architecture'] in (architecture, 'all')
+        graph_control = graph_map[(package, control['Architecture'])]
+        for field in graph_control.keys():
+            assert re.sub(r'\s+', ' ', control.get(field, '')).strip() == re.sub(r'\s+', ' ', graph_control[field]).strip(), ('Pristine graph/control mismatch', package, field)
+    found = {}
+    for archive in sorted(work.glob('*.deb')):
+        control = Parser().parsestr(subprocess.check_output(['dpkg-deb', '-f', str(archive)], text=True))
+        package = control['Package']
+        if package not in family:
+            continue
+        assert package not in found, ('Ambiguous compiled sibling', package)
+        assert control['Architecture'] in (architecture, 'all')
+        assert (control.get('Source', package).split()[0]) == 'util-linux'
+        found[package] = archive.name
+    assert set(found) == set(family), 'Missing already-built installed sibling'
+    return found
+
+
 def collect(recipe, work, output, specification):
     work_paths = []
     for name in ['original', 'original-payload', 'baseline.json',
                  'runtime-config.h', 'original-features.h']:
         work_paths.extend(descendants(work / name))
+    available = available_packages(work)
     selected = {}
     for package in specification['runtime_packages']:
         matches = list(work.glob(package + '_' +
             versions(specification, package)['rebuilt'].split(':', 1)[-1] + '_*.deb'))
         assert len(matches) == 1, ('Compiled package count', package)
         selected[package] = matches[0].name
-        work_paths.extend(matches)
+    work_paths.extend(work / name for name in available.values())
     output_paths = []
-    for name in ['source-build.log', 'source-regression.json',
-                 'idmap-header-regression.json', 'check-util-linux', 'check-features',
-                 'pristine-package-profile', 'compiled-package-controls.json']:
+    for name in ['source-build.log', 'source-suite-summary.json', 'source-regression.json',
+                 'idmap-header-regression.json', 'openat-resolve-regression.json', 'check-util-linux', 'check-features',
+                 'pristine-package-profile', 'compiled-package-controls.json', 'available-package-controls.json']:
         output_paths.extend(descendants(output / name))
     if (recipe / 'check-idmap-wrapper.py').is_file():
         output_paths.extend(descendants(output / 'wrapper-regression.json'))
     return {'schema': 1, 'kind': 'util-source-compile-inputs',
             'status': 'compile-only-unadmitted', 'installed_native_qualification': False, 'recipe': inventory(recipe, recipe.rglob('*')),
             'work': inventory(work, work_paths), 'output': inventory(output, output_paths),
-            'selected_compiled_packages': selected,
+            'selected_compiled_packages': selected, 'available_compiled_packages': available,
             'source_files': specification['source_files'], 'patches': specification['patches'],
             'recipe_manifest': (recipe / 'SHA256SUMS').read_text()}
 
@@ -94,16 +143,16 @@ def main():
                   'Protected', 'Multi-Arch', 'Provides', 'Conflicts', 'Breaks',
                   'Replaces', 'Pre-Depends', 'Depends', 'Recommends', 'Suggests')
         controls = {}
-        for package in specification['runtime_packages']:
-            candidates = list(work.glob(package + '_' +
-                versions(specification, package)['rebuilt'].split(':', 1)[-1] + '_*.deb'))
-            assert len(candidates) == 1, ('Compiled control package count', package)
+        available = available_packages(work)
+        for package, filename in available.items():
             original = Parser().parsestr((work / 'original' / package / 'status').read_text())
             rebuilt = Parser().parsestr(subprocess.check_output(
-                ['dpkg-deb', '-f', str(candidates[0])], text=True))
+                ['dpkg-deb', '-f', str(work / filename)], text=True))
             controls[package] = {side: {field: re.sub(r'\s+', ' ', message.get(field, '')).strip()
                 for field in fields} for side, message in [('original', original), ('rebuilt', rebuilt)]}
-        (output / 'compiled-package-controls.json').write_text(json.dumps(controls, indent=2, sort_keys=True) + '\n')
+        (output / 'available-package-controls.json').write_text(json.dumps(controls, indent=2, sort_keys=True) + '\n')
+        selected_controls = {name: controls[name] for name in specification['runtime_packages']}
+        (output / 'compiled-package-controls.json').write_text(json.dumps(selected_controls, indent=2, sort_keys=True) + '\n')
         proof = collect(recipe, work, output, specification)
         proof['compiled_source_inventory'] = inventory(work / 'source', (work / 'source').rglob('*'))
         # Full original metadata and actual compiled debs can be inspected even
@@ -114,7 +163,7 @@ def main():
             shutil.copy2(work / name, export / name)
         for name in ['original', 'original-payload']:
             shutil.copytree(work / name, export / name, symlinks=True)
-        for name in proof['selected_compiled_packages'].values():
+        for name in proof['available_compiled_packages'].values():
             shutil.copy2(work / name, export / name)
         # Preserve recorded numeric ownership across artifact transport. Local
         # exporters need not retain it, so package consumers restore this tar

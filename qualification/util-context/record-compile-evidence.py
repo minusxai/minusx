@@ -20,7 +20,7 @@ receipts=[x for x in objects if "status" in x]
 assert len(receipts)==2
 profile_hash="30f3f34a8336b491b755c7ab67b475d558c50a85da18190f89b78a1d42e4bd31"
 rule={"names":["personality"],"action":"SCMP_ACT_ALLOW","args":[{"index":0,"value":268173312,"op":"SCMP_CMP_EQ"}]}
-recipe={"debian":"a3e99174686040364a196bd66bf8b1e991a9ac0d09f85744a49b4269b131d041","ubuntu":"2fee7e8c9bb660064c8138a06bb2208bc19e5a67abb0a375c92b58284cf40421"}[os.environ["QUALIFICATION_OS"]]
+recipe={"debian":"ae243c028f66d19f22eac6114917269c3774ddc787373142484ba6d6ad2e5ee0","ubuntu":"50996f7087150828dcae8de4850776edb1d46030193ab7b6905af7d0d214234a"}[os.environ["QUALIFICATION_OS"]]
 canon=lambda x:json.dumps(x,sort_keys=True,separators=(",",":"),ensure_ascii=False).encode()
 for x in receipts:
  assert x["status"]=="approved-delta" and x["recipe_manifest_sha256"]==recipe
@@ -73,8 +73,17 @@ assert all(proof["export"][name]==item for name,item in proof["work"].items())
 expected_paths=set(proof["output"])|{"compile-inputs","compile-inputs.tar","compile-proof.json","compile-proof.sha256"}|{"compile-inputs/"+n for n in proof["export"]}
 actual_paths={str(f.relative_to(root)) for f in root.rglob("*")}
 assert actual_paths==expected_paths,"Unexpected or missing compilation output"
+suite=json.loads((root/"source-suite-summary.json").read_text())
+assert suite["kind"]=="util-source-distro-suite-summary"
+assert suite["observed_suite_count"]==suite["expected_suite_count"]==({"debian":337,"ubuntu":367}[os.environ["QUALIFICATION_OS"]])
+assert suite["source_log_sha256"]==hashlib.sha256((root/"source-build.log").read_bytes()).hexdigest()
 controls=json.loads((root/"compiled-package-controls.json").read_text())
 assert set(controls)==set(proof["selected_compiled_packages"])
+available_controls=json.loads((root/"available-package-controls.json").read_text())
+assert set(available_controls)==set(proof["available_compiled_packages"])
+assert set(controls)<=set(available_controls)
+assert all(controls[name]==available_controls[name] for name in controls)
+assert all(item["original"]["Package"]==name and item["rebuilt"]["Package"]==name for name,item in available_controls.items())
 for name in controls:
  assert set(controls[name])=={"original","rebuilt"}
  assert controls[name]["original"]["Package"]==name and controls[name]["rebuilt"]["Package"]==name
