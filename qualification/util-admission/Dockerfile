@@ -38,18 +38,9 @@ RUN node -e 'const r=JSON.parse(require("fs").readFileSync("/package-status.json
 # Only this explicit target executes the separately reviewed four-package plan.
 RUN --mount=from=packaged,source=/out,target=/candidate-debs,readonly \
     --mount=from=tools,source=/resolver-tools/root,target=/qualification-tools,readonly \
-    sh /checks/accept-util-native.sh /checks/resolver /checks /inputs /candidate-debs /qualification-result
+    sh /checks/retain-native.sh /checks/resolver /checks /inputs /candidate-debs /qualification-result
 
 FROM scratch AS package-export
 COPY --from=packaged /package-export/ /
 FROM scratch AS native-export
-COPY --from=native /qualification-result/dependency-closure.json /
-COPY --from=native /qualification-result/apt-plan.json /
-COPY --from=native /qualification-result/final-native.json /
-COPY --from=native /qualification-result/apt-simulation.txt /
-COPY --from=native /qualification-result/apt-simulation.stderr /
-COPY --from=native /qualification-result/dpkg-audit.stdout /
-COPY --from=native /qualification-result/dpkg-audit.stderr /
-COPY --from=native /qualification-result/before-packages.tsv /
-COPY --from=native /inputs/plan.json /
-COPY --from=tools /resolver-tools/tool-closure.json /
+COPY --from=native /native-export/ /

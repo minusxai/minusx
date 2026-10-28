@@ -12,7 +12,7 @@ def validate(text, plan):
         if line.startswith(('Remv ','Purg ','E:','W:')): raise AssertionError('Unreviewed removal/error/warning')
         if not line.startswith(('Inst ','Conf ')): continue
         match=re.fullmatch(r'(Inst|Conf) ([a-z0-9][a-z0-9+.-]*)(?: \[([^\]]+)\])? \(([^ ()]+)(?: [^()]*)?\)',line)
-        assert match, 'Unsupported APT action grammar'
+        assert match, 'Unsupported APT action grammar: '+repr(line)
         action,name,old,new=match.groups()
         assert name in names and name not in found[action]
         spec=plan['packages'][name]

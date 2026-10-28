@@ -4,6 +4,9 @@ from pathlib import Path
 packages,native,lock_path=map(Path,sys.argv[1:]);
 status=json.loads((packages/'package-status.json').read_text());assert status=={'kind':'util-package-transport','status':'package-only-unadmitted','source_compiled':False,'native_admitted':False,'exit_codes':{'source':0,'mount':0,'plan':0}}
 assert all(type(code)is int and code==0 for code in status['exit_codes'].values())
+native_status=json.loads((native/'native-status.json').read_text())
+assert native_status=={'kind':'util-native-transport','status':'native-unadmitted','native_qualified':False,'exit_code':0}
+assert native_status['native_qualified'] is False and type(native_status['exit_code']) is int
 lock=json.loads(lock_path.read_text())
 plan=json.loads((packages/'plan.json').read_text());assert set(plan['packages'])=={'libmount1','util-linux','login','mount'}
 assert (native/'plan.json').read_bytes()==(packages/'plan.json').read_bytes()
