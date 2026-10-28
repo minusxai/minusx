@@ -35,11 +35,19 @@ def payload_pathset(data):
             paths.add(path)
     return paths
 
-def stored_info_closure(prefix, expected_controls, expected_paths, alternatives=()):
+def info_owner(filename, package_prefixes):
+    matches=[name for name in package_prefixes if filename.startswith(name+'.')]
+    return max(matches,key=len) if matches else None
+
+def installed_prefixes(state):
+    return {prefix for name,row in state.items() if row.get('Status')=='install ok installed' for prefix in (name,name+':'+row['Architecture'])}
+
+def stored_info_closure(prefix, expected_controls, expected_paths, alternatives=(), package_prefixes=None):
+    package_prefixes=set(package_prefixes or ())|{prefix.name}|{p.name for p in alternatives}
     for alternate in alternatives:
         assert alternate.parent==prefix.parent and alternate!=prefix
-        assert not any(p.name.startswith(alternate.name+'.') for p in prefix.parent.iterdir()), 'Stale alternate package info prefix'
-    actual={p.name[len(prefix.name)+1:] for p in prefix.parent.iterdir() if p.name.startswith(prefix.name+'.')}
+        assert not any(info_owner(p.name,package_prefixes)==alternate.name for p in prefix.parent.iterdir()), 'Stale alternate package info prefix'
+    actual={p.name[len(prefix.name)+1:] for p in prefix.parent.iterdir() if info_owner(p.name,package_prefixes)==prefix.name}
     assert actual==set(expected_controls)|{'list'}, ('Unexpected/missing stored package control',prefix.name,sorted(actual),sorted(set(expected_controls)|{'list'}))
     path=prefix.with_name(prefix.name+'.list');info=path.lstat()
     assert stat.S_ISREG(info.st_mode) and not path.is_symlink()
@@ -103,7 +111,7 @@ def check(plan,before,inputs,out,debs=None):
             path=prefix.with_name(prefix.name+'.conffiles')
             verify_control_file(path,member,content)
         alternatives=[prefix.with_name(other) for other in (name,name+':'+new['Architecture']) if other!=prefix.name]
-        stored_info_closure(prefix,expected_control_names,payload_pathset(data_archive),alternatives)
+        stored_info_closure(prefix,expected_control_names,payload_pathset(data_archive),alternatives,installed_prefixes(current))
         for flag in ('Essential','Protected'):
 
             assert new.get(flag,'no')==old.get(flag,'no'), ('Changed protection flag',name,flag)

@@ -1,6 +1,9 @@
 """Bounded technical observations for four selected dpkg info sets; no acceptance."""
 import hashlib,io,json,stat,subprocess,sys,tarfile
 from pathlib import Path
+import runpy
+helpers=runpy.run_path(str(Path(__file__).with_name("check-util-final.py")))
+package_prefixes=helpers["installed_prefixes"](helpers["statuses"](Path("/var/lib/dpkg/status")))
 plan,debs,out=map(Path,sys.argv[1:]);plan=json.loads(plan.read_text());names={'libmount1','util-linux','login','mount'};assert set(plan['packages'])==names
 result={}
 for name in sorted(names):
@@ -17,7 +20,7 @@ for name in sorted(names):
     prefix=anchor.name.removesuffix('.md5sums');assert anchor.name==prefix+'.md5sums' and prefix in (name,name+':amd64')
     observed={}
     for path in sorted(anchor.parent.iterdir()):
-        if not any(path.name.startswith(option+'.') for option in (name,name+':amd64')):continue
+        if helpers['info_owner'](path.name,package_prefixes) not in (name,name+':amd64'):continue
         info=path.lstat();item={'mode':stat.S_IMODE(info.st_mode),'uid':info.st_uid,'gid':info.st_gid,'size':info.st_size}
         if stat.S_ISREG(info.st_mode):item.update(kind='file',sha256=hashlib.sha256(path.read_bytes()).hexdigest())
         elif path.is_symlink():item['kind']='symlink'
