@@ -55,6 +55,7 @@ apt_status=0
 apt-get check || apt_status=$?
 audit_status=0
 dpkg --audit > "$out/dpkg-audit.stdout" 2> "$out/dpkg-audit.stderr" || audit_status=$?
+printf '{"kind":"util-native-independent-gates","status":"unadmitted","namespace":%s,"observation":%s,"final":%s,"apt":%s,"audit":%s}\n' "$namespace_status" "$observation_status" "$final_status" "$apt_status" "$audit_status" > "$out/independent-gates.json"
 test "$audit_status" = 0
 test ! -s "$out/dpkg-audit.stdout"
 test ! -s "$out/dpkg-audit.stderr"

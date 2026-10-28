@@ -32,7 +32,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker buildx build --progress=plain --no-cache-filter native --build-context prepared-util="$GITHUB_WORKSPACE/util-package-candidate" --target native-export --output type=local,dest=util-native-proof "$RUNNER_TEMP/util-admission" 2>&1 | tee "$RUNNER_TEMP/util-native.log"
+          docker buildx build --progress=plain --build-context prepared-util="$GITHUB_WORKSPACE/util-package-candidate" --target runtime-profile --load -t util-native-original:proof "$RUNNER_TEMP/util-admission"
+          docker buildx build --progress=plain --no-cache-filter native --build-context prepared-util="$GITHUB_WORKSPACE/util-package-candidate" --target native --load -t util-native-candidate:proof "$RUNNER_TEMP/util-admission" 2>&1 | tee "$RUNNER_TEMP/util-native.log"
+          docker buildx build --progress=plain --build-context prepared-util="$GITHUB_WORKSPACE/util-package-candidate" --target native-export --output type=local,dest=util-native-proof "$RUNNER_TEMP/util-admission"
+      - name: Bind exact images and execute isolated mandatory namespace proof
+        run: |
+          set -eu
+          original=$(docker image inspect --format '{{.Id}}' util-native-original:proof)
+          candidate=$(docker image inspect --format '{{.Id}}' util-native-candidate:proof)
+          python3 qualification/util-admission/bind-namespace-images.py "$original" "$candidate" util-package-candidate util-native-proof util-native-proof/namespace-image-provenance.json
+          python3 qualification/util-admission/check-namespace-containers.py "$original" "$candidate" util-native-proof/namespace-kernel-proof.json
       - name: Bind successful unadmitted native candidate receipts
         run: python3 qualification/util-admission/record-native-candidate.py util-package-candidate util-native-proof qualification/util-admission/debian-compile.lock.json
       - name: Retain unadmitted package candidate and technical native proof

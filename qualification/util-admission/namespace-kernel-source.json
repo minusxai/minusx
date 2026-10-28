@@ -1,0 +1,14 @@
+{
+  "source": "https://raw.githubusercontent.com/torvalds/linux/refs/tags/v6.17/fs/namespace.c",
+  "sha256": "2f91d92e73427578721c978dcadc28f9f87745fc6cecd84a57284443c6d45ddd",
+  "function": "mntns_install",
+  "lines": [
+    6370,
+    6373
+  ],
+  "required_capabilities": [
+    "CAP_SYS_ADMIN",
+    "CAP_SYS_CHROOT"
+  ],
+  "scope": "Current mount namespace entry only; no policy override or application deployment"
+}

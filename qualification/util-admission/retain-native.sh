@@ -5,7 +5,7 @@ test "$#" = 5
 status=0
 sh /checks/accept-util-native.sh "$@" || status=$?
 mkdir /native-export
-for name in control-observation.json nsenter-baseline.json nsenter-candidate.json apt-cache-priming.json dependency-closure.json apt-plan.json final-native.json apt-simulation.txt apt-simulation.stderr dpkg-audit.stdout dpkg-audit.stderr before-packages.tsv; do
+for name in independent-gates.json control-observation.json nsenter-baseline.json nsenter-candidate.json apt-cache-priming.json dependency-closure.json apt-plan.json final-native.json apt-simulation.txt apt-simulation.stderr dpkg-audit.stdout dpkg-audit.stderr before-packages.tsv; do
     if test -f "/qualification-result/$name"; then
         cp "/qualification-result/$name" /native-export/
     fi
