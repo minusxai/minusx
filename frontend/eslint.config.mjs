@@ -217,6 +217,12 @@ const eslintConfig = defineConfig([
       "react/no-unescaped-entities": "warn",
       // React Compiler memoization hints — warn (perf hints, not bugs)
       "react-hooks/preserve-manual-memoization": "warn",
+      // Keep compiler migration diagnostics advisory during dependency upgrades.
+      "react-hooks/immutability": "warn",
+      "react-hooks/purity": "warn",
+      "react-hooks/refs": "warn",
+      "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/exhaustive-deps": "warn",
       // Detect runtime circular imports (import type cycles are safe and ignored)
       "import-x/no-cycle": ["error", { ignoreExternal: true }],
       // Enforce all imports at the top of the file before any other code

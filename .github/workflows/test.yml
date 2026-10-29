@@ -29,34 +29,21 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22.23.4'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: './frontend/package-lock.json'
-
-      - name: Prepare package manager
-        run: |
-          npm install --global --no-audit --no-fund npm@12.2.1
-          node frontend/scripts/patch-npm.mjs
 
       - name: Cache node_modules
         uses: actions/cache@v4
         id: cache-deps
         with:
           path: ./frontend/node_modules
-          key: node-modules-${{ runner.os }}-node22-npm12-${{ hashFiles('./frontend/package-lock.json', './frontend/package.json', './frontend/patches/**') }}
+          key: node-modules-${{ runner.os }}-node20-${{ hashFiles('./frontend/package-lock.json', './frontend/package.json', './frontend/patches/**') }}
 
       - name: Install frontend dependencies
         if: steps.cache-deps.outputs.cache-hit != 'true'
         working-directory: ./frontend
         run: npm ci
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version: '1.27.3'
-          cache: false
-      - name: Prepare matching esbuild binaries
-        working-directory: ./frontend
-        run: bash scripts/rebuild-esbuild.sh
 
       - name: Validate (typecheck + lint)
         working-directory: ./frontend
@@ -83,34 +70,21 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22.23.4'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: './frontend/package-lock.json'
-
-      - name: Prepare package manager
-        run: |
-          npm install --global --no-audit --no-fund npm@12.2.1
-          node frontend/scripts/patch-npm.mjs
 
       - name: Cache node_modules
         uses: actions/cache@v4
         id: cache-deps
         with:
           path: ./frontend/node_modules
-          key: node-modules-${{ runner.os }}-node22-npm12-${{ hashFiles('./frontend/package-lock.json', './frontend/package.json', './frontend/patches/**') }}
+          key: node-modules-${{ runner.os }}-node20-${{ hashFiles('./frontend/package-lock.json', './frontend/package.json', './frontend/patches/**') }}
 
       - name: Install frontend dependencies
         if: steps.cache-deps.outputs.cache-hit != 'true'
         working-directory: ./frontend
         run: npm ci
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version: '1.27.3'
-          cache: false
-      - name: Prepare matching esbuild binaries
-        working-directory: ./frontend
-        run: bash scripts/rebuild-esbuild.sh
 
       - name: Run frontend tests (shard ${{ matrix.shard }}/6)
         working-directory: ./frontend

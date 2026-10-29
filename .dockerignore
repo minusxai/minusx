@@ -51,7 +51,3 @@ Thumbs.db
 
 # Claude
 .claude/
-
-**/node_modules/
-**/.next/
-**/out/
