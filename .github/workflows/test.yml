@@ -36,7 +36,6 @@ jobs:
       - name: Prepare package manager
         run: |
           npm install --global --no-audit --no-fund npm@12.2.1
-          node frontend/scripts/patch-npm.mjs
 
       - name: Cache node_modules
         uses: actions/cache@v4
@@ -50,13 +49,6 @@ jobs:
         working-directory: ./frontend
         run: npm ci
 
-      - uses: actions/setup-go@v6
-        with:
-          go-version: '1.27.3'
-          cache: false
-      - name: Prepare matching esbuild binaries
-        working-directory: ./frontend
-        run: bash scripts/rebuild-esbuild.sh
 
       - name: Validate (typecheck + lint)
         working-directory: ./frontend
@@ -90,7 +82,6 @@ jobs:
       - name: Prepare package manager
         run: |
           npm install --global --no-audit --no-fund npm@12.2.1
-          node frontend/scripts/patch-npm.mjs
 
       - name: Cache node_modules
         uses: actions/cache@v4
@@ -104,13 +95,6 @@ jobs:
         working-directory: ./frontend
         run: npm ci
 
-      - uses: actions/setup-go@v6
-        with:
-          go-version: '1.27.3'
-          cache: false
-      - name: Prepare matching esbuild binaries
-        working-directory: ./frontend
-        run: bash scripts/rebuild-esbuild.sh
 
       - name: Run frontend tests (shard ${{ matrix.shard }}/6)
         working-directory: ./frontend

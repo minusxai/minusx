@@ -1,192 +1,16 @@
 # syntax=docker/dockerfile:1
 # Frontend Dockerfile for MinusX BI - Multi-stage build with standalone mode
 
-# Preserve esbuild's exact JavaScript/binary protocol while rebuilding its Go runtime.
-FROM golang:1.27.3-bookworm@sha256:972b4110ba0f47539a975c31e52c64765e1ff19f2d74469ae4a595c6676e80a5 AS esbuild-runtime
-ENV CGO_ENABLED=0 GOTOOLCHAIN=local
-RUN for version in 0.28.1 0.28.2; do \
-      mkdir -p /build/$version /out/$version; cd /build/$version; \
-      go mod init build-source \
-      && go mod download github.com/evanw/esbuild@v$version \
-      && cp -R "$(go env GOPATH)/pkg/mod/github.com/evanw/esbuild@v$version/." . \
-      && chmod -R u+w . \
-      && go mod edit -require=golang.org/x/sys@v0.44.0 \
-      && go mod download golang.org/x/sys \
-      && go build -trimpath -ldflags='-s -w' -o /out/$version/esbuild ./cmd/esbuild \
-      && test "$(/out/$version/esbuild --version)" = "$version" || exit 1; \
-    done
-
 # ===== BUILDER STAGE ===== #
-FROM node:22.23.4-trixie-slim@sha256:8eb619e402eaede1748a3c8173bffab391592812e85136452f781741c7242ddf AS base
-COPY scripts/patch-npm.mjs /tmp/patch-npm.mjs
-RUN npm install --global --no-audit --no-fund npm@12.2.1 \
-    && node /tmp/patch-npm.mjs && npm cache clean --force
-
-# Capture the actual runtime network profile before build dependencies or overlays.
-FROM base AS runtime-profile
-RUN apt-get update && apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends curl ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-FROM runtime-profile AS util-original
-COPY scripts/util-consumer/capture-original.mjs /util-capture.mjs
-RUN --network=none node /util-capture.mjs /util-original
-
-FROM scratch AS util-original-proof
-COPY --from=util-original /util-original/ /
-
-FROM runtime-profile AS perl-original-profile
-COPY scripts/perl/runtime-os /perl-checks/runtime-os
-COPY scripts/perl/lib /perl-checks/lib
-RUN mkdir /out && node /perl-checks/runtime-os/capture-perl-profile.mjs /out/perl-original.json
-
-FROM runtime-profile AS perl-tools
-COPY scripts/perl/perl-consumer-tools /tool-recipe
-RUN mkdir /perl-work && node /tool-recipe/capture-tool-empty-directories.mjs /perl-work/original-tool-empty-dirs.json && \
-    apt-get update && apt-get install -y --no-install-recommends python3 dpkg-dev binutils && \
-    python3 /tool-recipe/prepare-tools.py /perl-tools
-
-FROM runtime-profile AS perl-prepared
-COPY scripts/perl/runtime-os /checks/runtime-os
-COPY scripts/perl/lib /checks/lib
-COPY scripts/perl/perl-consumer-tools/check-dependencies.py scripts/perl/perl-consumer-tools/dsc-fields.py scripts/perl/perl-consumer-tools/test-closure.py scripts/perl/runtime-os/hash-native.py /checks/
-COPY --from=perl-tools /perl-tools/tool-closure.json /tool-closure.json
-RUN --mount=from=qualified-perl,target=/qualified,readonly \
-    --mount=from=perl-tools,source=/perl-tools/root,target=/qualification-tools,readonly \
-    node /checks/runtime-os/prepare-qualified-perl.mjs /qualified /out
-
-FROM runtime-profile AS utilbuilder
-COPY scripts/util-consumer /checks
-RUN chmod 0755 /checks/resolver
-RUN --mount=from=util-original,source=/util-original,target=/original,readonly \
-    --mount=from=qualified-util-source,target=/compiled-source,readonly \
-    --mount=from=qualified-util-native,target=/native-proof,readonly \
-    --mount=from=perl-tools,source=/perl-tools/root,target=/qualification-tools,readonly \
-    sh /checks/retain-prepare.sh /compiled-source /native-proof /original /out
-
-FROM runtime-profile AS util-qualified
-COPY scripts/util-consumer /checks
-RUN chmod 0755 /checks/resolver
-RUN --mount=from=utilbuilder,source=/out,target=/inputs,readonly \
-    --mount=from=perl-tools,source=/perl-tools/root,target=/qualification-tools,readonly \
-    sh /checks/retain-target.sh /checks /inputs /util-proof
-
-FROM util-qualified AS util-accepted
-RUN node /checks/check-transaction-status.mjs /util-proof
-
-FROM scratch AS util-linux-proof
-COPY --from=utilbuilder /out/ /
-COPY --from=util-qualified /util-proof/ /installed/
-COPY --from=util-original /util-original/ /original/
-
-FROM runtime-profile AS sqlitebuilder
-COPY scripts/sqlite /runtime-build/sqlite
-RUN dpkg-query -W -f='${binary:Package}\n' | sed 's/:.*//' | sort -u > /tmp/sqlite-runtime-package-names \
-    && SQLITE_RUNTIME_PACKAGE_LIST=/tmp/sqlite-runtime-package-names sh /runtime-build/sqlite/build.sh \
-    && rm -rf /build/sqlite
-
-FROM runtime-profile AS networkbuilder
-COPY scripts/network /runtime-build/network
-COPY scripts/curl-runtime-probe.c /runtime-build/curl-runtime-probe.c
-RUN sh /runtime-build/network/build-network.sh && mkdir -p /out/test-tools && cc -O2 -Wl,-z,relro,-z,now \
-    -I/network-work/stage-openssl/usr/include /runtime-build/curl-runtime-probe.c \
-    -L/network-work/stage-openssl/usr/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH) \
-    -lcurl -o /out/test-tools/curl-runtime-probe \
-    && rm -rf /network-work
-
-FROM runtime-profile AS library-source-proof
-COPY scripts/libraries /runtime-build/libraries
-RUN sh /runtime-build/libraries/build.sh
-
-FROM library-source-proof AS librarybuilder
-RUN rm -rf /libraries-work
-
-FROM scratch AS network-test-tools
-COPY --from=perl-original-profile /out/ /perl-original/
-COPY --from=perl-prepared /out/ /perl/
-COPY --from=utilbuilder /out/ /util-linux/
-COPY --from=util-qualified /util-proof/ /util-linux/installed/
-COPY --from=util-original /util-original/ /util-linux/original/
-COPY --from=sqlitebuilder /out/ /sqlite/
-COPY --from=networkbuilder /out/ /network/
-COPY --from=librarybuilder /out/ /libraries/
-
-FROM base AS pcre2
-ENV DEB_BUILD_MAINT_OPTIONS=hardening=+all
-RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends build-essential pkg-config && rm -rf /var/lib/apt/lists/*
-ADD --checksum=sha256:929f0b20e62879252a15886b06c89f1edef61a363cbd5826fb041080a5e557ae https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.49/pcre2-10.49.tar.gz /tmp/pcre2.tar.gz
-RUN mkdir /build && tar -xzf /tmp/pcre2.tar.gz --strip-components=1 -C /build
-WORKDIR /build
-RUN eval "$(dpkg-buildflags --export=sh)" && ./configure --prefix=/usr --libdir=/usr/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH) --enable-jit --disable-static && make -j2 && make check && make DESTDIR=/stage install
-RUN mkdir -p /pkg/DEBIAN /pkg/usr/share/doc/libpcre2-8-0 /pkg/usr/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH) /out && \
-    cp -a /stage/usr/lib/*/libpcre2-8.so.* /pkg/usr/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH)/ && \
-    cp LICENCE.md /pkg/usr/share/doc/libpcre2-8-0/copyright && \
-    for control in preinst postinst prerm postrm triggers conffiles; do original="$(dpkg-query --control-path libpcre2-8-0 "$control" 2>/dev/null || true)"; if test -n "$original"; then cp -a "$original" /pkg/DEBIAN/"$control"; fi; done && \
-    mkdir -p debian && printf 'Source: pcre2\nMaintainer: Runtime Maintainers <maintainers@example.invalid>\n\nPackage: libpcre2-8-0\nArchitecture: any\nDescription: PCRE2 runtime\n' > debian/control && \
-    dependencies="$(dpkg-shlibdeps -O -e$(find /pkg/usr/lib -type f -name 'libpcre2-8.so.*') | sed -n 's/^shlibs:Depends=//p')" && test -n "$dependencies" && \
-    original_dependencies="$(dpkg-query -W -f='${Depends}' libpcre2-8-0)" && if test -n "$original_dependencies"; then dependencies="$original_dependencies, $dependencies"; fi && \
-    printf 'Package: libpcre2-8-0\nSource: pcre2\nVersion: 10.49-1+runtime1\nArchitecture: %s\nMulti-Arch: same\nSection: libs\nPriority: optional\nMaintainer: Runtime Maintainers <maintainers@example.invalid>\nDepends: %s\nDescription: PCRE2 8-bit runtime built from verified upstream 10.49\n' "$(dpkg --print-architecture)" "$dependencies" > /pkg/DEBIAN/control && \
-    original_predepends="$(dpkg-query -W -f='${Pre-Depends}' libpcre2-8-0)" && if test -n "$original_predepends"; then printf 'Pre-Depends: %s\n' "$original_predepends" >> /pkg/DEBIAN/control; fi && \
-    dpkg-deb --build --root-owner-group /pkg /out/pcre2.deb
-
-FROM pcre2 AS archive
-RUN apt-get update && apt-get install -y --no-install-recommends autoconf automake gettext texinfo libacl1-dev libselinux1-dev attr acl xz-utils curl ca-certificates && rm -rf /var/lib/apt/lists/*
-RUN curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
-      --connect-timeout 30 --max-time 180 --retry 3 --retry-all-errors --retry-max-time 600 \
-      https://ftp.gnu.org/gnu/tar/tar-1.35.tar.xz -o /tmp/tar.tar.xz \
-    && printf '%s  %s\n' 4d62ff37342ec7aed748535323930c7cf94acf71c3591882b26a7ea50f3edc16 /tmp/tar.tar.xz | sha256sum --check
-COPY scripts/tar-patches /patches
-RUN cd /patches && sha256sum -c SHA256SUMS
-RUN mkdir /tarbuild && tar -xJf /tmp/tar.tar.xz --strip-components=1 -C /tarbuild
-WORKDIR /tarbuild
-RUN for patchfile in /patches/*.patch; do patch --batch -p1 < "$patchfile"; done && autoreconf -v
-RUN original_defaults="$(tar --show-defaults)" && \
-    original_rmt="$(printf '%s\n' "$original_defaults" | sed -n 's/.*--rmt-command=\([^ ]*\).*/\1/p')" && \
-    original_rsh="$(printf '%s\n' "$original_defaults" | sed -n 's/.*--rsh-command=\([^ ]*\).*/\1/p')" && \
-    test -n "$original_rmt" && test -n "$original_rsh" && \
-    eval "$(dpkg-buildflags --export=sh)" && FORCE_UNSAFE_CONFIGURE=1 ./configure --prefix=/usr --with-lzma='xz --format=lzma' DEFAULT_RMT_DIR="$(dirname "$original_rmt")" RSH="$original_rsh" && make -j2 && \
-    src/tar --show-defaults | grep -F -- "--rmt-command=$original_rmt" && src/tar --show-defaults | grep -F -- "--rsh-command=$original_rsh"
-# Run upstream tests without root so privileged-xattr checks correctly detect unavailable capabilities.
-RUN chown -R nobody:nogroup /tarbuild && runuser -u nobody -- make check
-RUN mkdir -p /tarpkg/DEBIAN /tarpkg/usr/bin /tarpkg/usr/sbin /tarpkg/usr/share/doc/tar /out && \
-    dpkg-query -L tar | while IFS= read -r entry; do if test -f "$entry" || test -L "$entry"; then normalized="$entry"; case "$entry" in /bin/*|/sbin/*|/lib/*|/lib64/*) normalized="/usr$entry";; esac; mkdir -p "$(dirname "/tarpkg$normalized")"; cp -a "$entry" "/tarpkg$normalized"; fi; done && \
-    for control in preinst postinst prerm postrm triggers conffiles; do original="$(dpkg-query --control-path tar "$control" 2>/dev/null || true)"; if test -n "$original"; then cp -a "$original" /tarpkg/DEBIAN/"$control"; fi; done && \
-    cp src/tar /tarpkg/usr/bin/tar && cp rmt/rmt /tarpkg/usr/sbin/rmt-tar && cp COPYING /tarpkg/usr/share/doc/tar/COPYING.upstream && cp -a /patches /tarpkg/usr/share/doc/tar/patches && \
-    mkdir -p debian && printf 'Source: tar\nMaintainer: Runtime Maintainers <maintainers@example.invalid>\n\nPackage: tar\nArchitecture: any\nDescription: GNU tar runtime\n' > debian/control && \
-    dependencies="$(dpkg-shlibdeps -O -e/tarpkg/usr/bin/tar -e/tarpkg/usr/sbin/rmt-tar | sed -n 's/^shlibs:Depends=//p')" && test -n "$dependencies" && \
-    original_dependencies="$(dpkg-query -W -f='${Depends}' tar)" && if test -n "$original_dependencies"; then dependencies="$original_dependencies, $dependencies"; fi && \
-    printf 'Package: tar\nSource: tar\nVersion: 1.35+fedora10-1+runtime1\nArchitecture: %s\nEssential: yes\nSection: utils\nPriority: required\nMaintainer: Runtime Maintainers <maintainers@example.invalid>\nDepends: %s\nDescription: GNU tar with verified Fedora 1.35-10 security backports\n' "$(dpkg --print-architecture)" "$dependencies" > /tarpkg/DEBIAN/control && \
-    original_predepends="$(dpkg-query -W -f='${Pre-Depends}' tar)" && if test -n "$original_predepends"; then printf 'Pre-Depends: %s\n' "$original_predepends" >> /tarpkg/DEBIAN/control; fi && dpkg-deb --build --root-owner-group /tarpkg /out/tar.deb
-
-FROM archive AS shell
-ADD --checksum=sha256:0d632f6b945058d84809cac7805326775bd60cb4a316907d0bd4228ff7107154 https://git.kernel.org/pub/scm/utils/dash/dash.git/snapshot/dash-0.5.12.tar.gz /tmp/dash.tar.gz
-RUN mkdir /shellbuild && tar -xzf /tmp/dash.tar.gz --strip-components=1 -C /shellbuild
-WORKDIR /shellbuild
-RUN autoreconf -fi && eval "$(dpkg-buildflags --export=sh)" && ./configure --prefix=/usr --enable-fnmatch && make -j2 && nm -D src/dash | grep -w fnmatch
-RUN src/dash -c 'set -eu; value=alpha; case "$value" in a*[!0-9]) ;; *) exit 1;; esac; f() { printf "%s" "$1"; }; test "$(f quoted)" = quoted; test "$(printf "%s\n" pipeline | sed s/line//)" = pipe; test "$(printf "\\u20ac")" = "\u20ac"; d=$(mktemp -d); cd "$d"; touch alpha.txt beta.txt; set -- *.txt; test "$#" = 2; test "$1" = alpha.txt'
-RUN timeout 5 src/dash -c 'value=$(printf "%050000d" 0 | tr 0 .); case "$value" in *.*.*.*.*.tar.gz) exit 1;; *) printf "libc matcher stress passed\n";; esac'
-RUN mkdir -p /shellpkg/DEBIAN /shellpkg/usr/bin /shellpkg/usr/share/doc/dash /out && \
-    dpkg-query -L dash | while IFS= read -r entry; do if test -f "$entry" || test -L "$entry"; then normalized="$entry"; case "$entry" in /bin/*|/sbin/*|/lib/*|/lib64/*) normalized="/usr$entry";; esac; mkdir -p "$(dirname "/shellpkg$normalized")"; cp -a "$entry" "/shellpkg$normalized"; fi; done && \
-    for control in preinst postinst prerm postrm triggers conffiles; do original="$(dpkg-query --control-path dash "$control" 2>/dev/null || true)"; if test -n "$original"; then cp -a "$original" /shellpkg/DEBIAN/"$control"; fi; done && \
-    cp src/dash /shellpkg/usr/bin/dash && cp COPYING /shellpkg/usr/share/doc/dash/COPYING.upstream && \
-    mkdir -p debian && printf 'Source: dash\nMaintainer: Runtime Maintainers <maintainers@example.invalid>\n\nPackage: dash\nArchitecture: any\nDescription: POSIX shell with libc matcher\n' > debian/control && \
-    dependencies="$(dpkg-shlibdeps -O -e/shellpkg/usr/bin/dash | sed -n 's/^shlibs:Depends=//p')" && test -n "$dependencies" && \
-    original_dependencies="$(dpkg-query -W -f='${Depends}' dash)" && if test -n "$original_dependencies"; then dependencies="$original_dependencies, $dependencies"; fi && \
-    printf 'Package: dash\nSource: dash\nVersion: 0.5.12+libcfnmatch-1+runtime1\nArchitecture: %s\nEssential: yes\nSection: shells\nPriority: required\nMaintainer: Runtime Maintainers <maintainers@example.invalid>\nDepends: %s\nDescription: Upstream dash 0.5.12 with libc fnmatch enabled\n' "$(dpkg --print-architecture)" "$dependencies" > /shellpkg/DEBIAN/control && \
-    original_predepends="$(dpkg-query -W -f='${Pre-Depends}' dash)" && if test -n "$original_predepends"; then printf 'Pre-Depends: %s\n' "$original_predepends" >> /shellpkg/DEBIAN/control; fi && dpkg-deb --build --root-owner-group /shellpkg /out/dash.deb
-
-FROM shell AS utilities
-RUN apt-get update && apt-get install -y --no-install-recommends python3 curl ca-certificates locales perl libgmp-dev libattr1-dev libacl1-dev libselinux1-dev bison gperf && rm -rf /var/lib/apt/lists/*
-COPY scripts/runtime /runtime-build
-RUN sh /runtime-build/build-utilities.sh coreutils && sh /runtime-build/build-utilities.sh ncurses
-
-FROM base AS builder
+FROM node:22.23.4-trixie-slim@sha256:8eb619e402eaede1748a3c8173bffab391592812e85136452f781741c7242ddf AS builder
 
 # Set working directory
 WORKDIR /app
 
+RUN npm install --global --no-audit --no-fund npm@12.2.1
+
 # Install dependencies for native modules (better-sqlite3, lightningcss)
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     python3 \
     make \
     g++ \
@@ -203,10 +27,6 @@ COPY patches ./patches
 
 RUN --mount=type=cache,target=/root/.npm \
     npm ci --cache /root/.npm
-
-COPY --from=esbuild-runtime /out /opt/esbuild
-COPY scripts/patch-esbuild.mjs /tmp/patch-esbuild.mjs
-RUN node /tmp/patch-esbuild.mjs
 
 # Verify the pi-ai patch (web search + image-URL support) was actually applied
 # by postinstall. patch-package --error-on-fail silently exits 0 when no patches
@@ -243,25 +63,12 @@ RUN --mount=type=cache,target=/app/.next/cache \
 RUN npm run build:setup-cli
 
 # ===== RUNTIME STAGE ===== #
-
-FROM sqlitebuilder AS sqlite-overlay-archive
-COPY scripts/util-consumer/prepare-sqlite-overlay.sh /prepare-sqlite-overlay.sh
-RUN sh /prepare-sqlite-overlay.sh /out /overlay
-
-FROM scratch AS runtime-overlay-archives
-COPY --from=perl-prepared /out/perl-base.deb /
-COPY --from=sqlite-overlay-archive /overlay/ /
-COPY --from=networkbuilder /out/*.deb /
-COPY --from=librarybuilder /out/*.deb /
-COPY --from=pcre2 /out/pcre2.deb /libpcre2-8-0.deb
-COPY --from=archive /out/tar.deb /
-COPY --from=shell /out/dash.deb /
-COPY --from=utilities /out/coreutils.deb /out/libtinfo6.deb /out/ncurses-bin.deb /out/ncurses-base.deb /
-
-FROM util-accepted AS runner
+FROM node:22.23.4-trixie-slim@sha256:8eb619e402eaede1748a3c8173bffab391592812e85136452f781741c7242ddf AS runner
 
 # Set working directory
 WORKDIR /app
+
+RUN npm install --global --no-audit --no-fund npm@12.2.1
 
 # Set production environment
 ENV NODE_ENV=production
@@ -269,12 +76,11 @@ ENV BASE_DUCKDB_DATA_PATH=/app
 ENV DB_TYPE=pglite
 ENV PGLITE_DATA_DIR=/app/data/pglite
 
-COPY --from=pcre2 /out/pcre2.deb /tmp/pcre2.deb
-COPY --from=archive /out/tar.deb /tmp/tar.deb
-COPY --from=shell /out/dash.deb /tmp/dash.deb
-COPY --from=perl-prepared /out/perl-base.deb /tmp/runtime-debs/
-COPY --from=utilities /out/coreutils.deb /out/libtinfo6.deb /out/ncurses-bin.deb /out/ncurses-base.deb /tmp/runtime-debs/
-RUN dpkg --path-include='/usr/share/doc/runtime-perl/*' --path-include='/usr/share/doc/tar/*' --path-include='/usr/share/doc/dash/*' --path-include='/usr/share/doc/coreutils/*' --path-include='/usr/share/doc/libtinfo6/*' --path-include='/usr/share/doc/ncurses-bin/*' --path-include='/usr/share/doc/ncurses-base/*' -i /tmp/runtime-debs/*.deb /tmp/pcre2.deb /tmp/tar.deb /tmp/dash.deb && rm -rf /tmp/runtime-debs && ldconfig && rm -f /tmp/pcre2.deb /tmp/tar.deb /tmp/dash.deb
+# Install curl and ca-certificates for downloading DuckDB files
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy standalone output (much smaller than node_modules - only runtime dependencies)
 COPY --from=builder /app/.next/standalone ./
@@ -305,31 +111,13 @@ COPY --from=builder /app/setup-cli ./setup-cli
 COPY --from=builder /app/patches ./patches
 # @aws/lambda-invoke-store: aws-sdk transitive that standalone tracing misses.
 # The setup-cli bundle keeps node_modules external, so it must resolve here.
-# Restore the complete locked production graph: traced directories can omit
-# files needed by dynamic imports even when npm sees the correct package version.
 RUN rm -rf node_modules \
     && npm ci --omit=dev --ignore-scripts \
-    && npm install --omit=dev --ignore-scripts tsx@4.21.0 "@tailwindcss/node@4.2.1" "@tailwindcss/oxide@4.2.1" "tailwindcss@4.2.1" "@aws/lambda-invoke-store@0.2.4"
-COPY --from=esbuild-runtime /out /opt/esbuild
-COPY scripts/patch-esbuild.mjs /tmp/patch-esbuild.mjs
-RUN node /tmp/patch-esbuild.mjs
-# npm's runtime reconciliation replaces package files while scripts are disabled.
-# Retain the binding compiled against this exact lock and Node ABI in the builder.
+    && npm install --omit=dev --ignore-scripts tsx@4.21.0 @tailwindcss/node@4.2.1 @tailwindcss/oxide@4.2.1 tailwindcss@4.2.1 @aws/lambda-invoke-store@0.2.4
 COPY --from=builder /app/node_modules/better-sqlite3/build/Release/better_sqlite3.node /app/node_modules/better-sqlite3/build/Release/better_sqlite3.node
-RUN npx --yes patch-package@8.0.1 --error-on-fail \
-    && rm -rf ./patches && npm cache clean --force
+RUN npx --yes patch-package@8.0.1 --error-on-fail && rm -rf ./patches && npm cache clean --force
 RUN grep -q "MX PATCH" /app/node_modules/@earendil-works/pi-ai/dist/api/anthropic-messages.js \
     || (echo "ERROR: pi-ai patch missing from runtime image" && exit 1)
-
-# Install only network packages captured in the original runtime profile.
-COPY --from=networkbuilder /out/*.deb /tmp/network-debs/
-COPY --from=librarybuilder /out/*.deb /tmp/library-debs/
-COPY --from=sqlitebuilder /out/*.deb /tmp/sqlite-debs/
-RUN dpkg --path-include='/usr/share/doc/runtime-network/*' --path-include='/usr/share/doc/runtime-libraries/*' -i /tmp/network-debs/*.deb /tmp/library-debs/*.deb /tmp/sqlite-debs/*.deb \
-    && ldconfig && rm -rf /tmp/network-debs /tmp/library-debs /tmp/sqlite-debs \
-    && apt-get check \
-    && { audit="$(dpkg --audit 2>&1)"; audit_status=$?; \
-         if test "$audit_status" -ne 0 || test -n "$audit"; then printf '%s\n' "$audit"; exit 1; fi; }
 
 # Create data directories (docker-compose volumes mount over these; standalone runs use them directly)
 RUN mkdir -p /app/data/pglite /app/data/analytics
@@ -338,22 +126,3 @@ RUN mkdir -p /app/data/pglite /app/data/analytics
 EXPOSE 3000
 
 CMD ["sh", "-c", "node server.js"]
-
-# Validate the actual final installed interpreter with disposable read-only proof.
-RUN --mount=from=perl-prepared,source=/out,target=/perl-proof,readonly \
-    --mount=from=perl-prepared,source=/checks,target=/perl-checks,readonly \
-    node /perl-checks/runtime-os/check-qualified-perl.mjs /perl-proof /perl-checks/runtime-os/check-normal.pl
-
-# Validate installed utility payload and ordinary namespace-entry behavior.
-RUN --mount=from=utilbuilder,source=/out,target=/util-linux-proof,readonly \
-    --mount=from=runtime-overlay-archives,target=/overlay-debs,readonly \
-    --mount=from=perl-tools,source=/perl-tools/root,target=/qualification-tools,readonly \
-    sha256sum -c /util-linux-proof/runtime-payload.sha256 \
-    && /util-linux-proof/check-absence.sh /util-linux-proof/runtime-absent.paths \
-    && /util-linux-proof/check-util-linux \
-    && /checks/resolver /checks/check-after-overlays.py /util-linux-proof /overlay-debs /util-final-proof.json \
-    && apt-get check \
-    && { status=0; dpkg --audit > /tmp/util-audit.stdout 2> /tmp/util-audit.stderr || status=$?; \
-         test "$status" -eq 0 && test ! -s /tmp/util-audit.stdout && test ! -s /tmp/util-audit.stderr; } \
-    && rm -f /tmp/util-audit.stdout /tmp/util-audit.stderr \
-    && rm -rf /checks /util-proof

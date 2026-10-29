@@ -59,5 +59,3 @@ next-env.d.ts
 
 .next/
 Dockerfile
-
-scripts/check-runtime.cjs
