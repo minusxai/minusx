@@ -1,9 +1,0 @@
-{
-  "actual_evidence": "final-minusx-validation/d2f3136-image-failure.log: keyctl add_key Operation not permitted, exit1; prior minimal diagnostic-only fix exposed real hosted errno.",
-  "change": "Exact exit1 plus exact C-locale add_key EPERM message returns unavailable kernel capability, with explicit coverage-unavailable stdout. All other errors remain failures; successful real syscall still enables keyring suite. Existing missing-keyctl/unsupported-cache/ENOSYS behavior unchanged.",
-  "coverage": "BuildKit source suite retains all other tests. Kernel-keyring cases explicitly unavailable there. Dedicated narrowly modified seccomp source-test container is proposed to actually execute those cases before claiming keyring coverage.",
-  "runtime": "No runtime policy or application behavior changes; source-test harness only.",
-  "not_proved": "No local Linux run, no kernel-keyring test pass or hosted custom-seccomp execution yet.",
-  "required_source_gate": "KRB5_REQUIRE_KEYRING_TESTS=1 makes every unavailable tool/cache/ENOSYS/EPERM case hard-fail. run-keyring-hosted.sh runs an existing matching source-builder image with default-policy-plus-only-three-keyring-syscalls, no network/host mounts/credentials, cap-drop ALL and no-new-privileges. Actual Linux run required; no keyring pass yet.",
-  "validation": "Both patches strict fuzz0 apply to actual full Debian source. Thirteen extracted actual-patched-method branches pass, including exact hosted EPERM notice, required-mode failures, success, and unexpected stderr/code hard-fails. JSON profile delta exactly three allow calls only. Shell syntax passes."
-}
