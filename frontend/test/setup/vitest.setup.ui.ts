@@ -5,7 +5,7 @@
  * in the Node environment used by backend/integration tests).
  */
 
-import '@testing-library/jest-dom';
+import '@testing-library/jest-dom/vitest';
 
 // ---------------------------------------------------------------------------
 // structuredClone polyfill

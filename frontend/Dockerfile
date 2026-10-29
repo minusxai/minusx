@@ -2,7 +2,9 @@
 # Frontend Dockerfile for MinusX BI - Multi-stage build with standalone mode
 
 # ===== BUILDER STAGE ===== #
-FROM node:22-slim AS builder
+FROM node:22.23.4-trixie-slim@sha256:2117f713a417f3aff682ac8f5bc2ebbdf1beed51f36e67ab1e0fd3866b6d2d8f AS builder
+
+RUN npm install --global --no-audit --no-fund npm@12.2.1
 
 # Set working directory
 WORKDIR /app
@@ -61,7 +63,9 @@ RUN --mount=type=cache,target=/app/.next/cache \
 RUN npm run build:setup-cli
 
 # ===== RUNTIME STAGE ===== #
-FROM node:22-slim AS runner
+FROM node:22.23.4-trixie-slim@sha256:2117f713a417f3aff682ac8f5bc2ebbdf1beed51f36e67ab1e0fd3866b6d2d8f AS runner
+
+RUN npm install --global --no-audit --no-fund npm@12.2.1
 
 # Set working directory
 WORKDIR /app
@@ -103,6 +107,7 @@ COPY --from=builder /app/setup-cli ./setup-cli
 # standalone tracing misses them; installing here guarantees they exist with
 # the right linux native bindings.
 COPY --from=builder /app/patches ./patches
+COPY --from=builder /app/.npmrc ./.npmrc
 # @aws/lambda-invoke-store: aws-sdk transitive that standalone tracing misses.
 # The setup-cli bundle keeps node_modules external, so it must resolve here.
 RUN npm install --ignore-scripts tsx "@tailwindcss/node@^4" "@tailwindcss/oxide@^4" "tailwindcss@^4" "@aws/lambda-invoke-store"
