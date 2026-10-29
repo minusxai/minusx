@@ -164,7 +164,7 @@
     "@vitejs/plugin-react": "^6.0.1",
     "@vitest/coverage-v8": "^4.1.12",
     "concurrently": "^10.0.6",
-    "esbuild": "^0.28.1",
+    "esbuild": "^0.28.2",
     "eslint": "^9",
     "eslint-config-next": "16.0.4",
     "eslint-import-resolver-typescript": "^4.4.4",
@@ -186,7 +186,7 @@
       "brace-expansion": "1.1.21"
     },
     "tsx": {
-      "esbuild": "0.28.1"
+      "esbuild": "0.28.2"
     },
     "eslint-plugin-react-hooks": "7.0.1",
     "monaco-editor": {

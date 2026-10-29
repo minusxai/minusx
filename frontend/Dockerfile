@@ -2,7 +2,7 @@
 # Frontend Dockerfile for MinusX BI - Multi-stage build with standalone mode
 
 # ===== BUILDER STAGE ===== #
-FROM node:22.23.4-trixie-slim@sha256:8eb619e402eaede1748a3c8173bffab391592812e85136452f781741c7242ddf AS builder
+FROM node:22.23.4-trixie-slim@sha256:2117f713a417f3aff682ac8f5bc2ebbdf1beed51f36e67ab1e0fd3866b6d2d8f AS builder
 
 # Set working directory
 WORKDIR /app
@@ -63,7 +63,7 @@ RUN --mount=type=cache,target=/app/.next/cache \
 RUN npm run build:setup-cli
 
 # ===== RUNTIME STAGE ===== #
-FROM node:22.23.4-trixie-slim@sha256:8eb619e402eaede1748a3c8173bffab391592812e85136452f781741c7242ddf AS runner
+FROM node:22.23.4-trixie-slim@sha256:2117f713a417f3aff682ac8f5bc2ebbdf1beed51f36e67ab1e0fd3866b6d2d8f AS runner
 
 # Set working directory
 WORKDIR /app
