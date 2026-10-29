@@ -9,7 +9,7 @@ RUN npm install --global --no-audit --no-fund npm@12.2.1
 WORKDIR /app
 
 COPY docs/package*.json docs/.npmrc ./
-RUN rm -f package-lock.json && npm install
+RUN npm ci
 
 # Keep frontend/compatibility.json as the one shared compatibility contract.
 # Its destination preserves components/compatibility-tables.tsx's relative import.
